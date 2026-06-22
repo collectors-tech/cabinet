@@ -4,13 +4,18 @@ import {
   Bell,
   CheckCheck,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
+  Eye,
+  EyeOff,
   ExternalLink,
   Inbox,
   Mail,
   MailOpen,
   RefreshCw,
   Search,
+  Trash2,
 } from 'lucide-react'
 import { loadToastHistory, type ToastHistoryRecord } from '@/lib/toast-history'
 import { cn } from '@/lib/utils'
@@ -64,7 +69,7 @@ type InboxFilter = 'all' | 'unread' | 'assistant' | 'system'
 const filterLabels: Record<InboxFilter, string> = {
   all: 'All',
   unread: 'Unread',
-  assistant: 'Assistant',
+  assistant: 'Mentions',
   system: 'System',
 }
 
@@ -74,6 +79,8 @@ const emptyStateByFilter: Record<InboxFilter, string> = {
   assistant: 'No assistant handoffs or mentions are waiting.',
   system: 'No system or runtime notices are waiting.',
 }
+
+const PAGE_SIZE = 5
 
 function normalizeStatus(status: string) {
   const normalized = status.trim().toLowerCase()
@@ -195,6 +202,8 @@ export function NotificationInbox() {
   const [toastItems, setToastItems] = useState<NotificationInboxItem[]>([])
   const [filter, setFilter] = useState<InboxFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showHidden, setShowHidden] = useState(false)
+  const [page, setPage] = useState(1)
   const [selectedItemId, setSelectedItemId] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedIds, setExpandedIds] = useState<string[]>([])
@@ -278,7 +287,13 @@ export function NotificationInbox() {
       )
       setItems((current) => {
         if (status === 'archived') {
-          return current.filter((item) => !remoteIds.includes(item.id))
+          return sortNotifications(
+            current.map((item) =>
+              remoteIds.includes(item.id)
+                ? { ...item, status, updated_at: new Date().toISOString() }
+                : item
+            )
+          )
         }
         return sortNotifications(
           current.map((item) => {
@@ -291,7 +306,13 @@ export function NotificationInbox() {
       })
       setToastItems((current) => {
         if (status === 'archived') {
-          return current.filter((item) => !localIds.includes(item.id))
+          return sortNotifications(
+            current.map((item) =>
+              localIds.includes(item.id)
+                ? { ...item, status, updated_at: new Date().toISOString() }
+                : item
+            )
+          )
         }
         return sortNotifications(
           current.map((item) =>
@@ -317,6 +338,7 @@ export function NotificationInbox() {
 
   useEffect(() => {
     setSelectedIds([])
+    setPage(1)
   }, [filter])
 
   const allItems = useMemo(
@@ -324,11 +346,11 @@ export function NotificationInbox() {
     [items, toastItems]
   )
 
-  const visibleItems = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     return allItems.filter((item) => {
       const status = normalizeStatus(item.status)
-      if (status === 'archived') {
+      if (!showHidden && status === 'archived') {
         return false
       }
       const matchesFilter =
@@ -349,7 +371,7 @@ export function NotificationInbox() {
           .some((value) => String(value).toLowerCase().includes(query))
       return matchesFilter && matchesSearch
     })
-  }, [allItems, filter, searchQuery])
+  }, [allItems, filter, searchQuery, showHidden])
 
   const counts = useMemo(() => {
     const active = allItems.filter(
@@ -368,24 +390,35 @@ export function NotificationInbox() {
 
   const selectedItem = useMemo(() => {
     return (
-      visibleItems.find((item) => item.id === selectedItemId) ??
-      visibleItems[0] ??
+      filteredItems.find((item) => item.id === selectedItemId) ??
+      filteredItems[0] ??
       null
     )
-  }, [selectedItemId, visibleItems])
+  }, [selectedItemId, filteredItems])
 
   useEffect(() => {
     setSelectedItemId((current) => {
-      if (visibleItems.some((item) => item.id === current)) {
+      if (filteredItems.some((item) => item.id === current)) {
         return current
       }
-      return visibleItems[0]?.id ?? ''
+      return filteredItems[0]?.id ?? ''
     })
-  }, [visibleItems])
+  }, [filteredItems])
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchQuery, showHidden])
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const visibleItems = filteredItems.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  )
 
   const allVisibleSelected =
-    visibleItems.length > 0 &&
-    visibleItems.every((item) => selectedIds.includes(item.id))
+    filteredItems.length > 0 &&
+    filteredItems.every((item) => selectedIds.includes(item.id))
 
   function toggleSelection(id: string) {
     setSelectedIds((current) =>
@@ -407,6 +440,15 @@ export function NotificationInbox() {
     setActiveWorkspace('inbox')
   }
 
+  function clearVisibleItems() {
+    void updateItems(
+      filteredItems
+        .filter((item) => normalizeStatus(item.status) !== 'archived')
+        .map((item) => item.id),
+      'archived'
+    )
+  }
+
   return (
     <>
       <Header fixed>
@@ -424,28 +466,32 @@ export function NotificationInbox() {
           <Button
             type='button'
             variant='outline'
+            size='icon'
             onClick={() => void loadItems()}
             disabled={loading}
             data-testid='notification-inbox-refresh'
+            aria-label='Refresh notifications'
+            title='Refresh notifications'
           >
             <RefreshCw className='h-4 w-4' />
-            Refresh
           </Button>
           <Button
             type='button'
             variant='outline'
+            size='icon'
             onClick={openCompactInbox}
             data-testid='notification-inbox-open-compact'
+            aria-label='Open compact Inbox workspace'
+            title='Open compact Inbox workspace'
           >
             <Inbox className='h-4 w-4' />
-            Compact Inbox
           </Button>
         </div>
       </Header>
       <main
         className='flex h-[calc(100svh-4rem)] min-h-0 flex-col gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:px-8'
         data-testid='notification-inbox-page'
-        data-layout='full-height-split'
+        data-layout='dense-two-pane'
       >
         <section className='space-y-3'>
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -481,7 +527,10 @@ export function NotificationInbox() {
                     value={key}
                     data-testid={`notification-inbox-filter-${key}`}
                   >
-                    {filterLabels[key]}
+                    <span>{filterLabels[key]}</span>
+                    <span className='ml-1 text-xs text-muted-foreground'>
+                      {counts[key]}
+                    </span>
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -503,10 +552,10 @@ export function NotificationInbox() {
               >
                 <Checkbox
                   checked={allVisibleSelected}
-                  disabled={visibleItems.length === 0}
+                  disabled={filteredItems.length === 0}
                   onCheckedChange={(checked) => {
                     setSelectedIds(
-                      checked ? visibleItems.map((item) => item.id) : []
+                      checked ? filteredItems.map((item) => item.id) : []
                     )
                   }}
                 />
@@ -515,22 +564,61 @@ export function NotificationInbox() {
               <Button
                 type='button'
                 variant='outline'
+                size='icon'
                 disabled={selectedIds.length === 0 || updating}
                 onClick={() => void updateItems(selectedIds, 'read')}
                 data-testid='notification-inbox-bulk-read'
+                aria-label='Mark all visible as read'
+                title='Mark all visible as read'
               >
                 <CheckCheck className='h-4 w-4' />
-                Mark read
               </Button>
               <Button
                 type='button'
                 variant='outline'
+                size='icon'
+                disabled={filteredItems.length === 0 || updating}
+                onClick={clearVisibleItems}
+                data-testid='notification-inbox-clear-visible'
+                aria-label='Clear all visible notifications'
+                title='Clear all visible notifications'
+              >
+                <Archive className='h-4 w-4' />
+              </Button>
+              <Button
+                type='button'
+                variant={showHidden ? 'default' : 'outline'}
+                size='icon'
+                onClick={() => setShowHidden((current) => !current)}
+                data-testid='notification-inbox-show-hidden'
+                aria-label={
+                  showHidden
+                    ? 'Hide cleared notifications'
+                    : 'Show hidden notifications'
+                }
+                title={
+                  showHidden
+                    ? 'Hide cleared notifications'
+                    : 'Show hidden notifications'
+                }
+              >
+                {showHidden ? (
+                  <EyeOff className='h-4 w-4' />
+                ) : (
+                  <Eye className='h-4 w-4' />
+                )}
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                size='icon'
                 disabled={selectedIds.length === 0 || updating}
                 onClick={() => void updateItems(selectedIds, 'archived')}
                 data-testid='notification-inbox-bulk-archive'
+                aria-label='Archive selected notifications'
+                title='Archive selected notifications'
               >
                 <Archive className='h-4 w-4' />
-                Archive
               </Button>
             </div>
           </div>
@@ -585,7 +673,7 @@ export function NotificationInbox() {
 
               {!loading && visibleItems.length > 0 ? (
                 <div
-                  className='min-h-[720px] space-y-2'
+                  className='min-h-[520px] space-y-2'
                   data-testid='notification-inbox-list'
                 >
                   {visibleItems.map((item) => {
@@ -600,6 +688,8 @@ export function NotificationInbox() {
                         className={cn(
                           'rounded-md border bg-card p-3 transition-colors',
                           !read && 'border-primary/40 bg-primary/5',
+                          status === 'archived' &&
+                            'border-dashed bg-muted/40 text-muted-foreground',
                           selectedItem?.id === item.id &&
                             'ring-2 ring-primary/30'
                         )}
@@ -739,6 +829,45 @@ export function NotificationInbox() {
                   })}
                 </div>
               ) : null}
+              <div className='mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground'>
+                <p data-testid='notification-inbox-total-count'>
+                  {filteredItems.length} total messages
+                </p>
+                <div
+                  className='flex items-center gap-2'
+                  data-testid='notification-inbox-pagination'
+                >
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon'
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((value) => Math.max(1, value - 1))}
+                    data-testid='notification-inbox-prev-page'
+                    aria-label='Previous notification page'
+                    title='Previous notification page'
+                  >
+                    <ChevronLeft className='h-4 w-4' />
+                  </Button>
+                  <span>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon'
+                    disabled={currentPage >= totalPages}
+                    onClick={() =>
+                      setPage((value) => Math.min(totalPages, value + 1))
+                    }
+                    data-testid='notification-inbox-next-page'
+                    aria-label='Next notification page'
+                    title='Next notification page'
+                  >
+                    <ChevronRight className='h-4 w-4' />
+                  </Button>
+                </div>
+              </div>
             </div>
             <aside
               className='min-h-0 overflow-y-auto rounded-md border bg-card p-4'
@@ -789,18 +918,53 @@ export function NotificationInbox() {
                     </dl>
                   </div>
                   {targetLink(selectedItem) ? (
-                    <Button asChild variant='outline' size='sm'>
-                      <a href={targetLink(selectedItem)?.href}>
-                        <ExternalLink className='h-4 w-4' />
-                        {targetLink(selectedItem)?.label}
-                      </a>
-                    </Button>
+                    <div className='flex flex-wrap gap-2'>
+                      <Button asChild variant='outline' size='sm'>
+                        <a href={targetLink(selectedItem)?.href}>
+                          <ExternalLink className='h-4 w-4' />
+                          {targetLink(selectedItem)?.label}
+                        </a>
+                      </Button>
+                    </div>
                   ) : null}
+                  <div className='flex flex-wrap gap-2'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={updating}
+                      onClick={() => void updateItems([selectedItem.id], 'read')}
+                      data-testid='notification-inbox-detail-mark-handled'
+                    >
+                      <CheckCheck className='h-4 w-4' />
+                      Mark handled
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={updating}
+                      onClick={() =>
+                        void updateItems([selectedItem.id], 'archived')
+                      }
+                      data-testid='notification-inbox-detail-delete'
+                    >
+                      <Trash2 className='h-4 w-4' />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <p className='text-sm text-muted-foreground'>
-                  Select a notification to inspect its details.
-                </p>
+                <div
+                  className='flex min-h-60 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground'
+                  data-testid='notification-inbox-detail-empty'
+                >
+                  <Bell className='h-10 w-10' />
+                  <p className='font-medium text-foreground'>
+                    No notification selected
+                  </p>
+                  <p>Select a notification to inspect its details.</p>
+                </div>
               )}
             </aside>
           </div>

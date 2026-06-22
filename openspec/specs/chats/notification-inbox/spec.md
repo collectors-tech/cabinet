@@ -55,3 +55,18 @@ When a read, unread, or archive request fails, the Notification Inbox MUST show 
 - **WHEN** the user marks the row read and the update API fails
 - **THEN** the update error MUST be visible
 - **AND** the row MUST remain in the queue with its unread status.
+
+### Requirement UI-SCREEN-NOTIFICATION-INBOX-007: Notification Inbox SHALL provide dense recoverable triage
+The Notification Inbox MUST render a compact two-pane operating layout with filter counts, a table-style paginated message list, total count, selected notification detail, and icon-only page actions. Clearing visible notifications MUST archive/hide the currently visible records without dropping them from the durable Inbox state, and Show hidden MUST reveal those archived records again.
+
+#### Scenario: Recover cleared notifications
+- **GIVEN** the Inbox has read, unread, assistant, system, and archived notifications
+- **WHEN** the user clears the currently visible queue
+- **THEN** the visible queue MUST hide those notifications
+- **AND** the hidden notifications MUST remain available when Show hidden is enabled.
+
+#### Scenario: Dense table and detail layout
+- **GIVEN** the Inbox has more rows than one page can show
+- **WHEN** the route renders
+- **THEN** it MUST show filter buttons with inline counts, stat counters, a search field, table-style paginated rows, a total message count below the table, and a selected notification detail pane
+- **AND** page actions such as refresh, mark all visible as read, clear all, and show hidden MUST be icon-only with accessible names/tooltips.
