@@ -81,4 +81,14 @@ describe("wishlist-header-actions", () => {
     cy.get('[data-testid="wishlist-import-action"]').click();
     cy.contains("Import Wishlist Entries").should("be.visible");
   });
+
+  it("keeps the Wishlist header title visible on mobile", () => {
+    cy.viewport(390, 844);
+    openWishlist();
+
+    cy.get('[data-testid="wishlist-header-title"]')
+      .should("be.visible")
+      .and("contain.text", "Wishlist");
+    cy.get('[data-testid="wishlist-page-icon"]').should("be.visible");
+  });
 });

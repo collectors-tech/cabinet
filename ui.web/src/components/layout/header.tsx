@@ -90,8 +90,8 @@ export function HeaderTitle({
   return (
     <div
       className={cn(
-        'pointer-events-none absolute top-1/2 left-1/2 z-10 hidden max-w-[min(34rem,42vw)] -translate-x-1/2 -translate-y-1/2 justify-center md:flex',
-        isCrowded && 'opacity-0',
+        'pointer-events-none z-10 flex min-w-20 max-w-28 shrink-0 justify-center md:absolute md:top-1/2 md:left-1/2 md:min-w-0 md:max-w-[min(34rem,42vw)] md:-translate-x-1/2 md:-translate-y-1/2',
+        isCrowded && 'md:opacity-0',
         className
       )}
       data-crowded={isCrowded ? 'true' : 'false'}
