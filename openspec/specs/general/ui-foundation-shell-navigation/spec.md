@@ -173,3 +173,21 @@ Cabinet SHALL render authenticated primary app navigation links as icon-only con
 - **AND** each link MUST expose a stable accessible name matching the destination label
 - **AND** the active route state MUST remain visually detectable through the shell nav active affordance
 - **AND** keyboard focus MUST remain visible on each icon-only navigation control
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-019: Workspace chrome rail SHALL be icon-only and expose Inbox only through the bell
+Cabinet SHALL render the workspace chrome rail as compact icon-only controls with accessible names, tooltips, and one active workspace affordance. The top workspace chrome SHALL NOT expose a separate visible `Inbox` pill/button; the bell control SHALL be the only top-level Inbox/notifications entry point and SHALL route to the durable Inbox page.
+
+#### Scenario: Workspace chrome rail has no visible action labels
+- **GIVEN** the authenticated shell is visible in expanded desktop layout
+- **WHEN** the workspace chrome rail renders
+- **THEN** Navigation and Assistant workspace controls MUST render as icon-only buttons with accessible names and tooltips
+- **AND** no visible `Nav`, `Assistant`, or `Inbox` text label MUST appear inside the rail controls
+- **AND** exactly one workspace control MUST expose the active visual state
+
+#### Scenario: Bell is the only top-level Inbox affordance
+- **GIVEN** the authenticated shell workspace rail is visible
+- **WHEN** a user needs to open notifications
+- **THEN** the bell control MUST expose an accessible Inbox/notifications label and tooltip
+- **AND** the bell control MUST retain a notification badge affordance
+- **AND** clicking the bell MUST navigate to the durable `/inbox` surface
+- **AND** the rail MUST NOT render a separate `Inbox` workspace button or pill next to the bell

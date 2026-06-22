@@ -7,7 +7,6 @@ import {
   Eye,
   EyeOff,
   GripVertical,
-  Inbox,
   MessageSquare,
   PanelLeft,
   Pencil,
@@ -34,7 +33,6 @@ import {
 import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
-import { InboxWorkspacePanel } from './inbox-workspace-panel'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
@@ -155,6 +153,12 @@ export function AppSidebar() {
       setOpen(true)
     }
   }, [activeWorkspace, isMobile, setOpen, sidebarState])
+
+  useEffect(() => {
+    if (activeWorkspace === 'inbox') {
+      setActiveWorkspace('navigation')
+    }
+  }, [activeWorkspace, setActiveWorkspace])
 
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
@@ -333,15 +337,11 @@ export function AppSidebar() {
     items: group.items.map(translateItem),
   }))
   const openNotificationInbox = () => {
-    setActiveWorkspace('navigation')
     void navigate({ to: '/inbox' })
+    setActiveWorkspace('navigation')
   }
   const activeWorkspaceIcon =
-    activeWorkspace === 'assistant'
-      ? MessageSquare
-      : activeWorkspace === 'inbox'
-        ? Inbox
-        : PanelLeft
+    activeWorkspace === 'assistant' ? MessageSquare : PanelLeft
   const ActiveWorkspaceIcon = activeWorkspaceIcon
 
   return (
@@ -393,58 +393,51 @@ export function AppSidebar() {
                   <Bell className='h-4 w-4' />
                   <span>Open Inbox</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  data-testid='shell-workspace-menu-inbox'
-                  onClick={() => setActiveWorkspace('inbox')}
-                >
-                  <Inbox className='h-4 w-4' />
-                  <span>Inbox</span>
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className='grid grid-cols-[1fr_1fr_1fr_auto] gap-2'>
+            <div
+              className='inline-flex items-center gap-1 rounded-lg border border-slate-700/70 bg-slate-950 p-1 shadow-sm'
+              data-testid='shell-workspace-icon-rail'
+            >
               <button
                 type='button'
+                aria-label='Navigation workspace'
+                title='Navigation workspace'
                 data-testid='shell-workspace-navigation'
                 data-active={
                   activeWorkspace === 'navigation' ? 'true' : 'false'
                 }
-                className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
                 onClick={() => setActiveWorkspace('navigation')}
               >
-                <PanelLeft className='h-3.5 w-3.5' />
-                Nav
+                <PanelLeft className='h-4 w-4' aria-hidden />
               </button>
               <button
                 type='button'
+                aria-label='Assistant workspace'
+                title='Assistant workspace'
                 data-testid='shell-workspace-assistant'
                 data-active={activeWorkspace === 'assistant' ? 'true' : 'false'}
-                className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
                 onClick={() => setActiveWorkspace('assistant')}
               >
-                <MessageSquare className='h-3.5 w-3.5' />
-                Assistant
+                <MessageSquare className='h-4 w-4' aria-hidden />
               </button>
               <button
                 type='button'
-                data-testid='shell-workspace-inbox'
-                data-active={activeWorkspace === 'inbox' ? 'true' : 'false'}
-                className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-                onClick={() => setActiveWorkspace('inbox')}
-              >
-                <Inbox className='h-3.5 w-3.5' />
-                Inbox
-              </button>
-              <button
-                type='button'
-                aria-label='Open Notification Inbox'
-                title='Open Notification Inbox'
+                aria-label='Open notification inbox'
+                title='Open notification inbox'
                 data-testid='shell-workspace-bell'
-                className='inline-flex items-center justify-center rounded-md border px-2 py-1 text-xs hover:bg-muted'
+                className='relative inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none'
                 onClick={openNotificationInbox}
               >
-                <Bell className='h-3.5 w-3.5' />
+                <Bell className='h-4 w-4' aria-hidden />
+                <span
+                  aria-hidden
+                  className='absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-rose-400 ring-1 ring-slate-950'
+                  data-testid='shell-workspace-bell-badge'
+                />
               </button>
             </div>
           )}
@@ -461,7 +454,6 @@ export function AppSidebar() {
             ))
           : null}
         {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
-        {activeWorkspace === 'inbox' ? <InboxWorkspacePanel /> : null}
       </SidebarContent>
       <SidebarFooter>
         <div className='px-2 pb-2'>
