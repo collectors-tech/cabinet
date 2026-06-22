@@ -106,3 +106,26 @@ Cabinet SHALL keep purchase date, delivery, and original order-link evidence vis
 - **THEN** Cabinet MUST show purchase date and delivery evidence when available and a pending state when they are not available.
 - **AND** rows with a source order URL MUST expose an external open-order action without replacing the purchase row.
 - **AND** table search MUST include purchase date, delivery, and order-link evidence so users can locate rows by those metadata fields.
+
+### Requirement COMMERCE-RECONCILIATION-012: Purchases page actions SHALL be icon-only and preserve workflow purpose
+Purchases SHALL render page header action controls as icon-only controls with accessible labels and tooltips, and SHALL keep secondary reconciliation workflows named for their actual source data and outcome.
+
+#### Scenario: Header actions are icon-only but accessible
+- **GIVEN** the user opens `/purchases`
+- **WHEN** the Purchases page header action area renders
+- **THEN** the Add purchase, source-match review, and captured-purchase review controls MUST render without visible button text.
+- **AND** each action MUST preserve an accessible label and tooltip describing the command.
+
+#### Scenario: Source-match review opens forwarder package matching tools
+- **GIVEN** the Purchases page has loaded
+- **WHEN** the user activates the source-match review action
+- **THEN** Cabinet MUST show the forwarder package/source-match review surface.
+- **AND** the surface MUST make clear that its inputs are Stackry or freight-forwarder source records and purchase or expected-arrival candidates.
+- **AND** the workflow MUST expose non-mutating suggestion review plus explicit confirm, override, and unlink actions before match state changes.
+
+#### Scenario: Captured-purchase review loads captured eBay review records
+- **GIVEN** the Purchases page has loaded
+- **WHEN** the user activates the captured-purchase review action
+- **THEN** Cabinet MUST load captured eBay purchase review records and show them in a secondary review surface.
+- **AND** the Purchases table MUST receive visible captured-review rows only from the loaded review response.
+- **AND** suggested actions from captured reviews MUST require explicit confirmation before any queued mutation action is represented.
