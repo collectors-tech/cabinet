@@ -1,5 +1,5 @@
 ## Purpose
-Define Integrations screen behavior for provider cards, filters, and credential edit dialogs.
+Define Integrations screen behavior for configured integration tables, provider cards, filters, and credential edit dialogs.
 
 ## Requirements
 ### Requirement UI-SCREEN-INTEGRATIONS-001: Integrations screen SHALL support search/filter/sort over provider cards
@@ -57,15 +57,25 @@ Integrations table rows SHALL provide distinct single-click, double-click, and r
 - **THEN** the provider configuration dialog MUST open
 - **AND** row details/edit dialogs MUST NOT open from the nested action click
 
-### Requirement UI-SCREEN-INTEGRATIONS-011: Integrations screen SHALL use a paginated full-page table as the primary provider list
-Integrations screen SHALL render the primary provider list as a scan-friendly full-page table with pagination and stable operational columns.
+### Requirement UI-SCREEN-INTEGRATIONS-011: Integrations screen SHALL use a paginated full-height configured integrations table as the primary provider list
+Integrations screen SHALL render the primary configured integrations list as a scan-friendly full-height table with pagination and stable operational columns.
 
 #### Scenario: Default integrations table renders stable scan columns
 - **GIVEN** integrations route is loaded with provider registry data
 - **WHEN** the primary provider list renders
 - **THEN** the default presentation MUST be a table, not cards
+- **AND** the main table MUST include only added/configured integrations, not every catalog provider returned by the registry
 - **AND** the table MUST include stable columns for provider/name, category/type, connection/config status, action availability, health/last-run state, and row actions
 - **AND** row actions MUST keep the provider configuration/details flow reachable
+
+#### Scenario: Integrations table uses the standard full-height page pattern
+- **GIVEN** integrations route is loaded with enough configured integrations to overflow the visible page body
+- **WHEN** the configured integrations table renders
+- **THEN** the page header action area MUST include an `Add Integration` action
+- **AND** extra in-page title/description copy blocks MUST NOT appear above the table controls
+- **AND** the table surface MUST take the available page height
+- **AND** only the table body MUST scroll while header controls, table header, and pagination remain stable and visible
+- **AND** row actions MUST remain reachable without horizontal clipping or overflow
 
 #### Scenario: Integrations table paginates larger provider lists
 - **GIVEN** integrations route has more providers than the table page size
@@ -218,8 +228,8 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-11 | Provider API support detail display | Detail panel shows API family + support profile metadata | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-11 + INTEGRATION-024: detail panel shows API family + support profile metadata from registry` |
 | UC-INT-UI-12 | Provider edit fields are labeled | Dialog config fields have visible labels associated by `htmlFor`/`id` | `internal/app/ui_template_contract_test.go` `TestIntegrationsProviderConfigInputsHaveLabels` |
 | UC-INT-UI-13 | Validate provider health | Validation shows progress, reconciles health/last-run/last-checked, and reports resulting status | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state` |
-| UC-INT-UI-14 | Primary integrations table | Default list renders full-page table columns with provider identity, type, connection, actions, health/last-run, and row actions | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to table and supports filter/sort/view using registry data` |
-| UC-INT-UI-15 | Integrations table pagination | Larger provider lists page through stable table rows and reset to page 1 when filters change | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page integrations table` |
+| UC-INT-UI-14 | Primary configured integrations table | Default list renders configured-only full-page table columns with provider identity, type, connection, actions, health/last-run, and row actions | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to configured-only table and supports filter/sort/view using registry data` |
+| UC-INT-UI-15 | Configured integrations table pagination and full-height scroll | Larger configured provider lists page through stable table rows, keep header actions/pagination stable while only the table body scrolls, and reset to page 1 when filters change | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page configured integrations table`; `UI-SCREEN-INTEGRATIONS-011 + #1112: keeps controls stable while only table body scrolls` |
 | UC-INT-UI-16 | Recover missing active profile inline | Active-profile bootstrap error exposes selectable profile recovery or inline profile creation, activates the resulting profile, reloads registry/settings, stays on `/integrations/`, and clears the route error | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context`, `UI-SCREEN-INTEGRATIONS-005 + UC-INT-UI-16: creates a missing active profile inline and reloads integrations` |
 | UC-INT-UI-17 | Hydrate direct route query state | Shared `/integrations/` URL applies `filter`, `type`, `sort`, and `view` on first render with matching provider results | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-17: applies direct route query state on first render` |
 | UC-INT-UI-18 | Use row interaction surfaces | Table row single-click opens details, double-click opens edit, selected context is URL-backed, and nested row actions do not trigger row dialogs | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs` |

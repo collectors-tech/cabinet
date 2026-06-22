@@ -13,6 +13,7 @@ import {
   ArrowUpAZ,
   Download,
   PlugZap,
+  Plus,
   SearchCheck,
   SlidersHorizontal,
   Store,
@@ -481,6 +482,26 @@ function providerSettingsKeys(providerID: string) {
   }
 }
 
+function providerSettingAliases(providerID: string) {
+  const keys = providerSettingsKeys(providerID)
+  return {
+    enabledKeys: [
+      keys.enabledKey,
+      `integration.${providerID}.enabled`,
+    ],
+    baseURLKeys: [keys.baseURLKey, `integration.${providerID}.base_url`],
+    tokenKeys: [keys.tokenKey, `integration.${providerID}.token`],
+    marketplaceKeys: [
+      keys.marketplaceKey,
+      `integration.${providerID}.marketplace`,
+    ],
+    itemsPerPageKeys: [
+      keys.itemsPerPageKey,
+      `integration.${providerID}.items_per_page`,
+    ],
+  }
+}
+
 function isConnected(
   provider: ProviderRecord,
   settings: Record<string, string>
@@ -499,11 +520,35 @@ function isConnected(
   if (provider.auth_mode === 'none') {
     return true
   }
-  const keys = providerSettingsKeys(provider.provider_id)
   if (provider.has_token) {
     return true
   }
-  return settings[keys.enabledKey] === 'true'
+  const aliases = providerSettingAliases(provider.provider_id)
+  return aliases.enabledKeys.some((key) => settings[key] === 'true')
+}
+
+function isConfiguredIntegration(
+  provider: ProviderRecord,
+  settings: Record<string, string>
+) {
+  if (provider.has_token || provider.active_auth_method) {
+    return true
+  }
+  if (
+    provider.auth_methods?.api_key?.connected ||
+    provider.auth_methods?.browser_auth?.connected ||
+    provider.auth_methods?.sender_chat?.connected
+  ) {
+    return true
+  }
+  const aliases = providerSettingAliases(provider.provider_id)
+  return [
+    ...aliases.enabledKeys,
+    ...aliases.baseURLKeys,
+    ...aliases.tokenKeys,
+    ...aliases.marketplaceKeys,
+    ...aliases.itemsPerPageKeys,
+  ].some((key) => Object.prototype.hasOwnProperty.call(settings, key))
 }
 
 function bootstrapErrorMessage(error: unknown) {
@@ -719,7 +764,13 @@ export function Apps({
     return list
   }, [providers, sort])
 
-  const filteredProviders = sortedProviders
+  const configuredProviders = sortedProviders.filter((provider) =>
+    isConfiguredIntegration(provider, settings)
+  )
+  const addableProviders = sortedProviders.filter(
+    (provider) => !isConfiguredIntegration(provider, settings)
+  )
+  const filteredProviders = configuredProviders
     .filter((provider) =>
       appType === 'connected'
         ? isConnected(provider, settings)
@@ -744,6 +795,7 @@ export function Apps({
     filteredProviders.length,
     tableStart + paginatedProviders.length
   )
+  const addIntegrationTarget = addableProviders[0] ?? sortedProviders[0] ?? null
 
   useEffect(() => {
     setTablePage((page) => Math.min(page, tablePageCount))
@@ -1611,6 +1663,20 @@ export function Apps({
           className='ms-auto flex items-center gap-4'
           data-header-title-avoid='true'
         >
+          <Button
+            type='button'
+            size='sm'
+            data-testid='integrations-header-add'
+            disabled={!addIntegrationTarget}
+            onClick={() => {
+              if (addIntegrationTarget) {
+                openIntegration(addIntegrationTarget)
+              }
+            }}
+          >
+            <Plus className='size-4' />
+            <span className='hidden sm:inline'>Add Integration</span>
+          </Button>
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
@@ -1618,12 +1684,7 @@ export function Apps({
         </div>
       </Header>
 
-      <Main fixed>
-        <div>
-          <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
-          <p className='text-muted-foreground'>{description}</p>
-        </div>
-
+      <Main fixed className='min-h-0 gap-3'>
         {bootstrapError ? (
           <div
             className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
@@ -1719,7 +1780,7 @@ export function Apps({
           </div>
         ) : null}
 
-        <div className='my-4 flex items-end justify-between sm:my-0 sm:items-center'>
+        <div className='flex items-end justify-between gap-3 sm:items-center'>
           <div className='flex flex-col gap-4 sm:my-4 sm:flex-row'>
             <Input
               placeholder='Filter providers...'
@@ -1764,7 +1825,7 @@ export function Apps({
 
         <Separator className='shadow-sm' />
 
-        <div className='flex items-center justify-end gap-2 pt-4'>
+        <div className='flex items-center justify-end gap-2'>
           <Button
             size='sm'
             variant={viewMode === 'rows' ? 'default' : 'outline'}
@@ -1792,10 +1853,16 @@ export function Apps({
         ) : null}
 
         {!loading && viewMode === 'rows' ? (
-          <div className='space-y-3' data-testid='integrations-table-surface'>
-            <div className='overflow-x-auto rounded-md border'>
+          <div
+            className='flex min-h-0 flex-1 flex-col gap-3'
+            data-testid='integrations-table-surface'
+          >
+            <div
+              className='min-h-0 flex-1 overflow-auto rounded-md border'
+              data-testid='integrations-table-scroll-body'
+            >
               <Table className='min-w-[72rem] table-fixed'>
-                <TableHeader>
+                <TableHeader className='sticky top-0 z-10 bg-background'>
                   <TableRow>
                     <TableHead className='w-[18rem]'>Provider</TableHead>
                     <TableHead className='w-[14rem]'>Category / Type</TableHead>
@@ -1887,7 +1954,7 @@ export function Apps({
                   ) : (
                     <TableRow>
                       <TableCell colSpan={6} className='h-24 text-center'>
-                        No integrations match current filters.
+                        No configured integrations match current filters.
                       </TableCell>
                     </TableRow>
                   )}
@@ -2013,7 +2080,7 @@ export function Apps({
                 className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground md:col-span-2 lg:col-span-3'
                 data-testid='integrations-cards-empty-state'
               >
-                No integrations match current filters.
+                No configured integrations match current filters.
               </li>
             )}
           </ul>

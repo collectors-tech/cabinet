@@ -15,7 +15,7 @@ describe('ui-screen-integrations', () => {
     cy.clearLocalStorage()
   })
 
-  it('UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to table and supports filter/sort/view using registry data', () => {
+  it('UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to configured-only table and supports filter/sort/view using registry data', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
@@ -73,9 +73,12 @@ describe('ui-screen-integrations', () => {
     cy.wait('@registry')
     cy.wait('@settings')
 
-    cy.contains('h1', 'Integrations').should('be.visible')
+    cy.get('[data-testid="integrations-header-title"]').should(
+      'contain',
+      'Integrations'
+    )
     cy.contains('Configure providers, credentials, and connector actions.').should(
-      'be.visible'
+      'not.exist'
     )
     cy.contains('integrations.title').should('not.exist')
     cy.contains('integrations.description').should('not.exist')
@@ -89,25 +92,30 @@ describe('ui-screen-integrations', () => {
     cy.contains('th', 'Row actions').should('exist')
     cy.get('[data-testid="provider-row-ebay"]').should('be.visible')
     cy.get('[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]').should(
-      'be.visible'
+      'not.exist'
     )
+    cy.get('[data-testid="integrations-header-add"]')
+      .should('be.visible')
+      .and('contain', 'Add Integration')
 
     cy.get('input[placeholder="Filter providers..."]').clear().type('bonza')
     cy.get('[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]').should(
-      'be.visible'
+      'not.exist'
     )
     cy.get('[data-testid="provider-row-ebay"]').should('not.exist')
 
+    cy.get('input[placeholder="Filter providers..."]').clear()
     cy.contains('button', 'Cards').click()
     cy.location('search').should('contain', 'view=cards')
+    cy.get('[data-testid="provider-card-ebay"]').should('be.visible')
     cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
-      'be.visible'
+      'not.exist'
     )
     cy.contains('button', 'Rows').click()
     cy.get('table').should('be.visible')
   })
 
-  it('UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page integrations table', () => {
+  it('UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page configured integrations table', () => {
     const providers = Array.from({ length: 12 }, (_, index) => {
       const number = index + 1
       return {
@@ -140,7 +148,14 @@ describe('ui-screen-integrations', () => {
     }).as('registry')
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: {} },
+      body: {
+        settings: Object.fromEntries(
+          providers.map((provider) => [
+            `integration.${provider.provider_id}.enabled`,
+            provider.provider_id === 'provider-12' ? 'false' : 'true',
+          ])
+        ),
+      },
     }).as('settings')
 
     signIn()
@@ -177,6 +192,93 @@ describe('ui-screen-integrations', () => {
       'Page 1 of 1'
     )
     cy.get('[data-testid="provider-row-provider-12"]').should('be.visible')
+  })
+
+  it('UI-SCREEN-INTEGRATIONS-011 + #1112: keeps controls stable while only table body scrolls', () => {
+    const providers = Array.from({ length: 14 }, (_, index) => {
+      const number = index + 1
+      return {
+        provider_id: `configured-${String(number).padStart(2, '0')}`,
+        display_name: `Configured ${String(number).padStart(2, '0')}`,
+        base_domain: `configured-${number}.example.test`,
+        integration_mode: 'official_api',
+        auth_mode: 'api_key',
+        state: 'ready',
+        has_token: true,
+        setup_instructions: 'Configure provider credentials.',
+        capabilities: {
+          search: true,
+          stock_observation: false,
+          pricing: true,
+          health: true,
+        },
+        health: { status: 'ok' },
+        last_run: { status: 'success' },
+      }
+    })
+
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          ...providers,
+          {
+            provider_id: 'catalog-only',
+            display_name: 'Catalog Only',
+            base_domain: 'catalog-only.example.test',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Configure catalog provider.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown' },
+            last_run: { status: 'never' },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: {
+        settings: Object.fromEntries(
+          providers.map((provider) => [
+            `integration.${provider.provider_id}.enabled`,
+            'true',
+          ])
+        ),
+      },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('[data-testid="integrations-header-add"]').should('be.visible')
+    cy.get('[data-testid="provider-row-catalog-only"]').should('not.exist')
+    cy.get('[data-testid="integrations-table-scroll-body"]')
+      .should('have.css', 'overflow-y', 'auto')
+      .and(($el) => {
+        expect($el[0].clientHeight).to.be.lessThan($el[0].scrollHeight)
+      })
+    cy.get('[data-testid="integrations-table-surface"]').then(($surface) => {
+      const surfaceTop = $surface[0].getBoundingClientRect().top
+      cy.get('[data-testid="integrations-table-scroll-body"]').scrollTo('bottom')
+      cy.get('[data-testid="integrations-table-pagination"]').should('be.visible')
+      cy.get('[data-testid="integrations-table-surface"]').then(($after) => {
+        expect($after[0].getBoundingClientRect().top).to.eq(surfaceTop)
+      })
+    })
   })
 
   it('UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs', () => {
@@ -233,7 +335,12 @@ describe('ui-screen-integrations', () => {
     }).as('registry')
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: { 'integration.connected-api.enabled': 'true' } },
+      body: {
+        settings: {
+          'integration.connected-api.enabled': 'true',
+          'integration.offline-webshop.enabled': 'false',
+        },
+      },
     }).as('settings')
 
     signIn()
@@ -324,7 +431,12 @@ describe('ui-screen-integrations', () => {
     }).as('registry')
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: { 'integration.connected-api.enabled': 'true' } },
+      body: {
+        settings: {
+          'integration.connected-api.enabled': 'true',
+          'integration.offline-webshop.enabled': 'false',
+        },
+      },
     }).as('settings')
 
     signIn()
@@ -406,7 +518,12 @@ describe('ui-screen-integrations', () => {
     }).as('registry')
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: { 'integration.connected-api.enabled': 'true' } },
+      body: {
+        settings: {
+          'integration.connected-api.enabled': 'true',
+          'integration.offline-webshop.enabled': 'false',
+        },
+      },
     }).as('settings')
 
     signIn()
@@ -620,7 +737,7 @@ describe('ui-screen-integrations', () => {
     cy.contains('button', 'Rows').should('have.attr', 'aria-pressed', 'true')
     cy.get('[data-testid="integrations-table-surface"]')
       .should('be.visible')
-      .and('contain', 'No integrations match current filters.')
+      .and('contain', 'No configured integrations match current filters.')
     cy.get('[data-testid="integrations-table-pagination"]').should(
       'contain',
       'Showing 0-0 of 0 integrations'
@@ -710,7 +827,7 @@ describe('ui-screen-integrations', () => {
     cy.contains('button', 'Cards').should('have.attr', 'aria-pressed', 'true')
     cy.get('[data-testid="integrations-cards-empty-state"]')
       .should('be.visible')
-      .and('contain', 'No integrations match current filters.')
+      .and('contain', 'No configured integrations match current filters.')
     cy.get('[data-testid="integrations-table-surface"]').should('not.exist')
     cy.get('[data-testid^="provider-row-"]').should('not.exist')
     cy.get('[data-testid^="provider-card-"]').should('not.exist')
@@ -1914,7 +2031,7 @@ describe('ui-screen-integrations', () => {
 
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: {} },
+      body: { settings: { 'integration.ebay.enabled': 'false' } },
     }).as('settingsRecovered')
 
     signIn()
@@ -1990,7 +2107,11 @@ describe('ui-screen-integrations', () => {
 
     cy.intercept('GET', '/api/profiles/profile-e2e-created/settings', {
       statusCode: 200,
-      body: { settings: {} },
+      body: {
+        settings: {
+          'integration.created-profile-provider.enabled': 'false',
+        },
+      },
     }).as('settingsRecovered')
 
     signIn()
@@ -2084,7 +2205,11 @@ describe('ui-screen-integrations', () => {
     })
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: {} },
+      body: {
+        settings: {
+          'integration.au-webshop-voglers-com-au.enabled': 'true',
+        },
+      },
     })
 
     signIn()
@@ -2129,7 +2254,11 @@ describe('ui-screen-integrations', () => {
     })
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: {} },
+      body: {
+        settings: {
+          'integration.au-webshop-voglers-com-au.enabled': 'true',
+        },
+      },
     })
 
     signIn()
