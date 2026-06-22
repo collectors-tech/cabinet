@@ -112,6 +112,79 @@ describe('chats/notification-inbox', () => {
     cy.get('[data-testid="purchase-inbox-load-reviews"]').should('not.exist')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-007 + #1426 exposes Inbox as primary nav with bell navigation, search, split detail, and toast history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: baseItems },
+    }).as('loadNotifications')
+
+    cy.visit('/sign-in?redirect=%2Fdashboard')
+    cy.get('input[name="email"]').clear().type('e2e-inbox-nav@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.window().then((win) => {
+      win.localStorage.setItem(
+        'cabinet.toastHistory.v1',
+        JSON.stringify([
+          {
+            id: 'toast-history-1',
+            level: 'success',
+            title: 'Wishlist row updated.',
+            summary: 'Toast feedback persisted for later review.',
+            created_at: '2026-06-08T09:30:00Z',
+          },
+        ])
+      )
+    })
+    cy.contains('button', 'Sign in').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/)
+
+    cy.get('[data-testid="sidebar-nav-link-inbox"]')
+      .should('be.visible')
+      .and('contain', 'Inbox')
+      .click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+    cy.wait('@loadNotifications')
+    cy.get('[data-testid="notification-inbox-filter-all"]').should(
+      'have.attr',
+      'data-state',
+      'active'
+    )
+
+    cy.visit('/dashboard')
+    cy.get('[data-testid="shell-workspace-bell"]').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+    cy.get('[data-testid="notification-inbox-page"]').should(
+      'have.attr',
+      'data-layout',
+      'full-height-split'
+    )
+    cy.get('[data-testid="notification-inbox-list-pane"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-detail-pane"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-search"]')
+      .should('be.visible')
+      .type('toast')
+    cy.get('[data-testid="notification-inbox-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Wishlist row updated.')
+    cy.get('[data-testid="notification-inbox-detail-pane"]')
+      .should('contain', 'Wishlist row updated.')
+      .and('contain', 'Toast feedback persisted for later review.')
+    cy.get('[data-testid="notification-inbox-list-pane"]').then(($pane) => {
+      const pane = $pane[0]
+      expect(pane.clientHeight, 'list pane is height constrained').to.be.lessThan(
+        620
+      )
+      expect(
+        pane.scrollHeight,
+        'list pane owns vertical scrolling'
+      ).to.be.greaterThan(pane.clientHeight)
+    })
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-002 filters categories and shows contextual empty states', () => {
     bootInbox()
 
