@@ -177,7 +177,7 @@ describe("UI-SCREEN-HOME", () => {
     cy.contains("No recently added items yet.").should("be.visible")
   })
 
-  it("UI-SCREEN-HOME-003 handles fetch error and supports retry + quick action routing", () => {
+  it("UI-SCREEN-HOME-003 + UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves dashboard fetch errors in Inbox history", () => {
     let attempts = 0
     cy.intercept("GET", "/api/dashboard", (req) => {
       attempts += 1
