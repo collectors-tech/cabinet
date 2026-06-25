@@ -139,3 +139,10 @@ Cabinet SHALL expose active-profile purchase lifecycle and expected-arrival reco
 - **AND** status filters MUST support `all`, `active`, `reviews`, `shipped`, and `received`.
 - **AND** search MUST match order id, item title, seller/source, tracking, and status.
 - **AND** pagination metadata MUST include page, page size, total count, and total pages.
+
+#### Scenario: Purchases page renders grouped persisted purchase orders
+- **GIVEN** the Purchases page has loaded for an active profile with persisted grouped purchase orders
+- **WHEN** the user searches, changes workflow status filters, or pages through the purchase table
+- **THEN** Cabinet MUST query `GET /api/commerce/purchase-orders` with the selected `status`, `search`, `page`, and `page_size` parameters.
+- **AND** the table MUST render each returned purchase order as an order-centred row with grouped line-item rows visible beneath it.
+- **AND** the table MUST expose pagination controls and an empty state that distinguishes no persisted purchases from no matching filtered purchases.

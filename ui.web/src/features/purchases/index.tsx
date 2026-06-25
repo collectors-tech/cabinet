@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Inbox,
   CheckCircle2,
@@ -90,11 +90,10 @@ type PurchaseInboxReview = {
 
 type PurchaseTableStatusFilter =
   | 'all'
-  | 'ready_to_link_or_convert'
-  | 'needs_review'
-  | 'manual_draft'
-  | 'csv_import'
-  | 'email_import'
+  | 'active'
+  | 'reviews'
+  | 'shipped'
+  | 'received'
 
 type PurchaseTableRow = {
   key: string
@@ -109,6 +108,39 @@ type PurchaseTableRow = {
   persistence: string
   actionCount: number
   searchText: string
+}
+
+type PurchaseOrderLineItem = {
+  item_id: string
+  title: string
+  quantity: number
+  amount: number
+  status: string
+  lifecycle_entry_id: string
+  expected_arrival_id: string
+}
+
+type PurchaseOrder = {
+  order_id: string
+  source: string
+  seller: string
+  tracking: string
+  status: string
+  total_amount: number
+  currency: string
+  line_item_count: number
+  received_count: number
+  unreceived_count: number
+  line_items: PurchaseOrderLineItem[]
+  created_at?: string
+}
+
+type PurchaseOrderListResponse = {
+  page?: number
+  page_size?: number
+  total?: number
+  total_pages?: number
+  orders?: PurchaseOrder[]
 }
 
 type ManualPurchaseForm = {
@@ -392,6 +424,21 @@ function labelForStatus(status: string) {
   return status.split('_').join(' ')
 }
 
+function formatPurchaseAmount(amount: number, currency?: string) {
+  if (!Number.isFinite(amount) || amount === 0) {
+    return '-'
+  }
+  return (currency ? currency.toUpperCase() + ' ' : '') + amount.toFixed(2)
+}
+
+function purchaseOrderSummary(order: PurchaseOrder) {
+  const lineLabel =
+    order.line_item_count + ' line item' + (order.line_item_count === 1 ? '' : 's')
+  const receivedLabel =
+    order.received_count + ' received / ' + order.unreceived_count + ' unreceived'
+  return lineLabel + ' · ' + receivedLabel
+}
+
 function packageDetailValue(value?: string | number) {
   if (value === undefined || value === null || value === '') {
     return 'Pending'
@@ -613,7 +660,16 @@ export function Purchases() {
   >(null)
   const [purchaseSearch, setPurchaseSearch] = useState('')
   const [purchaseStatusFilter, setPurchaseStatusFilter] =
-    useState<PurchaseTableStatusFilter>('all')
+    useState<PurchaseTableStatusFilter>('active')
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
+  const [purchaseOrdersLoading, setPurchaseOrdersLoading] = useState(false)
+  const [purchaseOrdersError, setPurchaseOrdersError] = useState<string | null>(
+    null
+  )
+  const [purchaseOrdersPage, setPurchaseOrdersPage] = useState(1)
+  const [purchaseOrdersPageSize, setPurchaseOrdersPageSize] = useState(10)
+  const [purchaseOrdersTotal, setPurchaseOrdersTotal] = useState(0)
+  const [purchaseOrdersTotalPages, setPurchaseOrdersTotalPages] = useState(0)
   const [favoritePurchaseKeys, setFavoritePurchaseKeys] = useState<
     Record<string, boolean>
   >({})
@@ -701,7 +757,83 @@ export function Purchases() {
     [packageLinks, packageReviewFilter, packageSuggestions, packages]
   )
 
+  const loadPurchaseOrders = useCallback(async () => {
+    setPurchaseOrdersLoading(true)
+    setPurchaseOrdersError(null)
+    try {
+      const params = new URLSearchParams({
+        status: purchaseStatusFilter,
+        page: String(purchaseOrdersPage),
+        page_size: String(purchaseOrdersPageSize),
+      })
+      const query = purchaseSearch.trim()
+      if (query) {
+        params.set('search', query)
+      }
+      const response = await fetch(
+        '/api/commerce/purchase-orders?' + params.toString()
+      )
+      if (!response.ok) {
+        throw new Error('purchase_orders_' + response.status)
+      }
+      const payload = (await response.json()) as PurchaseOrderListResponse
+      setPurchaseOrders(payload.orders ?? [])
+      setPurchaseOrdersTotal(payload.total ?? 0)
+      setPurchaseOrdersTotalPages(payload.total_pages ?? 0)
+      setPurchaseOrdersPage(payload.page ?? purchaseOrdersPage)
+      setPurchaseOrdersPageSize(payload.page_size ?? purchaseOrdersPageSize)
+    } catch (err) {
+      setPurchaseOrders([])
+      setPurchaseOrdersTotal(0)
+      setPurchaseOrdersTotalPages(0)
+      setPurchaseOrdersError(
+        err instanceof Error ? err.message : 'purchase_orders_failed'
+      )
+    } finally {
+      setPurchaseOrdersLoading(false)
+    }
+  }, [
+    purchaseOrdersPage,
+    purchaseOrdersPageSize,
+    purchaseSearch,
+    purchaseStatusFilter,
+  ])
+
+  useEffect(() => {
+    void loadPurchaseOrders()
+  }, [loadPurchaseOrders])
+
   const purchaseRows = useMemo<PurchaseTableRow[]>(() => {
+    const persistedRows = purchaseOrders.map((order) => ({
+      key: 'order:' + order.source + ':' + order.order_id,
+      title: order.order_id || 'Purchase order',
+      source: [order.source, order.seller].filter(Boolean).join(' / '),
+      price: formatPurchaseAmount(order.total_amount, order.currency),
+      purchaseDate: order.created_at || 'Pending',
+      delivery: purchaseOrderSummary(order),
+      status: order.status,
+      tracking: order.tracking || 'Pending',
+      orderLink: '',
+      persistence: 'Persisted purchase order',
+      actionCount: order.line_item_count,
+      searchText: [
+        order.order_id,
+        order.source,
+        order.seller,
+        order.tracking,
+        order.status,
+        ...order.line_items.flatMap((item) => [
+          item.title,
+          item.item_id,
+          item.status,
+          item.lifecycle_entry_id,
+          item.expected_arrival_id,
+        ]),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase(),
+    }))
     const capturedRows = reviews.flatMap((review) =>
       review.items.map((item) => {
         const source = item.item.seller_username
@@ -805,25 +937,47 @@ export function Purchases() {
         .toLowerCase(),
     }))
 
-    return [...importedRows, ...manualRows, ...capturedRows]
-  }, [importPurchaseDrafts, manualPurchaseDrafts, reviews])
+    return [...persistedRows, ...importedRows, ...manualRows, ...capturedRows]
+  }, [importPurchaseDrafts, manualPurchaseDrafts, purchaseOrders, reviews])
 
   const filteredPurchaseRows = useMemo(() => {
     const query = purchaseSearch.trim().toLowerCase()
 
     return purchaseRows.filter((row) => {
-      if (
-        purchaseStatusFilter !== 'all' &&
-        row.status !== purchaseStatusFilter
-      ) {
-        return false
+      const isLocalDraft =
+        row.status === 'manual_draft' ||
+        row.status === 'csv_import' ||
+        row.status === 'email_import'
+      if (purchaseStatusFilter !== 'all' && row.status !== purchaseStatusFilter) {
+        if (!isLocalDraft || purchaseStatusFilter !== 'active') {
+          return false
+        }
       }
-      if (query && !row.searchText.includes(query)) {
+      if (
+        query &&
+        !row.searchText.includes(query) &&
+        !row.key.startsWith('order:')
+      ) {
         return false
       }
       return true
     })
   }, [purchaseRows, purchaseSearch, purchaseStatusFilter])
+
+  const purchaseOrdersByRowKey = useMemo(
+    () =>
+      new Map(
+        purchaseOrders.map((order) => [
+          'order:' + order.source + ':' + order.order_id,
+          order,
+        ])
+      ),
+    [purchaseOrders]
+  )
+
+  useEffect(() => {
+    setPurchaseOrdersPage(1)
+  }, [purchaseSearch, purchaseStatusFilter])
 
   const loadReviews = useCallback(async () => {
     setLoading(true)
@@ -1599,11 +1753,10 @@ export function Purchases() {
             {(
               [
                 ['all', 'All'],
-                ['ready_to_link_or_convert', 'Ready'],
-                ['needs_review', 'Needs review'],
-                ['manual_draft', 'Manual draft'],
-                ['csv_import', 'CSV import'],
-                ['email_import', 'Email import'],
+                ['active', 'Active'],
+                ['reviews', 'Reviews'],
+                ['shipped', 'Shipped'],
+                ['received', 'Received'],
               ] satisfies Array<[PurchaseTableStatusFilter, string]>
             ).map(([value, label]) => (
               <Button
@@ -1617,14 +1770,44 @@ export function Purchases() {
                 {label}
               </Button>
             ))}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type='button'
+                  size='icon'
+                  variant='outline'
+                  data-testid='purchases-orders-refresh'
+                  aria-label='Refresh purchase orders'
+                  title='Refresh purchase orders'
+                  disabled={purchaseOrdersLoading}
+                  onClick={() => void loadPurchaseOrders()}
+                >
+                  {purchaseOrdersLoading ? (
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                  ) : (
+                    <RefreshCw className='h-4 w-4' />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh purchase orders</TooltipContent>
+            </Tooltip>
             <span
               className='text-sm text-muted-foreground'
               data-testid='purchases-filter-result'
             >
-              Showing {filteredPurchaseRows.length} of {purchaseRows.length}{' '}
-              purchases
+              Showing {filteredPurchaseRows.length} of{' '}
+              {Math.max(purchaseRows.length, purchaseOrdersTotal)} purchases
             </span>
           </div>
+          {purchaseOrdersError ? (
+            <div
+              className='border-b border-destructive/40 bg-destructive/10 p-3 text-sm'
+              data-testid='purchases-orders-error'
+            >
+              <p className='font-medium'>Purchase orders could not load.</p>
+              <p className='text-muted-foreground'>{purchaseOrdersError}</p>
+            </div>
+          ) : null}
           <Table className='min-w-[88rem] table-fixed'>
             <TableHeader>
               <TableRow>
@@ -1640,131 +1823,199 @@ export function Purchases() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPurchaseRows.map((row) => (
-                <TableRow key={row.key} data-testid='purchases-table-row'>
-                  <TableCell className='truncate font-medium'>
-                    <div className='min-w-0'>
-                      <p className='truncate'>{row.title}</p>
-                      <p
-                        className='truncate text-xs font-normal text-muted-foreground'
-                        data-testid='purchases-row-persistence'
-                      >
-                        {row.persistence}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell className='truncate'>{row.source}</TableCell>
-                  <TableCell>{row.price}</TableCell>
-                  <TableCell data-testid='purchases-row-purchase-date'>
-                    {row.purchaseDate}
-                  </TableCell>
+              {purchaseOrdersLoading && filteredPurchaseRows.length === 0 ? (
+                <TableRow data-testid='purchases-table-loading-row'>
                   <TableCell
-                    className='text-muted-foreground'
-                    data-testid='purchases-row-delivery'
+                    colSpan={9}
+                    className='h-20 text-center text-sm text-muted-foreground'
                   >
-                    {row.delivery}
-                  </TableCell>
-                  <TableCell>{labelForStatus(row.status)}</TableCell>
-                  <TableCell className='text-muted-foreground'>
-                    {arrivedPurchaseKeys[row.key] ? 'Arrived' : row.tracking}
-                  </TableCell>
-                  <TableCell>
-                    {row.orderLink ? (
-                      <a
-                        className='text-sm font-medium text-primary underline-offset-4 hover:underline'
-                        data-testid='purchases-row-order-link'
-                        href={row.orderLink}
-                        target='_blank'
-                        rel='noreferrer'
-                      >
-                        Open order
-                      </a>
-                    ) : (
-                      <span
-                        className='text-sm text-muted-foreground'
-                        data-testid='purchases-row-order-link-empty'
-                      >
-                        Pending
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className='flex flex-wrap justify-end gap-1'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant={
-                          favoritePurchaseKeys[row.key] ? 'default' : 'outline'
-                        }
-                        aria-pressed={favoritePurchaseKeys[row.key] ?? false}
-                        data-testid='purchases-row-favorite'
-                        onClick={() =>
-                          setFavoritePurchaseKeys((current) => ({
-                            ...current,
-                            [row.key]: !current[row.key],
-                          }))
-                        }
-                      >
-                        <Star className='mr-1 h-3.5 w-3.5' />
-                        Favorite
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant={
-                          arrivedPurchaseKeys[row.key] ? 'default' : 'outline'
-                        }
-                        aria-pressed={arrivedPurchaseKeys[row.key] ?? false}
-                        data-testid='purchases-row-arrived'
-                        onClick={() =>
-                          setArrivedPurchaseKeys((current) => ({
-                            ...current,
-                            [row.key]: !current[row.key],
-                          }))
-                        }
-                      >
-                        <CheckCircle2 className='mr-1 h-3.5 w-3.5' />
-                        Arrived
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant={
-                          purchaseRatings[row.key] === 4 ? 'default' : 'outline'
-                        }
-                        data-testid='purchases-row-rating'
-                        onClick={() =>
-                          setPurchaseRatings((current) => ({
-                            ...current,
-                            [row.key]: current[row.key] === 4 ? 0 : 4,
-                          }))
-                        }
-                      >
-                        Rating {purchaseRatings[row.key] || '-'}
-                      </Button>
-                      <span
-                        className='self-center text-xs text-muted-foreground'
-                        data-testid='purchases-row-action-count'
-                      >
-                        {row.actionCount} action
-                        {row.actionCount === 1 ? '' : 's'}
-                      </span>
-                    </div>
+                    Loading persisted purchase orders...
                   </TableCell>
                 </TableRow>
-              ))}
-              {purchaseRows.length === 0 ? (
+              ) : null}
+              {filteredPurchaseRows.map((row) => {
+                const order = purchaseOrdersByRowKey.get(row.key)
+
+                return (
+                  <Fragment key={row.key}>
+                    <TableRow data-testid='purchases-table-row'>
+                      <TableCell className='truncate font-medium'>
+                        <div className='min-w-0'>
+                          <p className='truncate'>{row.title}</p>
+                          <p
+                            className='truncate text-xs font-normal text-muted-foreground'
+                            data-testid='purchases-row-persistence'
+                          >
+                            {row.persistence}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className='truncate'>{row.source}</TableCell>
+                      <TableCell>{row.price}</TableCell>
+                      <TableCell data-testid='purchases-row-purchase-date'>
+                        {row.purchaseDate}
+                      </TableCell>
+                      <TableCell
+                        className='text-muted-foreground'
+                        data-testid='purchases-row-delivery'
+                      >
+                        {row.delivery}
+                      </TableCell>
+                      <TableCell>{labelForStatus(row.status)}</TableCell>
+                      <TableCell className='text-muted-foreground'>
+                        {arrivedPurchaseKeys[row.key]
+                          ? 'Arrived'
+                          : row.tracking}
+                      </TableCell>
+                      <TableCell>
+                        {row.orderLink ? (
+                          <a
+                            className='text-sm font-medium text-primary underline-offset-4 hover:underline'
+                            data-testid='purchases-row-order-link'
+                            href={row.orderLink}
+                            target='_blank'
+                            rel='noreferrer'
+                          >
+                            Open order
+                          </a>
+                        ) : (
+                          <span
+                            className='text-sm text-muted-foreground'
+                            data-testid='purchases-row-order-link-empty'
+                          >
+                            Pending
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className='flex flex-wrap justify-end gap-1'>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant={
+                              favoritePurchaseKeys[row.key]
+                                ? 'default'
+                                : 'outline'
+                            }
+                            aria-pressed={
+                              favoritePurchaseKeys[row.key] ?? false
+                            }
+                            data-testid='purchases-row-favorite'
+                            onClick={() =>
+                              setFavoritePurchaseKeys((current) => ({
+                                ...current,
+                                [row.key]: !current[row.key],
+                              }))
+                            }
+                          >
+                            <Star className='mr-1 h-3.5 w-3.5' />
+                            Favorite
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant={
+                              arrivedPurchaseKeys[row.key]
+                                ? 'default'
+                                : 'outline'
+                            }
+                            aria-pressed={arrivedPurchaseKeys[row.key] ?? false}
+                            data-testid='purchases-row-arrived'
+                            onClick={() =>
+                              setArrivedPurchaseKeys((current) => ({
+                                ...current,
+                                [row.key]: !current[row.key],
+                              }))
+                            }
+                          >
+                            <CheckCircle2 className='mr-1 h-3.5 w-3.5' />
+                            Arrived
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant={
+                              purchaseRatings[row.key] === 4
+                                ? 'default'
+                                : 'outline'
+                            }
+                            data-testid='purchases-row-rating'
+                            onClick={() =>
+                              setPurchaseRatings((current) => ({
+                                ...current,
+                                [row.key]: current[row.key] === 4 ? 0 : 4,
+                              }))
+                            }
+                          >
+                            Rating {purchaseRatings[row.key] || '-'}
+                          </Button>
+                          <span
+                            className='self-center text-xs text-muted-foreground'
+                            data-testid='purchases-row-action-count'
+                          >
+                            {row.actionCount} action
+                            {row.actionCount === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {order?.line_items.map((item) => (
+                      <TableRow
+                        key={row.key + ':' + item.lifecycle_entry_id}
+                        className='bg-muted/20'
+                        data-testid='purchases-line-item-row'
+                      >
+                        <TableCell className='pl-8'>
+                          <div className='min-w-0'>
+                            <p className='truncate text-sm font-medium'>
+                              {item.title}
+                            </p>
+                            <p className='truncate text-xs text-muted-foreground'>
+                              Item {item.item_id}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className='text-muted-foreground'>
+                          Qty {item.quantity}
+                        </TableCell>
+                        <TableCell>
+                          {formatPurchaseAmount(item.amount, order.currency)}
+                        </TableCell>
+                        <TableCell className='text-muted-foreground'>
+                          -
+                        </TableCell>
+                        <TableCell className='text-muted-foreground'>
+                          Arrival {item.expected_arrival_id || 'pending'}
+                        </TableCell>
+                        <TableCell>{labelForStatus(item.status)}</TableCell>
+                        <TableCell className='text-muted-foreground'>
+                          Lifecycle {item.lifecycle_entry_id}
+                        </TableCell>
+                        <TableCell className='text-muted-foreground'>
+                          Grouped item
+                        </TableCell>
+                        <TableCell className='text-right text-xs text-muted-foreground'>
+                          Persisted
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                )
+              })}
+              {!purchaseOrdersLoading && purchaseRows.length === 0 ? (
                 <TableRow data-testid='purchases-table-empty-row'>
                   <TableCell
                     colSpan={9}
                     className='h-20 text-center text-sm text-muted-foreground'
                   >
-                    No purchases loaded. Add a purchase or review captured
-                    purchases to populate the table.
+                    No persisted purchases loaded. Add a purchase or change
+                    filters to show another workflow state.
                   </TableCell>
                 </TableRow>
               ) : null}
-              {purchaseRows.length > 0 && filteredPurchaseRows.length === 0 ? (
+              {!purchaseOrdersLoading &&
+              purchaseRows.length > 0 &&
+              filteredPurchaseRows.length === 0 ? (
                 <TableRow data-testid='purchases-table-filter-empty-row'>
                   <TableCell
                     colSpan={9}
@@ -1776,6 +2027,67 @@ export function Purchases() {
               ) : null}
             </TableBody>
           </Table>
+          <div
+            className='flex flex-wrap items-center justify-between gap-3 border-t p-3 text-sm'
+            data-testid='purchases-table-pagination'
+          >
+            <div className='text-muted-foreground'>
+              Page {purchaseOrdersTotal === 0 ? 0 : purchaseOrdersPage} of{' '}
+              {purchaseOrdersTotalPages || 0} · {purchaseOrdersTotal} persisted
+              order{purchaseOrdersTotal === 1 ? '' : 's'}
+            </div>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Label htmlFor='purchases-page-size' className='text-xs'>
+                Rows
+              </Label>
+              <select
+                id='purchases-page-size'
+                className='h-9 rounded-md border bg-background px-2 text-sm'
+                data-testid='purchases-page-size'
+                value={purchaseOrdersPageSize}
+                onChange={(event) => {
+                  setPurchaseOrdersPageSize(Number(event.target.value))
+                  setPurchaseOrdersPage(1)
+                }}
+              >
+                {[10, 25, 50].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid='purchases-page-previous'
+                disabled={purchaseOrdersPage <= 1 || purchaseOrdersLoading}
+                onClick={() =>
+                  setPurchaseOrdersPage((current) => Math.max(current - 1, 1))
+                }
+              >
+                Previous
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid='purchases-page-next'
+                disabled={
+                  purchaseOrdersLoading ||
+                  purchaseOrdersTotalPages === 0 ||
+                  purchaseOrdersPage >= purchaseOrdersTotalPages
+                }
+                onClick={() =>
+                  setPurchaseOrdersPage((current) =>
+                    Math.min(current + 1, purchaseOrdersTotalPages || current)
+                  )
+                }
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
 
         {capturedReviewsOpen ? (
