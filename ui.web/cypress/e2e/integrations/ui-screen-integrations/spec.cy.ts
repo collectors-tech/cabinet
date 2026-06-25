@@ -198,6 +198,124 @@ describe('ui-screen-integrations', () => {
       .and('contain', 'Items per page')
   })
 
+  it('#1483: renders migrated registry providers and keeps disabled providers addable with guidance', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Add eBay API token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-06-25T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-06-25T00:00:00Z' },
+          },
+          {
+            provider_id: 'openai',
+            display_name: 'OpenAI / ChatGPT',
+            base_domain: 'platform.openai.com',
+            integration_mode: 'assistant_workflows',
+            auth_mode: 'hybrid',
+            state: 'needs_config',
+            has_token: false,
+            setup_instructions: 'Configure OpenAI with Browser Auth or an API key.',
+            capabilities: {
+              search: false,
+              stock_observation: false,
+              pricing: false,
+              health: true,
+              assistant: true,
+            },
+            health: { status: 'unknown' },
+            last_run: { status: 'never' },
+          },
+          {
+            provider_id: 'amazon',
+            display_name: 'Amazon',
+            base_domain: 'amazon.com',
+            integration_mode: 'disabled',
+            auth_mode: 'hybrid',
+            state: 'disabled',
+            has_token: false,
+            setup_instructions:
+              'Program API eligibility controls availability before scans can run.',
+            capabilities: {
+              search: false,
+              stock_observation: false,
+              pricing: false,
+              health: true,
+            },
+            health: { status: 'unknown' },
+            last_run: { status: 'never' },
+          },
+          {
+            provider_id: 'au-webshop-legacy-example-test',
+            display_name: 'legacy.example.test',
+            base_domain: 'legacy.example.test',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'none',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Webshop ingestion uses crawl parsing.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown' },
+            last_run: { status: 'never' },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.ebay.enabled': 'true' } },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('[data-testid="provider-row-ebay"]').should('be.visible')
+    cy.get('[data-testid="provider-row-openai"]').should('not.exist')
+    cy.get('[data-testid="provider-row-amazon"]').should('not.exist')
+    cy.get('[data-testid="provider-row-au-webshop-legacy-example-test"]').should(
+      'not.exist'
+    )
+
+    cy.get('[data-testid="integrations-header-add"]').click()
+    cy.get('[data-testid="integrations-provider-selector"]')
+      .should('be.visible')
+      .and('contain', 'OpenAI / ChatGPT')
+      .and('contain', 'Amazon')
+      .and('contain', 'legacy.example.test')
+
+    cy.get('[data-testid="integrations-provider-selector-option-amazon"]').click()
+    cy.get('[role="dialog"]')
+      .should('contain', 'Amazon')
+      .and('contain', 'Mode: disabled')
+      .and('contain', 'Program API eligibility controls availability')
+    cy.contains('secret').should('not.exist')
+  })
+
   it('UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page configured integrations table', () => {
     const providers = Array.from({ length: 12 }, (_, index) => {
       const number = index + 1
