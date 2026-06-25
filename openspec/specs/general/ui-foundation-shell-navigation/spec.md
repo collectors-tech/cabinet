@@ -175,14 +175,15 @@ Cabinet SHALL render authenticated primary app navigation links as icon-only con
 - **AND** keyboard focus MUST remain visible on each icon-only navigation control
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-019: Workspace chrome rail SHALL be icon-only and expose Inbox only through the bell
-Cabinet SHALL render the workspace chrome rail as compact icon-only controls with accessible names, tooltips, and one active workspace affordance. The top workspace chrome SHALL NOT expose a separate visible `Inbox` pill/button; the bell control SHALL be the only top-level Inbox/notifications entry point and SHALL route to the durable Inbox page.
+Cabinet SHALL render the workspace chrome rail as compact icon-only controls with accessible names, tooltips, and one active workspace affordance. The shell workspace tool group SHALL expose Navigation, Search, Chat, and Inbox as icon-only controls without a visible `Workspace` section label. The top workspace chrome SHALL NOT expose a separate visible `Inbox` pill/button; the bell control SHALL be the only top-level Inbox/notifications entry point and SHALL route to the durable Inbox page.
 
 #### Scenario: Workspace chrome rail has no visible action labels
 - **GIVEN** the authenticated shell is visible in expanded desktop layout
 - **WHEN** the workspace chrome rail renders
-- **THEN** Navigation and Assistant workspace controls MUST render as icon-only buttons with accessible names and tooltips
-- **AND** no visible `Nav`, `Assistant`, or `Inbox` text label MUST appear inside the rail controls
+- **THEN** Navigation, Search, Chat, and Inbox controls MUST render as icon-only buttons with accessible names and tooltips
+- **AND** no visible `Workspace`, `Nav`, `Search`, `Chat`, `Assistant`, or `Inbox` text label MUST appear in the workspace tool group
 - **AND** exactly one workspace control MUST expose the active visual state
+- **AND** the Search control MUST open the shared command/search panel without navigating away from the current route
 
 #### Scenario: Bell is the only top-level Inbox affordance
 - **GIVEN** the authenticated shell workspace rail is visible

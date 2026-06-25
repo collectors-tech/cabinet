@@ -33,25 +33,37 @@ describe('sidebar-collapsed-workspace', () => {
       .should('have.attr', 'data-state', 'collapsed')
 
     cy.get('[data-testid="sidebar-runtime-meta"]').should('not.exist')
-    cy.get('[data-testid="shell-workspace-label"]')
-      .should('be.visible')
-      .and('have.text', 'Work')
+    cy.get('[data-testid="shell-workspace-label"]').should('not.exist')
     cy.get('[data-testid="shell-workspace-switcher"]').should(
       'not.contain',
       'Workspace'
     )
-    cy.get('[data-testid="shell-workspace-menu-trigger"]').should('be.visible')
-    cy.get('[data-testid="shell-workspace-navigation"]').should('not.exist')
-    cy.get('[data-testid="shell-workspace-assistant"]').should('not.exist')
+    cy.get('[data-testid="shell-workspace-menu-trigger"]').should('not.exist')
+    cy.get('[data-testid="shell-workspace-icon-rail"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-navigation"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Navigation workspace')
+    cy.get('[data-testid="shell-workspace-search"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Search workspace')
+    cy.get('[data-testid="shell-workspace-assistant"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Chat workspace')
+    cy.get('[data-testid="shell-workspace-bell"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Open notification inbox')
     cy.get('[data-testid="shell-workspace-inbox"]').should('not.exist')
-
-    cy.get('[data-testid="shell-workspace-menu-trigger"]').click()
-    cy.get('[data-testid="shell-workspace-menu-navigation"]').should(
-      'be.visible'
+    cy.get('[data-testid="shell-workspace-switcher"]').should(
+      'not.contain',
+      'Search'
     )
-    cy.get('[data-testid="shell-workspace-menu-assistant"]').should(
-      'be.visible'
+    cy.get('[data-testid="shell-workspace-switcher"]').should(
+      'not.contain',
+      'Chat'
     )
-    cy.get('[data-testid="shell-workspace-menu-inbox"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-switcher"]').should(
+      'not.contain',
+      'Inbox'
+    )
   })
 })
