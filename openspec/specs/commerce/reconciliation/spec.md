@@ -55,8 +55,8 @@ Cabinet SHALL expose a first-class authenticated `/purchases` route, label the p
 - **WHEN** the Purchases workspace renders
 - **THEN** Cabinet MUST show Purchases as the route title, expose a table shell with purchase/source/price/status/tracking/action columns, and provide a `+` add action that opens a creation/import dialog with New, CSV, and Email modes.
 - **AND** primary navigation and command navigation MUST expose the route with the user-facing `Purchases` label.
-- **AND** captured-review and purchase-source-match tooling MUST stay collapsed or hidden by default so the initial workspace is table-first instead of a stacked import/reconciliation toolbox.
-- **AND** users MUST be able to deliberately open add/import, captured purchase review, and source-match tooling from explicit Purchases controls in the standard page header action area, without a duplicate in-body Purchases title or description block above the table.
+- **AND** captured-review and purchase-source-match tooling MUST NOT render as standalone primary page actions or default body sections.
+- **AND** users MUST be able to deliberately open add/import from the standard page header action area, without a duplicate in-body Purchases title or description block above the table.
 
 ### Requirement COMMERCE-RECONCILIATION-007: Purchases SHALL support table filtering and row state actions
 Cabinet SHALL let users narrow the Purchases table by purchase text/source/status signals and expose row-level controls for common review state markers before deeper edit/persistence workflows are completed.
@@ -107,25 +107,23 @@ Cabinet SHALL keep purchase date, delivery, and original order-link evidence vis
 - **AND** rows with a source order URL MUST expose an external open-order action without replacing the purchase row.
 - **AND** table search MUST include purchase date, delivery, and order-link evidence so users can locate rows by those metadata fields.
 
-### Requirement COMMERCE-RECONCILIATION-012: Purchases page actions SHALL be icon-only and preserve workflow purpose
-Purchases SHALL render page header action controls as icon-only controls with accessible labels and tooltips, and SHALL keep secondary reconciliation workflows named for their actual source data and outcome.
+### Requirement COMMERCE-RECONCILIATION-012: Purchases page actions SHALL be modal-backed and product-approved
+Purchases SHALL render primary page header actions as clear modal-backed commands and SHALL NOT expose rejected source-match or captured-review workflows as primary page actions.
 
 #### Scenario: Header actions are icon-only but accessible
 - **GIVEN** the user opens `/purchases`
 - **WHEN** the Purchases page header action area renders
-- **THEN** the Add purchase, source-match review, and captured-purchase review controls MUST render without visible button text.
-- **AND** each action MUST preserve an accessible label and tooltip describing the command.
+- **THEN** the Add purchase control MUST render without visible button text.
+- **AND** the Add purchase control MUST preserve an accessible label and tooltip describing the command.
 
-#### Scenario: Source-match review opens forwarder package matching tools
+#### Scenario: Add purchase opens the purchase creation workflow
 - **GIVEN** the Purchases page has loaded
-- **WHEN** the user activates the source-match review action
-- **THEN** Cabinet MUST show the forwarder package/source-match review surface.
-- **AND** the surface MUST make clear that its inputs are Stackry or freight-forwarder source records and purchase or expected-arrival candidates.
-- **AND** the workflow MUST expose non-mutating suggestion review plus explicit confirm, override, and unlink actions before match state changes.
+- **WHEN** the user activates the Add purchase action
+- **THEN** Cabinet MUST show a modal purchase creation workflow.
+- **AND** the modal MUST expose manual/new, CSV import, and email import modes as one purchase creation workflow.
 
-#### Scenario: Captured-purchase review loads captured eBay review records
+#### Scenario: Rejected review actions are absent from the primary Purchases page
 - **GIVEN** the Purchases page has loaded
-- **WHEN** the user activates the captured-purchase review action
-- **THEN** Cabinet MUST load captured eBay purchase review records and show them in a secondary review surface.
-- **AND** the Purchases table MUST receive visible captured-review rows only from the loaded review response.
-- **AND** suggested actions from captured reviews MUST require explicit confirmation before any queued mutation action is represented.
+- **WHEN** the Purchases page header and default page body render
+- **THEN** Cabinet MUST NOT render `Review source matches` or `Review captured purchases` as header actions.
+- **AND** Cabinet MUST NOT render standalone source-match or captured-review stacked sections as primary page body workflows.

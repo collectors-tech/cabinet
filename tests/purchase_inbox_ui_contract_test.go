@@ -34,7 +34,6 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchases-header-title",
 		"purchases-page-icon",
 		"purchases-global-header-actions",
-		"Load captured reviews",
 		"requires_confirmation",
 		"Confirmation required",
 		"purchases-add-csv-preview",
@@ -48,12 +47,22 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchases-row-order-link",
 		"capturedReviewsOpen",
 		"sourceMatchesOpen",
-		"purchases-source-matches-toggle",
 		"purchase-review-tools",
 	}
 	for _, snippet := range requiredFeatureSnippets {
 		if !strings.Contains(feature, snippet) {
 			t.Fatalf("Purchases UI missing %q in %s", snippet, featurePath)
+		}
+	}
+	forbiddenFeatureSnippets := []string{
+		"data-testid='purchases-source-matches-toggle'",
+		"data-testid='purchase-inbox-load-reviews'",
+		"aria-label='Review source matches'",
+		"aria-label='Review captured purchases'",
+	}
+	for _, snippet := range forbiddenFeatureSnippets {
+		if strings.Contains(feature, snippet) {
+			t.Fatalf("Purchases UI must not expose rejected header action %q in %s", snippet, featurePath)
 		}
 	}
 

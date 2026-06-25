@@ -1555,46 +1555,6 @@ export function Purchases() {
               </TooltipTrigger>
               <TooltipContent>Add purchase</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size='icon'
-                  variant='outline'
-                  data-testid='purchases-source-matches-toggle'
-                  onClick={() => setSourceMatchesOpen((current) => !current)}
-                  aria-expanded={sourceMatchesOpen}
-                  aria-label='Review source matches'
-                  title='Review source matches'
-                >
-                  <Truck className='h-4 w-4' aria-hidden='true' />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Review source matches</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size='icon'
-                  variant='outline'
-                  data-testid='purchase-inbox-load-reviews'
-                  onClick={openCapturedReviews}
-                  disabled={loading}
-                  aria-expanded={capturedReviewsOpen}
-                  aria-label='Review captured purchases'
-                  title='Review captured purchases'
-                >
-                  {loading ? (
-                    <Loader2
-                      className='h-4 w-4 animate-spin'
-                      aria-hidden='true'
-                    />
-                  ) : (
-                    <RefreshCw className='h-4 w-4' aria-hidden='true' />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Review captured purchases</TooltipContent>
-            </Tooltip>
           </div>
           <Separator
             orientation='vertical'
