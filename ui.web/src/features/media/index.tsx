@@ -834,7 +834,8 @@ export function Media() {
       </Header>
 
       <Main
-        className='relative space-y-6'
+        className='relative flex min-h-[calc(100vh-4rem)] flex-col space-y-6'
+        data-media-table-layout='full-height'
         data-testid='media-workspace'
         onDragEnter={handlePageDragOver}
         onDragOver={handlePageDragOver}
@@ -996,139 +997,11 @@ export function Media() {
               </CardDescription>
             </CardHeader>
           </Card>
-        ) : !error && viewMode === 'cards' ? (
-          <div
-            className='grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6'
-            data-testid='media-card-grid'
-          >
-            {assets.map((asset) => (
-              <Card
-                key={asset.id}
-                className='overflow-hidden'
-                data-testid={`media-card-${asset.id}`}
-                onDoubleClick={() => openMetadataEditor(asset)}
-              >
-                <CardHeader className='space-y-2 p-2.5'>
-                  <div className='flex aspect-video items-center justify-center overflow-hidden rounded-md border bg-muted'>
-                    {asset.thumbnail_url ? (
-                      <img
-                        src={asset.thumbnail_url}
-                        alt=''
-                        className='h-full w-full object-cover'
-                      />
-                    ) : (
-                      <FileImage className='h-7 w-7 text-muted-foreground' />
-                    )}
-                  </div>
-                  <div className='space-y-1.5'>
-                    <div className='flex items-start justify-between gap-2'>
-                      <div className='flex min-w-0 flex-wrap items-center gap-1.5'>
-                        <Badge
-                          className='max-w-full truncate text-[11px]'
-                          variant={
-                            asset.linkage_state === 'unlinked'
-                              ? 'default'
-                              : 'secondary'
-                          }
-                        >
-                          {linkageLabel(asset.linkage_state)}
-                        </Badge>
-                        <Badge
-                          className='max-w-full truncate text-[11px]'
-                          variant='outline'
-                        >
-                          {analysisLabel(asset.analysis_status)}
-                        </Badge>
-                      </div>
-                      <Checkbox
-                        aria-label={`Select ${asset.title}`}
-                        checked={selectedAssetSet.has(asset.id)}
-                        data-testid={`media-select-${asset.id}`}
-                        onCheckedChange={(checked) =>
-                          toggleAssetSelection(asset.id, checked === true)
-                        }
-                      />
-                    </div>
-                    <CardTitle className='line-clamp-2 text-sm leading-snug'>
-                      {asset.title}
-                    </CardTitle>
-                    <CardDescription className='truncate text-xs'>
-                      {asset.source}
-                    </CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className='space-y-2.5 p-2.5 pt-0'>
-                  <dl className='grid grid-cols-2 gap-2 text-[11px]'>
-                    <div className='min-w-0'>
-                      <dt className='text-muted-foreground'>Uploaded</dt>
-                      <dd className='truncate'>
-                        {asset.uploaded_at || 'Unknown'}
-                      </dd>
-                    </div>
-                    <div className='min-w-0'>
-                      <dt className='text-muted-foreground'>Filename</dt>
-                      <dd className='truncate'>{asset.download_filename}</dd>
-                    </div>
-                  </dl>
-                  <div className='grid grid-cols-4 gap-1'>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-7 w-7'
-                      aria-label={`Open ${asset.title}`}
-                      data-testid={`media-open-${asset.id}`}
-                      onClick={() => openMetadataEditor(asset)}
-                    >
-                      <Eye />
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-7 w-7'
-                      aria-label={`Analyze ${asset.title}`}
-                      data-testid={`media-analyze-${asset.id}`}
-                      disabled={asset.analysis_status === 'ready'}
-                      title={
-                        asset.analysis_status === 'ready'
-                          ? 'Analysis is already ready'
-                          : 'Start media analysis'
-                      }
-                      onClick={() => void openAnalysis(asset)}
-                    >
-                      <WandSparkles />
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-7 w-7'
-                      aria-label={`Assign ${asset.title}`}
-                      data-testid={`media-assign-${asset.id}`}
-                      disabled={asset.linkage_state !== 'unlinked'}
-                      title={
-                        asset.linkage_state === 'unlinked'
-                          ? 'Assign media'
-                          : 'Media is already linked'
-                      }
-                      onClick={() => openAssignment(asset)}
-                    >
-                      <Link2 />
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-7 w-7'
-                      aria-label={`Archive ${asset.title}`}
-                      data-testid={`media-archive-${asset.id}`}
-                    >
-                      <Archive />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         ) : !error ? (
-          <div className='space-y-3' data-testid='media-table-section'>
+          <div
+            className='flex min-h-[520px] flex-1 flex-col space-y-3'
+            data-testid='media-table-section'
+          >
             <div data-testid='media-table-toolbar'>
               <DataTableToolbar
                 table={table}
@@ -1148,78 +1021,237 @@ export function Media() {
               </span>
             </div>
             <div
-              className='overflow-auto rounded-md border'
+              className='min-h-0 flex-1 overflow-auto rounded-md border'
               data-table-surface='true'
+              data-media-view-mode={viewMode}
               data-testid='media-shared-table'
             >
-              <Table
-                className='w-full min-w-[920px] table-fixed text-xs'
-                data-testid='media-row-table'
-              >
-                <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead
-                          key={header.id}
-                          className={
-                            header.column.id === 'select'
-                              ? 'w-12'
-                              : header.column.id === 'actions'
-                                ? 'w-36 text-end'
-                                : 'max-w-0 truncate'
-                          }
-                        >
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
+              <div className='min-h-full' data-testid='media-table-scroll-body'>
+                {viewMode === 'cards' ? (
+                  table.getRowModel().rows.length ? (
+                    <div
+                      className='grid gap-3 p-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6'
+                      data-testid='media-card-grid'
+                    >
+                      {table.getRowModel().rows.map((row) => {
+                        const asset = row.original
+                        return (
+                          <Card
+                            key={asset.id}
+                            className='overflow-hidden'
+                            data-testid={`media-card-${asset.id}`}
+                            onDoubleClick={() => openMetadataEditor(asset)}
+                          >
+                            <CardHeader className='space-y-2 p-2.5'>
+                              <div className='flex aspect-video items-center justify-center overflow-hidden rounded-md border bg-muted'>
+                                {asset.thumbnail_url ? (
+                                  <img
+                                    src={asset.thumbnail_url}
+                                    alt=''
+                                    className='h-full w-full object-cover'
+                                  />
+                                ) : (
+                                  <FileImage className='h-7 w-7 text-muted-foreground' />
+                                )}
+                              </div>
+                              <div className='space-y-1.5'>
+                                <div className='flex items-start justify-between gap-2'>
+                                  <div className='flex min-w-0 flex-wrap items-center gap-1.5'>
+                                    <Badge
+                                      className='max-w-full truncate text-[11px]'
+                                      variant={
+                                        asset.linkage_state === 'unlinked'
+                                          ? 'default'
+                                          : 'secondary'
+                                      }
+                                    >
+                                      {linkageLabel(asset.linkage_state)}
+                                    </Badge>
+                                    <Badge
+                                      className='max-w-full truncate text-[11px]'
+                                      variant='outline'
+                                    >
+                                      {analysisLabel(asset.analysis_status)}
+                                    </Badge>
+                                  </div>
+                                  <Checkbox
+                                    aria-label={`Select ${asset.title}`}
+                                    checked={selectedAssetSet.has(asset.id)}
+                                    data-testid={`media-select-${asset.id}`}
+                                    onCheckedChange={(checked) =>
+                                      toggleAssetSelection(
+                                        asset.id,
+                                        checked === true
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <CardTitle className='line-clamp-2 text-sm leading-snug'>
+                                  {asset.title}
+                                </CardTitle>
+                                <CardDescription className='truncate text-xs'>
+                                  {asset.source}
+                                </CardDescription>
+                              </div>
+                            </CardHeader>
+                            <CardContent className='space-y-2.5 p-2.5 pt-0'>
+                              <dl className='grid grid-cols-2 gap-2 text-[11px]'>
+                                <div className='min-w-0'>
+                                  <dt className='text-muted-foreground'>
+                                    Uploaded
+                                  </dt>
+                                  <dd className='truncate'>
+                                    {asset.uploaded_at || 'Unknown'}
+                                  </dd>
+                                </div>
+                                <div className='min-w-0'>
+                                  <dt className='text-muted-foreground'>
+                                    Filename
+                                  </dt>
+                                  <dd className='truncate'>
+                                    {asset.download_filename}
+                                  </dd>
+                                </div>
+                              </dl>
+                              <div className='grid grid-cols-4 gap-1'>
+                                <Button
+                                  variant='outline'
+                                  size='icon'
+                                  className='h-7 w-7'
+                                  aria-label={`Open ${asset.title}`}
+                                  data-testid={`media-open-${asset.id}`}
+                                  onClick={() => openMetadataEditor(asset)}
+                                >
+                                  <Eye />
+                                </Button>
+                                <Button
+                                  variant='outline'
+                                  size='icon'
+                                  className='h-7 w-7'
+                                  aria-label={`Analyze ${asset.title}`}
+                                  data-testid={`media-analyze-${asset.id}`}
+                                  disabled={asset.analysis_status === 'ready'}
+                                  title={
+                                    asset.analysis_status === 'ready'
+                                      ? 'Analysis is already ready'
+                                      : 'Start media analysis'
+                                  }
+                                  onClick={() => void openAnalysis(asset)}
+                                >
+                                  <WandSparkles />
+                                </Button>
+                                <Button
+                                  variant='outline'
+                                  size='icon'
+                                  className='h-7 w-7'
+                                  aria-label={`Assign ${asset.title}`}
+                                  data-testid={`media-assign-${asset.id}`}
+                                  disabled={asset.linkage_state !== 'unlinked'}
+                                  title={
+                                    asset.linkage_state === 'unlinked'
+                                      ? 'Assign media'
+                                      : 'Media is already linked'
+                                  }
+                                  onClick={() => openAssignment(asset)}
+                                >
+                                  <Link2 />
+                                </Button>
+                                <Button
+                                  variant='outline'
+                                  size='icon'
+                                  className='h-7 w-7'
+                                  aria-label={`Archive ${asset.title}`}
+                                  data-testid={`media-archive-${asset.id}`}
+                                >
+                                  <Archive />
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div
+                      className='flex h-24 items-center justify-center text-sm text-muted-foreground'
+                      data-testid='media-table-empty-row'
+                    >
+                      No media assets match the current table filter.
+                    </div>
+                  )
+                ) : (
+                  <Table
+                    className='w-full min-w-[920px] table-fixed text-xs'
+                    data-testid='media-row-table'
+                  >
+                    <TableHeader>
+                      {table.getHeaderGroups().map((headerGroup) => (
+                        <TableRow key={headerGroup.id}>
+                          {headerGroup.headers.map((header) => (
+                            <TableHead
+                              key={header.id}
+                              className={
+                                header.column.id === 'select'
+                                  ? 'w-12'
+                                  : header.column.id === 'actions'
+                                    ? 'w-36 text-end'
+                                    : 'max-w-0 truncate'
+                              }
+                            >
+                              {header.isPlaceholder
+                                ? null
+                                : flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext()
+                                  )}
+                            </TableHead>
+                          ))}
+                        </TableRow>
                       ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        data-testid={`media-row-${row.original.id}`}
-                        onDoubleClick={() => openMetadataEditor(row.original)}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell
-                            key={cell.id}
-                            className={
-                              cell.column.id === 'select'
-                                ? 'w-12'
-                                : cell.column.id === 'actions'
-                                  ? 'w-36'
-                                  : 'max-w-0 truncate'
+                    </TableHeader>
+                    <TableBody>
+                      {table.getRowModel().rows.length ? (
+                        table.getRowModel().rows.map((row) => (
+                          <TableRow
+                            key={row.id}
+                            data-testid={`media-row-${row.original.id}`}
+                            onDoubleClick={() =>
+                              openMetadataEditor(row.original)
                             }
                           >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
+                            {row.getVisibleCells().map((cell) => (
+                              <TableCell
+                                key={cell.id}
+                                className={
+                                  cell.column.id === 'select'
+                                    ? 'w-12'
+                                    : cell.column.id === 'actions'
+                                      ? 'w-36'
+                                      : 'max-w-0 truncate'
+                                }
+                              >
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext()
+                                )}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow data-testid='media-table-empty-row'>
+                          <TableCell
+                            colSpan={columns.length}
+                            className='h-24 text-center'
+                          >
+                            No media assets match the current table filter.
                           </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow data-testid='media-table-empty-row'>
-                      <TableCell
-                        colSpan={columns.length}
-                        className='h-24 text-center'
-                      >
-                        No media assets match the current table filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
             </div>
             <div data-testid='media-table-pagination'>
               <DataTablePagination table={table} />
