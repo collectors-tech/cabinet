@@ -27,6 +27,7 @@ Define Notifications settings screen behavior.
 - **GIVEN** notifications form is loaded with editable controls
 - **WHEN** user clicks `Update notifications`
 - **THEN** runtime MUST persist notification preferences and show deterministic success feedback
+- **AND** the success feedback MUST be preserved in Notification Inbox history with source, level, category, title, and detail metadata.
 
 ### Requirement UI-SCREEN-SETTINGS-NOTIFICATIONS-004: Notifications screen SHALL preserve editable controls on save failure
 
@@ -49,6 +50,6 @@ Define Notifications settings screen behavior.
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
 | UC-SET-NOTIF-01 | Retry notifications load failure | `Retry` re-attempts notifications fetch deterministically | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 retries notifications settings load failure without route reload`) |
-| UC-SET-NOTIF-02 | Update notifications action | `Update notifications` persists notification settings | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 updates notifications with deterministic success feedback`) |
+| UC-SET-NOTIF-02 | Update notifications action | `Update notifications` persists notification settings and records the success event in Notification Inbox history | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 updates notifications with deterministic success feedback`) |
 | UC-SET-NOTIF-03 | Notifications save failure | Failed save shows error feedback and preserves edited notification choices | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-004 preserves edited notification choices when save fails`) |
 | UC-SET-NOTIF-04 | Missing active profile blocker | Profile-context blocker hides editable notification controls and exposes recovery actions | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-005 blocks notification edits when active profile is missing`) |
