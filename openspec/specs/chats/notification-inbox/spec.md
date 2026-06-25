@@ -72,7 +72,7 @@ The Notification Inbox MUST render a compact two-pane operating layout with filt
 - **AND** page actions such as refresh, mark all visible as read, clear all, and show hidden MUST be icon-only with accessible names/tooltips.
 
 ### Requirement UI-SCREEN-NOTIFICATION-INBOX-008: Notification-like UI events SHALL be preserved in Inbox history
-Cabinet notification-like UI events, including toast messages, promise-based success/failure feedback, and shared confirmation or warning dialogs, MUST be captured into the Notification Inbox history so immediate feedback is not the only record. Captured records MUST include a source label, event time, level/category metadata, title, and detail or lifecycle summary sufficient for later review from the Inbox route.
+Cabinet notification-like UI events, including toast messages, promise-based success/failure feedback, and shared confirmation or warning dialogs, MUST be captured into the Notification Inbox history so immediate feedback is not the only record. Captured records MUST include a source label, event time, level/category metadata, title, and detail or lifecycle summary sufficient for later review from the Inbox route. Once Cabinet has an active profile, captured local notification history MUST be promoted into the server-backed Inbox store and deduplicated by local capture ID so the record survives local history loss or reload.
 
 #### Scenario: Toast lifecycle events appear in Inbox
 - **GIVEN** a user triggers a promise-based UI feedback flow
@@ -85,3 +85,10 @@ Cabinet notification-like UI events, including toast messages, promise-based suc
 - **WHEN** the dialog is dismissed and the user later opens the Notification Inbox
 - **THEN** the Notification Inbox MUST include a captured dialog history record
 - **AND** the record MUST show source, time, level/category metadata, title, and detail sufficient to identify the dialog after it disappears.
+
+#### Scenario: Local notification history is promoted to durable Inbox storage
+- **GIVEN** local notification history contains a captured notification-like UI event and an active profile is available
+- **WHEN** the Notification Inbox syncs history with `/api/chat/inbox`
+- **THEN** Cabinet MUST create a server-backed Inbox record with source, time, state, category/type, title, detail, and source label metadata
+- **AND** repeated syncs of the same local capture ID MUST return the existing Inbox record rather than creating duplicate rows
+- **AND** the promoted record MUST remain visible from `/api/chat/inbox` even if local browser history is cleared.

@@ -5123,6 +5123,29 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/chat/inbox", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			var req struct {
+				ProfileID string                          `json:"profile_id"`
+				Records   []chat.NotificationHistoryInput `json:"records"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			var items []chat.InboxItem
+			for _, record := range req.Records {
+				record.ProfileID = req.ProfileID
+				item, err := chatSvc.CreateNotificationHistoryItem(r.Context(), record)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_record_notification_history"}`, http.StatusBadRequest)
+					return
+				}
+				items = append(items, item)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+			return
+		}
 		if r.Method != http.MethodGet {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
