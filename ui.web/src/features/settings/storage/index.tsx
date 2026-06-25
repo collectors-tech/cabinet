@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { ContentSection } from '../components/content-section'
 
 type ActiveProfileResponse = {
@@ -39,6 +40,25 @@ type BackupSortKey = 'created_at' | 'file_name'
 type BackupSortDirection = 'asc' | 'desc'
 
 const LAST_KNOWN_STORAGE_KEY = 'cabinet.settings.storage.lastKnown'
+
+function recordStorageStatusHistory({
+  id,
+  level = 'success',
+  title,
+}: {
+  id: string
+  level?: 'success' | 'error' | 'warning'
+  title: string
+}) {
+  recordNotificationHistory({
+    id,
+    level,
+    title,
+    summary: 'Maintenance status from Settings Storage.',
+    source_label: 'Settings Storage',
+    category: 'system',
+  })
+}
 
 export function SettingsStorage() {
   const { t } = useTranslation('pages')
@@ -173,12 +193,22 @@ export function SettingsStorage() {
       if (!response.ok) {
         throw new Error('failed_to_reindex')
       }
-      setActionStatus('Search reindex completed successfully.')
+      const message = 'Search reindex completed successfully.'
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-reindex-success',
+        title: message,
+      })
     } catch {
-      setActionTone('destructive')
-      setActionStatus(
+      const message =
         'Search reindex failed. Try again when runtime diagnostics are healthy.'
-      )
+      setActionTone('destructive')
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-reindex-error',
+        level: 'error',
+        title: message,
+      })
     } finally {
       setReindexPending(false)
     }
@@ -201,14 +231,23 @@ export function SettingsStorage() {
       }
       const rebuiltItems = Number(payload.rebuilt_items ?? 0)
       const rebuiltPhotos = Number(payload.rebuilt_photos ?? 0)
-      setActionStatus(
+      const message =
         `Thumbnail rebuild completed for ${rebuiltPhotos} photo${rebuiltPhotos === 1 ? '' : 's'} across ${rebuiltItems} item${rebuiltItems === 1 ? '' : 's'}.`
-      )
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-rebuild-success',
+        title: message,
+      })
     } catch {
-      setActionTone('destructive')
-      setActionStatus(
+      const message =
         'Thumbnail rebuild failed. Check diagnostics health and try again.'
-      )
+      setActionTone('destructive')
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-rebuild-error',
+        level: 'error',
+        title: message,
+      })
     } finally {
       setRebuildPending(false)
     }
@@ -228,19 +267,31 @@ export function SettingsStorage() {
       }
       const integrityCheck = payload.integrity_check?.trim() || 'unknown'
       if (integrityCheck.toLowerCase() === 'ok') {
-        setRepairResult(
-          `Database integrity check passed. Result: ${integrityCheck}`
-        )
+        const message = `Database integrity check passed. Result: ${integrityCheck}`
+        setRepairResult(message)
+        recordStorageStatusHistory({
+          id: 'settings-storage-repair-success',
+          title: message,
+        })
       } else {
-        setRepairResult(
-          `Database integrity check reported issues. Result: ${integrityCheck}`
-        )
+        const message = `Database integrity check reported issues. Result: ${integrityCheck}`
+        setRepairResult(message)
+        recordStorageStatusHistory({
+          id: 'settings-storage-repair-warning',
+          level: 'warning',
+          title: message,
+        })
       }
     } catch {
-      setRepairTone('destructive')
-      setRepairResult(
+      const message =
         'Database integrity check failed. Check diagnostics and try again.'
-      )
+      setRepairTone('destructive')
+      setRepairResult(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-repair-error',
+        level: 'error',
+        title: message,
+      })
     } finally {
       setRepairPending(false)
     }
@@ -261,15 +312,24 @@ export function SettingsStorage() {
         payload.backup?.integrity_check?.trim() || 'unknown'
       const archiveFormat =
         payload.backup?.archive_format?.trim().toUpperCase() || 'archive'
-      setActionStatus(
+      const message =
         `Backup created successfully: ${fileName}. ${archiveFormat} ready for download. Integrity check: ${integrityCheck}.`
-      )
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-backup-success',
+        title: message,
+      })
       await loadBackups()
     } catch {
-      setActionTone('destructive')
-      setActionStatus(
+      const message =
         'Backup creation failed. Try again when runtime storage is healthy.'
-      )
+      setActionTone('destructive')
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-backup-error',
+        level: 'error',
+        title: message,
+      })
     } finally {
       setBackupPending(false)
     }
@@ -301,15 +361,24 @@ export function SettingsStorage() {
       }
       const integrityCheck =
         payload.restore?.integrity_check?.trim() || 'unknown'
-      setActionStatus(
-        `Backup restored successfully. Integrity check: ${integrityCheck}.`
-      )
+      const message = `Backup restored successfully. Integrity check: ${integrityCheck}.`
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-restore-success',
+        title: message,
+      })
       await Promise.all([loadStorage(), loadBackups()])
     } catch {
+      const message = 'Backup restore failed. Verify the backup and try again.'
       setRestoreConfirmOpen(false)
       setSelectedBackupPath(null)
       setActionTone('destructive')
-      setActionStatus('Backup restore failed. Verify the backup and try again.')
+      setActionStatus(message)
+      recordStorageStatusHistory({
+        id: 'settings-storage-restore-error',
+        level: 'error',
+        title: message,
+      })
     } finally {
       setRestorePending(false)
     }

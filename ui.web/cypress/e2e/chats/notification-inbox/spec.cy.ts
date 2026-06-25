@@ -513,6 +513,73 @@ describe('chats/notification-inbox', () => {
     cy.wait('@loadNotifications')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves storage maintenance status banners in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'e2e-profile-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/e2e/cabinet.db',
+        media_dir: 'C:/cabinet/e2e/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+    cy.intercept('POST', '/api/data/reindex', {
+      statusCode: 200,
+      body: { ok: true },
+    }).as('reindexSearch')
+    cy.intercept('POST', '/api/chat/inbox', (req) => {
+      const record = req.body.records.find(
+        (candidate: Record<string, unknown>) =>
+          candidate.local_history_id === 'settings-storage-reindex-success'
+      )
+      expect(record).to.deep.include({
+        level: 'success',
+        title: 'Search reindex completed successfully.',
+        summary: 'Maintenance status from Settings Storage.',
+        source_label: 'Settings Storage',
+        category: 'system',
+      })
+      expect(record.created_at).to.match(/\d{4}-\d{2}-\d{2}T/)
+      req.reply({ statusCode: 201, body: { items: [] } })
+    }).as('syncStorageStatusHistory')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/storage/',
+    })
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+
+    cy.contains('button', 'Reindex Search').click()
+    cy.wait('@reindexSearch')
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Search reindex completed successfully.'
+    )
+
+    cy.visit('/inbox/')
+    cy.wait('@syncStorageStatusHistory')
+    cy.wait('@loadNotifications')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 syncs local history into durable server Inbox without duplicates', () => {
     cy.viewport(1366, 768)
     cy.e2eReset()
