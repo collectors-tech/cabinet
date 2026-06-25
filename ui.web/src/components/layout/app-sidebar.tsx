@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useLocation } from '@tanstack/react-router'
 import {
   ArrowDown,
   ArrowUp,
@@ -10,18 +10,14 @@ import {
   MessageSquare,
   PanelLeft,
   Pencil,
+  SearchIcon,
   X,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useLayout } from '@/context/layout-provider'
+import { useSearch } from '@/context/search-provider'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Sidebar,
   SidebarContent,
@@ -70,10 +66,11 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 }
 
 export function AppSidebar() {
-  const navigate = useNavigate()
+  const location = useLocation()
   const { collapsible, variant } = useLayout()
-  const { state: sidebarState, isMobile, setOpen } = useSidebar()
+  const { state: sidebarState, isMobile } = useSidebar()
   const { t } = useTranslation('nav')
+  const { open: searchOpen, setOpen: setSearchOpen } = useSearch()
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const isCollapsedSidebar = sidebarState === 'collapsed' && !isMobile
   const authUser = useAuthStore((state) => state.auth.user)
@@ -143,16 +140,6 @@ export function AppSidebar() {
       cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    if (
-      activeWorkspace === 'navigation' &&
-      sidebarState === 'collapsed' &&
-      !isMobile
-    ) {
-      setOpen(true)
-    }
-  }, [activeWorkspace, isMobile, setOpen, sidebarState])
 
   useEffect(() => {
     if (activeWorkspace === 'inbox') {
@@ -336,13 +323,17 @@ export function AppSidebar() {
     }),
     items: group.items.map(translateItem),
   }))
-  const openNotificationInbox = () => {
-    void navigate({ to: '/inbox' })
+  const markNotificationInboxOpening = () => {
     setActiveWorkspace('navigation')
   }
-  const activeWorkspaceIcon =
-    activeWorkspace === 'assistant' ? MessageSquare : PanelLeft
-  const ActiveWorkspaceIcon = activeWorkspaceIcon
+  const openWorkspaceSearch = () => {
+    setSearchOpen(true)
+  }
+  const inboxActive = location.pathname.startsWith('/inbox')
+  const navigationActive =
+    !searchOpen && !inboxActive && activeWorkspace === 'navigation'
+  const assistantActive =
+    !searchOpen && !inboxActive && activeWorkspace === 'assistant'
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
@@ -353,93 +344,63 @@ export function AppSidebar() {
           data-collapsed={isCollapsedSidebar ? 'true' : 'false'}
           data-testid='shell-workspace-switcher'
         >
-          <p
-            className='mb-2 text-xs font-medium text-muted-foreground'
-            data-testid='shell-workspace-label'
+          <div
+            className={`inline-flex gap-1 rounded-lg border border-slate-700/70 bg-slate-950 p-1 shadow-sm ${
+              isCollapsedSidebar ? 'flex-col' : 'items-center'
+            }`}
+            aria-label='Workspace tools'
+            data-testid='shell-workspace-icon-rail'
           >
-            {isCollapsedSidebar ? 'Work' : 'Workspace'}
-          </p>
-          {isCollapsedSidebar ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type='button'
-                  aria-label='Switch workspace'
-                  data-testid='shell-workspace-menu-trigger'
-                  className='inline-flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted'
-                >
-                  <ActiveWorkspaceIcon className='h-4 w-4' />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side='right' align='start' sideOffset={8}>
-                <DropdownMenuItem
-                  data-testid='shell-workspace-menu-navigation'
-                  onClick={() => setActiveWorkspace('navigation')}
-                >
-                  <PanelLeft className='h-4 w-4' />
-                  <span>Nav</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  data-testid='shell-workspace-menu-assistant'
-                  onClick={() => setActiveWorkspace('assistant')}
-                >
-                  <MessageSquare className='h-4 w-4' />
-                  <span>Assistant</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  data-testid='shell-workspace-menu-bell'
-                  onClick={openNotificationInbox}
-                >
-                  <Bell className='h-4 w-4' />
-                  <span>Open Inbox</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <div
-              className='inline-flex items-center gap-1 rounded-lg border border-slate-700/70 bg-slate-950 p-1 shadow-sm'
-              data-testid='shell-workspace-icon-rail'
+            <button
+              type='button'
+              aria-label='Navigation workspace'
+              title='Navigation workspace'
+              data-testid='shell-workspace-navigation'
+              data-active={navigationActive ? 'true' : 'false'}
+              className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
+              onClick={() => setActiveWorkspace('navigation')}
             >
-              <button
-                type='button'
-                aria-label='Navigation workspace'
-                title='Navigation workspace'
-                data-testid='shell-workspace-navigation'
-                data-active={
-                  activeWorkspace === 'navigation' ? 'true' : 'false'
-                }
-                className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
-                onClick={() => setActiveWorkspace('navigation')}
-              >
-                <PanelLeft className='h-4 w-4' aria-hidden />
-              </button>
-              <button
-                type='button'
-                aria-label='Assistant workspace'
-                title='Assistant workspace'
-                data-testid='shell-workspace-assistant'
-                data-active={activeWorkspace === 'assistant' ? 'true' : 'false'}
-                className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
-                onClick={() => setActiveWorkspace('assistant')}
-              >
-                <MessageSquare className='h-4 w-4' aria-hidden />
-              </button>
-              <a
-                href='/inbox'
-                aria-label='Open notification inbox'
-                title='Open notification inbox'
-                data-testid='shell-workspace-bell'
-                className='relative inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none'
-              >
-                <Bell className='h-4 w-4' aria-hidden />
-                <span
-                  aria-hidden
-                  className='absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-rose-400 ring-1 ring-slate-950'
-                  data-testid='shell-workspace-bell-badge'
-                />
-              </a>
-            </div>
-          )}
+              <PanelLeft className='h-4 w-4' aria-hidden />
+            </button>
+            <button
+              type='button'
+              aria-label='Search workspace'
+              title='Search workspace'
+              data-testid='shell-workspace-search'
+              data-active={searchOpen ? 'true' : 'false'}
+              className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
+              onClick={openWorkspaceSearch}
+            >
+              <SearchIcon className='h-4 w-4' aria-hidden />
+            </button>
+            <button
+              type='button'
+              aria-label='Chat workspace'
+              title='Chat workspace'
+              data-testid='shell-workspace-assistant'
+              data-active={assistantActive ? 'true' : 'false'}
+              className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
+              onClick={() => setActiveWorkspace('assistant')}
+            >
+              <MessageSquare className='h-4 w-4' aria-hidden />
+            </button>
+            <a
+              href='/inbox'
+              aria-label='Open notification inbox'
+              title='Open notification inbox'
+              data-testid='shell-workspace-bell'
+              data-active={inboxActive ? 'true' : 'false'}
+              className='relative inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
+              onClick={markNotificationInboxOpening}
+            >
+              <Bell className='h-4 w-4' aria-hidden />
+              <span
+                aria-hidden
+                className='absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-rose-400 ring-1 ring-slate-950'
+                data-testid='shell-workspace-bell-badge'
+              />
+            </a>
+          </div>
         </div>
 
         {/* Replace <TeamSwitch /> with the following <AppTitle />
