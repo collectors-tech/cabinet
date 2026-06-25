@@ -3785,6 +3785,33 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/commerce/purchase-orders", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		page, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page")))
+		pageSize, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page_size")))
+		orders, err := commerceSvc.ListPurchaseOrdersByProfile(
+			r.Context(),
+			strings.TrimSpace(active.ID),
+			strings.TrimSpace(r.URL.Query().Get("status")),
+			strings.TrimSpace(r.URL.Query().Get("search")),
+			page,
+			pageSize,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_purchase_orders"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(orders)
+	})
 	mux.HandleFunc("/api/commerce/arrivals", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		active, err := profiles.GetActiveProfile(r.Context())

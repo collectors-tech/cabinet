@@ -1,4 +1,81 @@
 describe('purchases/purchase-inbox', () => {
+  const groupedPurchaseOrderFixture = () => ({
+    order_id: 'EBAY-ORDER-100',
+    source: 'ebay',
+    seller: 'seller-one',
+    tracking: 'TRACK-100',
+    status: 'active',
+    total_amount: 8.1,
+    currency: 'AUD',
+    line_item_count: 2,
+    received_count: 0,
+    unreceived_count: 2,
+    created_at: '2026-06-08T10:00:00Z',
+    line_items: [
+      {
+        item_id: 'po-line-1',
+        title: 'Accompanying Flute TWM 142',
+        quantity: 4,
+        amount: 2.4,
+        status: 'expected',
+        lifecycle_entry_id: 'life-po-1',
+        expected_arrival_id: 'arrival-po-1',
+      },
+      {
+        item_id: 'po-line-2',
+        title: 'Mystery Pokemon card',
+        quantity: 1,
+        amount: 5.7,
+        status: 'expected',
+        lifecycle_entry_id: 'life-po-2',
+        expected_arrival_id: 'arrival-po-2',
+      },
+    ],
+  })
+
+  const receivedPurchaseOrderFixture = () => ({
+    order_id: 'AMZ-ORDER-200',
+    source: 'amazon',
+    seller: 'Amazon AU',
+    tracking: 'TBA200',
+    status: 'received',
+    total_amount: 42.5,
+    currency: 'AUD',
+    line_item_count: 1,
+    received_count: 1,
+    unreceived_count: 0,
+    created_at: '2026-06-09T10:00:00Z',
+    line_items: [
+      {
+        item_id: 'po-line-3',
+        title: 'Received order item',
+        quantity: 1,
+        amount: 42.5,
+        status: 'delivered',
+        lifecycle_entry_id: 'life-po-3',
+        expected_arrival_id: 'arrival-po-3',
+      },
+    ],
+  })
+
+  const secondActivePurchaseOrderFixture = () => ({
+    ...groupedPurchaseOrderFixture(),
+    order_id: 'EBAY-ORDER-101',
+    tracking: 'TRACK-101',
+    total_amount: 9.25,
+    line_items: [
+      {
+        item_id: 'po-line-4',
+        title: 'Second active purchase item',
+        quantity: 1,
+        amount: 9.25,
+        status: 'expected',
+        lifecycle_entry_id: 'life-po-4',
+        expected_arrival_id: 'arrival-po-4',
+      },
+    ],
+  })
+
   // #1487 removed the source-match and captured-review controls from the
   // primary Purchases page. These legacy workflow specs need relocation to the
   // future provenance/detail surface before they can run again.
@@ -18,10 +95,15 @@ describe('purchases/purchase-inbox', () => {
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', {
+      statusCode: 200,
+      body: { page: 1, page_size: 10, total: 0, total_pages: 0, orders: [] },
+    }).as('listPurchaseOrdersEmpty')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    cy.wait('@listPurchaseOrdersEmpty')
     cy.location('pathname').should('eq', '/purchases')
     cy.get('[data-testid="purchases-header-title"]').should(
       'contain',
@@ -48,7 +130,11 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Actions')
     cy.get('[data-testid="purchases-table-empty-row"]').should(
       'contain',
-      'No purchases loaded'
+      'No persisted purchases loaded'
+    )
+    cy.get('[data-testid="purchases-table-pagination"]').should(
+      'contain',
+      '0 persisted orders'
     )
     cy.get('[data-testid="purchase-inbox-empty-state"]').should('not.exist')
     cy.get('[data-testid="purchase-review-tools"]').should('not.exist')
@@ -76,6 +162,129 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-inbox"]').should('not.exist')
     cy.contains('Review source matches').should('not.exist')
     cy.contains('Review captured purchases').should('not.exist')
+  })
+
+  it('COMMERCE-RECONCILIATION-013 lists grouped persisted purchase orders with filters search and pagination', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', (req) => {
+      const url = new URL(req.url)
+      const page = url.searchParams.get('page') ?? '1'
+      const search = url.searchParams.get('search') ?? ''
+      const status = url.searchParams.get('status') ?? ''
+
+      if (search === 'flute') {
+        expect(status).to.eq('active')
+        req.reply({
+          statusCode: 200,
+          body: {
+            page: 1,
+            page_size: 10,
+            total: 1,
+            total_pages: 1,
+            orders: [groupedPurchaseOrderFixture()],
+          },
+        })
+        return
+      }
+
+      if (status === 'received') {
+        req.reply({
+          statusCode: 200,
+          body: {
+            page: 1,
+            page_size: 10,
+            total: 1,
+            total_pages: 1,
+            orders: [receivedPurchaseOrderFixture()],
+          },
+        })
+        return
+      }
+
+      req.reply({
+        statusCode: 200,
+        body:
+          page === '2'
+            ? {
+                page: 2,
+                page_size: 10,
+                total: 2,
+                total_pages: 2,
+                orders: [secondActivePurchaseOrderFixture()],
+              }
+            : {
+                page: 1,
+                page_size: 10,
+                total: 2,
+                total_pages: 2,
+                orders: [groupedPurchaseOrderFixture()],
+              },
+      })
+    }).as('listPurchaseOrders')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.wait('@listPurchaseOrders')
+      .its('request.url')
+      .should('include', 'status=active')
+
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('contain', 'EBAY-ORDER-100')
+      .and('contain', 'ebay / seller-one')
+      .and('contain', 'AUD 8.10')
+      .and('contain', '2 line items')
+      .and('contain', 'active')
+    cy.get('[data-testid="purchases-line-item-row"]')
+      .should('have.length', 2)
+      .and('contain', 'Accompanying Flute TWM 142')
+      .and('contain', 'Mystery Pokemon card')
+      .and('contain', 'Lifecycle life-po-1')
+      .and('contain', 'Arrival arrival-po-1')
+    cy.get('[data-testid="purchases-table-pagination"]')
+      .should('contain', 'Page 1 of 2')
+      .and('contain', '2 persisted orders')
+
+    cy.get('[data-testid="purchases-table-search"]').type('flute')
+    cy.wait('@listPurchaseOrders')
+    cy.wait('@listPurchaseOrders')
+    cy.wait('@listPurchaseOrders')
+    cy.wait('@listPurchaseOrders')
+    cy.wait('@listPurchaseOrders')
+      .its('request.url')
+      .should('include', 'search=flute')
+    cy.get('[data-testid="purchases-table-row"]').should(
+      'contain',
+      'EBAY-ORDER-100'
+    )
+
+    cy.get('[data-testid="purchases-table-search"]').clear()
+    cy.wait('@listPurchaseOrders')
+    cy.get('[data-testid="purchases-status-filter-received"]').click()
+    cy.wait('@listPurchaseOrders')
+      .its('request.url')
+      .should('include', 'status=received')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('contain', 'AMZ-ORDER-200')
+      .and('contain', 'received')
+
+    cy.get('[data-testid="purchases-status-filter-active"]').click()
+    cy.wait('@listPurchaseOrders')
+    cy.get('[data-testid="purchases-page-next"]').click()
+    cy.wait('@listPurchaseOrders')
+      .its('request.url')
+      .should('include', 'page=2')
+    cy.get('[data-testid="purchases-table-row"]').should(
+      'contain',
+      'EBAY-ORDER-101'
+    )
+    cy.get('[data-testid="purchases-page-previous"]').click()
+    cy.wait('@listPurchaseOrders')
+      .its('request.url')
+      .should('include', 'page=1')
   })
 
   it.skip('EBAY-PURCHASE-CAPTURE-006 reviews captured purchases before confirmed mutation actions', () => {
@@ -305,6 +514,10 @@ describe('purchases/purchase-inbox', () => {
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', {
+      statusCode: 200,
+      body: { page: 1, page_size: 10, total: 0, total_pages: 0, orders: [] },
+    }).as('listPurchaseOrdersEmptyManual')
     cy.intercept('POST', '/api/items', (req) => {
       req.reply({
         statusCode: 201,
@@ -334,9 +547,10 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    cy.wait('@listPurchaseOrdersEmptyManual')
     cy.get('[data-testid="purchases-table-empty-row"]').should(
       'contain',
-      'No purchases loaded'
+      'No persisted purchases loaded'
     )
     cy.get('[data-testid="purchases-add-button"]').click()
     cy.get('[data-testid="purchases-add-dialog"]').should('be.visible')
@@ -396,7 +610,7 @@ describe('purchases/purchase-inbox', () => {
       'contain',
       'Manual Amazon order'
     )
-    cy.get('[data-testid="purchases-status-filter-manual_draft"]').click()
+    cy.get('[data-testid="purchases-status-filter-active"]').click()
     cy.get('[data-testid="purchases-table-row"]')
       .should('have.length', 1)
       .and('contain', 'manual draft')
@@ -408,6 +622,10 @@ describe('purchases/purchase-inbox', () => {
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
     let persistedCount = 0
+    cy.intercept('GET', '/api/commerce/purchase-orders*', {
+      statusCode: 200,
+      body: { page: 1, page_size: 10, total: 0, total_pages: 0, orders: [] },
+    }).as('listPurchaseOrdersEmptyImport')
     cy.intercept('POST', '/api/items', (req) => {
       persistedCount += 1
       req.reply({
@@ -440,9 +658,10 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    cy.wait('@listPurchaseOrdersEmptyImport')
     cy.get('[data-testid="purchases-table-empty-row"]').should(
       'contain',
-      'No purchases loaded'
+      'No persisted purchases loaded'
     )
     cy.get('[data-testid="purchases-add-button"]').click()
     cy.get('[data-testid="purchases-add-tab-csv"]').click()
@@ -535,7 +754,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'email import')
       .and('contain', 'Expected 2026-06-14')
       .and('contain', 'Persisted lifecycle life-imp')
-    cy.get('[data-testid="purchases-status-filter-email_import"]').click()
+    cy.get('[data-testid="purchases-table-search"]').type('Email Flute')
     cy.get('[data-testid="purchases-table-row"]')
       .should('have.length', 1)
       .and('contain', 'Email Flute order')
