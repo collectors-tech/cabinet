@@ -111,3 +111,19 @@ Cabinet SHALL expose a profile-scoped Purchase Inbox action API that applies onl
 - **WHEN** the client posts a confirmed link-existing-inventory-item action for the matching target key
 - **THEN** Cabinet SHALL update only the owned inventory item with purchase provenance
 - **AND** Cabinet SHALL reject links to missing or other-profile inventory records
+
+### Requirement EBAY-PURCHASE-CAPTURE-008: Purchases UI MUST support review-mode feedback drafts
+Cabinet SHALL expose a review mode in the `/purchases` workspace that lets users draft purchase feedback separately from receive and reconciliation state.
+
+#### Scenario: Draft per-target review scores and comments
+- **GIVEN** the Purchases workspace is showing persisted purchase orders and line items
+- **WHEN** the user enables review mode
+- **THEN** the table SHALL show rating, quality, and timeliness controls using 1-5 values for review targets
+- **AND** the selected order or line-item detail SHALL expose a review comment draft field
+- **AND** review drafts SHALL persist across page refresh without changing received or reconciled purchase state
+
+#### Scenario: Bulk-apply review scores and comments to visible targets
+- **GIVEN** review mode is enabled and the user has filtered the visible purchase table
+- **WHEN** the user applies a bulk rating, quality, timeliness score, or bulk comment
+- **THEN** Cabinet SHALL apply that value to the currently visible order and line-item review targets
+- **AND** the `reviews` status filter SHALL remain available as the workflow entry point for purchases needing feedback

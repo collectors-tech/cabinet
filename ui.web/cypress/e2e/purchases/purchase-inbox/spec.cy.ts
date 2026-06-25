@@ -390,6 +390,129 @@ describe('purchases/purchase-inbox', () => {
     )
   })
 
+  it('EBAY-PURCHASE-CAPTURE-008 drafts review-mode scores comments and bulk actions', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', (req) => {
+      const url = new URL(req.url)
+      const status = url.searchParams.get('status') ?? ''
+
+      if (status === 'reviews') {
+        req.reply({
+          statusCode: 200,
+          body: {
+            page: 1,
+            page_size: 10,
+            total: 1,
+            total_pages: 1,
+            orders: [
+              {
+                ...groupedPurchaseOrderFixture(),
+                status: 'reviews',
+                line_items: groupedPurchaseOrderFixture().line_items.map(
+                  (item) => ({ ...item, status: 'reviews' })
+                ),
+              },
+            ],
+          },
+        })
+        return
+      }
+
+      req.reply({
+        statusCode: 200,
+        body: {
+          page: 1,
+          page_size: 10,
+          total: 1,
+          total_pages: 1,
+          orders: [groupedPurchaseOrderFixture()],
+        },
+      })
+    }).as('listPurchaseOrdersForReview')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.wait('@listPurchaseOrdersForReview')
+
+    cy.get('[data-testid="purchases-review-mode-toggle"]')
+      .should('have.attr', 'aria-pressed', 'false')
+      .click()
+      .should('have.attr', 'aria-pressed', 'true')
+    cy.get('[data-testid="purchases-review-bulk-tools"]').should('be.visible')
+    cy.get('[data-testid="purchases-table-shell"]')
+      .should('contain', 'Rating')
+      .and('contain', 'Quality')
+      .and('contain', 'Timeliness')
+      .and('contain', 'Review comment')
+
+    cy.get('[data-testid="purchases-table-row"]')
+      .first()
+      .within(() => {
+        cy.get('[data-testid="purchases-review-rating-5"]').click()
+        cy.get('[data-testid="purchases-review-quality-4"]').click()
+        cy.get('[data-testid="purchases-review-timeliness-3"]').click()
+        cy.get('[data-testid="purchases-row-rating"]').should('not.be.visible')
+      })
+    cy.get('[data-testid="purchases-review-comment"]').type(
+      'Seller packed carefully'
+    )
+    cy.get('[data-testid="purchases-review-draft-summary"]')
+      .should('contain', 'Rating 5')
+      .and('contain', 'Quality 4')
+      .and('contain', 'Timeliness 3')
+    cy.get('[data-testid="purchases-review-draft-status"]').should(
+      'contain',
+      'ready'
+    )
+
+    cy.get('[data-testid="purchases-bulk-rating"]').select('2')
+    cy.get('[data-testid="purchases-bulk-apply-rating"]').click()
+    cy.get('[data-testid="purchases-bulk-quality"]').select('5')
+    cy.get('[data-testid="purchases-bulk-apply-quality"]').click()
+    cy.get('[data-testid="purchases-bulk-timeliness"]').select('4')
+    cy.get('[data-testid="purchases-bulk-apply-timeliness"]').click()
+    cy.get('[data-testid="purchases-bulk-comment"]').type(
+      'Bulk visible review note'
+    )
+    cy.get('[data-testid="purchases-bulk-apply-comment"]').click()
+    cy.get('[data-testid="purchases-review-row-comment"]')
+      .first()
+      .should('contain', 'Bulk visible review note')
+    cy.get('[data-testid="purchases-line-item-row"]')
+      .first()
+      .within(() => {
+        cy.get('[data-testid="purchases-review-row-comment"]').should(
+          'contain',
+          'Bulk visible review note'
+        )
+      })
+
+    cy.reload()
+    cy.wait('@listPurchaseOrdersForReview')
+    cy.get('[data-testid="purchases-review-mode-toggle"]').click()
+    cy.get('[data-testid="purchases-review-comment"]').should(
+      'have.value',
+      'Bulk visible review note'
+    )
+    cy.get('[data-testid="purchases-review-draft-summary"]')
+      .should('contain', 'Rating 2')
+      .and('contain', 'Quality 5')
+      .and('contain', 'Timeliness 4')
+
+    cy.get('[data-testid="purchases-status-filter-reviews"]').click()
+    cy.wait('@listPurchaseOrdersForReview')
+      .its('request.url')
+      .should('include', 'status=reviews')
+    cy.get('[data-testid="purchases-table-row"]').should(
+      'contain',
+      'EBAY-ORDER-100'
+    )
+  })
+
   it.skip('EBAY-PURCHASE-CAPTURE-006 reviews captured purchases before confirmed mutation actions', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()

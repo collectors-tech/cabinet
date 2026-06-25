@@ -147,6 +147,26 @@ type PurchaseOrderListResponse = {
   orders?: PurchaseOrder[]
 }
 
+type PurchaseReviewDimension = 'rating' | 'quality' | 'timeliness'
+
+type PurchaseReviewDraft = {
+  targetType: 'order' | 'line_item'
+  orderId: string
+  lineItemId?: string
+  rating: number
+  quality: number
+  timeliness: number
+  comment: string
+  status: 'draft' | 'ready'
+}
+
+type PurchaseReviewTarget = Pick<
+  PurchaseReviewDraft,
+  'targetType' | 'orderId' | 'lineItemId'
+> & {
+  key: string
+}
+
 type ManualPurchaseForm = {
   title: string
   source: string
@@ -417,6 +437,8 @@ const defaultPurchaseEmailImport = [
   'Delivery: Expected 2026-06-14',
 ].join('\n')
 
+const purchaseReviewDraftStorageKey = 'cabinet:purchases:review-drafts:v1'
+
 function actionTone(action: PurchaseInboxAction) {
   if (action.requires_confirmation) {
     return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -454,6 +476,17 @@ function purchaseOrderRowKey(order: PurchaseOrder) {
 
 function purchaseLineRowKey(orderKey: string, item: PurchaseOrderLineItem) {
   return orderKey + ':line:' + item.item_id
+}
+
+function purchaseOrderReviewKey(order: PurchaseOrder) {
+  return purchaseOrderRowKey(order)
+}
+
+function purchaseLineReviewKey(
+  order: PurchaseOrder,
+  item: PurchaseOrderLineItem
+) {
+  return purchaseLineRowKey(purchaseOrderRowKey(order), item)
 }
 
 function packageDetailValue(value?: string | number) {
@@ -698,6 +731,14 @@ export function Purchases() {
   const [purchaseRatings, setPurchaseRatings] = useState<
     Record<string, number>
   >({})
+  const [reviewModeEnabled, setReviewModeEnabled] = useState(false)
+  const [purchaseReviewDrafts, setPurchaseReviewDrafts] = useState<
+    Record<string, PurchaseReviewDraft>
+  >({})
+  const [bulkReviewScores, setBulkReviewScores] = useState<
+    Record<PurchaseReviewDimension, number>
+  >({ rating: 5, quality: 5, timeliness: 5 })
+  const [bulkReviewComment, setBulkReviewComment] = useState('')
   const [packageSuggestionSummary, setPackageSuggestionSummary] =
     useState<ForwarderPackageMatchSuggestionSummary | null>(null)
   const [
@@ -729,6 +770,30 @@ export function Purchases() {
       ),
     [reviews]
   )
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(purchaseReviewDraftStorageKey)
+      if (stored) {
+        setPurchaseReviewDrafts(
+          JSON.parse(stored) as Record<string, PurchaseReviewDraft>
+        )
+      }
+    } catch {
+      setPurchaseReviewDrafts({})
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        purchaseReviewDraftStorageKey,
+        JSON.stringify(purchaseReviewDrafts)
+      )
+    } catch {
+      // Review drafts remain usable in memory if local storage is unavailable.
+    }
+  }, [purchaseReviewDrafts])
 
   const packageReviewSummary = useMemo(() => {
     const linkedPackageIDs = new Set<string>()
@@ -1003,6 +1068,133 @@ export function Purchases() {
           (item) => item.item_id === selectedPurchase.lineItemId
         ) ?? null)
       : null
+  const selectedPurchaseReviewKey = selectedPurchaseOrder
+    ? selectedPurchaseLine
+      ? purchaseLineReviewKey(selectedPurchaseOrder, selectedPurchaseLine)
+      : purchaseOrderReviewKey(selectedPurchaseOrder)
+    : null
+  const selectedPurchaseReviewDraft = selectedPurchaseReviewKey
+    ? purchaseReviewDrafts[selectedPurchaseReviewKey]
+    : undefined
+  const visiblePurchaseReviewTargets = useMemo<PurchaseReviewTarget[]>(() => {
+    return filteredPurchaseRows.flatMap((row) => {
+      const order = purchaseOrdersByRowKey.get(row.key)
+      if (!order) {
+        return []
+      }
+      return [
+        {
+          key: purchaseOrderReviewKey(order),
+          targetType: 'order' as const,
+          orderId: order.order_id,
+        },
+        ...order.line_items.map((item) => ({
+          key: purchaseLineReviewKey(order, item),
+          targetType: 'line_item' as const,
+          orderId: order.order_id,
+          lineItemId: item.item_id,
+        })),
+      ]
+    })
+  }, [filteredPurchaseRows, purchaseOrdersByRowKey])
+
+  const updatePurchaseReviewDraft = (
+    key: string,
+    patch: Partial<PurchaseReviewDraft> &
+      Pick<PurchaseReviewDraft, 'targetType' | 'orderId'>
+  ) => {
+    setPurchaseReviewDrafts((current) => {
+      const existing = current[key] ?? {
+        targetType: patch.targetType,
+        orderId: patch.orderId,
+        lineItemId: patch.lineItemId,
+        rating: 0,
+        quality: 0,
+        timeliness: 0,
+        comment: '',
+        status: 'draft' as const,
+      }
+      const next = {
+        ...existing,
+        ...patch,
+      }
+      return {
+        ...current,
+        [key]: {
+          ...next,
+          status:
+            next.rating || next.quality || next.timeliness || next.comment
+              ? 'ready'
+              : 'draft',
+        },
+      }
+    })
+  }
+
+  const updateSelectedPurchaseReviewComment = (comment: string) => {
+    if (!selectedPurchaseOrder || !selectedPurchaseReviewKey) {
+      return
+    }
+    updatePurchaseReviewDraft(selectedPurchaseReviewKey, {
+      targetType: selectedPurchaseLine ? 'line_item' : 'order',
+      orderId: selectedPurchaseOrder.order_id,
+      lineItemId: selectedPurchaseLine?.item_id,
+      comment,
+    })
+  }
+
+  const applyBulkReviewScore = (dimension: PurchaseReviewDimension) => {
+    const score = bulkReviewScores[dimension]
+    setPurchaseReviewDrafts((current) => {
+      const next = { ...current }
+      visiblePurchaseReviewTargets.forEach((target) => {
+        const existing = next[target.key] ?? {
+          targetType: target.targetType,
+          orderId: target.orderId,
+          lineItemId: target.lineItemId,
+          rating: 0,
+          quality: 0,
+          timeliness: 0,
+          comment: '',
+          status: 'draft' as const,
+        }
+        next[target.key] = {
+          ...existing,
+          [dimension]: score,
+          status: 'ready',
+        }
+      })
+      return next
+    })
+  }
+
+  const applyBulkReviewComment = () => {
+    const comment = bulkReviewComment.trim()
+    if (!comment) {
+      return
+    }
+    setPurchaseReviewDrafts((current) => {
+      const next = { ...current }
+      visiblePurchaseReviewTargets.forEach((target) => {
+        const existing = next[target.key] ?? {
+          targetType: target.targetType,
+          orderId: target.orderId,
+          lineItemId: target.lineItemId,
+          rating: 0,
+          quality: 0,
+          timeliness: 0,
+          comment: '',
+          status: 'draft' as const,
+        }
+        next[target.key] = {
+          ...existing,
+          comment,
+          status: 'ready',
+        }
+      })
+      return next
+    })
+  }
 
   useEffect(() => {
     const firstPersistedRow = filteredPurchaseRows.find((row) =>
@@ -1730,6 +1922,42 @@ export function Purchases() {
     setPendingAction(null)
   }
 
+  const renderReviewScoreButtons = (
+    key: string,
+    target: Pick<PurchaseReviewDraft, 'targetType' | 'orderId' | 'lineItemId'>,
+    dimension: PurchaseReviewDimension
+  ) => {
+    const value = purchaseReviewDrafts[key]?.[dimension] ?? 0
+    return (
+      <div
+        className='flex items-center gap-0.5'
+        data-testid={'purchases-review-' + dimension}
+      >
+        {[1, 2, 3, 4, 5].map((score) => (
+          <Button
+            key={score}
+            type='button'
+            size='icon'
+            variant={value >= score ? 'default' : 'outline'}
+            className='h-7 w-7'
+            aria-label={
+              'Set ' + dimension + ' to ' + score + ' for purchase review'
+            }
+            data-testid={'purchases-review-' + dimension + '-' + score}
+            onClick={() =>
+              updatePurchaseReviewDraft(key, {
+                ...target,
+                [dimension]: score,
+              })
+            }
+          >
+            <Star className='h-3.5 w-3.5' />
+          </Button>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <>
       <Header>
@@ -1857,7 +2085,99 @@ export function Purchases() {
                 Showing {filteredPurchaseRows.length} of{' '}
                 {Math.max(purchaseRows.length, purchaseOrdersTotal)} purchases
               </span>
+              <Button
+                type='button'
+                size='sm'
+                variant={reviewModeEnabled ? 'default' : 'outline'}
+                aria-pressed={reviewModeEnabled}
+                data-testid='purchases-review-mode-toggle'
+                onClick={() => setReviewModeEnabled((current) => !current)}
+              >
+                Review mode
+              </Button>
             </div>
+            {reviewModeEnabled ? (
+              <div
+                className='grid gap-3 border-b bg-muted/20 p-3 text-sm md:grid-cols-[repeat(3,minmax(10rem,1fr))_minmax(16rem,1.5fr)]'
+                data-testid='purchases-review-bulk-tools'
+              >
+                {(
+                  [
+                    ['rating', 'Rating'],
+                    ['quality', 'Quality'],
+                    ['timeliness', 'Timeliness'],
+                  ] satisfies Array<[PurchaseReviewDimension, string]>
+                ).map(([dimension, label]) => (
+                  <div key={dimension} className='space-y-1'>
+                    <Label
+                      htmlFor={'purchases-bulk-' + dimension}
+                      className='text-xs'
+                    >
+                      Bulk {label.toLowerCase()}
+                    </Label>
+                    <div className='flex gap-2'>
+                      <select
+                        id={'purchases-bulk-' + dimension}
+                        className='h-9 rounded-md border bg-background px-2 text-sm'
+                        data-testid={'purchases-bulk-' + dimension}
+                        value={bulkReviewScores[dimension]}
+                        onChange={(event) =>
+                          setBulkReviewScores((current) => ({
+                            ...current,
+                            [dimension]: Number(event.target.value),
+                          }))
+                        }
+                      >
+                        {[1, 2, 3, 4, 5].map((score) => (
+                          <option key={score} value={score}>
+                            {score}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid={'purchases-bulk-apply-' + dimension}
+                        disabled={visiblePurchaseReviewTargets.length === 0}
+                        onClick={() => applyBulkReviewScore(dimension)}
+                      >
+                        Apply visible
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <div className='space-y-1'>
+                  <Label htmlFor='purchases-bulk-comment' className='text-xs'>
+                    Bulk comment
+                  </Label>
+                  <div className='flex gap-2'>
+                    <Input
+                      id='purchases-bulk-comment'
+                      data-testid='purchases-bulk-comment'
+                      value={bulkReviewComment}
+                      onChange={(event) =>
+                        setBulkReviewComment(event.target.value)
+                      }
+                      placeholder='Apply comment to visible review targets'
+                    />
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      data-testid='purchases-bulk-apply-comment'
+                      disabled={
+                        visiblePurchaseReviewTargets.length === 0 ||
+                        bulkReviewComment.trim() === ''
+                      }
+                      onClick={applyBulkReviewComment}
+                    >
+                      Apply visible
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {purchaseOrdersError ? (
               <div
                 className='border-b border-destructive/40 bg-destructive/10 p-3 text-sm'
@@ -1867,7 +2187,7 @@ export function Purchases() {
                 <p className='text-muted-foreground'>{purchaseOrdersError}</p>
               </div>
             ) : null}
-            <Table className='min-w-[88rem] table-fixed'>
+            <Table className='min-w-[112rem] table-fixed'>
               <TableHeader>
                 <TableRow>
                   <TableHead className='w-[18rem]'>Purchase</TableHead>
@@ -1878,6 +2198,14 @@ export function Purchases() {
                   <TableHead className='w-[12rem]'>Status</TableHead>
                   <TableHead className='w-[14rem]'>Tracking</TableHead>
                   <TableHead className='w-[9rem]'>Order link</TableHead>
+                  {reviewModeEnabled ? (
+                    <>
+                      <TableHead className='w-[11rem]'>Rating</TableHead>
+                      <TableHead className='w-[11rem]'>Quality</TableHead>
+                      <TableHead className='w-[11rem]'>Timeliness</TableHead>
+                      <TableHead className='w-[14rem]'>Review comment</TableHead>
+                    </>
+                  ) : null}
                   <TableHead className='w-[10rem] text-right'>
                     Actions
                   </TableHead>
@@ -1887,7 +2215,7 @@ export function Purchases() {
                 {purchaseOrdersLoading && filteredPurchaseRows.length === 0 ? (
                   <TableRow data-testid='purchases-table-loading-row'>
                     <TableCell
-                      colSpan={9}
+                      colSpan={reviewModeEnabled ? 13 : 9}
                       className='h-20 text-center text-sm text-muted-foreground'
                     >
                       Loading persisted purchase orders...
@@ -1978,6 +2306,65 @@ export function Purchases() {
                             </span>
                           )}
                         </TableCell>
+                        {reviewModeEnabled ? (
+                          order ? (
+                            <>
+                              <TableCell>
+                                {renderReviewScoreButtons(
+                                  purchaseOrderReviewKey(order),
+                                  {
+                                    targetType: 'order',
+                                    orderId: order.order_id,
+                                  },
+                                  'rating'
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {renderReviewScoreButtons(
+                                  purchaseOrderReviewKey(order),
+                                  {
+                                    targetType: 'order',
+                                    orderId: order.order_id,
+                                  },
+                                  'quality'
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {renderReviewScoreButtons(
+                                  purchaseOrderReviewKey(order),
+                                  {
+                                    targetType: 'order',
+                                    orderId: order.order_id,
+                                  },
+                                  'timeliness'
+                                )}
+                              </TableCell>
+                              <TableCell
+                                className='truncate text-sm text-muted-foreground'
+                                data-testid='purchases-review-row-comment'
+                              >
+                                {purchaseReviewDrafts[
+                                  purchaseOrderReviewKey(order)
+                                ]?.comment || 'No draft comment'}
+                              </TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell className='text-muted-foreground'>
+                                -
+                              </TableCell>
+                              <TableCell className='text-muted-foreground'>
+                                -
+                              </TableCell>
+                              <TableCell className='text-muted-foreground'>
+                                -
+                              </TableCell>
+                              <TableCell className='text-muted-foreground'>
+                                Persist row first
+                              </TableCell>
+                            </>
+                          )
+                        ) : null}
                         <TableCell>
                           <div className='flex flex-wrap justify-end gap-1'>
                             <Button
@@ -2032,6 +2419,7 @@ export function Purchases() {
                                   ? 'default'
                                   : 'outline'
                               }
+                              className={reviewModeEnabled ? 'hidden' : ''}
                               data-testid='purchases-row-rating'
                               onClick={() =>
                                 setPurchaseRatings((current) => ({
@@ -2115,6 +2503,51 @@ export function Purchases() {
                           <TableCell className='text-muted-foreground'>
                             Grouped item
                           </TableCell>
+                          {reviewModeEnabled ? (
+                            <>
+                              <TableCell>
+                                {renderReviewScoreButtons(
+                                  purchaseLineReviewKey(order, item),
+                                  {
+                                    targetType: 'line_item',
+                                    orderId: order.order_id,
+                                    lineItemId: item.item_id,
+                                  },
+                                  'rating'
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {renderReviewScoreButtons(
+                                  purchaseLineReviewKey(order, item),
+                                  {
+                                    targetType: 'line_item',
+                                    orderId: order.order_id,
+                                    lineItemId: item.item_id,
+                                  },
+                                  'quality'
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {renderReviewScoreButtons(
+                                  purchaseLineReviewKey(order, item),
+                                  {
+                                    targetType: 'line_item',
+                                    orderId: order.order_id,
+                                    lineItemId: item.item_id,
+                                  },
+                                  'timeliness'
+                                )}
+                              </TableCell>
+                              <TableCell
+                                className='truncate text-sm text-muted-foreground'
+                                data-testid='purchases-review-row-comment'
+                              >
+                                {purchaseReviewDrafts[
+                                  purchaseLineReviewKey(order, item)
+                                ]?.comment || 'No draft comment'}
+                              </TableCell>
+                            </>
+                          ) : null}
                           <TableCell className='text-right text-xs text-muted-foreground'>
                             Persisted
                           </TableCell>
@@ -2126,7 +2559,7 @@ export function Purchases() {
                 {!purchaseOrdersLoading && purchaseRows.length === 0 ? (
                   <TableRow data-testid='purchases-table-empty-row'>
                     <TableCell
-                      colSpan={9}
+                      colSpan={reviewModeEnabled ? 13 : 9}
                       className='h-20 text-center text-sm text-muted-foreground'
                     >
                       No persisted purchases loaded. Add a purchase or change
@@ -2139,7 +2572,7 @@ export function Purchases() {
                 filteredPurchaseRows.length === 0 ? (
                   <TableRow data-testid='purchases-table-filter-empty-row'>
                     <TableCell
-                      colSpan={9}
+                      colSpan={reviewModeEnabled ? 13 : 9}
                       className='h-20 text-center text-sm text-muted-foreground'
                     >
                       No purchases match the current table filters.
@@ -2407,6 +2840,56 @@ export function Purchases() {
                     </div>
                   </div>
                 )}
+                {reviewModeEnabled ? (
+                  <div
+                    className='space-y-3 rounded-md border bg-muted/20 p-3 text-sm'
+                    data-testid='purchases-review-detail-draft'
+                  >
+                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                      <div>
+                        <p className='text-xs font-medium text-muted-foreground uppercase'>
+                          Review draft
+                        </p>
+                        <p className='font-medium'>
+                          {selectedPurchaseLine
+                            ? 'Line item feedback'
+                            : 'Order feedback'}
+                        </p>
+                      </div>
+                      <span
+                        className='text-xs text-muted-foreground'
+                        data-testid='purchases-review-draft-status'
+                      >
+                        {selectedPurchaseReviewDraft?.status ?? 'draft'}
+                      </span>
+                    </div>
+                    <div className='grid gap-2'>
+                      <Label htmlFor='purchases-review-comment'>
+                        Comment
+                      </Label>
+                      <Textarea
+                        id='purchases-review-comment'
+                        data-testid='purchases-review-comment'
+                        value={selectedPurchaseReviewDraft?.comment ?? ''}
+                        onChange={(event) =>
+                          updateSelectedPurchaseReviewComment(
+                            event.target.value
+                          )
+                        }
+                        placeholder='Leave feedback for this purchase target'
+                      />
+                    </div>
+                    <p
+                      className='text-xs text-muted-foreground'
+                      data-testid='purchases-review-draft-summary'
+                    >
+                      Rating {selectedPurchaseReviewDraft?.rating || '-'} /
+                      Quality {selectedPurchaseReviewDraft?.quality || '-'} /
+                      Timeliness{' '}
+                      {selectedPurchaseReviewDraft?.timeliness || '-'}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div
