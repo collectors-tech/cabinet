@@ -207,9 +207,33 @@ describe("UI-SCREEN-HOME", () => {
       })
     }).as("dashboardRetry")
 
+    cy.clearLocalStorage("cabinet.toastHistory.v1")
     signInToHome()
     cy.wait("@dashboardRetry")
     cy.contains("Dashboard unavailable").should("be.visible")
+    cy.window()
+      .its("localStorage")
+      .invoke("getItem", "cabinet.toastHistory.v1")
+      .should("be.a", "string")
+      .then((raw) => {
+        const records = JSON.parse(raw as string) as Array<{
+          level: string
+          title: string
+          summary: string
+          source_label: string
+          category: string
+        }>
+        expect(
+          records.some(
+            (record) =>
+              record.level === "error" &&
+              record.title === "Dashboard unavailable" &&
+              record.summary === "dashboard_fetch_failed_500" &&
+              record.source_label === "Home" &&
+              record.category === "system"
+          )
+        ).to.eq(true)
+      })
     cy.contains("button", "Retry").click()
     cy.wait("@dashboardRetry")
     cy.contains("Dashboard unavailable").should("not.exist")

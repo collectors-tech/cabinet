@@ -25,6 +25,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { recordNotificationHistory } from '@/lib/toast-history'
 
 type DashboardCard = {
   title: string
@@ -84,13 +85,24 @@ export function Dashboard() {
       const message =
         err instanceof Error ? err.message : 'dashboard_fetch_failed'
       setError(message)
+      recordNotificationHistory({
+        id: `dashboard-fetch-error-${message}`,
+        level: 'error',
+        title: 'Dashboard unavailable',
+        summary: message,
+        source_label: 'Home',
+        category: 'system',
+      })
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    void loadDashboard()
+    const timeoutID = window.setTimeout(() => {
+      void loadDashboard()
+    }, 0)
+    return () => window.clearTimeout(timeoutID)
   }, [loadDashboard])
 
   const metricCards = useMemo(() => {
