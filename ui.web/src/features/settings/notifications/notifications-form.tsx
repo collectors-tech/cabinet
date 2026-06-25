@@ -109,9 +109,17 @@ export function NotificationsForm() {
         category: 'settings',
       })
     } catch (err) {
-      setSaveError(
+      const message =
         err instanceof Error ? err.message : 'failed_to_save_notifications'
-      )
+      setSaveError(message)
+      recordNotificationHistory({
+        id: 'settings-notifications-save-failed',
+        level: 'error',
+        title: message,
+        summary: 'Settings Notifications save failure preserved for review.',
+        source_label: 'Settings Notifications',
+        category: 'settings',
+      })
     }
   }
 
