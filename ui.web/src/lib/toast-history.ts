@@ -154,10 +154,11 @@ function recordPromiseResolution(
   level: 'success' | 'error',
   fallback: string
 ) {
-  if (typeof value === 'string') {
+  const title = titleFromValue(value, fallback)
+  if (title !== fallback || typeof value === 'string') {
     recordToastHistory({
       level,
-      title: value,
+      title,
       summary: 'Promise toast settled and was preserved in Inbox history.',
     })
     return
@@ -204,8 +205,45 @@ export function installToastHistoryCapture(toast: unknown) {
           'Promise toast started and was preserved in Inbox history.',
       })
 
+      let forwardedArgs = args
+      let successCapturedByCallback = false
+      let errorCapturedByCallback = false
+      if (messages && typeof messages === 'object') {
+        const wrappedMessages = { ...(messages as Record<string, unknown>) }
+        if (typeof wrappedMessages.success === 'function') {
+          const originalSuccess = wrappedMessages.success as (
+            value: unknown
+          ) => unknown
+          successCapturedByCallback = true
+          wrappedMessages.success = (value: unknown) => {
+            const result = originalSuccess(value)
+            recordPromiseResolution(
+              result,
+              'success',
+              'Async notification completed'
+            )
+            return result
+          }
+        }
+        if (typeof wrappedMessages.error === 'function') {
+          const originalError = wrappedMessages.error as (
+            value: unknown
+          ) => unknown
+          errorCapturedByCallback = true
+          wrappedMessages.error = (value: unknown) => {
+            const result = originalError(value)
+            recordPromiseResolution(result, 'error', 'Async notification failed')
+            return result
+          }
+        }
+        forwardedArgs = [args[0], wrappedMessages, ...args.slice(2)]
+      }
+
       Promise.resolve(args[0])
         .then(() => {
+          if (successCapturedByCallback) {
+            return
+          }
           const success =
             messages && typeof messages === 'object'
               ? (messages as { success?: unknown }).success
@@ -217,6 +255,9 @@ export function installToastHistoryCapture(toast: unknown) {
           )
         })
         .catch(() => {
+          if (errorCapturedByCallback) {
+            return
+          }
           const error =
             messages && typeof messages === 'object'
               ? (messages as { error?: unknown }).error
@@ -224,7 +265,7 @@ export function installToastHistoryCapture(toast: unknown) {
           recordPromiseResolution(error, 'error', 'Async notification failed')
         })
 
-      return originalPromise(...args)
+      return originalPromise(...forwardedArgs)
     }
   }
 }

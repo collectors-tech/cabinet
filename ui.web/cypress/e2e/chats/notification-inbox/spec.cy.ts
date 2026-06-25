@@ -385,16 +385,18 @@ describe('chats/notification-inbox', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
     cy.wait('@loadNotifications')
 
-    cy.get('[data-testid="notification-inbox-search"]').type('Async')
+    cy.get('[data-testid="notification-inbox-search"]').type(
+      'Email sent to e2e-toast-capture@example.com'
+    )
     cy.get('[data-testid="notification-inbox-row"]')
       .should('have.length.at.least', 1)
       .first()
-      .should('contain', 'Async notification completed')
+      .should('contain', 'Email sent to e2e-toast-capture@example.com')
       .and('contain', 'Toast History')
       .and('contain', 'system')
     cy.get('[data-testid="notification-inbox-row"]').first().click()
     cy.get('[data-testid="notification-inbox-detail-pane"]')
-      .should('contain', 'Async notification completed')
+      .should('contain', 'Email sent to e2e-toast-capture@example.com')
       .and(
         'contain',
         'Promise toast settled and was preserved in Inbox history.'
