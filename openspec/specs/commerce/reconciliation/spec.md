@@ -146,3 +146,15 @@ Cabinet SHALL expose active-profile purchase lifecycle and expected-arrival reco
 - **THEN** Cabinet MUST query `GET /api/commerce/purchase-orders` with the selected `status`, `search`, `page`, and `page_size` parameters.
 - **AND** the table MUST render each returned purchase order as an order-centred row with grouped line-item rows visible beneath it.
 - **AND** the table MUST expose pagination controls and an empty state that distinguishes no persisted purchases from no matching filtered purchases.
+
+### Requirement COMMERCE-RECONCILIATION-014: Purchases SHALL expose split-pane order and item detail
+Cabinet SHALL present persisted purchase orders in an Inbox-style split pane with a table/list on the left and stable order or item detail on the right.
+
+#### Scenario: Select purchase order and line item detail
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders
+- **WHEN** the user selects an order row from the left purchase list
+- **THEN** the right detail pane MUST show order-level source/provider, source order id, seller/source account, purchase date, total/currency, order status, shipping/tracking summary, received/reconciled summary, all line items, and clear receive/reconcile/review actions.
+- **WHEN** the user selects a grouped line item row
+- **THEN** the right detail pane MUST show item-level title, source listing identity where available, quantity, item price, linked Cabinet item/instance identifier where available, inherited tracking/shipping status, received/reconciled state, review/feedback state placeholder, notes/evidence identifiers, and clear receive/reconcile/review actions.
+- **AND** filtering, searching, or pagination MUST either preserve the selected record when still visible or fall back to the first visible persisted order.
+- **AND** the detail pane MUST show an explicit empty state when no persisted purchase is selected.

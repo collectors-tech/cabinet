@@ -287,6 +287,109 @@ describe('purchases/purchase-inbox', () => {
       .should('include', 'page=1')
   })
 
+  it('COMMERCE-RECONCILIATION-014 selects order and item detail in split pane', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', (req) => {
+      const url = new URL(req.url)
+      const page = url.searchParams.get('page') ?? '1'
+      const status = url.searchParams.get('status') ?? ''
+
+      if (status === 'received') {
+        req.reply({
+          statusCode: 200,
+          body: {
+            page: 1,
+            page_size: 10,
+            total: 1,
+            total_pages: 1,
+            orders: [receivedPurchaseOrderFixture()],
+          },
+        })
+        return
+      }
+
+      req.reply({
+        statusCode: 200,
+        body:
+          page === '2'
+            ? {
+                page: 2,
+                page_size: 10,
+                total: 2,
+                total_pages: 2,
+                orders: [secondActivePurchaseOrderFixture()],
+              }
+            : {
+                page: 1,
+                page_size: 10,
+                total: 2,
+                total_pages: 2,
+                orders: [groupedPurchaseOrderFixture()],
+              },
+      })
+    }).as('listPurchaseOrdersForDetail')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.wait('@listPurchaseOrdersForDetail')
+
+    cy.get('[data-testid="purchases-split-pane"]').should('be.visible')
+    cy.get('[data-testid="purchases-detail-pane"]')
+      .should('be.visible')
+      .and('contain', 'EBAY-ORDER-100')
+      .and('contain', 'seller-one')
+      .and('contain', 'AUD 8.10')
+      .and('contain', 'TRACK-100')
+      .and('contain', '0 received / 2 unreceived')
+    cy.get('[data-testid="purchases-order-detail"]')
+      .should('contain', 'Receive order')
+      .and('contain', 'Reconcile')
+      .and('contain', 'Review')
+    cy.get('[data-testid="purchases-detail-line-item"]')
+      .should('have.length', 2)
+      .and('contain', 'Accompanying Flute TWM 142')
+
+    cy.contains(
+      '[data-testid="purchases-line-item-row"]',
+      'Mystery Pokemon card'
+    )
+      .find('[data-testid="purchases-line-item-select"]')
+      .click()
+    cy.get('[data-testid="purchases-detail-pane"]').should(
+      'contain',
+      'Mystery Pokemon card'
+    )
+    cy.get('[data-testid="purchases-item-detail"]')
+      .should('contain', 'Quantity')
+      .and('contain', 'AUD 5.70')
+      .and('contain', 'po-line-2')
+      .and('contain', 'TRACK-100')
+      .and('contain', 'life-po-2')
+      .and('contain', 'arrival-po-2')
+      .and('contain', 'Receive')
+      .and('contain', 'Reconcile')
+      .and('contain', 'Review')
+
+    cy.get('[data-testid="purchases-status-filter-received"]').click()
+    cy.wait('@listPurchaseOrdersForDetail')
+    cy.get('[data-testid="purchases-detail-pane"]')
+      .should('contain', 'AMZ-ORDER-200')
+      .and('contain', 'Amazon AU')
+
+    cy.get('[data-testid="purchases-status-filter-active"]').click()
+    cy.wait('@listPurchaseOrdersForDetail')
+    cy.get('[data-testid="purchases-page-next"]').click()
+    cy.wait('@listPurchaseOrdersForDetail')
+    cy.get('[data-testid="purchases-detail-pane"]').should(
+      'contain',
+      'EBAY-ORDER-101'
+    )
+  })
+
   it.skip('EBAY-PURCHASE-CAPTURE-006 reviews captured purchases before confirmed mutation actions', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
