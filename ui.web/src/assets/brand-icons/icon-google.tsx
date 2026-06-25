@@ -1,0 +1,34 @@
+import { type SVGProps } from 'react'
+import { cn } from '@/lib/utils'
+
+export function IconGoogle({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      role='img'
+      viewBox='0 0 24 24'
+      xmlns='http://www.w3.org/2000/svg'
+      width='24'
+      height='24'
+      className={cn(className)}
+      {...props}
+    >
+      <title>Google</title>
+      <path
+        fill='#4285F4'
+        d='M22.6 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09z'
+      />
+      <path
+        fill='#34A853'
+        d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.24 1.06-3.72 1.06-2.87 0-5.3-1.94-6.16-4.54H2.18v2.84A11 11 0 0 0 12 23z'
+      />
+      <path
+        fill='#FBBC05'
+        d='M5.84 14.1a6.61 6.61 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z'
+      />
+      <path
+        fill='#EA4335'
+        d='M12 5.36c1.62 0 3.06.56 4.2 1.64l3.16-3.16A10.58 10.58 0 0 0 12 1 11 11 0 0 0 2.18 7.06L5.84 9.9C6.7 7.3 9.13 5.36 12 5.36z'
+      />
+    </svg>
+  )
+}

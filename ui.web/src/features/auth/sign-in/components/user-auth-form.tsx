@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react'
+import { type ComponentType, type SVGProps, useEffect, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
-import { IconFacebook, IconGithub } from '@/assets/brand-icons'
+import {
+  IconApple,
+  IconFacebook,
+  IconGithub,
+  IconGoogle,
+  IconMicrosoft,
+} from '@/assets/brand-icons'
 import { useAuthStore } from '@/stores/auth-store'
 import { sleep, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -43,6 +49,12 @@ type ProviderOption = {
 type ProviderOptionsPayload = {
   identity_mode?: string
   providers?: ProviderOption[]
+}
+
+const providerIcons: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
+  google: IconGoogle,
+  apple: IconApple,
+  microsoft: IconMicrosoft,
 }
 
 function normalizePasskeyError(error: unknown) {
@@ -293,17 +305,29 @@ export function UserAuthForm({
         </p>
 
         <div className='grid grid-cols-3 gap-2'>
-          {providerOptions.map((provider) => (
-            <Button
-              key={provider.id}
-              variant='outline'
-              type='button'
-              disabled={isLoading || !provider.enabled}
-              data-testid={`provider-${provider.id}`}
-            >
-              {provider.label}
-            </Button>
-          ))}
+          {providerOptions.map((provider) => {
+            const ProviderIcon = providerIcons[provider.id]
+            return (
+              <Button
+                key={provider.id}
+                variant='outline'
+                type='button'
+                disabled={isLoading || !provider.enabled}
+                data-testid={`provider-${provider.id}`}
+              >
+                {ProviderIcon ? (
+                  <ProviderIcon
+                    aria-hidden='true'
+                    data-testid={`provider-${provider.id}-icon`}
+                    className='h-4 w-4 shrink-0'
+                  />
+                ) : null}
+                <span data-testid={`provider-${provider.id}-label`}>
+                  {provider.label}
+                </span>
+              </Button>
+            )
+          })}
         </div>
 
         <div className='grid grid-cols-2 gap-2'>
