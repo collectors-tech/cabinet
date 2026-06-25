@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Inbox,
   CheckCircle2,
@@ -578,7 +578,7 @@ export function Purchases() {
   >(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [capturedReviewsOpen, setCapturedReviewsOpen] = useState(false)
-  const [sourceMatchesOpen, setSourceMatchesOpen] = useState(false)
+  const [sourceMatchesOpen, _setSourceMatchesOpen] = useState(false)
   const [addDialogTab, setAddDialogTab] = useState<'new' | 'csv' | 'email'>(
     'new'
   )
@@ -852,6 +852,12 @@ export function Purchases() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (capturedReviewsOpen) {
+      void loadReviews()
+    }
+  }, [capturedReviewsOpen, loadReviews])
 
   const loadPackages = useCallback(
     async (profileId = packageForm.profile_id) => {
@@ -1517,11 +1523,6 @@ export function Purchases() {
     setPendingAction(null)
   }
 
-  const openCapturedReviews = () => {
-    setCapturedReviewsOpen(true)
-    void loadReviews()
-  }
-
   return (
     <>
       <Header>
@@ -1554,46 +1555,6 @@ export function Purchases() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Add purchase</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size='icon'
-                  variant='outline'
-                  data-testid='purchases-source-matches-toggle'
-                  onClick={() => setSourceMatchesOpen((current) => !current)}
-                  aria-expanded={sourceMatchesOpen}
-                  aria-label='Review source matches'
-                  title='Review source matches'
-                >
-                  <Truck className='h-4 w-4' aria-hidden='true' />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Review source matches</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size='icon'
-                  variant='outline'
-                  data-testid='purchase-inbox-load-reviews'
-                  onClick={openCapturedReviews}
-                  disabled={loading}
-                  aria-expanded={capturedReviewsOpen}
-                  aria-label='Review captured purchases'
-                  title='Review captured purchases'
-                >
-                  {loading ? (
-                    <Loader2
-                      className='h-4 w-4 animate-spin'
-                      aria-hidden='true'
-                    />
-                  ) : (
-                    <RefreshCw className='h-4 w-4' aria-hidden='true' />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Review captured purchases</TooltipContent>
             </Tooltip>
           </div>
           <Separator

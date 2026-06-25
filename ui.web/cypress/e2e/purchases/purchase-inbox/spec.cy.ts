@@ -1,4 +1,7 @@
 describe('purchases/purchase-inbox', () => {
+  // #1487 removed the source-match and captured-review controls from the
+  // primary Purchases page. These legacy workflow specs need relocation to the
+  // future provenance/detail surface before they can run again.
   const openSourceMatches = () => {
     cy.get('[data-testid="purchases-source-matches-toggle"]').then(
       ($button) => {
@@ -60,25 +63,22 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="purchases-add-tab-new"]').should('contain', 'New')
     cy.get('[data-testid="purchases-add-tab-csv"]').should('contain', 'CSV')
     cy.get('[data-testid="purchases-add-tab-email"]').should('contain', 'Email')
+    cy.get('[data-testid="purchases-add-new-title"]').should('be.visible')
+    cy.get('[data-testid="purchases-add-csv-input"]').should('not.exist')
+    cy.get('[data-testid="purchases-add-tab-csv"]').click()
+    cy.get('[data-testid="purchases-add-csv-input"]').should('be.visible')
+    cy.get('[data-testid="purchases-add-tab-email"]').click()
+    cy.get('[data-testid="purchases-add-email-input"]').should('be.visible')
     cy.contains('button', 'Cancel').click()
-    cy.get('[data-testid="purchases-source-matches-toggle"]')
-      .should('have.attr', 'aria-label', 'Review source matches')
-      .and('have.attr', 'title', 'Review source matches')
-      .should('have.attr', 'aria-expanded', 'false')
-      .and('not.contain.text', 'Source matches')
-      .click()
-      .should('have.attr', 'aria-expanded', 'true')
-    cy.get('[data-testid="forwarder-package-inbox"]')
-      .should('be.visible')
-      .and('contain', 'Purchase Source Matches')
-      .and('contain', 'source-backed purchase candidates')
-    cy.get('[data-testid="purchase-inbox-load-reviews"]')
-      .should('have.attr', 'aria-label', 'Review captured purchases')
-      .and('have.attr', 'title', 'Review captured purchases')
-      .and('not.contain.text', 'Load captured reviews')
+    cy.get('[data-testid="purchases-source-matches-toggle"]').should('not.exist')
+    cy.get('[data-testid="purchase-inbox-load-reviews"]').should('not.exist')
+    cy.get('[data-testid="purchase-review-tools"]').should('not.exist')
+    cy.get('[data-testid="forwarder-package-inbox"]').should('not.exist')
+    cy.contains('Review source matches').should('not.exist')
+    cy.contains('Review captured purchases').should('not.exist')
   })
 
-  it('EBAY-PURCHASE-CAPTURE-006 reviews captured purchases before confirmed mutation actions', () => {
+  it.skip('EBAY-PURCHASE-CAPTURE-006 reviews captured purchases before confirmed mutation actions', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -189,7 +189,7 @@ describe('purchases/purchase-inbox', () => {
     )
   })
 
-  it('COMMERCE-RECONCILIATION-007 filters Purchases rows and marks review state actions', () => {
+  it.skip('COMMERCE-RECONCILIATION-007 filters Purchases rows and marks review state actions', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -550,7 +550,7 @@ describe('purchases/purchase-inbox', () => {
     )
   })
 
-  it('COMMERCE-RECONCILIATION-011 shows row purchase metadata and order links', () => {
+  it.skip('COMMERCE-RECONCILIATION-011 shows row purchase metadata and order links', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -617,7 +617,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Accompanying Flute TWM 142')
   })
 
-  it('EBAY-PURCHASE-CAPTURE-006 exposes a retryable error state', () => {
+  it.skip('EBAY-PURCHASE-CAPTURE-006 exposes a retryable error state', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -637,7 +637,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Purchases could not load reviews.')
   })
 
-  it('EBAY-PURCHASE-CAPTURE-006 exposes loading state while reviews are prepared', () => {
+  it.skip('EBAY-PURCHASE-CAPTURE-006 exposes loading state while reviews are prepared', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -666,7 +666,7 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="purchase-inbox-empty-state"]').should('be.visible')
   })
 
-  it('INTEGRATION-032 imports and lists manual forwarder packages', () => {
+  it.skip('INTEGRATION-032 imports and lists manual forwarder packages', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -747,7 +747,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'stackry:manual:STK-PKG-1001')
   })
 
-  it('INTEGRATION-032 shows forwarder package import validation errors', () => {
+  it.skip('INTEGRATION-032 shows forwarder package import validation errors', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -772,7 +772,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'external_package_id is required')
   })
 
-  it('INTEGRATION-034 imports CSV forwarder package rows and reports row errors', () => {
+  it.skip('INTEGRATION-034 imports CSV forwarder package rows and reports row errors', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -855,7 +855,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'stackry:csv:STK-CSV-2001')
   })
 
-  it('INTEGRATION-036/037 imports email notices and shows package detail provenance', () => {
+  it.skip('INTEGRATION-036/037 imports email notices and shows package detail provenance', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -984,7 +984,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'external_package_id is required')
   })
 
-  it('INTEGRATION-039 links forwarder packages to purchase arrivals from the inbox UI', () => {
+  it.skip('INTEGRATION-039 links forwarder packages to purchase arrivals from the inbox UI', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -1076,7 +1076,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'already linked to a different target')
   })
 
-  it('INTEGRATION-042 confirms overrides unlinks and shows forwarder package link audit events', () => {
+  it.skip('INTEGRATION-042 confirms overrides unlinks and shows forwarder package link audit events', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -1471,7 +1471,7 @@ describe('purchases/purchase-inbox', () => {
     )
   })
 
-  it('INTEGRATION-043 shows forwarder package match suggestions and prepares confirmation', () => {
+  it.skip('INTEGRATION-043 shows forwarder package match suggestions and prepares confirmation', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -1668,7 +1668,7 @@ describe('purchases/purchase-inbox', () => {
     cy.wait('@confirmSuggestedForwarderPackageLink')
   })
 
-  it('INTEGRATION-059 keeps package rows visible across empty and failed suggestion loads', () => {
+  it.skip('INTEGRATION-059 keeps package rows visible across empty and failed suggestion loads', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
