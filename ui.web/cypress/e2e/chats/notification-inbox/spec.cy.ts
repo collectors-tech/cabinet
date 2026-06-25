@@ -443,6 +443,76 @@ describe('chats/notification-inbox', () => {
       .and('contain', 'Dialog History')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves settings status banners in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-inline-status',
+        build_date: '2026-06-25T02:00:00Z',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17882,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/logs/export', {
+      statusCode: 200,
+      body: '2026-06-25T02:00:00Z runtime log line',
+    }).as('exportLogs')
+    cy.intercept('POST', '/api/chat/inbox', (req) => {
+      const record = req.body.records.find(
+        (candidate: Record<string, unknown>) =>
+          candidate.local_history_id ===
+          'settings-operations-logs-export-success'
+      )
+      expect(record).to.deep.include({
+        level: 'success',
+        title: 'Exported runtime logs successfully.',
+        summary: 'Diagnostics logs status from Settings Operations.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
+      expect(record.created_at).to.match(/\d{4}-\d{2}-\d{2}T/)
+      req.reply({ statusCode: 201, body: { items: [] } })
+    }).as('syncInlineStatusHistory')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/operations/',
+    })
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+
+    cy.get('[data-testid="settings-operations-export-logs"]').click()
+    cy.wait('@exportLogs')
+    cy.get('[data-testid="settings-operations-logs-status"]').should(
+      'contain',
+      'Exported runtime logs successfully.'
+    )
+
+    cy.visit('/inbox/')
+    cy.wait('@syncInlineStatusHistory')
+    cy.wait('@loadNotifications')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 syncs local history into durable server Inbox without duplicates', () => {
     cy.viewport(1366, 768)
     cy.e2eReset()
