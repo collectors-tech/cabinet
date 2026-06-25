@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/form'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { ProfileContextBlocked } from '../components/profile-context-blocked'
 import { useProfileSettings } from '../use-profile-settings'
 
@@ -99,6 +100,14 @@ export function NotificationsForm() {
         'notifications.security_emails': String(data.security_emails),
       })
       setSaveMessage('Notification settings saved.')
+      recordNotificationHistory({
+        level: 'success',
+        title: 'Notification settings saved.',
+        summary:
+          'Settings Notifications preferences were persisted and preserved in Inbox history.',
+        source_label: 'Settings Notifications',
+        category: 'settings',
+      })
     } catch (err) {
       setSaveError(
         err instanceof Error ? err.message : 'failed_to_save_notifications'

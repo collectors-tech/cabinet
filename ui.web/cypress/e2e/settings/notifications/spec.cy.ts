@@ -56,6 +56,30 @@ describe('settings/notifications', () => {
         'notifications.security_emails': 'true',
       })
     cy.contains('Notification settings saved.').should('be.visible')
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.toastHistory.v1')
+      .then((rawHistory) => {
+        expect(rawHistory).to.be.a('string')
+        const history = JSON.parse(rawHistory as string) as Array<{
+          title?: string
+          level?: string
+          source_label?: string
+          category?: string
+          summary?: string
+        }>
+        const savedNotification = history.find(
+          (record) => record.title === 'Notification settings saved.'
+        )
+        expect(savedNotification).to.deep.include({
+          title: 'Notification settings saved.',
+          level: 'success',
+          source_label: 'Settings Notifications',
+          category: 'settings',
+          summary:
+            'Settings Notifications preferences were persisted and preserved in Inbox history.',
+        })
+      })
   })
 
   it('UI-SCREEN-SETTINGS-NOTIFICATIONS-003 retries notifications settings load failure without route reload', () => {
