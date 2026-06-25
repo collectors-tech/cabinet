@@ -58,6 +58,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import {
   type WorkspaceCollectionItem,
   type WorkspaceCollectionSummary,
@@ -75,6 +76,25 @@ const tableClassName = 'w-full table-fixed'
 const tableCellClassName = 'max-w-0 truncate'
 const tableHeaderClassName = 'max-w-0 truncate'
 const actionsCellClassName = 'w-[17rem] min-w-[17rem]'
+
+function recordCollectionsStatusHistory({
+  id,
+  level = 'success',
+  title,
+}: {
+  id: string
+  level?: 'success' | 'error' | 'warning'
+  title: string
+}) {
+  recordNotificationHistory({
+    id,
+    level,
+    title,
+    summary: 'Collections workspace status from Collections.',
+    source_label: 'Collections',
+    category: 'notification',
+  })
+}
 
 type InventoryCatalogItem = {
   id?: string
@@ -602,7 +622,12 @@ export function Collections() {
       setSelectedCollectionID(collectionKey(created))
       setCreateValue('')
       setCreateDialogOpen(false)
-      toast.success(`${created} created and set as the active collection.`)
+      const message = `${created} created and set as the active collection.`
+      toast.success(message)
+      recordCollectionsStatusHistory({
+        id: 'collections-create-success',
+        title: message,
+      })
     } finally {
       setCreateSubmitting(false)
     }
@@ -614,12 +639,23 @@ export function Collections() {
     }
     const renamed = await renameCollection(selectedRow.name, editValue)
     if (!renamed) {
-      toast.error('Rename failed. Use a unique non-empty collection name.')
+      const message = 'Rename failed. Use a unique non-empty collection name.'
+      toast.error(message)
+      recordCollectionsStatusHistory({
+        id: 'collections-rename-error',
+        level: 'error',
+        title: message,
+      })
       return
     }
     setSelectedCollectionID(collectionKey(renamed))
     setEditOpen(false)
-    toast.success(`${selectedRow.name} renamed to ${renamed}.`)
+    const message = `${selectedRow.name} renamed to ${renamed}.`
+    toast.success(message)
+    recordCollectionsStatusHistory({
+      id: 'collections-rename-success',
+      title: message,
+    })
   }
 
   async function handleDeleteCollection() {
@@ -629,12 +665,23 @@ export function Collections() {
     const removedName = selectedRow.name
     const removed = await removeCollection(removedName)
     if (!removed) {
-      toast.error('Collection removal failed.')
+      const message = 'Collection removal failed.'
+      toast.error(message)
+      recordCollectionsStatusHistory({
+        id: 'collections-remove-error',
+        level: 'error',
+        title: message,
+      })
       return
     }
     setSelectedCollectionID(collectionKey('All Items'))
     setDeleteOpen(false)
-    toast.success(`${removedName} removed from workspace collections.`)
+    const message = `${removedName} removed from workspace collections.`
+    toast.success(message)
+    recordCollectionsStatusHistory({
+      id: 'collections-remove-success',
+      title: message,
+    })
   }
 
   return (
