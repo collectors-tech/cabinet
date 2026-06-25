@@ -145,9 +145,24 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('eq', 200);
 
     cy.visit('/sign-in');
-    cy.get('[data-testid="provider-google"]').should('be.visible');
-    cy.get('[data-testid="provider-apple"]').should('be.visible');
-    cy.get('[data-testid="provider-microsoft"]').should('be.visible');
+    cy.get('[data-testid="provider-google"]')
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="provider-google-icon"]').should('be.visible');
+        cy.get('[data-testid="provider-google-label"]').should('contain.text', 'Google');
+      });
+    cy.get('[data-testid="provider-apple"]')
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="provider-apple-icon"]').should('be.visible');
+        cy.get('[data-testid="provider-apple-label"]').should('contain.text', 'Apple');
+      });
+    cy.get('[data-testid="provider-microsoft"]')
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="provider-microsoft-icon"]').should('be.visible');
+        cy.get('[data-testid="provider-microsoft-label"]').should('contain.text', 'Microsoft');
+      });
   });
 
   it('UI-SCREEN-ONBOARDING-AUTH-007 resolves identity mode and provider enablement from runtime config', () => {
@@ -362,9 +377,21 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('eq', 200);
 
     cy.visit('/sign-in-2');
-    cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
-    cy.get('[data-testid="provider-apple"]').should('be.visible').and('not.be.disabled');
-    cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
+    cy.get('[data-testid="provider-google"]')
+      .should('be.visible')
+      .and('not.be.disabled')
+      .find('[data-testid="provider-google-icon"]')
+      .should('be.visible');
+    cy.get('[data-testid="provider-apple"]')
+      .should('be.visible')
+      .and('not.be.disabled')
+      .find('[data-testid="provider-apple-icon"]')
+      .should('be.visible');
+    cy.get('[data-testid="provider-microsoft"]')
+      .should('be.visible')
+      .and('not.be.disabled')
+      .find('[data-testid="provider-microsoft-icon"]')
+      .should('be.visible');
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 

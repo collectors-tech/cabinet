@@ -32,7 +32,7 @@ Social/enterprise sign-in options SHALL include Google, Apple, and Microsoft in 
 #### Scenario: Render provider buttons
 - **GIVEN** sign-in screen is rendered
 - **WHEN** provider actions are displayed
-- **THEN** UI MUST include buttons for `Google`, `Apple`, and `Microsoft` with deterministic enabled/disabled state based on configuration
+- **THEN** UI MUST include buttons for `Google`, `Apple`, and `Microsoft` with matching provider icons and deterministic enabled/disabled state based on configuration
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-007: Identity provider platform decision SHALL be explicit and configurable
 Authentication implementation SHALL define whether Clerk is the source-of-truth identity platform and expose provider configuration deterministically.
@@ -160,7 +160,7 @@ Sign-up SHALL expose visible return/legal links that support deterministic mouse
 #### Scenario: Sign-in-2 Google, Apple, and Microsoft actions
 - **GIVEN** runtime setup is complete and user is on `/sign-in-2`
 - **WHEN** user inspects social and enterprise provider actions on the sign-in-2 surface
-- **THEN** UI MUST show visible `Google`, `Apple`, and `Microsoft` actions
+- **THEN** UI MUST show visible `Google`, `Apple`, and `Microsoft` actions with matching provider icons
 - **AND** each action MUST reflect deterministic enabled/disabled state from provider configuration
 - **AND** focus/inspection MUST NOT navigate away from `/sign-in-2`
 
