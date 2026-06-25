@@ -17,6 +17,7 @@ tags:
   - name: Matching
   - name: Discovery
   - name: Wishlist
+  - name: Commerce
   - name: Pricing
   - name: Dashboard
   - name: Auth
@@ -1388,6 +1389,37 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/commerce/purchase-orders:
+    get:
+      tags: [Commerce]
+      summary: List grouped purchase orders
+      description: Returns active-profile persisted purchase lifecycle and expected-arrival records as paginated, order-centred purchase orders with grouped line items.
+      parameters:
+        - in: query
+          name: status
+          description: Workflow status filter for the Purchases table.
+          schema:
+            type: string
+            enum: [all, active, reviews, shipped, received]
+        - in: query
+          name: search
+          description: Search order id, item title, seller/source, tracking, and status.
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Grouped purchase orders for the active profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrderListResponse"
         "400":
           $ref: "#/components/responses/Error"
   /api/pricing/snapshot/run:
@@ -3534,6 +3566,52 @@ components:
       properties:
         ok:
           type: boolean
+    PurchaseOrderListResponse:
+      type: object
+      required: [page, page_size, total, total_pages, orders]
+      properties:
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+        total_pages: { type: integer }
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseOrder"
+    PurchaseOrder:
+      type: object
+      required: [order_id, source, status, total_amount, currency, line_item_count, received_count, unreceived_count, line_items]
+      properties:
+        order_id: { type: string }
+        source: { type: string }
+        seller: { type: string }
+        tracking: { type: string }
+        status:
+          type: string
+          enum: [active, received]
+        total_amount: { type: number }
+        currency: { type: string }
+        line_item_count: { type: integer }
+        received_count: { type: integer }
+        unreceived_count: { type: integer }
+        created_at: { type: string }
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseOrderLineItem"
+    PurchaseOrderLineItem:
+      type: object
+      required: [item_id, title, quantity, amount, status, lifecycle_entry_id, expected_arrival_id]
+      properties:
+        item_id: { type: string }
+        title: { type: string }
+        quantity: { type: integer }
+        amount: { type: number }
+        status:
+          type: string
+          enum: [expected, delivered, reconciled, cancelled]
+        lifecycle_entry_id: { type: string }
+        expected_arrival_id: { type: string }
     Profile:
       type: object
       properties:

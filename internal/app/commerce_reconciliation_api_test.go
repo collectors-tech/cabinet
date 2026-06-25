@@ -262,6 +262,139 @@ func TestCommerceArrivalLifecycleStatesPersistAndFilter(t *testing.T) {
 	}
 }
 
+func TestCommercePurchaseOrdersAPIListsGroupedPurchases(t *testing.T) {
+	t.Parallel()
+
+	a, profileID := newCommerceProfileApp(t)
+	otherProfileID := "profile-other-purchase-orders"
+	if _, err := a.db.Exec(`INSERT INTO profiles(id, name) VALUES (?, 'Other purchases')`, otherProfileID); err != nil {
+		t.Fatalf("seed other profile: %v", err)
+	}
+	for _, item := range []struct {
+		id        string
+		profileID string
+		title     string
+		part      string
+	}{
+		{id: "po-line-1", profileID: profileID, title: "Accompanying Flute TWM 142", part: "PO-001"},
+		{id: "po-line-2", profileID: profileID, title: "Mystery Pokemon card", part: "PO-002"},
+		{id: "po-line-3", profileID: profileID, title: "Received order item", part: "PO-003"},
+		{id: "po-other-profile", profileID: otherProfileID, title: "Other profile purchase", part: "PO-OTHER"},
+	} {
+		if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES (?, ?, 'Pokemon', 'Cards', ?, ?)`, item.id, item.profileID, item.part, item.title); err != nil {
+			t.Fatalf("seed item %s: %v", item.id, err)
+		}
+	}
+	entries := []struct {
+		id        string
+		profileID string
+		itemID    string
+		source    string
+		orderID   string
+		quantity  int
+		amount    float64
+		notes     string
+		arrivalID string
+		status    string
+	}{
+		{id: "life-po-1", profileID: profileID, itemID: "po-line-1", source: "ebay", orderID: "EBAY-ORDER-100", quantity: 4, amount: 2.40, notes: "seller=seller-one tracking=TRACK-100", arrivalID: "arrival-po-1", status: "expected"},
+		{id: "life-po-2", profileID: profileID, itemID: "po-line-2", source: "ebay", orderID: "EBAY-ORDER-100", quantity: 1, amount: 5.70, notes: "seller=seller-one tracking=TRACK-100", arrivalID: "arrival-po-2", status: "expected"},
+		{id: "life-po-3", profileID: profileID, itemID: "po-line-3", source: "amazon", orderID: "AMZ-ORDER-200", quantity: 1, amount: 42.50, notes: "seller=Amazon AU tracking=TBA200", arrivalID: "arrival-po-3", status: "delivered"},
+		{id: "life-po-other", profileID: otherProfileID, itemID: "po-other-profile", source: "ebay", orderID: "EBAY-ORDER-999", quantity: 1, amount: 99, notes: "seller=other tracking=OTHER", arrivalID: "arrival-po-other", status: "expected"},
+	}
+	for _, entry := range entries {
+		if _, err := a.db.Exec(`INSERT INTO commerce_lifecycle_entries(id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes) VALUES (?, ?, ?, 'purchase', ?, ?, ?, ?, 'AUD', ?)`, entry.id, entry.profileID, entry.itemID, entry.source, entry.orderID, entry.quantity, entry.amount, entry.notes); err != nil {
+			t.Fatalf("seed lifecycle %s: %v", entry.id, err)
+		}
+		if _, err := a.db.Exec(`INSERT INTO expected_arrivals(id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, expected_on, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'AUD', ?, '2026-06-30', ?)`, entry.arrivalID, entry.profileID, entry.itemID, entry.id, entry.source, entry.orderID, entry.quantity, entry.amount, entry.status, entry.notes); err != nil {
+			t.Fatalf("seed arrival %s: %v", entry.arrivalID, err)
+		}
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/commerce/purchase-orders?status=all&page=1&page_size=10&search=flute", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list purchase orders status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Page      int `json:"page"`
+		PageSize  int `json:"page_size"`
+		Total     int `json:"total"`
+		TotalPage int `json:"total_pages"`
+		Orders    []struct {
+			OrderID         string  `json:"order_id"`
+			Source          string  `json:"source"`
+			Seller          string  `json:"seller"`
+			Tracking        string  `json:"tracking"`
+			Status          string  `json:"status"`
+			TotalAmount     float64 `json:"total_amount"`
+			Currency        string  `json:"currency"`
+			LineItemCount   int     `json:"line_item_count"`
+			ReceivedCount   int     `json:"received_count"`
+			UnreceivedCount int     `json:"unreceived_count"`
+			LineItems       []struct {
+				ItemID            string  `json:"item_id"`
+				Title             string  `json:"title"`
+				Quantity          int     `json:"quantity"`
+				Amount            float64 `json:"amount"`
+				Status            string  `json:"status"`
+				LifecycleEntryID  string  `json:"lifecycle_entry_id"`
+				ExpectedArrivalID string  `json:"expected_arrival_id"`
+			} `json:"line_items"`
+		} `json:"orders"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode purchase orders: %v body=%s", err, list.Body.String())
+	}
+	if payload.Page != 1 || payload.PageSize != 10 || payload.Total != 1 || payload.TotalPage != 1 {
+		t.Fatalf("unexpected pagination payload %+v", payload)
+	}
+	if len(payload.Orders) != 1 {
+		t.Fatalf("expected one matching order, got %+v", payload.Orders)
+	}
+	order := payload.Orders[0]
+	if order.OrderID != "EBAY-ORDER-100" || order.Source != "ebay" || order.Seller != "seller-one" || order.Tracking != "TRACK-100" {
+		t.Fatalf("unexpected grouped order identity %+v", order)
+	}
+	if order.Status != "active" || order.LineItemCount != 2 || order.ReceivedCount != 0 || order.UnreceivedCount != 2 {
+		t.Fatalf("expected active two-line order, got %+v", order)
+	}
+	if order.TotalAmount != 8.10 || order.Currency != "AUD" {
+		t.Fatalf("expected grouped total AUD 8.10, got %+v", order)
+	}
+	if len(order.LineItems) != 2 || order.LineItems[0].ItemID != "po-line-1" || order.LineItems[1].ItemID != "po-line-2" {
+		t.Fatalf("expected grouped line items, got %+v", order.LineItems)
+	}
+
+	page := doRequest(t, a, http.MethodGet, "/api/commerce/purchase-orders?status=all&page=2&page_size=1", nil, nil)
+	if page.Code != http.StatusOK {
+		t.Fatalf("paged purchase orders status=%d body=%s", page.Code, page.Body.String())
+	}
+	var paged struct {
+		Page       int `json:"page"`
+		PageSize   int `json:"page_size"`
+		Total      int `json:"total"`
+		TotalPages int `json:"total_pages"`
+		Orders     []struct {
+			OrderID string `json:"order_id"`
+		} `json:"orders"`
+	}
+	if err := json.NewDecoder(page.Body).Decode(&paged); err != nil {
+		t.Fatalf("decode paged purchase orders: %v", err)
+	}
+	if paged.Total != 2 || paged.TotalPages != 2 || len(paged.Orders) != 1 || paged.Orders[0].OrderID != "AMZ-ORDER-200" {
+		t.Fatalf("expected second active-profile order only, got %+v", paged)
+	}
+
+	active := doRequest(t, a, http.MethodGet, "/api/commerce/purchase-orders?status=active", nil, nil)
+	if active.Code != http.StatusOK || strings.Contains(active.Body.String(), "AMZ-ORDER-200") || !strings.Contains(active.Body.String(), "EBAY-ORDER-100") {
+		t.Fatalf("active filter should include only unreceived purchases, status=%d body=%s", active.Code, active.Body.String())
+	}
+	received := doRequest(t, a, http.MethodGet, "/api/commerce/purchase-orders?status=received", nil, nil)
+	if received.Code != http.StatusOK || !strings.Contains(received.Body.String(), "AMZ-ORDER-200") || strings.Contains(received.Body.String(), "EBAY-ORDER-100") {
+		t.Fatalf("received filter should include delivered purchases only, status=%d body=%s", received.Code, received.Body.String())
+	}
+}
+
 func newCommerceProfileApp(t *testing.T) (*App, string) {
 	t.Helper()
 

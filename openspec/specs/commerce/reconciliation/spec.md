@@ -127,3 +127,15 @@ Purchases SHALL render primary page header actions as clear modal-backed command
 - **WHEN** the Purchases page header and default page body render
 - **THEN** Cabinet MUST NOT render `Review source matches` or `Review captured purchases` as header actions.
 - **AND** Cabinet MUST NOT render standalone source-match or captured-review stacked sections as primary page body workflows.
+
+### Requirement COMMERCE-RECONCILIATION-013: Purchase orders SHALL be queryable as grouped persisted orders
+Cabinet SHALL expose active-profile purchase lifecycle and expected-arrival records as paginated, order-centred purchase orders with grouped line items.
+
+#### Scenario: List grouped persisted purchase orders
+- **GIVEN** the active profile has persisted `purchase` lifecycle entries and linked expected-arrival records
+- **WHEN** the user requests `GET /api/commerce/purchase-orders` with optional `status`, `search`, `page`, and `page_size` parameters
+- **THEN** Cabinet MUST return only active-profile purchase orders grouped by source order id.
+- **AND** each order MUST include source, seller, tracking, workflow status, total amount, line-item counts, received/unreceived counts, and grouped line items with lifecycle and expected-arrival identifiers.
+- **AND** status filters MUST support `all`, `active`, `reviews`, `shipped`, and `received`.
+- **AND** search MUST match order id, item title, seller/source, tracking, and status.
+- **AND** pagination metadata MUST include page, page size, total count, and total pages.
