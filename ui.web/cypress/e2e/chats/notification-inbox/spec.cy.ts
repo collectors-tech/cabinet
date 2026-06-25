@@ -651,6 +651,69 @@ describe('chats/notification-inbox', () => {
     cy.wait('@loadNotifications')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves Collections workspace status toasts in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('collectionsInventoryItems')
+    cy.intercept('GET', '/api/profiles/*/settings').as(
+      'loadCollectionSettings'
+    )
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { settings: req.body.settings },
+      })
+    }).as('saveCollectionSettings')
+    cy.intercept('POST', '/api/chat/inbox', (req) => {
+      const record = req.body.records.find(
+        (candidate: Record<string, unknown>) =>
+          candidate.local_history_id === 'collections-rename-success'
+      )
+      expect(record).to.deep.include({
+        level: 'success',
+        title: 'Watch List renamed to Watch List Inbox.',
+        summary: 'Collections workspace status from Collections.',
+        source_label: 'Collections',
+        category: 'notification',
+      })
+      expect(record.created_at).to.match(/\d{4}-\d{2}-\d{2}T/)
+      req.reply({ statusCode: 201, body: { items: [] } })
+    }).as('syncCollectionsStatusHistory')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/collections/',
+    })
+    cy.wait('@loadCollectionSettings')
+    cy.wait('@collectionsInventoryItems')
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+
+    cy.get('[data-testid="collections-row-edit-watch-list"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="collections-edit-input"]')
+      .clear()
+      .type('Watch List Inbox')
+    cy.get('[data-testid="collections-edit-submit"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.contains('Watch List renamed to Watch List Inbox.').should('be.visible')
+
+    cy.visit('/inbox/')
+    cy.wait('@syncCollectionsStatusHistory')
+    cy.wait('@loadNotifications')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 syncs local history into durable server Inbox without duplicates', () => {
     cy.viewport(1366, 768)
     cy.e2eReset()
