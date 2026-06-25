@@ -56,6 +56,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { recordNotificationHistory } from '@/lib/toast-history'
 
 const route = getRouteApi('/_authenticated/integrations/')
 
@@ -502,6 +503,10 @@ function providerSettingAliases(providerID: string) {
       `integration.${providerID}.items_per_page`,
     ],
   }
+}
+
+function notificationHistoryID(value: string) {
+  return value.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
 }
 
 function isConnected(
@@ -1280,11 +1285,27 @@ export function Apps({
             : provider
         )
       )
-      setActionMessage(
-        `Validated ${editingProvider.display_name} health: ${healthStatus}.`
-      )
+      const message = `Validated ${editingProvider.display_name} health: ${healthStatus}.`
+      setActionMessage(message)
+      recordNotificationHistory({
+        id: `integrations-provider-health-${notificationHistoryID(editingProvider.provider_id)}-${notificationHistoryID(healthStatus)}`,
+        level: healthStatus === 'ok' ? 'success' : 'warning',
+        title: message,
+        summary: 'Provider health validation status from Integrations.',
+        source_label: 'Integrations',
+        category: 'system',
+      })
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'validate_failed')
+      const message = error instanceof Error ? error.message : 'validate_failed'
+      setSaveError(message)
+      recordNotificationHistory({
+        id: `integrations-provider-health-${notificationHistoryID(editingProvider.provider_id)}-failed`,
+        level: 'error',
+        title: message,
+        summary: 'Provider health validation status from Integrations.',
+        source_label: 'Integrations',
+        category: 'system',
+      })
     } finally {
       setValidating(false)
     }
