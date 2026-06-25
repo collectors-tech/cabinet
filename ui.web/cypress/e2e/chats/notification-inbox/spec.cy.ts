@@ -515,6 +515,73 @@ describe('chats/notification-inbox', () => {
     cy.wait('@loadNotifications')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves settings notification save failures in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'e2e-profile-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/e2e-profile-001/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          'notifications.type': 'mentions',
+          'notifications.mobile': 'false',
+          'notifications.communication_emails': 'false',
+          'notifications.social_emails': 'true',
+          'notifications.marketing_emails': 'false',
+          'notifications.security_emails': 'true',
+        },
+      },
+    }).as('notificationSettings')
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings', {
+      statusCode: 503,
+      body: { error: 'notification_settings_save_unavailable' },
+    }).as('saveNotificationsFailure')
+    cy.intercept('POST', '/api/chat/inbox', (req) => {
+      const record = req.body.records.find(
+        (candidate: Record<string, unknown>) =>
+          candidate.local_history_id ===
+          'settings-notifications-save-failed'
+      )
+      expect(record).to.deep.include({
+        level: 'error',
+        title: 'profile_settings_save_503',
+        summary: 'Settings Notifications save failure preserved for review.',
+        source_label: 'Settings Notifications',
+        category: 'settings',
+      })
+      expect(record.created_at).to.match(/\d{4}-\d{2}-\d{2}T/)
+      req.reply({ statusCode: 201, body: { items: [] } })
+    }).as('syncNotificationSettingsFailureHistory')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/notifications/',
+    })
+    cy.wait('@activeProfile')
+    cy.wait('@notificationSettings')
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+
+    cy.contains('label', 'Nothing').click()
+    cy.contains('button', 'Update notifications').click()
+    cy.wait('@saveNotificationsFailure')
+    cy.contains('profile_settings_save_503').should('be.visible')
+
+    cy.visit('/inbox/')
+    cy.wait('@syncNotificationSettingsFailureHistory')
+    cy.wait('@loadNotifications')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves storage maintenance status banners in Inbox history', () => {
     cy.viewport(1366, 768)
     cy.e2eReset()
