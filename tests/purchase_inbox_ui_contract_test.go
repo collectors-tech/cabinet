@@ -48,6 +48,10 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"capturedReviewsOpen",
 		"sourceMatchesOpen",
 		"purchase-review-tools",
+		"purchases-split-pane",
+		"purchases-detail-pane",
+		"purchases-order-detail",
+		"purchases-item-detail",
 	}
 	for _, snippet := range requiredFeatureSnippets {
 		if !strings.Contains(feature, snippet) {
@@ -76,6 +80,8 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"COMMERCE-RECONCILIATION-009",
 		"COMMERCE-RECONCILIATION-010",
 		"COMMERCE-RECONCILIATION-011",
+		"COMMERCE-RECONCILIATION-014",
+		"purchases-detail-pane",
 		"path: '/purchases'",
 		"EBAY-PURCHASE-CAPTURE-006",
 		"purchase-inbox-empty-state",
