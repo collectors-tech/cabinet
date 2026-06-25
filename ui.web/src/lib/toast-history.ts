@@ -115,29 +115,32 @@ export function saveToastHistory(records: ToastHistoryRecord[]) {
 }
 
 export function recordToastHistory(
-  record: Omit<ToastHistoryRecord, 'id' | 'created_at'>
+  record: Omit<ToastHistoryRecord, 'id' | 'created_at'> & { id?: string }
 ) {
   const title = record.title.trim()
   if (!title) {
     return
   }
+  const id = record.id ?? toastId()
   saveToastHistory([
     {
       ...record,
-      id: toastId(),
+      id,
       title,
       created_at: new Date().toISOString(),
     },
-    ...loadToastHistory(),
+    ...loadToastHistory().filter((existing) => existing.id !== id),
   ])
 }
 
 export function recordNotificationHistory(
   record: Omit<ToastHistoryRecord, 'id' | 'created_at' | 'level'> & {
+    id?: string
     level?: ToastHistoryLevel
   }
 ) {
   recordToastHistory({
+    id: record.id,
     level: record.level ?? 'info',
     title: record.title,
     summary: record.summary,

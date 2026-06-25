@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { ContentSection } from '../components/content-section'
 import { useProfileSettings } from '../use-profile-settings'
 
@@ -414,10 +415,26 @@ export function SettingsOperations() {
       const preview = text.trim()
       setLogsPreview(preview || null)
       setLogsStatus('Exported runtime logs successfully.')
+      recordNotificationHistory({
+        id: 'settings-operations-logs-export-success',
+        level: 'success',
+        title: 'Exported runtime logs successfully.',
+        summary: 'Diagnostics logs status from Settings Operations.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
     } catch {
       setLogsPreview(null)
       setLogsTone('destructive')
       setLogsStatus('Runtime logs export failed.')
+      recordNotificationHistory({
+        id: 'settings-operations-logs-export-failed',
+        level: 'error',
+        title: 'Runtime logs export failed.',
+        summary: 'Diagnostics logs status from Settings Operations.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
     } finally {
       setLogsExportPending(false)
     }
