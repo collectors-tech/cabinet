@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Inbox,
   CheckCircle2,
@@ -578,7 +578,7 @@ export function Purchases() {
   >(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [capturedReviewsOpen, setCapturedReviewsOpen] = useState(false)
-  const [sourceMatchesOpen, setSourceMatchesOpen] = useState(false)
+  const [sourceMatchesOpen, _setSourceMatchesOpen] = useState(false)
   const [addDialogTab, setAddDialogTab] = useState<'new' | 'csv' | 'email'>(
     'new'
   )
@@ -852,6 +852,12 @@ export function Purchases() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (capturedReviewsOpen) {
+      void loadReviews()
+    }
+  }, [capturedReviewsOpen, loadReviews])
 
   const loadPackages = useCallback(
     async (profileId = packageForm.profile_id) => {
@@ -1515,11 +1521,6 @@ export function Purchases() {
     }
     setConfirmedAction(pendingAction.label + ': ' + pendingAction.target_key)
     setPendingAction(null)
-  }
-
-  const openCapturedReviews = () => {
-    setCapturedReviewsOpen(true)
-    void loadReviews()
   }
 
   return (
