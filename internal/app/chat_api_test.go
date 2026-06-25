@@ -242,6 +242,46 @@ func TestChatInboxItemStatusLifecycle(t *testing.T) {
 	}
 }
 
+func TestNotificationHistoryAPIPromotesLocalHistoryToDurableInbox(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P1"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	body := `{"profile_id":"` + p.ID + `","records":[{"local_history_id":"local-toast-1","level":"warning","title":"Settings save warning","summary":"Banner warning preserved for review.","source_label":"Settings Banner","category":"system","created_at":"2026-06-22T10:00:00Z"}]}`
+	record := doRequest(t, a, http.MethodPost, "/api/chat/inbox", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if record.Code != http.StatusCreated {
+		t.Fatalf("record history status=%d body=%s", record.Code, record.Body.String())
+	}
+	if !strings.Contains(record.Body.String(), `"source":"notification_history"`) || !strings.Contains(record.Body.String(), `"local_history_id":"local-toast-1"`) {
+		t.Fatalf("expected durable notification history item, body=%s", record.Body.String())
+	}
+
+	duplicate := doRequest(t, a, http.MethodPost, "/api/chat/inbox", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if duplicate.Code != http.StatusCreated {
+		t.Fatalf("duplicate history status=%d body=%s", duplicate.Code, duplicate.Body.String())
+	}
+	list := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list inbox status=%d body=%s", list.Code, list.Body.String())
+	}
+	if count := strings.Count(list.Body.String(), "local-toast-1"); count != 1 {
+		t.Fatalf("expected one deduped durable history item, count=%d body=%s", count, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), `"source_label":"Settings Banner"`) || !strings.Contains(list.Body.String(), `"captured_at":"2026-06-22T10:00:00Z"`) {
+		t.Fatalf("expected source and captured-at metadata in durable history item, body=%s", list.Body.String())
+	}
+}
+
 func TestChatAPIsValidateErrorsAndProfileIsolation(t *testing.T) {
 	t.Parallel()
 

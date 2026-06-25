@@ -443,6 +443,106 @@ describe('chats/notification-inbox', () => {
       .and('contain', 'Dialog History')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 syncs local history into durable server Inbox without duplicates', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('POST', '/api/chat/inbox', (req) => {
+      expect(String(req.body.profile_id)).to.match(/\S/)
+      expect(req.body.records).to.deep.include({
+        local_history_id: 'local-sync-proof-1',
+        level: 'warning',
+        title: 'Settings save warning',
+        summary: 'Banner warning preserved for review.',
+        source_label: 'Settings Banner',
+        category: 'system',
+        created_at: '2026-06-22T10:00:00Z',
+      })
+      req.reply({
+        statusCode: 201,
+        body: {
+          items: [
+            {
+              id: 'server-history-1',
+              status: 'read',
+              source: 'notification_history',
+              title: 'Settings save warning',
+              summary: 'Banner warning preserved for review.',
+              created_at: '2026-06-22T10:00:00Z',
+              updated_at: '2026-06-22T10:00:00Z',
+              metadata: {
+                category: 'system',
+                detail: 'Banner warning preserved for review.',
+                local_history_id: 'local-sync-proof-1',
+                source_label: 'Settings Banner',
+              },
+            },
+          ],
+        },
+      })
+    }).as('syncLocalHistory')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'server-history-1',
+            status: 'read',
+            source: 'notification_history',
+            title: 'Settings save warning',
+            summary: 'Banner warning preserved for review.',
+            created_at: '2026-06-22T10:00:00Z',
+            updated_at: '2026-06-22T10:00:00Z',
+            metadata: {
+              category: 'system',
+              detail: 'Banner warning preserved for review.',
+              local_history_id: 'local-sync-proof-1',
+              source_label: 'Settings Banner',
+            },
+          },
+        ],
+      },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox/',
+    })
+    cy.window().then((win) => {
+      win.localStorage.setItem(
+        'cabinet.toastHistory.v1',
+        JSON.stringify([
+          {
+            id: 'local-sync-proof-1',
+            level: 'warning',
+            title: 'Settings save warning',
+            summary: 'Banner warning preserved for review.',
+            source_label: 'Settings Banner',
+            category: 'system',
+            created_at: '2026-06-22T10:00:00Z',
+          },
+        ])
+      )
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+    cy.reload()
+    cy.wait('@syncLocalHistory')
+    cy.wait('@loadNotifications')
+
+    cy.get('[data-testid="notification-inbox-search"]').type(
+      'Settings save warning'
+    )
+    cy.get('[data-testid="notification-inbox-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Settings save warning')
+      .and('contain', 'Settings Banner')
+    cy.get('[data-testid="notification-inbox-row"]').first().click()
+    cy.get('[data-testid="notification-inbox-detail-pane"]')
+      .should('contain', 'Settings save warning')
+      .and('contain', 'Banner warning preserved for review.')
+      .and('contain', 'Settings Banner')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-003 expands detail and preserves linked target navigation', () => {
     bootInbox()
 

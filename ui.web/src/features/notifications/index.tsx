@@ -59,6 +59,7 @@ type NotificationInboxItem = {
     item_href?: string
     local_toast?: boolean
     level?: string
+    local_history_id?: string
   }
   created_at?: string
   updated_at?: string
@@ -211,6 +212,32 @@ export function NotificationInbox() {
   const [error, setError] = useState('')
   const [updating, setUpdating] = useState(false)
 
+  const syncToastHistory = useCallback(async () => {
+    if (!activeProfileId) {
+      return
+    }
+    const records = loadToastHistory()
+    if (records.length === 0) {
+      return
+    }
+    await fetch('/api/chat/inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: activeProfileId,
+        records: records.map((record) => ({
+          local_history_id: record.id,
+          level: record.level,
+          title: record.title,
+          summary: record.summary,
+          source_label: record.source_label,
+          category: record.category,
+          created_at: record.created_at,
+        })),
+      }),
+    })
+  }, [activeProfileId])
+
   const loadItems = useCallback(async () => {
     if (!activeProfileId) {
       return
@@ -218,6 +245,7 @@ export function NotificationInbox() {
     setLoading(true)
     setError('')
     try {
+      await syncToastHistory()
       const response = await fetch(
         `/api/chat/inbox?profile_id=${encodeURIComponent(activeProfileId)}`
       )
@@ -235,7 +263,7 @@ export function NotificationInbox() {
     } finally {
       setLoading(false)
     }
-  }, [activeProfileId])
+  }, [activeProfileId, syncToastHistory])
 
   useEffect(() => {
     const loadToastItems = () => {
@@ -342,7 +370,21 @@ export function NotificationInbox() {
   }, [filter])
 
   const allItems = useMemo(
-    () => sortNotifications([...items, ...toastItems]),
+    () => {
+      const syncedLocalHistoryIds = new Set(
+        items
+          .map((item) => item.metadata?.local_history_id)
+          .filter(Boolean)
+          .map(String)
+      )
+      return sortNotifications([
+        ...items,
+        ...toastItems.filter((item) => {
+          const localHistoryID = item.id.replace(/^toast:/, '')
+          return !syncedLocalHistoryIds.has(localHistoryID)
+        }),
+      ])
+    },
     [items, toastItems]
   )
 

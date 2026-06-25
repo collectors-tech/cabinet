@@ -63,6 +63,18 @@ type InboxItem struct {
 	UpdatedAt string         `json:"updated_at"`
 }
 
+type NotificationHistoryInput struct {
+	ProfileID      string         `json:"profile_id"`
+	LocalHistoryID string         `json:"local_history_id"`
+	Level          string         `json:"level"`
+	Title          string         `json:"title"`
+	Summary        string         `json:"summary"`
+	SourceLabel    string         `json:"source_label"`
+	Category       string         `json:"category"`
+	CreatedAt      string         `json:"created_at"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
 type PreviewActionInput struct {
 	ProfileID string         `json:"profile_id"`
 	ThreadID  string         `json:"thread_id"`
@@ -526,6 +538,110 @@ func (s *Service) CreateInboxItem(ctx context.Context, item InboxItem) (InboxIte
 		return InboxItem{}, fmt.Errorf("create inbox item: %w", err)
 	}
 	return s.getInboxItem(ctx, item.ProfileID, item.ID)
+}
+
+func (s *Service) CreateNotificationHistoryItem(ctx context.Context, in NotificationHistoryInput) (InboxItem, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.LocalHistoryID = strings.TrimSpace(in.LocalHistoryID)
+	in.Title = strings.TrimSpace(in.Title)
+	if in.ProfileID == "" || in.LocalHistoryID == "" || in.Title == "" {
+		return InboxItem{}, fmt.Errorf("profile_id, local_history_id and title are required")
+	}
+	if existing, ok, err := s.findNotificationHistoryItem(ctx, in.ProfileID, in.LocalHistoryID); err != nil {
+		return InboxItem{}, err
+	} else if ok {
+		return existing, nil
+	}
+	thread, err := s.notificationHistoryThread(ctx, in.ProfileID)
+	if err != nil {
+		return InboxItem{}, err
+	}
+	category := strings.TrimSpace(in.Category)
+	if category == "" {
+		category = "system"
+	}
+	level := strings.TrimSpace(in.Level)
+	if level == "" {
+		level = "info"
+	}
+	sourceLabel := strings.TrimSpace(in.SourceLabel)
+	if sourceLabel == "" {
+		sourceLabel = "Notification History"
+	}
+	metadata := map[string]any{
+		"category":         category,
+		"detail":           strings.TrimSpace(in.Summary),
+		"level":            level,
+		"local_history_id": in.LocalHistoryID,
+		"local_toast":      true,
+		"source_label":     sourceLabel,
+	}
+	if strings.TrimSpace(in.CreatedAt) != "" {
+		metadata["captured_at"] = strings.TrimSpace(in.CreatedAt)
+	}
+	for key, value := range in.Metadata {
+		if _, exists := metadata[key]; !exists {
+			metadata[key] = value
+		}
+	}
+	return s.CreateInboxItem(ctx, InboxItem{
+		ProfileID: in.ProfileID,
+		ThreadID:  thread.ID,
+		Source:    "notification_history",
+		Status:    "read",
+		Title:     in.Title,
+		Summary:   strings.TrimSpace(in.Summary),
+		Metadata:  metadata,
+	})
+}
+
+func (s *Service) notificationHistoryThread(ctx context.Context, profileID string) (Thread, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
+		FROM chat_threads
+		WHERE profile_id = ? AND json_extract(metadata_json, '$.kind') = 'notification_history'
+		ORDER BY created_at ASC
+		LIMIT 1
+	`, profileID)
+	if err != nil {
+		return Thread{}, fmt.Errorf("find notification history thread: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var t Thread
+		var metadataJSON string
+		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return Thread{}, err
+		}
+		t.Metadata = parseContextJSON(metadataJSON)
+		return t, nil
+	}
+	if err := rows.Err(); err != nil {
+		return Thread{}, err
+	}
+	return s.CreateThread(ctx, profileID, "Notification History", map[string]any{"kind": "notification_history"})
+}
+
+func (s *Service) findNotificationHistoryItem(ctx context.Context, profileID, localHistoryID string) (InboxItem, bool, error) {
+	var item InboxItem
+	var metadataJSON string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		  AND source = 'notification_history'
+		  AND json_extract(metadata_json, '$.local_history_id') = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, profileID, localHistoryID).Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return InboxItem{}, false, nil
+		}
+		return InboxItem{}, false, err
+	}
+	item.Metadata = parseContextJSON(metadataJSON)
+	return item, true, nil
 }
 
 func (s *Service) ListInboxItems(ctx context.Context, profileID string) ([]InboxItem, error) {
