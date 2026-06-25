@@ -457,11 +457,29 @@ export function SettingsOperations() {
       const payload = (await response.json()) as RuntimeSetupImportResponse
       setSetupImportSummary(payload)
       setSetupImportStatus('Runtime setup imported successfully.')
+      recordNotificationHistory({
+        id: 'settings-operations-setup-import-success',
+        level: 'success',
+        title: 'Runtime setup imported successfully.',
+        summary:
+          'Runtime setup import status from Settings Operations was preserved in Inbox history.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
       await loadOperations()
     } catch {
       setSetupImportSummary(null)
       setSetupImportTone('destructive')
       setSetupImportStatus('Runtime setup import failed.')
+      recordNotificationHistory({
+        id: 'settings-operations-setup-import-failed',
+        level: 'error',
+        title: 'Runtime setup import failed.',
+        summary:
+          'Runtime setup import failure from Settings Operations was preserved in Inbox history.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
     } finally {
       setSetupImportPending(false)
     }
