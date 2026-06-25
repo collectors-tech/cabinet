@@ -1121,6 +1121,31 @@ describe('settings/operations', () => {
       'contain',
       'imported-recovery'
     )
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.toastHistory.v1')
+      .then((rawHistory) => {
+        expect(rawHistory).to.be.a('string')
+        const history = JSON.parse(rawHistory ?? '[]') as Array<{
+          level: string
+          title: string
+          source_label?: string
+          category?: string
+          summary?: string
+        }>
+        const record = history.find(
+          (item) => item.title === 'Runtime setup imported successfully.'
+        )
+        expect(record, JSON.stringify(history)).to.not.equal(undefined)
+        expect(record).to.include({
+          level: 'success',
+          title: 'Runtime setup imported successfully.',
+          source_label: 'Settings Operations',
+          category: 'system',
+          summary:
+            'Runtime setup import status from Settings Operations was preserved in Inbox history.',
+        })
+      })
   })
 
   it('UI-SCREEN-SETTINGS-OPERATIONS-015 reports runtime setup import failure without leaving the Operations route', () => {
@@ -1163,5 +1188,30 @@ describe('settings/operations', () => {
       'contain',
       'Runtime setup import failed.'
     )
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.toastHistory.v1')
+      .then((rawHistory) => {
+        expect(rawHistory).to.be.a('string')
+        const history = JSON.parse(rawHistory ?? '[]') as Array<{
+          level: string
+          title: string
+          source_label?: string
+          category?: string
+          summary?: string
+        }>
+        const record = history.find(
+          (item) => item.title === 'Runtime setup import failed.'
+        )
+        expect(record, JSON.stringify(history)).to.not.equal(undefined)
+        expect(record).to.include({
+          level: 'error',
+          title: 'Runtime setup import failed.',
+          source_label: 'Settings Operations',
+          category: 'system',
+          summary:
+            'Runtime setup import failure from Settings Operations was preserved in Inbox history.',
+        })
+      })
   })
 })

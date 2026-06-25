@@ -129,12 +129,14 @@ Wizard Step 1 MUST provide an import path entry flow that copies a valid existin
 - **THEN** runtime MUST validate and write imported config to active `cabinet.json` path
 - **AND** response MUST return status `200` with `ok=true`, `setup_required=false`, and `config_path`
 - **AND** subsequent `GET /api/runtime/setup-status` MUST return `setup_required=false`
+- **AND** Settings Operations setup import success feedback MUST be preserved in Notification Inbox history with source, level, category, title, and detail metadata.
 
 #### Scenario: Invalid import path validation
 - **GIVEN** setup-required state and import action is submitted with missing or unreadable source path
 - **WHEN** runtime processes import request
 - **THEN** runtime MUST return status `400` with deterministic `error_code` and `message`
 - **AND** setup-required state MUST remain `true`
+- **AND** Settings Operations setup import failure feedback MUST be preserved in Notification Inbox history with source, level, category, title, and detail metadata.
 
 ### Requirement SETUP-WIZ-012: Identity step MUST support optional profile key with inline validation and config path preview
 Identity form step MUST capture instance name, accept optional profile key, and show deterministic config-path preview while preserving entered state.
