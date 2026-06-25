@@ -79,6 +79,7 @@ Cabinet notification-like UI events, including toast messages, promise-based suc
 - **WHEN** the feedback shows loading and then settles
 - **THEN** the Notification Inbox MUST include the captured feedback lifecycle records
 - **AND** the records MUST show source, time, level/category metadata, and detail sufficient to identify the event after the toast disappears.
+- **AND** promise toast success or failure callbacks MUST preserve their returned user-facing copy rather than replacing it with a generic completion or failure fallback.
 
 #### Scenario: Shared confirmation dialogs appear in Inbox
 - **GIVEN** a user opens a shared confirmation dialog for a destructive or warning action
