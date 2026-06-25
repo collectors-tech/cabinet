@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="352" height="1692" viewBox="0 0 352 1692" role="img" aria-labelledby="title desc">
+  <title id="title">Issue 1458 chat workspace panel reference</title>
+  <desc id="desc">Reference image recreating the supplied Cabinet chat workspace screenshot: compact rail, Chat header, agent card, conversation selector, scrollable transcript, composer, and Action Timeline.</desc>
+  <rect width="352" height="1692" fill="#020817"/>
+
+  <rect x="18" y="7" width="310" height="65" rx="14" fill="#050a18" stroke="#1f2a44"/>
+  <circle cx="48" cy="40" r="10" fill="none" stroke="#f8fbff" stroke-width="2"/>
+  <path d="M43 43l10-7-4 10z" fill="none" stroke="#f8fbff" stroke-width="1.8" stroke-linejoin="round"/>
+  <circle cx="101" cy="40" r="8" fill="none" stroke="#f8fbff" stroke-width="2"/>
+  <line x1="107" y1="46" x2="113" y2="52" stroke="#f8fbff" stroke-width="2" stroke-linecap="round"/>
+  <rect x="132" y="16" width="47" height="48" rx="11" fill="#24324d"/>
+  <rect x="145" y="29" width="19" height="20" rx="2" fill="none" stroke="#f8fbff" stroke-width="2"/>
+  <line x1="150" y1="35" x2="160" y2="35" stroke="#f8fbff" stroke-width="1.6"/>
+  <line x1="150" y1="41" x2="160" y2="41" stroke="#f8fbff" stroke-width="1.6"/>
+  <path d="M209 47h14" stroke="#f8fbff" stroke-width="2" stroke-linecap="round"/>
+  <path d="M212 47v-8a6 6 0 0112 0v8" fill="none" stroke="#f8fbff" stroke-width="2"/>
+  <path d="M216 52h3" stroke="#f8fbff" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="228" cy="29" r="12" fill="#ff6372"/>
+  <text x="228" y="34" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#fff">2</text>
+  <circle cx="288" cy="40" r="2" fill="#f8fbff"/><circle cx="299" cy="40" r="2" fill="#f8fbff"/><circle cx="310" cy="40" r="2" fill="#f8fbff"/>
+
+  <rect x="12" y="116" width="322" height="1538" rx="12" fill="#060c1a" stroke="#1e2a40"/>
+  <text x="30" y="158" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">Chat</text>
+  <text x="176" y="158" font-family="Inter, Arial, sans-serif" font-size="29" font-weight="300" fill="#ffffff">+</text>
+  <path d="M229 146h18m-15-7l12 16m-12 0l12-16" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="285" y1="145" x2="297" y2="157" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <line x1="297" y1="145" x2="285" y2="157" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <line x1="12" y1="187" x2="334" y2="187" stroke="#1e2a40"/>
+
+  <rect x="30" y="208" width="286" height="115" rx="9" fill="#111a2d" stroke="#283452"/>
+  <text x="44" y="236" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700" fill="#ffffff">SCHA Agent</text>
+  <text x="44" y="258" font-family="Inter, Arial, sans-serif" font-size="18" fill="#9fc7f7">Single app-control agent</text>
+  <text x="44" y="281" font-family="Inter, Arial, sans-serif" font-size="20" fill="#9fc7f7">SCHA Agent runtime</text>
+  <text x="44" y="306" font-family="Inter, Arial, sans-serif" font-size="20" fill="#9fc7f7">connected</text>
+
+  <text x="30" y="361" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700" fill="#9fc7f7">Conversation</text>
+  <rect x="30" y="372" width="286" height="53" rx="11" fill="#070817" stroke="#22304b"/>
+  <text x="49" y="406" font-family="Inter, Arial, sans-serif" font-size="22" fill="#ffffff">test</text>
+  <polyline points="297,394 303,401 309,394" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="12" y1="443" x2="334" y2="443" stroke="#1e2a40"/>
+
+  <rect x="322" y="453" width="8" height="939" rx="4" fill="#212944"/>
+  <polygon points="326,447 321,455 331,455" fill="#212944"/>
+  <polygon points="326,1512 321,1504 331,1504" fill="#212944"/>
+
+  <rect x="180" y="463" width="122" height="66" rx="21" fill="#e9eef6"/>
+  <text x="196" y="496" font-family="Inter, Arial, sans-serif" font-size="19" fill="#050816">test</text>
+  <path d="M252 495h5l4-10 6 22 5-12h8" fill="none" stroke="#22304b" stroke-width="2" stroke-linecap="round"/>
+
+  <rect x="30" y="540" width="230" height="521" rx="20" fill="#1c2a40"/>
+  <text x="49" y="574" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">SCHA Agent</text>
+  <path d="M211 574h5l4-10 6 22 5-12h8" fill="none" stroke="#dce5f1" stroke-width="2" stroke-linecap="round"/>
+  <text x="49" y="603" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">received &quot;test&quot;.</text>
+  <text x="49" y="632" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Streaming is</text>
+  <text x="49" y="661" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">available</text>
+  <text x="49" y="690" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">through</text>
+  <text x="49" y="719" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Instagram,</text>
+  <text x="49" y="748" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">OpenAI, Google</text>
+  <text x="49" y="777" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Trends as SCHA</text>
+  <text x="49" y="806" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Agent runtime</text>
+  <text x="49" y="835" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">through the</text>
+  <text x="49" y="864" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">SCHA local run</text>
+  <text x="49" y="893" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">contract for</text>
+  <text x="49" y="922" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">/inbox;</text>
+  <text x="49" y="951" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">persisted thread</text>
+  <text x="49" y="980" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">history and</text>
+  <text x="49" y="1009" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">action audit stay</text>
+  <text x="49" y="1038" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">on /api/chats/*.</text>
+
+  <rect x="180" y="1074" width="122" height="66" rx="21" fill="#e9eef6"/>
+  <text x="196" y="1107" font-family="Inter, Arial, sans-serif" font-size="19" fill="#050816">test</text>
+  <path d="M252 1106h5l4-10 6 22 5-12h8" fill="none" stroke="#22304b" stroke-width="2" stroke-linecap="round"/>
+
+  <rect x="30" y="1152" width="230" height="390" rx="20" fill="#1c2a40"/>
+  <text x="49" y="1186" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">SCHA Agent</text>
+  <path d="M211 1186h5l4-10 6 22 5-12h8" fill="none" stroke="#dce5f1" stroke-width="2" stroke-linecap="round"/>
+  <text x="49" y="1215" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">received &quot;test&quot;.</text>
+  <text x="49" y="1244" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Streaming is</text>
+  <text x="49" y="1273" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">available</text>
+  <text x="49" y="1302" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">through</text>
+  <text x="49" y="1331" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Instagram,</text>
+  <text x="49" y="1360" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">OpenAI, Google</text>
+  <text x="49" y="1389" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Trends as SCHA</text>
+  <text x="49" y="1418" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">Agent runtime</text>
+  <text x="49" y="1447" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">through the</text>
+  <text x="49" y="1476" font-family="Inter, Arial, sans-serif" font-size="19" fill="#ffffff">SCHA local run</text>
+
+  <line x1="12" y1="1539" x2="334" y2="1539" stroke="#1e2a40"/>
+  <rect x="26" y="1556" width="228" height="61" rx="13" fill="#0c1322" stroke="#3e4a61" stroke-width="3"/>
+  <rect x="31" y="1561" width="218" height="51" rx="10" fill="#111827" stroke="#58677d"/>
+  <text x="50" y="1594" font-family="Inter, Arial, sans-serif" font-size="21" fill="#9fc7f7">Ask assistant...</text>
+  <rect x="262" y="1558" width="54" height="55" rx="12" fill="#8d95a3"/>
+  <path d="M281 1586l22-12-8 24-6-9-8-3z" fill="none" stroke="#101827" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="30" y="1625" width="286" height="43" rx="10" fill="#071020" stroke="#24314a"/>
+  <polygon points="44,1641 44,1653 54,1647" fill="#9fc7f7"/>
+  <text x="60" y="1652" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700" fill="#9fc7f7">Action Timeline</text>
+</svg>
