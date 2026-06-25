@@ -580,6 +580,77 @@ describe('chats/notification-inbox', () => {
     cy.wait('@loadNotifications')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves settings taxonomy status banners in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'e2e-profile-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/e2e-profile-001/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          inventory_category_options: 'Cards',
+          inventory_packaging_grades: 'Sealed',
+          inventory_item_type_condition_scales:
+            '[{"item_type":"Card","conditions":["Near Mint","Played"]}]',
+        },
+      },
+    }).as('categorySettings')
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { settings: req.body.settings },
+      })
+    }).as('saveCategorySettings')
+    cy.intercept('POST', '/api/chat/inbox', (req) => {
+      const record = req.body.records.find(
+        (candidate: Record<string, unknown>) =>
+          candidate.local_history_id ===
+          'settings-categories-taxonomy-save-success'
+      )
+      expect(record).to.deep.include({
+        level: 'success',
+        title: 'Saved categories, packaging grades, and item type condition scales.',
+        summary: 'Taxonomy settings status from Settings Categories.',
+        source_label: 'Settings Categories',
+        category: 'system',
+      })
+      expect(record.created_at).to.match(/\d{4}-\d{2}-\d{2}T/)
+      req.reply({ statusCode: 201, body: { items: [] } })
+    }).as('syncCategoriesStatusHistory')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/categories/',
+    })
+    cy.wait('@activeProfile')
+    cy.wait('@categorySettings')
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+
+    cy.get('[data-testid="settings-categories-new"]').type('Garage Kit')
+    cy.get('[data-testid="settings-categories-add"]').click()
+    cy.get('[data-testid="settings-categories-save"]').click()
+    cy.wait('@saveCategorySettings')
+    cy.get('[data-testid="settings-categories-status"]').should(
+      'contain',
+      'Saved categories, packaging grades, and item type condition scales.'
+    )
+
+    cy.visit('/inbox/')
+    cy.wait('@syncCategoriesStatusHistory')
+    cy.wait('@loadNotifications')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 syncs local history into durable server Inbox without duplicates', () => {
     cy.viewport(1366, 768)
     cy.e2eReset()

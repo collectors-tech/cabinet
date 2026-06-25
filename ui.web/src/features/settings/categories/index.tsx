@@ -29,6 +29,7 @@ import {
   parsePackagingGradeOptions,
   serializePackagingGradeOptions,
 } from '@/features/inventory/packaging-grade-options'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { ContentSection } from '../components/content-section'
 import { ProfileContextBlocked } from '../components/profile-context-blocked'
 import { useProfileSettings } from '../use-profile-settings'
@@ -110,13 +111,29 @@ export function SettingsCategories() {
     }
     try {
       await saveSettings(nextSettings)
-      setStatus(
+      const message =
         'Saved categories, packaging grades, and item type condition scales.'
-      )
+      setStatus(message)
+      recordNotificationHistory({
+        id: 'settings-categories-taxonomy-save-success',
+        level: 'success',
+        title: message,
+        summary: 'Taxonomy settings status from Settings Categories.',
+        source_label: 'Settings Categories',
+        category: 'system',
+      })
     } catch (err) {
-      setSaveError(
+      const message =
         err instanceof Error ? err.message : 'Failed to save taxonomy settings.'
-      )
+      setSaveError(message)
+      recordNotificationHistory({
+        id: 'settings-categories-taxonomy-save-failed',
+        level: 'error',
+        title: message,
+        summary: 'Taxonomy settings status from Settings Categories.',
+        source_label: 'Settings Categories',
+        category: 'system',
+      })
     }
   }
 
