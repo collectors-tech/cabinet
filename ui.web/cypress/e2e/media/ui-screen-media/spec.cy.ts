@@ -344,7 +344,9 @@ describe('ui-screen-media', () => {
       .invoke('getItem', 'cabinet.viewMode.media')
       .should('eq', 'cards')
     cy.get('[data-testid="media-card-grid"]').should('be.visible')
-    cy.get('[data-testid="media-shared-table"]').should('not.exist')
+    cy.get('[data-testid="media-shared-table"]')
+      .should('be.visible')
+      .and('have.attr', 'data-media-view-mode', 'cards')
 
     cy.reload()
     cy.wait('@mediaAssets')
@@ -362,6 +364,53 @@ describe('ui-screen-media', () => {
       .should('eq', 'rows')
     cy.get('[data-testid="media-shared-table"]').should('be.visible')
     cy.get('[data-testid="media-card-grid"]').should('not.exist')
+  })
+
+  it('UI-SCREEN-MEDIA-017 keeps Cards and Rows on the shared table behavior', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-workspace"]').should(
+      'have.attr',
+      'data-media-table-layout',
+      'full-height'
+    )
+    cy.get('[data-testid="media-table-scroll-body"]').should('be.visible')
+    cy.get('[data-testid="media-table-pagination"]').should('be.visible')
+
+    cy.get('[data-testid="media-view-mode-cards"]').click()
+    cy.get('[data-testid="media-shared-table"]')
+      .should('be.visible')
+      .and('have.attr', 'data-table-surface', 'true')
+      .and('have.attr', 'data-media-view-mode', 'cards')
+    cy.get('[data-testid="media-table-search-input"]')
+      .should('be.visible')
+      .clear()
+      .type('porsche')
+    cy.get('[data-testid="media-card-grid"]')
+      .find('[data-testid^="media-card-media-"]')
+      .should('have.length', 1)
+    cy.get('[data-testid="media-card-media-porsche-box"]')
+      .should('contain', 'Porsche 917 box side')
+      .and('contain', 'Inventory linked')
+    cy.get('[data-testid="media-table-pagination"]').should('be.visible')
+
+    cy.get('[data-testid="media-view-mode-rows"]').click()
+    cy.get('[data-testid="media-shared-table"]')
+      .should('have.attr', 'data-media-view-mode', 'rows')
+    cy.get('[data-testid="media-row-table"]')
+      .find('tr[data-testid^="media-row-media-"]')
+      .should('have.length', 1)
+    cy.get('[data-testid="media-row-media-porsche-box"]').should(
+      'contain',
+      'Porsche 917 box side'
+    )
   })
 
   it('UI-SCREEN-MEDIA-016 opens double-click metadata modal and saves edits', () => {

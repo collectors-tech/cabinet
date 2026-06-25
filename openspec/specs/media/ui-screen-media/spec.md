@@ -292,6 +292,22 @@ Cabinet SHALL render the Media page primary content with the shared table surfac
 - **AND** the workspace MUST NOT render the former top summary cards for Assets, Unlinked, or Ready for review above the table workflow.
 - **AND** the table toolbar MUST provide search/filtering over media identity, status, linkage, source, and filename fields without switching away from the table.
 
+### Requirement UI-SCREEN-MEDIA-017: Media Cards and Rows views SHALL share table behavior
+Cabinet SHALL keep both Media Cards and Rows view modes on the same shared table state, controls, filtering, selection, pagination, loading, empty, and error contracts. The Media workspace primary table region MUST fill the available page height, keep the page header/table controls/pagination reachable, and make only the table body or card body region the scrolling surface.
+
+#### Scenario: Cards and Rows share filtering and pagination
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user switches between Cards and Rows modes
+- **THEN** both modes MUST remain inside the shared Media table surface with the same toolbar search, filter controls, selected asset state, and pagination controls.
+- **AND** filtering/searching in Cards mode MUST reduce the visible card rows using the same table state that Rows mode uses.
+- **AND** switching back to Rows mode MUST preserve the filtered table result.
+
+#### Scenario: Media table body owns scrolling
+- **GIVEN** the Media workspace renders either Cards or Rows mode
+- **WHEN** the page needs more vertical space than the viewport
+- **THEN** the Media table body or card body region MUST be the scrolling surface
+- **AND** the page header, table toolbar, and pagination controls MUST remain reachable without relying on whole-page table scrolling.
+
 ### Requirement UI-SCREEN-MEDIA-014: Media workspace SHALL support page-wide image drop and add-media metadata dialog
 Cabinet SHALL let authenticated users add unlinked media assets from the Media workspace by dragging supported image files anywhere over the page or by opening an explicit add-media dialog from a `+` action.
 
