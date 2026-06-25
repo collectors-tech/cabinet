@@ -27,6 +27,7 @@ Home SHALL support loading, empty, error, and ready states for each major panel.
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** Home API fetch fails
 - **THEN** Home SHALL render actionable retry/error messaging without route crash
+- **AND** Home SHALL preserve the failure status in Notification Inbox history with source, level, category, title, and summary metadata
 
 ### Requirement UI-SCREEN-HOME-003: Home quick actions SHALL route to correct workflows
 Each quick action SHALL navigate to the correct destination with preserved context.
