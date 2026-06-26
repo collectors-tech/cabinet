@@ -131,3 +131,66 @@ Cabinet Agent MUST expose safe app-control tools for main chat and side-panel As
 - **AND** applying the preview MUST require explicit confirmation
 - **AND** the mutation MUST only update the target item for the same profile
 - **AND** the assistant audit message MUST include the action, item id, changed title, confirmation state, and mutation-applied evidence
+
+### Requirement ASSISTANT-EXECUTION-010: Chat-guided walkthroughs SHALL expose typed guidance modes
+Cabinet Agent MUST model Chat app-control guidance as explicit, typed modes: `explain`, `show_me`, `do_it_with_me`, and `do_it_for_me`. Each mode MUST declare whether it may navigate, highlight UI targets, collect user input, preview mutations, request confirmation, or apply a confirmed mutation.
+
+#### Scenario: Select guided walkthrough mode
+- **GIVEN** an active profile, assistant thread, current route context, and a user request for help completing a Cabinet workflow
+- **WHEN** the assistant planner selects a guided walkthrough mode
+- **THEN** the selected mode MUST be persisted on the workflow run
+- **AND** the mode MUST determine which command bus operations are allowed for that step
+- **AND** mutating modes MUST still require preview and explicit confirmation before save/apply
+- **AND** `explain` and `show_me` modes MUST remain non-mutating
+
+### Requirement ASSISTANT-EXECUTION-011: Guided workflow registry SHALL provide typed recipes
+Cabinet MUST expose a deterministic guided workflow registry that maps user intents to typed recipe definitions before the assistant dispatches app-control steps.
+
+#### Scenario: Match workflow recipe
+- **GIVEN** the assistant receives a request to update an existing inventory item
+- **WHEN** the guided workflow registry evaluates the request against known recipes
+- **THEN** it MUST return a typed `inventory.item.update` recipe when required route, target item, editable field, and confirmation capabilities are available
+- **AND** the recipe MUST declare required context, ordered steps, allowed guidance modes, UI targets, command bus operations, validation expectations, and result/audit destinations
+- **AND** unknown or under-specified requests MUST return a follow-up prompt rather than inventing workflow steps
+
+### Requirement ASSISTANT-EXECUTION-012: UI target registry SHALL provide stable selectors for guided steps
+Cabinet MUST expose a UI target registry for guided workflows so route navigation, highlights, callouts, and Cypress validation bind to stable target ids and selectors instead of fragile copy or layout assumptions.
+
+#### Scenario: Resolve walkthrough UI target
+- **GIVEN** a guided recipe references an inventory title field target
+- **WHEN** the shell command bus resolves that target for the current route
+- **THEN** the registry MUST return a stable target id, route/surface ownership, selector or `data-testid`, accessible label expectation, highlight/callout placement metadata, and unavailable-state guidance
+- **AND** command execution MUST fail safely when a target cannot be resolved
+- **AND** missing targets MUST be testable as registry coverage gaps before a walkthrough is marked complete
+
+### Requirement ASSISTANT-EXECUTION-013: Shell command bus SHALL govern Chat-driven navigation and highlighting
+Cabinet MUST route Chat-driven navigation, target highlighting, callouts, user-prompt waits, preview creation, and confirmation requests through a shell command bus with deterministic status and audit events.
+
+#### Scenario: Dispatch non-mutating walkthrough commands
+- **GIVEN** a guided recipe step requests navigation to Inventory and highlighting of an editable field
+- **WHEN** the shell command bus dispatches the step
+- **THEN** it MUST emit command status events for queued, running, success, failure, and skipped states
+- **AND** navigation and highlight commands MUST remain non-mutating
+- **AND** failures MUST preserve current route context and provide retry or fallback guidance
+- **AND** side-panel Chat MUST remain open while the main app route changes
+
+### Requirement ASSISTANT-EXECUTION-014: Guided walkthrough Action Timeline SHALL persist step records
+Cabinet MUST persist guided walkthrough Action Timeline records from assistant workflow runs so each route, target, prompt, preview, confirmation, apply, and result step is inspectable after the chat message scrollback changes.
+
+#### Scenario: Record guided walkthrough steps
+- **GIVEN** a guided inventory update walkthrough is running
+- **WHEN** route navigation, target highlighting, preview creation, confirmation, apply, or failure events occur
+- **THEN** Cabinet MUST append ordered Action Timeline records with workflow run id, recipe id, mode, command id, target id, status, timestamp, and non-secret result/error evidence
+- **AND** records MUST be queryable from the assistant thread and compact side-panel Action Timeline
+- **AND** failed or paused steps MUST remain visible with the next required user or system action
+
+### Requirement ASSISTANT-EXECUTION-015: Inventory item update walkthrough SHALL be the first validated recipe
+The first guided walkthrough implementation MUST validate `inventory.item.update` end to end before broader guided recipes are treated as complete.
+
+#### Scenario: Guide inventory item update with confirmation boundary
+- **GIVEN** an existing inventory item is open or can be selected from the Inventory surface
+- **WHEN** the user asks Chat to help update an editable item field
+- **THEN** Cabinet MUST match the `inventory.item.update` recipe, navigate or focus the Inventory item editor as needed, highlight the target field, collect the intended value, and create a preview before mutation
+- **AND** Cabinet MUST pause before save/apply until explicit user confirmation is received
+- **AND** confirmed apply MUST persist the field update for the active profile and record the result in the Action Timeline and assistant thread audit
+- **AND** cancellation, missing target, stale profile/thread, and failed apply states MUST avoid mutation and leave retryable evidence

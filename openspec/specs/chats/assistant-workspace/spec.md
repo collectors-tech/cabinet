@@ -87,3 +87,14 @@ Assistant workspace capability/action cards MUST make preview, confirmation, exe
 - **AND** the result card MUST expose an item result link
 - **AND** a refreshed inventory data query MUST include the applied item under the active profile
 - **AND** the active chat thread MUST persist an assistant/action audit message that records the confirmed mutation outcome
+
+### Requirement ASSISTANT-WORKSPACE-008: Assistant SHALL keep guided walkthroughs open across main-route navigation
+The shell Assistant side-panel MUST remain open and connected to the active guided walkthrough while Chat-driven app-control commands navigate the main Cabinet route, highlight targets, or wait for user confirmation.
+
+#### Scenario: Preserve side-panel walkthrough during navigation
+- **GIVEN** a guided walkthrough is active in the shell Assistant side-panel
+- **WHEN** the shell command bus navigates the main app from one authenticated route to another
+- **THEN** the Assistant side-panel MUST stay open with the same active thread and workflow run selected
+- **AND** the compact Action Timeline MUST show the navigation step, target highlight step, and next required action
+- **AND** route changes MUST NOT clear pending preview, confirmation, recipe, or target state for the active profile/thread
+- **AND** closing the side-panel MUST not apply or cancel a mutating step unless the user explicitly chooses that action
