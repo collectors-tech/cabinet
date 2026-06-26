@@ -3022,7 +3022,10 @@ export function Purchases() {
             }
           }}
         >
-          <DialogContent data-testid='purchases-detail-action-dialog'>
+          <DialogContent
+            className='z-[60]'
+            data-testid='purchases-detail-action-dialog'
+          >
             <DialogHeader>
               <DialogTitle data-testid='purchases-detail-action-title'>
                 {purchaseDetailAction
