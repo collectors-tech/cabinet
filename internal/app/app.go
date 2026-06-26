@@ -9917,6 +9917,11 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 				"listing_id":  listingID,
 				"title":       strings.TrimSpace(product.Name),
 				"url":         permalink,
+				"price":       parseWooCommerceMinorUnitPrice(product.Prices.Price),
+				"currency":    strings.TrimSpace(product.Prices.CurrencyCode),
+				"image":       firstBonzaImageURL(product.Images),
+				"category":    firstBonzaCategoryName(product.Categories),
+				"categories":  bonzaCategoryNames(product.Categories),
 				"source":      "bonzaslotcars",
 				"seller":      "bonzaslotcars.com.au",
 				"stock_state": stockState,
@@ -10327,7 +10332,9 @@ func providerCandidatesForScanner(candidates []map[string]any, defaultSource str
 			ListingID:  listingID,
 			Title:      title,
 			Price:      numericCandidateValue(candidate["price"]),
+			Currency:   stringCandidateValue(candidate["currency"]),
 			URL:        sourceURL,
+			Image:      stringCandidateValue(candidate["image"]),
 			Seller:     stringCandidateValue(candidate["seller"]),
 			Source:     firstNonEmptyString(stringCandidateValue(candidate["source"]), defaultSource),
 			StockState: stringCandidateValue(candidate["stock_state"]),
@@ -10335,6 +10342,33 @@ func providerCandidatesForScanner(candidates []map[string]any, defaultSource str
 		})
 	}
 	return out
+}
+
+func firstBonzaCategoryName(categories []bonzaProductName) string {
+	names := bonzaCategoryNames(categories)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func bonzaCategoryNames(categories []bonzaProductName) []string {
+	out := make([]string, 0, len(categories))
+	for _, category := range categories {
+		if value := strings.TrimSpace(category.Name); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func firstBonzaImageURL(images []bonzaProductImage) string {
+	for _, image := range images {
+		if src := strings.TrimSpace(image.Src); src != "" {
+			return src
+		}
+	}
+	return ""
 }
 
 func normalizeScannerReviewApplyTarget(raw string) string {

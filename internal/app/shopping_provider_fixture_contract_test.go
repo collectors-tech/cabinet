@@ -164,6 +164,65 @@ func TestShoppingProviderFixturesPreserveAvailabilitySignals(t *testing.T) {
 	}
 }
 
+func TestShoppingProviderFixturesCoverBonzaCategoryListingShape(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	result, err := runBonzaSearch(
+		context.Background(),
+		server.Client(),
+		server.URL,
+		scanner.QuerySet{Name: "AFX", Keywords: []string{"AFX"}},
+		24,
+	)
+	if err != nil {
+		t.Fatalf("runBonzaSearch() category fixture error = %v", err)
+	}
+	if result.PageCount != 1 {
+		t.Fatalf("expected one Bonza fixture page, got %d", result.PageCount)
+	}
+	if result.ObservedPageSize != 1 || result.ItemsPerPageUsed != 24 {
+		t.Fatalf("unexpected Bonza fixture paging metadata: %+v", result)
+	}
+	if len(result.Candidates) != 1 {
+		t.Fatalf("expected one Bonza category/listing candidate, got %+v", result.Candidates)
+	}
+	raw := result.Candidates[0]
+	for key, want := range map[string]string{
+		"listing_id": "bonza-2001",
+		"title":      "AFX Mega-G+ Ford GT",
+		"url":        server.URL + "/product/afx-mega-g-ford-gt/",
+		"currency":   "AUD",
+		"image":      "https://bonzaslotcars.com.au/wp-content/uploads/afx-mega-g-ford-gt.jpg",
+		"category":   "HO Slot Cars",
+		"source":     "bonzaslotcars",
+		"seller":     "bonzaslotcars.com.au",
+	} {
+		if got := stringCandidateValue(raw[key]); got != want {
+			t.Fatalf("Bonza raw candidate %s got %q want %q; candidate=%+v", key, got, want, raw)
+		}
+	}
+	if got := numericCandidateValue(raw["price"]); got != 64.95 {
+		t.Fatalf("Bonza raw candidate price got %.2f want 64.95; candidate=%+v", got, raw)
+	}
+	if got := raw["categories"]; !hasStringValue(got, "HO Slot Cars") || !hasStringValue(got, "AFX") {
+		t.Fatalf("Bonza raw candidate categories missing fixture values: %+v", raw)
+	}
+
+	normalized := bonzaCandidatesForScanner(result.Candidates)
+	if len(normalized) != 1 {
+		t.Fatalf("expected one normalized Bonza candidate, got %+v", normalized)
+	}
+	candidate := normalized[0]
+	assertSharedShoppingCandidateShape(t, "bonzaslotcars", candidate)
+	if candidate.Currency != "AUD" {
+		t.Fatalf("expected normalized Bonza currency AUD, got %+v", candidate)
+	}
+	if candidate.Image == "" {
+		t.Fatalf("expected normalized Bonza image URL, got %+v", candidate)
+	}
+}
+
 func TestShoppingProviderFixturesRejectUnsupportedManualFallbackResponse(t *testing.T) {
 	t.Parallel()
 
@@ -192,12 +251,13 @@ func shoppingFixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	fixtures := map[string]string{
-		"/hobbytech/search":            readShoppingFixture(t, "hobbytech_success.json"),
-		"/bigcommerce/products/search": readShoppingFixture(t, "bigcommerce_storefront_success.json"),
-		"/bigcommerce/graphql":         readShoppingFixture(t, "bigcommerce_graphql_stock_success.json"),
-		"/doofinder/search":            readShoppingFixture(t, "doofinder_success.json"),
-		"/missing-fields/search":       readShoppingFixture(t, "missing_required_fields.json"),
-		"/unsupported/manual-fallback": readShoppingFixture(t, "unsupported_manual_fallback.json"),
+		"/hobbytech/search":             readShoppingFixture(t, "hobbytech_success.json"),
+		"/bigcommerce/products/search":  readShoppingFixture(t, "bigcommerce_storefront_success.json"),
+		"/bigcommerce/graphql":          readShoppingFixture(t, "bigcommerce_graphql_stock_success.json"),
+		"/doofinder/search":             readShoppingFixture(t, "doofinder_success.json"),
+		"/missing-fields/search":        readShoppingFixture(t, "missing_required_fields.json"),
+		"/wp-json/wc/store/v1/products": readShoppingFixture(t, "bonza_category_listing_success.json"),
+		"/unsupported/manual-fallback":  readShoppingFixture(t, "unsupported_manual_fallback.json"),
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := fixtures[r.URL.Path]
@@ -253,4 +313,17 @@ func assertSharedShoppingCandidateShape(t *testing.T, providerID string, candida
 	if candidate.Price <= 0 {
 		t.Fatalf("price must be normalized to a positive value: %+v", candidate)
 	}
+}
+
+func hasStringValue(raw any, want string) bool {
+	values, ok := raw.([]string)
+	if !ok {
+		return false
+	}
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
