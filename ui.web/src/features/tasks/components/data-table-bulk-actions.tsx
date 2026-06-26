@@ -33,6 +33,18 @@ interface DataTableBulkActionsProps<TData> {
   isWishlistMutating?: boolean
 }
 
+function taskBulkHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Task bulk actions',
+      category: 'tasks',
+    },
+  }
+}
+
 export function DataTableBulkActions<TData>({
   table,
   routePath,
@@ -64,6 +76,11 @@ export function DataTableBulkActions<TData>({
         return `Status updated to "${status}" for ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''}.`
       },
       error: 'Error',
+      ...taskBulkHistory(
+        'tasks-bulk-status',
+        'Update selected task status',
+        'Task bulk status feedback was preserved in Inbox history.'
+      ),
     })
     table.resetRowSelection()
   }
@@ -81,6 +98,11 @@ export function DataTableBulkActions<TData>({
         return `Priority updated to "${priority}" for ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''}.`
       },
       error: 'Error',
+      ...taskBulkHistory(
+        'tasks-bulk-priority',
+        'Update selected task priority',
+        'Task bulk priority feedback was preserved in Inbox history.'
+      ),
     })
     table.resetRowSelection()
   }
@@ -99,6 +121,11 @@ export function DataTableBulkActions<TData>({
         return `Exported ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''} to CSV.`
       },
       error: 'Error',
+      ...taskBulkHistory(
+        'tasks-bulk-export',
+        'Export selected tasks',
+        'Task bulk export feedback was preserved in Inbox history.'
+      ),
     })
     table.resetRowSelection()
   }

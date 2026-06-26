@@ -20,6 +20,18 @@ type TaskMultiDeleteDialogProps<TData> = {
 
 const CONFIRM_WORD = 'DELETE'
 
+function taskDeleteHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Task delete dialog',
+      category: 'tasks',
+    },
+  }
+}
+
 export function TasksMultiDeleteDialog<TData>({
   open,
   onOpenChange,
@@ -36,7 +48,14 @@ export function TasksMultiDeleteDialog<TData>({
 
   const handleDelete = () => {
     if (value.trim() !== CONFIRM_WORD) {
-      toast.error(`Please type "${CONFIRM_WORD}" to confirm.`)
+      toast.error(
+        `Please type "${CONFIRM_WORD}" to confirm.`,
+        taskDeleteHistory(
+          'tasks-delete-confirmation-invalid',
+          'Task delete confirmation failed',
+          'Task delete confirmation feedback was preserved in Inbox history.'
+        ) as never
+      )
       return
     }
 
@@ -59,6 +78,11 @@ export function TasksMultiDeleteDialog<TData>({
         }`
       },
       error: 'Error',
+      ...taskDeleteHistory(
+        'tasks-bulk-delete',
+        'Delete selected tasks',
+        'Task bulk delete feedback was preserved in Inbox history.'
+      ),
     })
   }
 
