@@ -17,6 +17,18 @@ type DataTableBulkActionsProps<TData> = {
   onMutated: () => Promise<void> | void
 }
 
+function usersBulkHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Users bulk actions',
+      category: 'users',
+    },
+  }
+}
+
 export function DataTableBulkActions<TData>({
   table,
   onMutated,
@@ -26,6 +38,9 @@ export function DataTableBulkActions<TData>({
 
   const handleBulkStatusChange = (status: 'active' | 'inactive') => {
     const selectedUsers = selectedRows.map((row) => row.original as User)
+    const actionLabel = status === 'active' ? 'Activate' : 'Deactivate'
+    const historyId =
+      status === 'active' ? 'users-bulk-active' : 'users-bulk-inactive'
     toast.promise(
       async () => {
         await Promise.all(
@@ -48,6 +63,11 @@ export function DataTableBulkActions<TData>({
         loading: `${status === 'active' ? 'Activating' : 'Deactivating'} users...`,
         success: `${status === 'active' ? 'Activated' : 'Deactivated'} ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`,
         error: `Error ${status === 'active' ? 'activating' : 'deactivating'} users`,
+        ...usersBulkHistory(
+          historyId,
+          `${actionLabel} selected users`,
+          'Users bulk status change feedback was preserved in Inbox history.'
+        ),
       }
     )
   }
@@ -80,6 +100,11 @@ export function DataTableBulkActions<TData>({
         loading: 'Inviting users...',
         success: `Invited ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`,
         error: 'Error inviting users',
+        ...usersBulkHistory(
+          'users-bulk-invite',
+          'Invite selected users',
+          'Users bulk invitation feedback was preserved in Inbox history.'
+        ),
       }
     )
   }

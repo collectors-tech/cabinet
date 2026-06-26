@@ -18,6 +18,18 @@ type UserMultiDeleteDialogProps<TData> = {
 
 const CONFIRM_WORD = 'DELETE'
 
+function usersDeleteHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Users delete dialog',
+      category: 'users',
+    },
+  }
+}
+
 export function UsersMultiDeleteDialog<TData>({
   open,
   onOpenChange,
@@ -30,7 +42,14 @@ export function UsersMultiDeleteDialog<TData>({
 
   const handleDelete = () => {
     if (value.trim() !== CONFIRM_WORD) {
-      toast.error(`Please type "${CONFIRM_WORD}" to confirm.`)
+      toast.error(
+        `Please type "${CONFIRM_WORD}" to confirm.`,
+        usersDeleteHistory(
+          'users-delete-confirmation-invalid',
+          'Users delete confirmation blocked',
+          'Users delete confirmation validation feedback was preserved in Inbox history.'
+        ) as never
+      )
       return
     }
 
@@ -58,6 +77,11 @@ export function UsersMultiDeleteDialog<TData>({
           selectedRows.length > 1 ? 'users' : 'user'
         }`,
         error: 'Error',
+        ...usersDeleteHistory(
+          'users-bulk-delete',
+          'Delete selected users',
+          'Users bulk delete feedback was preserved in Inbox history.'
+        ),
       }
     )
   }

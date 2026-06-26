@@ -94,6 +94,14 @@ function promiseMessage(
   return { title, summary: summary || undefined }
 }
 
+function promiseHistoryMetadata(value: unknown): ToastHistoryMetadata {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+  const candidate = value as { history?: ToastHistoryMetadata }
+  return candidate.history ?? {}
+}
+
 function toastId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -169,21 +177,32 @@ export function recordNotificationHistory(
 function recordPromiseResolution(
   value: unknown,
   level: 'success' | 'error',
-  fallback: string
+  fallback: string,
+  history: ToastHistoryMetadata = {}
 ) {
   const title = titleFromValue(value, fallback)
   if (title !== fallback || typeof value === 'string') {
     recordToastHistory({
+      id: history.id ? `${history.id}-${level}` : undefined,
       level,
       title,
-      summary: 'Promise toast settled and was preserved in Inbox history.',
+      summary:
+        history.summary ||
+        'Promise toast settled and was preserved in Inbox history.',
+      source_label: history.source_label,
+      category: history.category,
     })
     return
   }
   recordToastHistory({
+    id: history.id ? `${history.id}-${level}` : undefined,
     level,
     title: fallback,
-    summary: 'Promise toast settled and was preserved in Inbox history.',
+    summary:
+      history.summary ||
+      'Promise toast settled and was preserved in Inbox history.',
+    source_label: history.source_label,
+    category: history.category,
   })
 }
 
@@ -217,13 +236,18 @@ export function installToastHistoryCapture(toast: unknown) {
   if (originalPromise) {
     toastLike.promise = (...args: unknown[]) => {
       const [, messages] = args
+      const history = promiseHistoryMetadata(messages)
       const loading = promiseMessage(messages, 'Async notification started')
       recordToastHistory({
+        id: history.id,
         level: 'info',
-        title: loading.title,
+        title: history.title ?? loading.title,
         summary:
+          history.summary ||
           loading.summary ||
           'Promise toast started and was preserved in Inbox history.',
+        source_label: history.source_label,
+        category: history.category,
       })
 
       let forwardedArgs = args
@@ -241,7 +265,8 @@ export function installToastHistoryCapture(toast: unknown) {
             recordPromiseResolution(
               result,
               'success',
-              'Async notification completed'
+              'Async notification completed',
+              history
             )
             return result
           }
@@ -253,7 +278,12 @@ export function installToastHistoryCapture(toast: unknown) {
           errorCapturedByCallback = true
           wrappedMessages.error = (value: unknown) => {
             const result = originalError(value)
-            recordPromiseResolution(result, 'error', 'Async notification failed')
+            recordPromiseResolution(
+              result,
+              'error',
+              'Async notification failed',
+              history
+            )
             return result
           }
         }
@@ -272,7 +302,8 @@ export function installToastHistoryCapture(toast: unknown) {
           recordPromiseResolution(
             success,
             'success',
-            'Async notification completed'
+            'Async notification completed',
+            history
           )
         })
         .catch(() => {
@@ -283,7 +314,12 @@ export function installToastHistoryCapture(toast: unknown) {
             messages && typeof messages === 'object'
               ? (messages as { error?: unknown }).error
               : undefined
-          recordPromiseResolution(error, 'error', 'Async notification failed')
+          recordPromiseResolution(
+            error,
+            'error',
+            'Async notification failed',
+            history
+          )
         })
 
       return originalPromise(...forwardedArgs)

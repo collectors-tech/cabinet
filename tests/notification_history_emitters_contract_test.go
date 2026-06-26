@@ -96,6 +96,72 @@ func TestWishlistToastFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 	}
 }
 
+func TestUsersBulkFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := repoRoot(t)
+	toastHistoryPath := filepath.Join(root, "ui.web", "src", "lib", "toast-history.ts")
+	usersBulkPath := filepath.Join(root, "ui.web", "src", "features", "users", "components", "data-table-bulk-actions.tsx")
+	usersDeletePath := filepath.Join(root, "ui.web", "src", "features", "users", "components", "users-multi-delete-dialog.tsx")
+	notificationSpecPath := filepath.Join(root, "openspec", "specs", "chats", "notification-inbox", "spec.md")
+	traceabilityPath := filepath.Join(root, "openspec", "traceability.md")
+
+	toastHistory := mustReadContractFile(t, toastHistoryPath)
+	usersBulk := mustReadContractFile(t, usersBulkPath)
+	usersDelete := mustReadContractFile(t, usersDeletePath)
+	notificationSpec := mustReadContractFile(t, notificationSpecPath)
+	traceability := mustReadContractFile(t, traceabilityPath)
+
+	requiredToastHistorySnippets := []string{
+		"promiseHistoryMetadata",
+		"title: history.title ?? loading.title",
+		"source_label: history.source_label",
+		"category: history.category",
+		"history.id ? `${history.id}-${level}` : undefined",
+	}
+	for _, snippet := range requiredToastHistorySnippets {
+		if !strings.Contains(toastHistory, snippet) {
+			t.Fatalf("toast promise history capture missing Users metadata support %q in %s", snippet, toastHistoryPath)
+		}
+	}
+
+	requiredUsersSnippets := []string{
+		"function usersBulkHistory(",
+		"source_label: 'Users bulk actions'",
+		"category: 'users'",
+		"'users-bulk-invite'",
+		"'users-bulk-active'",
+		"'users-bulk-inactive'",
+	}
+	for _, snippet := range requiredUsersSnippets {
+		if !strings.Contains(usersBulk, snippet) {
+			t.Fatalf("Users bulk feedback missing durable Inbox history metadata %q in %s", snippet, usersBulkPath)
+		}
+	}
+
+	requiredDeleteSnippets := []string{
+		"function usersDeleteHistory(",
+		"source_label: 'Users delete dialog'",
+		"category: 'users'",
+		"'users-delete-confirmation-invalid'",
+		"'users-bulk-delete'",
+	}
+	for _, snippet := range requiredDeleteSnippets {
+		if !strings.Contains(usersDelete, snippet) {
+			t.Fatalf("Users delete feedback missing durable Inbox history metadata %q in %s", snippet, usersDeletePath)
+		}
+	}
+
+	if !strings.Contains(notificationSpec, "Users admin bulk action/delete confirmation feedback") ||
+		!strings.Contains(notificationSpec, "Promise feedback MUST preserve configured source/category metadata") {
+		t.Fatalf("notification Inbox spec must list Users feedback in #1438 emitter scope in %s", notificationSpecPath)
+	}
+
+	if !strings.Contains(traceability, "TestUsersBulkFeedbackCarriesInboxHistoryMetadata") {
+		t.Fatalf("traceability must list Users Inbox history contract test in %s", traceabilityPath)
+	}
+}
+
 func mustReadContractFile(t *testing.T, path string) string {
 	t.Helper()
 
