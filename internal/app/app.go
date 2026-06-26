@@ -10298,14 +10298,16 @@ func providerCandidatesForScanner(candidates []map[string]any, defaultSource str
 	out := make([]scanner.CandidateInput, 0, len(candidates))
 	for _, candidate := range candidates {
 		listingID := strings.TrimSpace(fmt.Sprint(candidate["listing_id"]))
-		if listingID == "" {
+		title := stringCandidateValue(candidate["title"])
+		sourceURL := stringCandidateValue(candidate["url"])
+		if listingID == "" || title == "" || sourceURL == "" {
 			continue
 		}
 		out = append(out, scanner.CandidateInput{
 			ListingID:  listingID,
-			Title:      stringCandidateValue(candidate["title"]),
+			Title:      title,
 			Price:      numericCandidateValue(candidate["price"]),
-			URL:        stringCandidateValue(candidate["url"]),
+			URL:        sourceURL,
 			Seller:     stringCandidateValue(candidate["seller"]),
 			Source:     firstNonEmptyString(stringCandidateValue(candidate["source"]), defaultSource),
 			StockState: stringCandidateValue(candidate["stock_state"]),

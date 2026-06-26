@@ -1,0 +1,17 @@
+{
+  "products": [
+    {
+      "id": "missing-title",
+      "url": "https://example.test/products/missing-title",
+      "price": "19.95"
+    },
+    {
+      "id": "missing-url",
+      "title": "Incomplete source record",
+      "price": "21.95"
+    }
+  ],
+  "pagination": {
+    "total_pages": 1
+  }
+}
