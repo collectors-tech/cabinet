@@ -167,6 +167,15 @@ Market Watch SHALL translate route handoff context into editable saved-query fie
 - **AND WHEN** user creates the query
 - **THEN** the saved query MUST persist the prefilled barcode keyword with the selected provider scope
 
+### Requirement UI-SCREEN-MARKET-WATCH-012: Market Watch SHALL preserve output-detail Discoveries handoff context
+Market Watch output-detail Discoveries handoff SHALL use the saved watch keyword context when requesting Discoveries candidates and SHALL expose a testable handoff result state.
+
+#### Scenario: Handoff output detail context to Discoveries
+- **GIVEN** a Market Watch output detail is open for a saved watch with keywords
+- **WHEN** user activates `Open Discoveries Handoff`
+- **THEN** UI MUST request Discoveries candidates using the saved watch keyword as the query
+- **AND** UI MUST show a testable Discoveries handoff status with the returned item count
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -184,3 +193,4 @@ Market Watch SHALL translate route handoff context into editable saved-query fie
 | UC-MW-12 | Wishlist handoff from output detail | Output detail Wishlist handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Wishlist route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-009 persists output-detail Wishlist handoff provenance` |
 | UC-MW-13 | Inventory handoff from output detail | Output detail Inventory handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Inventory route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance` |
 | UC-MW-14 | Route handoff bootstrap | Barcode handoff route pre-fills saved-query fields and persists the selected provider scope when created | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state` |
+| UC-MW-15 | Discoveries handoff from output detail | Output detail Discoveries handoff queries Discoveries with the saved watch keyword and reports returned item count | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword` |

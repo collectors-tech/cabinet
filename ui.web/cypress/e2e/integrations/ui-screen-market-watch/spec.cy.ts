@@ -1529,6 +1529,79 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'https://bonzaslotcars.example/products/afx-mustang')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-discoveries-1',
+            name: 'Bonza Discoveries Handoff',
+            keywords: ['AFX Camaro'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', {
+      statusCode: 200,
+      body: {
+        query_set_id: 'qs-mw-discoveries-1',
+        candidates: [
+          {
+            id: 'cand-mw-discoveries-1',
+            query_set_id: 'qs-mw-discoveries-1',
+            listing_id: 'bonza-afx-camaro-discovery',
+            title: 'AFX Camaro Discovery Candidate',
+            source: 'bonzaslotcars',
+            price: 84.95,
+            currency: 'AUD',
+            url: 'https://bonzaslotcars.example/products/afx-camaro-discovery',
+            stock_status: 'in_stock',
+            handoff_state: 'discoveries_ready',
+          },
+        ],
+      },
+    }).as('runBonzaQuery')
+    cy.intercept('GET', '/api/discovery/not-in-collection?q=AFX%20Camaro', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          items: [
+            { candidate_id: 'disc-mw-1' },
+            { candidate_id: 'disc-mw-2' },
+          ],
+        },
+      })
+    }).as('discoveriesHandoff')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-discoveries-1"]').click()
+    cy.wait('@runBonzaQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-discoveries-1"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('td', 'AFX Camaro Discovery Candidate').should('be.visible')
+      cy.contains('td', 'discoveries_ready').should('be.visible')
+    })
+    cy.get('[data-testid="scanner-handoff-discoveries-detail-qs-mw-discoveries-1"]').click()
+    cy.wait('@discoveriesHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'discoveries_handoff_ok_2'
+    )
+  })
+
   it('INTEGRATION-005 + UI-SCREEN-MARKET-WATCH-009 + UI-SCREEN-MARKET-WATCH-010 preserves eBay output handoff response provenance', () => {
     let wishlistEntries: Array<Record<string, unknown>> = []
     let wishlistItems: Array<Record<string, unknown>> = []
