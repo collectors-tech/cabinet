@@ -135,19 +135,80 @@ func TestShoppingProviderFixturesRejectMissingRequiredFields(t *testing.T) {
 	}
 }
 
+func TestShoppingProviderFixturesPreserveAvailabilitySignals(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	candidates, err := runBigCommerceTokenSearch(
+		context.Background(),
+		server.Client(),
+		server.URL+"/bigcommerce/graphql",
+		"fixture-token",
+		"slot car",
+		"voglers.com.au",
+	)
+	if err != nil {
+		t.Fatalf("runBigCommerceTokenSearch() availability fixture error = %v", err)
+	}
+	normalized := bigCommerceCandidatesForScanner(candidates, "voglers.com.au")
+	if len(normalized) != 1 {
+		t.Fatalf("expected one availability candidate, got %+v", normalized)
+	}
+	candidate := normalized[0]
+	assertSharedShoppingCandidateShape(t, "voglers.com.au", candidate)
+	if candidate.URL != "https://voglers.com.au/products/scalextric-limited-edition" {
+		t.Fatalf("expected relative BigCommerce path to normalize to canonical URL, got %+v", candidate)
+	}
+	if candidate.StockState != "in_stock" || candidate.StockCount != 2 {
+		t.Fatalf("expected availability signal to survive normalization, got %+v", candidate)
+	}
+}
+
+func TestShoppingProviderFixturesRejectUnsupportedManualFallbackResponse(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	candidates, err := runBigCommerceStorefrontSearch(
+		context.Background(),
+		server.Client(),
+		server.URL+"/unsupported/manual-fallback",
+		"slot car",
+		1,
+		24,
+		"manual-fallback.test",
+	)
+	if err == nil {
+		t.Fatalf("expected unsupported manual-fallback fixture error, got candidates=%+v", candidates)
+	}
+	if !strings.Contains(err.Error(), "bigcommerce storefront returned status 422") {
+		t.Fatalf("expected clear unsupported fixture status, got %v", err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("unsupported manual-fallback fixture must not return candidates, got %+v", candidates)
+	}
+}
+
 func shoppingFixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	fixtures := map[string]string{
 		"/hobbytech/search":            readShoppingFixture(t, "hobbytech_success.json"),
 		"/bigcommerce/products/search": readShoppingFixture(t, "bigcommerce_storefront_success.json"),
+		"/bigcommerce/graphql":         readShoppingFixture(t, "bigcommerce_graphql_stock_success.json"),
 		"/doofinder/search":            readShoppingFixture(t, "doofinder_success.json"),
 		"/missing-fields/search":       readShoppingFixture(t, "missing_required_fields.json"),
+		"/unsupported/manual-fallback": readShoppingFixture(t, "unsupported_manual_fallback.json"),
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := fixtures[r.URL.Path]
 		if !ok {
 			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path == "/unsupported/manual-fallback" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(body))
 			return
 		}
 		if strings.Contains(r.URL.Path, "doofinder") && strings.TrimSpace(r.Header.Get("Origin")) == "" {

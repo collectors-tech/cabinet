@@ -1,0 +1,28 @@
+{
+  "data": {
+    "site": {
+      "search": {
+        "searchProducts": {
+          "products": [
+            {
+              "entityId": 4201,
+              "name": "Scalextric Limited Edition",
+              "path": "/products/scalextric-limited-edition",
+              "prices": {
+                "price": {
+                  "value": "84.50"
+                }
+              },
+              "inventory": {
+                "isInStock": true,
+                "aggregated": {
+                  "availableToSell": 2
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
