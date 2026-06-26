@@ -62,6 +62,67 @@ describe('chats/assistant-workspace', () => {
     cy.contains('[data-testid="shell-assistant-message-list"]', 'what should I do with this inventory route?').should('exist')
   })
 
+  it('ASSISTANT-WORKSPACE-008/#1503 renders app-control route and preview cards from assistant thread context', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type('open media')
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+    cy.wait('@assistantMessage').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'navigate.open_surface'
+      )
+      expect(response?.body.app_control.route).to.eq('/media')
+    })
+    cy.get('[data-testid="shell-assistant-navigation-action"]')
+      .should('be.visible')
+      .and('contain', 'Open Media')
+    cy.get('[data-testid="shell-assistant-navigation-reason"]').should(
+      'contain',
+      'read-only navigation action'
+    )
+    cy.get('[data-testid="shell-assistant-navigation-action-open"]').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/media\/?$/)
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type(
+      'create an inventory item APP-1503 Thread Preview'
+    )
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+    cy.wait('@assistantMessage').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'inventory.item.create'
+      )
+      expect(response?.body.app_control.preview.action).to.eq(
+        'create_inventory_item'
+      )
+      expect(response?.body.app_control.preview.payload.part_number).to.eq(
+        'APP-1503'
+      )
+      expect(response?.body.app_control.preview.payload.title).to.eq(
+        'Thread Preview'
+      )
+    })
+    cy.get('[data-testid="shell-assistant-permission-guidance"]').should(
+      'contain',
+      'Confirm before any mutation is applied'
+    )
+    cy.get('[data-testid="shell-assistant-action-preview"]')
+      .should('contain', 'create_inventory_item')
+      .and('contain', 'APP-1503')
+      .and('contain', 'Thread Preview')
+    cy.get('[data-testid="shell-assistant-apply-action"]').should(
+      'not.be.disabled'
+    )
+    cy.request('/api/items?profile_id=e2e-profile-001')
+      .its('body')
+      .should((items) => {
+        expect(JSON.stringify(items)).not.to.include('APP-1503')
+      })
+  })
+
   it('ASSISTANT-WORKSPACE-003 changes provider/model with deterministic forked-thread semantics', () => {
     bootstrapInventory()
     let originalThreadId = ''
