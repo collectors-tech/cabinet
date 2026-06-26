@@ -5116,28 +5116,32 @@ func New(cfg config.Config) (*App, error) {
 			response := map[string]any{"message": message}
 			if strings.EqualFold(strings.TrimSpace(req.Role), "user") {
 				if assistantContext, ok := req.Context["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
-					inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
-						ProfileID: req.ProfileID,
-						ThreadID:  req.ThreadID,
-						Source:    "assistant_handoff",
-						Status:    "queued",
-						Title:     "Assistant handoff queued",
-						Summary:   strings.TrimSpace(req.Content),
-						Metadata: map[string]any{
-							"assistant": assistantContext,
-							"route":     req.Context["route"],
-							"selection": req.Context["selection"],
-						},
-					})
-					if inboxErr == nil {
-						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", "Assistant handoff queued in Inbox.", map[string]any{
-							"assistant_handoff": map[string]any{
-								"status":        "queued",
-								"inbox_item_id": inboxItem.ID,
+					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, req.Context, message.ID); handled {
+						response["app_control"] = appControl
+					} else {
+						inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
+							ProfileID: req.ProfileID,
+							ThreadID:  req.ThreadID,
+							Source:    "assistant_handoff",
+							Status:    "queued",
+							Title:     "Assistant handoff queued",
+							Summary:   strings.TrimSpace(req.Content),
+							Metadata: map[string]any{
+								"assistant": assistantContext,
+								"route":     req.Context["route"],
+								"selection": req.Context["selection"],
 							},
 						})
-						if assistantErr == nil {
-							response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
+						if inboxErr == nil {
+							assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", "Assistant handoff queued in Inbox.", map[string]any{
+								"assistant_handoff": map[string]any{
+									"status":        "queued",
+									"inbox_item_id": inboxItem.ID,
+								},
+							})
+							if assistantErr == nil {
+								response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
+							}
 						}
 					}
 				}

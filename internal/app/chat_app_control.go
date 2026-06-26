@@ -1,0 +1,288 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"net/url"
+	"regexp"
+	"strings"
+
+	"github.com/collectors-tech/cabinet/internal/chat"
+)
+
+type chatAppControlIntent struct {
+	CapabilityID      string
+	Action            string
+	Payload           map[string]any
+	Route             string
+	ConfirmationState string
+	Message           string
+	SetupNeeded       bool
+}
+
+func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, profileID, threadID, content string, envelope map[string]any, sourceMessageID string) (map[string]any, bool) {
+	intent, ok := planChatMessageAppControl(content, envelope)
+	if !ok {
+		return nil, false
+	}
+	result := map[string]any{
+		"capability_id": intent.CapabilityID,
+		"policy":        "preview-before-apply",
+	}
+	if intent.Route != "" {
+		result["route"] = intent.Route
+	}
+	if intent.SetupNeeded {
+		result["setup_needed"] = true
+	}
+
+	run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         profileID,
+		WorkflowID:        "chat.app_control.dispatch",
+		CapabilityID:      intent.CapabilityID,
+		SourceChannel:     "in_app_chat",
+		SourceThreadID:    threadID,
+		SourceMessageID:   sourceMessageID,
+		Input:             map[string]any{"content": content, "route": envelope["route"], "selection": envelope["selection"]},
+		ProviderTrace:     map[string]any{"mode": "deterministic_app_control_planner", "live_provider": false},
+		ConfirmationState: intent.ConfirmationState,
+	})
+	if runErr == nil {
+		result["workflow_run"] = run
+	}
+
+	if intent.Action != "" {
+		preview, previewErr := chatSvc.PreviewAction(ctx, chat.PreviewActionInput{
+			ProfileID: profileID,
+			ThreadID:  threadID,
+			Action:    intent.Action,
+			Payload:   intent.Payload,
+		})
+		if previewErr != nil {
+			result["error"] = map[string]any{"code": "app_control_preview_failed", "message": previewErr.Error()}
+			intent.Message = "I found the app-control request, but Cabinet could not create a safe preview."
+		} else {
+			result["preview"] = preview
+			if runErr == nil {
+				updated, updateErr := chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+					ProfileID:         profileID,
+					RunID:             run.ID,
+					Status:            "completed",
+					ProviderTrace:     map[string]any{"mode": "deterministic_app_control_planner", "live_provider": false},
+					Result:            map[string]any{"preview_id": preview.ID, "action": preview.Action, "confirmation_required": true},
+					ConfirmationState: "pending",
+				})
+				if updateErr == nil {
+					result["workflow_run"] = updated
+				}
+			}
+		}
+	} else if runErr == nil {
+		updated, updateErr := chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+			ProfileID:         profileID,
+			RunID:             run.ID,
+			Status:            "completed",
+			ProviderTrace:     map[string]any{"mode": "deterministic_app_control_planner", "live_provider": false},
+			Result:            map[string]any{"route": intent.Route, "setup_needed": intent.SetupNeeded},
+			ConfirmationState: intent.ConfirmationState,
+		})
+		if updateErr == nil {
+			result["workflow_run"] = updated
+		}
+	}
+
+	assistantMessage, assistantErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", intent.Message, map[string]any{
+		"app_control": result,
+	})
+	if assistantErr == nil {
+		result["thread_message"] = assistantMessage
+	}
+	return result, true
+}
+
+func planChatMessageAppControl(content string, envelope map[string]any) (chatAppControlIntent, bool) {
+	normalized := normalizePlannerText(content)
+	if normalized == "" {
+		return chatAppControlIntent{}, false
+	}
+	if route, label, ok := plannedOpenSurface(normalized); ok {
+		return chatAppControlIntent{
+			CapabilityID:      "navigate.open_surface",
+			Route:             route,
+			ConfirmationState: "not_required",
+			Message:           fmt.Sprintf("I can open %s from this thread without changing Cabinet data.", label),
+		}, true
+	}
+	if partNumber, title, ok := plannedCreateInventoryItem(content); ok {
+		return chatAppControlIntent{
+			CapabilityID:      "inventory.item.create",
+			Action:            "create_inventory_item",
+			Payload:           map[string]any{"part_number": partNumber, "title": title, "brand": "Unknown", "category": "General", "source": "chat_app_control"},
+			ConfirmationState: "pending",
+			Message:           fmt.Sprintf("I prepared a preview to create %s. Confirm before Cabinet saves anything.", partNumber),
+		}, true
+	}
+	if title, ok := plannedRenameTitle(content); ok {
+		itemID := selectedItemID(envelope)
+		if itemID == "" {
+			return chatAppControlIntent{
+				CapabilityID:      "update_open_item_title",
+				ConfirmationState: "not_required",
+				Message:           "I can rename an item after you open or select the target inventory item.",
+				SetupNeeded:       true,
+			}, true
+		}
+		return chatAppControlIntent{
+			CapabilityID:      "update_open_item_title",
+			Action:            "update_open_item_title",
+			Payload:           map[string]any{"item_id": itemID, "title": title, "source_route": routePath(envelope)},
+			ConfirmationState: "pending",
+			Message:           "I prepared a title-change preview for the open item. Confirm before Cabinet applies it.",
+		}, true
+	}
+	if mentionsProviderBackedCapability(normalized) {
+		return chatAppControlIntent{
+			CapabilityID:      "content_generate",
+			ConfirmationState: "not_required",
+			Message:           "That assistant action needs provider setup before Cabinet can run it.",
+			SetupNeeded:       true,
+		}, true
+	}
+	return chatAppControlIntent{}, false
+}
+
+func normalizePlannerText(content string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(content))), " ")
+}
+
+func plannedOpenSurface(normalized string) (string, string, bool) {
+	if !strings.Contains(normalized, "open ") && !strings.Contains(normalized, "go to ") && !strings.Contains(normalized, "show ") {
+		return "", "", false
+	}
+	surfaces := []struct {
+		aliases []string
+		route   string
+		label   string
+	}{
+		{[]string{"media", "photos", "images"}, "/media", "Media"},
+		{[]string{"inventory", "items"}, "/inventory", "Inventory"},
+		{[]string{"wishlist", "wish list"}, "/wishlist", "Wishlist"},
+		{[]string{"collections"}, "/collections", "Collections"},
+		{[]string{"integrations", "apps"}, "/integrations", "Integrations"},
+		{[]string{"settings"}, "/settings", "Settings"},
+		{[]string{"chats", "chat"}, "/chats", "Chats"},
+	}
+	for _, surface := range surfaces {
+		for _, alias := range surface.aliases {
+			if strings.Contains(normalized, alias) {
+				return surface.route, surface.label, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func plannedCreateInventoryItem(content string) (string, string, bool) {
+	normalized := normalizePlannerText(content)
+	if !strings.Contains(normalized, "create") || (!strings.Contains(normalized, "inventory item") && !strings.Contains(normalized, "item")) {
+		return "", "", false
+	}
+	parts := strings.Fields(strings.TrimSpace(content))
+	for i, part := range parts {
+		clean := strings.Trim(part, ".,:;")
+		if looksLikePartNumber(clean) && i+1 < len(parts) {
+			title := strings.TrimSpace(strings.Join(parts[i+1:], " "))
+			title = strings.Trim(title, ".,")
+			if title != "" {
+				return clean, title, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func plannedRenameTitle(content string) (string, bool) {
+	normalized := normalizePlannerText(content)
+	if !strings.Contains(normalized, "rename") && !strings.Contains(normalized, "title") {
+		return "", false
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\brename\b.+?\bto\s+(.+)$`),
+		regexp.MustCompile(`(?i)\btitle\b.+?\bto\s+(.+)$`),
+	}
+	for _, pattern := range patterns {
+		matches := pattern.FindStringSubmatch(strings.TrimSpace(content))
+		if len(matches) == 2 {
+			title := strings.Trim(strings.TrimSpace(matches[1]), ` "'.,`)
+			if title != "" {
+				return title, true
+			}
+		}
+	}
+	return "", false
+}
+
+func mentionsProviderBackedCapability(normalized string) bool {
+	return strings.Contains(normalized, "generate listing") ||
+		strings.Contains(normalized, "catalog content") ||
+		strings.Contains(normalized, "analyze image") ||
+		strings.Contains(normalized, "process image") ||
+		strings.Contains(normalized, "provider")
+}
+
+func looksLikePartNumber(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) < 2 {
+		return false
+	}
+	hasDigit := false
+	hasLetter := false
+	for _, r := range value {
+		switch {
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		case r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z':
+			hasLetter = true
+		case r == '-' || r == '_' || r == '.':
+		default:
+			return false
+		}
+	}
+	return hasDigit && hasLetter
+}
+
+func selectedItemID(envelope map[string]any) string {
+	if id := stringFromNestedMap(envelope, "selection", "item_id"); id != "" {
+		return id
+	}
+	if id := stringFromNestedMap(envelope, "selection", "active_item_id"); id != "" {
+		return id
+	}
+	pathname := routePath(envelope)
+	if strings.HasPrefix(pathname, "/inventory/") {
+		return strings.Trim(strings.TrimPrefix(pathname, "/inventory/"), "/")
+	}
+	if rawSearch := stringFromNestedMap(envelope, "route", "search"); rawSearch != "" {
+		values, err := url.ParseQuery(strings.TrimPrefix(rawSearch, "?"))
+		if err == nil {
+			return strings.TrimSpace(values.Get("item"))
+		}
+	}
+	return ""
+}
+
+func routePath(envelope map[string]any) string {
+	if path := stringFromNestedMap(envelope, "route", "pathname"); path != "" {
+		return path
+	}
+	return "/"
+}
+
+func stringFromNestedMap(envelope map[string]any, parent, key string) string {
+	rawParent, _ := envelope[parent].(map[string]any)
+	if rawParent == nil {
+		return ""
+	}
+	rawValue, _ := rawParent[key].(string)
+	return strings.TrimSpace(rawValue)
+}

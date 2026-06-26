@@ -537,6 +537,101 @@ func TestCabinetAgentAppControlCapabilitiesAndOpenItemTitleMutation(t *testing.T
 	}
 }
 
+func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Chat Planner Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"}); activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Planner Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	routeResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"open media","context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if routeResp.Code != http.StatusCreated {
+		t.Fatalf("route app-control status=%d body=%s", routeResp.Code, routeResp.Body.String())
+	}
+	routeBody := routeResp.Body.String()
+	if strings.Contains(routeBody, `"assistant_handoff"`) {
+		t.Fatalf("handled app-control route must not create default inbox handoff, body=%s", routeBody)
+	}
+	if !strings.Contains(routeBody, `"capability_id":"navigate.open_surface"`) || !strings.Contains(routeBody, `"route":"/media"`) || !strings.Contains(routeBody, `"confirmation_state":"not_required"`) {
+		t.Fatalf("expected navigate.open_surface app-control route result, body=%s", routeBody)
+	}
+
+	createResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"create an inventory item AFX-001 Test Car","context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create preview app-control status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	createBody := createResp.Body.String()
+	if strings.Contains(createBody, `"assistant_handoff"`) {
+		t.Fatalf("handled app-control create must not create default inbox handoff, body=%s", createBody)
+	}
+	if !strings.Contains(createBody, `"capability_id":"inventory.item.create"`) || !strings.Contains(createBody, `"action":"create_inventory_item"`) || !strings.Contains(createBody, `"confirmation_state":"pending"`) || !strings.Contains(createBody, `"part_number":"AFX-001"`) {
+		t.Fatalf("expected create_inventory_item preview result, body=%s", createBody)
+	}
+	itemsBeforeConfirm := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if itemsBeforeConfirm.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", itemsBeforeConfirm.Code, itemsBeforeConfirm.Body.String())
+	}
+	if strings.Contains(itemsBeforeConfirm.Body.String(), "AFX-001") {
+		t.Fatalf("planner preview must not mutate inventory before confirmation, body=%s", itemsBeforeConfirm.Body.String())
+	}
+
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"REN-001","title":"Original Planner Title","brand":"AFX","category":"Slot Cars"}`), map[string]string{"Content-Type": "application/json"})
+	if itemResp.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	renameResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"rename this item to Planner Updated Title","context":{"route":{"pathname":"/inventory/`+item.ID+`"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if renameResp.Code != http.StatusCreated {
+		t.Fatalf("rename preview app-control status=%d body=%s", renameResp.Code, renameResp.Body.String())
+	}
+	renameBody := renameResp.Body.String()
+	if !strings.Contains(renameBody, `"capability_id":"update_open_item_title"`) || !strings.Contains(renameBody, `"action":"update_open_item_title"`) || !strings.Contains(renameBody, `"item_id":"`+item.ID+`"`) || !strings.Contains(renameBody, `"title":"Planner Updated Title"`) {
+		t.Fatalf("expected open item rename preview result, body=%s", renameBody)
+	}
+	itemsAfterRenamePreview := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if itemsAfterRenamePreview.Code != http.StatusOK {
+		t.Fatalf("items after rename preview status=%d body=%s", itemsAfterRenamePreview.Code, itemsAfterRenamePreview.Body.String())
+	}
+	if strings.Contains(itemsAfterRenamePreview.Body.String(), "Planner Updated Title") {
+		t.Fatalf("rename preview must not mutate inventory before confirmation, body=%s", itemsAfterRenamePreview.Body.String())
+	}
+
+	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if runs.Code != http.StatusOK {
+		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
+	}
+	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) || !strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) || !strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) || !strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) {
+		t.Fatalf("expected durable app-control workflow audit runs, body=%s", runs.Body.String())
+	}
+}
+
 func TestAssistantContentListingGenerationRunsStayPreviewFirst(t *testing.T) {
 	t.Parallel()
 
