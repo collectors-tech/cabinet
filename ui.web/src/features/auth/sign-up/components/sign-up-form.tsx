@@ -37,6 +37,18 @@ const formSchema = z
     path: ['confirmPassword'],
   })
 
+function authToastHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id,
+      title,
+      summary,
+      source_label: 'Auth sign-up',
+      category: 'auth',
+    },
+  } as Record<string, unknown>
+}
+
 export function SignUpForm({
   className,
   ...props
@@ -59,6 +71,11 @@ export function SignUpForm({
 
     toast.promise(sleep(1200), {
       loading: 'Creating account...',
+      ...authToastHistory(
+        'auth-sign-up',
+        'Account creation feedback',
+        `Account creation feedback for ${data.email}`
+      ),
       success: () => {
         setIsLoading(false)
 

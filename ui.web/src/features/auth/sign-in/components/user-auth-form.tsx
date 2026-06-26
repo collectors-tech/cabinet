@@ -13,6 +13,7 @@ import {
   IconMicrosoft,
 } from '@/assets/brand-icons'
 import { useAuthStore } from '@/stores/auth-store'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { sleep, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -78,6 +79,18 @@ function normalizePasskeyError(error: unknown) {
   return message || fallback
 }
 
+function authToastHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id,
+      title,
+      summary,
+      source_label: 'Auth sign-in',
+      category: 'auth',
+    },
+  } as Record<string, unknown>
+}
+
 export function UserAuthForm({
   className,
   redirectTo,
@@ -108,6 +121,11 @@ export function UserAuthForm({
 
     toast.promise(sleep(2000), {
       loading: 'Signing in...',
+      ...authToastHistory(
+        'auth-sign-in',
+        'Sign-in feedback',
+        `Sign-in feedback for ${data.email}`
+      ),
       success: () => {
         setIsLoading(false)
 
@@ -172,7 +190,16 @@ export function UserAuthForm({
       const targetPath = redirectTo || '/dashboard'
       navigate({ to: targetPath, replace: true })
     } catch (error) {
-      setPasskeyError(normalizePasskeyError(error))
+      const message = normalizePasskeyError(error)
+      setPasskeyError(message)
+      recordNotificationHistory({
+        id: 'auth-passkey-sign-in-failed',
+        level: 'warning',
+        title: 'Passkey sign-in failed',
+        summary: message,
+        source_label: 'Auth sign-in',
+        category: 'auth',
+      })
     } finally {
       setPasskeyLoading(false)
     }

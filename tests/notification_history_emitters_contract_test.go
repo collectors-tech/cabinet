@@ -162,6 +162,86 @@ func TestUsersBulkFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 	}
 }
 
+func TestAuthAndGlobalErrorFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := repoRoot(t)
+	signInPath := filepath.Join(root, "ui.web", "src", "features", "auth", "sign-in", "components", "user-auth-form.tsx")
+	signUpPath := filepath.Join(root, "ui.web", "src", "features", "auth", "sign-up", "components", "sign-up-form.tsx")
+	forgotPasswordPath := filepath.Join(root, "ui.web", "src", "features", "auth", "forgot-password", "components", "forgot-password-form.tsx")
+	handleServerErrorPath := filepath.Join(root, "ui.web", "src", "lib", "handle-server-error.ts")
+	mainPath := filepath.Join(root, "ui.web", "src", "main.tsx")
+	notificationSpecPath := filepath.Join(root, "openspec", "specs", "chats", "notification-inbox", "spec.md")
+	traceabilityPath := filepath.Join(root, "openspec", "traceability.md")
+
+	signIn := mustReadContractFile(t, signInPath)
+	signUp := mustReadContractFile(t, signUpPath)
+	forgotPassword := mustReadContractFile(t, forgotPasswordPath)
+	handleServerError := mustReadContractFile(t, handleServerErrorPath)
+	mainSource := mustReadContractFile(t, mainPath)
+	notificationSpec := mustReadContractFile(t, notificationSpecPath)
+	traceability := mustReadContractFile(t, traceabilityPath)
+
+	requiredSignInSnippets := []string{
+		"source_label: 'Auth sign-in'",
+		"category: 'auth'",
+		"'auth-sign-in'",
+		"'auth-passkey-sign-in-failed'",
+		"recordNotificationHistory({",
+	}
+	for _, snippet := range requiredSignInSnippets {
+		if !strings.Contains(signIn, snippet) {
+			t.Fatalf("auth sign-in feedback missing durable Inbox history metadata %q in %s", snippet, signInPath)
+		}
+	}
+
+	requiredAuthPromiseSnippets := map[string][]string{
+		signUpPath: {
+			"source_label: 'Auth sign-up'",
+			"category: 'auth'",
+			"'auth-sign-up'",
+		},
+		forgotPasswordPath: {
+			"source_label: 'Auth forgot password'",
+			"category: 'auth'",
+			"'auth-forgot-password'",
+		},
+	}
+	for path, snippets := range requiredAuthPromiseSnippets {
+		source := signUp
+		if path == forgotPasswordPath {
+			source = forgotPassword
+		}
+		for _, snippet := range snippets {
+			if !strings.Contains(source, snippet) {
+				t.Fatalf("auth feedback missing durable Inbox history metadata %q in %s", snippet, path)
+			}
+		}
+	}
+
+	requiredGlobalSnippets := []string{
+		"source_label: 'Global server error'",
+		"source_label: 'Global query client'",
+		"category: 'system'",
+		"category: 'auth'",
+	}
+	combinedGlobal := handleServerError + "\n" + mainSource
+	for _, snippet := range requiredGlobalSnippets {
+		if !strings.Contains(combinedGlobal, snippet) {
+			t.Fatalf("global error feedback missing durable Inbox history metadata %q in %s or %s", snippet, handleServerErrorPath, mainPath)
+		}
+	}
+
+	if !strings.Contains(notificationSpec, "Auth entry sign-in/sign-up/forgot-password/passkey feedback") ||
+		!strings.Contains(notificationSpec, "global query/server error feedback") {
+		t.Fatalf("notification Inbox spec must list Auth/global feedback in #1438 emitter scope in %s", notificationSpecPath)
+	}
+
+	if !strings.Contains(traceability, "TestAuthAndGlobalErrorFeedbackCarriesInboxHistoryMetadata") {
+		t.Fatalf("traceability must list Auth/global Inbox history contract test in %s", traceabilityPath)
+	}
+}
+
 func mustReadContractFile(t *testing.T, path string) string {
 	t.Helper()
 

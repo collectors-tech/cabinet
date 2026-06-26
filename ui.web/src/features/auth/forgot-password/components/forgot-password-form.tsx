@@ -23,6 +23,18 @@ const formSchema = z.object({
   }),
 })
 
+function authToastHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id,
+      title,
+      summary,
+      source_label: 'Auth forgot password',
+      category: 'auth',
+    },
+  } as Record<string, unknown>
+}
+
 export function ForgotPasswordForm({
   className,
   ...props
@@ -42,6 +54,11 @@ export function ForgotPasswordForm({
 
     toast.promise(sleep(2000), {
       loading: 'Sending email...',
+      ...authToastHistory(
+        'auth-forgot-password',
+        'Password reset email feedback',
+        `Password reset email feedback for ${data.email}`
+      ),
       success: () => {
         setIsLoading(false)
         navigate({ to: '/otp' })

@@ -1,6 +1,17 @@
 import { AxiosError } from 'axios'
 import { toast } from 'sonner'
 
+function serverErrorToastHistory(title: string, summary: string) {
+  return {
+    history: {
+      title,
+      summary,
+      source_label: 'Global server error',
+      category: 'system',
+    },
+  } as never
+}
+
 export function handleServerError(error: unknown) {
   // eslint-disable-next-line no-console
   console.log(error)
@@ -20,5 +31,8 @@ export function handleServerError(error: unknown) {
     errMsg = error.response?.data.title
   }
 
-  toast.error(errMsg)
+  toast.error(
+    errMsg,
+    serverErrorToastHistory('Server error feedback', errMsg)
+  )
 }
