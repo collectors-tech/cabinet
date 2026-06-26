@@ -339,12 +339,45 @@ describe('chats/assistant-workspace', () => {
     )
   })
 
-  it('ASSISTANT-WORKSPACE-007 exposes governed action results with persistence proof', () => {
+  it('ASSISTANT-WORKSPACE-007/#1508 exposes governed action results with persistence and thread audit proof', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/actions/preview').as('assistantPreview')
     cy.intercept('POST', '/api/chat/actions/apply').as('assistantApply')
 
+    let assistantThreadId = ''
+    cy.request('POST', '/api/chat/threads', {
+      profile_id: 'e2e-profile-001',
+      title: 'Assistant Workspace #1508 Proof',
+      metadata: {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        thread_semantics: 'assistant_workspace_session',
+      },
+    }).then((response) => {
+      expect(response.status).to.eq(201)
+      assistantThreadId = String(response.body.id)
+      expect(assistantThreadId).not.to.eq('')
+      cy.window().then((win) => {
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.thread.e2e-profile-001',
+          assistantThreadId
+        )
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.provider.e2e-profile-001',
+          'openai'
+        )
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.model.e2e-profile-001',
+          'gpt-4o-mini'
+        )
+      })
+    })
     openAssistantWorkspace()
+    cy.get('[data-testid="shell-assistant-thread-id"]')
+      .invoke('text')
+      .then((threadId) => {
+        expect(String(threadId).trim()).to.eq(assistantThreadId)
+      })
     cy.get('[data-testid="shell-assistant-execution-panel"]').should('exist')
     cy.get('[data-testid="shell-assistant-execution-state"]').should(
       'contain',
@@ -416,5 +449,19 @@ describe('chats/assistant-workspace', () => {
         expect(JSON.stringify(items)).to.include('WS-1083')
         expect(JSON.stringify(items)).to.include('Workspace Execution Proof')
       })
+    cy.then(() => {
+      cy.request(
+        `/api/chat/messages?profile_id=e2e-profile-001&thread_id=${encodeURIComponent(
+          assistantThreadId
+        )}`
+      )
+        .its('body')
+        .should((payload) => {
+          const serialized = JSON.stringify(payload)
+          expect(serialized).to.include('Applied create_item_stub')
+          expect(serialized).to.include('"mutation_applied":true')
+          expect(serialized).to.include('"confirmation":"confirmed"')
+        })
+    })
   })
 })
