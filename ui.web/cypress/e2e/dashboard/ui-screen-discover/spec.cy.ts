@@ -491,6 +491,266 @@ describe('dashboard/ui-screen-discover', () => {
     )
   })
 
+  it('UI-SCREEN-DISCOVER-007 keeps ranking and source filters deterministic without mutating candidates', () => {
+    cy.intercept('POST', '/api/discovery/action').as('unexpectedDiscoverAction')
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-provider-row',
+            title: 'Provider Attention Row',
+            price: 64,
+            currency: 'AUD',
+            match_type: 'provider_search',
+            source_provider: 'Provider Store',
+            source_trust_status: 'auth attention',
+            first_seen: '2026-06-23T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'unknown',
+            stock_count: 0,
+            needs_review: true,
+          },
+          {
+            candidate_id: 'cand-great-price',
+            title: 'Great Price Candidate',
+            price: 30,
+            currency: 'AUD',
+            target_price: 40,
+            market_price_baseline: 60,
+            deal_score: 95,
+            match_type: 'store_stock',
+            source_provider: 'Store Stock',
+            first_seen: '2026-06-22T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 5,
+            triage_status: 'new',
+          },
+          {
+            candidate_id: 'cand-market-watch',
+            title: 'Market Watch Candidate',
+            price: 77,
+            currency: 'AUD',
+            match_type: 'market_watch_result',
+            source_provider: 'Market Watch',
+            query_name: 'Saved AFX search',
+            first_seen: '2026-06-21T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+            triage_status: 'reviewing',
+          },
+          {
+            candidate_id: 'cand-wishlist-first',
+            title: 'Wishlist Ranked First',
+            price: 42,
+            currency: 'AUD',
+            target_price: 55,
+            market_price_baseline: 70,
+            deal_score: 75,
+            match_type: 'wishlist_match',
+            match_reason: 'Wishlist match below target',
+            wishlist_id: 'wish-ranked',
+            source_provider: 'Market Watch',
+            first_seen: '2026-06-20T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 2,
+            triage_status: 'new',
+            confidence: 0.98,
+          },
+          {
+            candidate_id: 'cand-shared-inventory',
+            title: 'Shared Inventory Candidate',
+            price: 22,
+            currency: 'AUD',
+            match_type: 'public_binder_match',
+            source_provider: 'Shared Binder',
+            first_seen: '2026-06-19T00:00:00Z',
+            last_seen: '2026-06-25T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+            triage_status: 'reviewing',
+          },
+          {
+            candidate_id: 'cand-hidden-archived',
+            title: 'Hidden Archived Candidate',
+            price: 12,
+            currency: 'AUD',
+            match_type: 'market_watch_result',
+            source_provider: 'Market Watch',
+            first_seen: '2026-06-18T00:00:00Z',
+            last_seen: '2026-06-24T00:00:00Z',
+            stock_state: 'out_of_stock',
+            stock_count: 0,
+            triage_status: 'archived',
+          },
+        ],
+      },
+    }).as('discoverDashboardFilterList')
+
+    signInToDiscoveries()
+    cy.wait('@discoverDashboardFilterList')
+      .its('request.query.include_archived')
+      .should('eq', 'true')
+
+    cy.get('[data-testid="discover-summary-best-deals-found"]').should(
+      'contain',
+      '2'
+    )
+    cy.get('[data-testid="discover-summary-wishlist-matches"]').should(
+      'contain',
+      '1'
+    )
+    cy.get('[data-testid="discover-summary-market-watch-review"]').should(
+      'contain',
+      '2'
+    )
+    cy.get('[data-testid="discover-summary-provider-attention"]').should(
+      'contain',
+      '1'
+    )
+
+    cy.get('[data-testid^="discover-candidate-row-"]').should('have.length', 5)
+    cy.get('[data-testid^="discover-candidate-row-"]')
+      .eq(0)
+      .should('have.attr', 'data-testid', 'discover-candidate-row-cand-wishlist-first')
+    cy.get('[data-testid^="discover-candidate-row-"]')
+      .eq(1)
+      .should('have.attr', 'data-testid', 'discover-candidate-row-cand-great-price')
+    cy.get('[data-testid="discover-candidate-row-cand-hidden-archived"]').should(
+      'not.exist'
+    )
+
+    cy.get('[data-testid="discover-filter-tab-market_watch"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid^="discover-candidate-row-"]').should('have.length', 2)
+    cy.get('[data-testid="discover-candidate-row-cand-market-watch"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="discover-candidate-row-cand-hidden-archived"]').should(
+      'not.exist'
+    )
+
+    cy.get('[data-testid="discover-filter-tab-stores"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid^="discover-candidate-row-"]').should('have.length', 2)
+    cy.get('[data-testid="discover-candidate-row-cand-provider-row"]').should(
+      'contain',
+      'Provider Attention Row'
+    )
+
+    cy.get('[data-testid="discover-filter-tab-other"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid^="discover-candidate-row-"]').should('have.length', 1)
+    cy.get('[data-testid="discover-candidate-row-cand-shared-inventory"]').should(
+      'contain',
+      'Shared Inventory Candidate'
+    )
+
+    cy.get('[data-testid="discover-filter-tab-archived"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid^="discover-candidate-row-"]').should('have.length', 1)
+    cy.get('[data-testid="discover-candidate-row-cand-hidden-archived"]').should(
+      'contain',
+      'Hidden Archived Candidate'
+    )
+    cy.get('[data-testid="discover-action-status"]').should('not.exist')
+    cy.get('@unexpectedDiscoverAction.all').should('have.length', 0)
+  })
+
+  it('UI-SCREEN-DISCOVER-007 renders provider-attention no-match and promoted destination states', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-provider-needs-attention',
+            title: 'Provider Attention Candidate',
+            price: 88,
+            currency: 'AUD',
+            match_type: 'provider_search',
+            source_provider: 'Provider Store',
+            source_trust_status: 'auth attention',
+            first_seen: '2026-06-21T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'unknown',
+            stock_count: 0,
+            needs_review: true,
+          },
+          {
+            candidate_id: 'cand-no-match',
+            title: 'Unmatched Source Candidate',
+            price: 18,
+            currency: 'AUD',
+            match_type: 'manual_capture',
+            source_label: 'Manual Capture',
+            first_seen: '2026-06-20T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+            triage_status: 'new',
+          },
+          {
+            candidate_id: 'cand-already-promoted',
+            title: 'Already Promoted Candidate',
+            price: 44,
+            currency: 'AUD',
+            match_type: 'wishlist_match',
+            source_provider: 'Market Watch',
+            first_seen: '2026-06-19T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+            triage_status: 'wishlisted',
+            destination_status: 'wishlisted',
+            destination_link: '/wishlist/?candidate=cand-already-promoted',
+          },
+        ],
+      },
+    }).as('discoverDashboardStateList')
+
+    signInToDiscoveries()
+    cy.wait('@discoverDashboardStateList')
+
+    cy.get('[data-testid="discover-summary-provider-attention"]').should(
+      'contain',
+      '1'
+    )
+    cy.get('[data-testid="discover-candidate-row-cand-provider-needs-attention"]')
+      .should('contain', 'Provider Store')
+      .and('contain', 'auth attention')
+      .and('contain', 'Needs review')
+
+    cy.get('[data-testid="discover-candidate-row-cand-no-match"]')
+      .should('contain', 'Found candidate')
+      .and('contain', 'Review ready')
+    cy.get('[data-testid="discover-filter-tab-wishlist"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="discover-candidate-row-cand-no-match"]').should(
+      'not.exist'
+    )
+
+    cy.get('[data-testid="discover-filter-tab-all"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="discover-action-open-destination-cand-already-promoted"]')
+      .should('have.attr', 'href', '/wishlist/?candidate=cand-already-promoted')
+      .and('contain', 'Open destination')
+    cy.get('[data-testid="discover-action-wishlist-cand-already-promoted"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="discover-action-create-cand-already-promoted"]').should(
+      'not.exist'
+    )
+  })
+
   it('UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state', () => {
     let wishlistEntries: Array<Record<string, unknown>> = []
     let wishlistItems: Array<Record<string, unknown>> = []

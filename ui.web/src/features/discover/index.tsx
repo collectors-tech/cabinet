@@ -207,12 +207,13 @@ export function Discover() {
 
   const isStoreOrProvider = (item: DiscoveryItem) => {
     const type = item.match_type ?? ''
+    const label = sourceLabel(item).toLowerCase()
     return (
       type === 'store_stock' ||
       type === 'provider_search' ||
-      Boolean(item.provider || item.source_provider) ||
-      sourceLabel(item).toLowerCase().includes('store') ||
-      sourceLabel(item).toLowerCase().includes('provider')
+      (!isMarketWatch(item) &&
+        !isWishlistMatch(item) &&
+        (label.includes('store') || label.includes('provider')))
     )
   }
 
@@ -644,7 +645,12 @@ export function Discover() {
                         <td className='px-3 py-3 align-top'>
                           {alreadyPromoted ? (
                             <Button size='sm' variant='outline' asChild>
-                              <a href={item.destination_link}>Open destination</a>
+                              <a
+                                href={item.destination_link}
+                                data-testid={`discover-action-open-destination-${item.candidate_id}`}
+                              >
+                                Open destination
+                              </a>
                             </Button>
                           ) : (
                             <div className='flex flex-wrap gap-2'>
