@@ -62,10 +62,14 @@ func TestWishlistToastFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 
 	root := repoRoot(t)
 	tasksPath := filepath.Join(root, "ui.web", "src", "features", "tasks", "index.tsx")
+	taskBulkPath := filepath.Join(root, "ui.web", "src", "features", "tasks", "components", "data-table-bulk-actions.tsx")
+	taskDeletePath := filepath.Join(root, "ui.web", "src", "features", "tasks", "components", "tasks-multi-delete-dialog.tsx")
 	notificationSpecPath := filepath.Join(root, "openspec", "specs", "chats", "notification-inbox", "spec.md")
 	traceabilityPath := filepath.Join(root, "openspec", "traceability.md")
 
 	tasksSource := mustReadContractFile(t, tasksPath)
+	taskBulkSource := mustReadContractFile(t, taskBulkPath)
+	taskDeleteSource := mustReadContractFile(t, taskDeletePath)
 	notificationSpec := mustReadContractFile(t, notificationSpecPath)
 	traceability := mustReadContractFile(t, traceabilityPath)
 
@@ -87,7 +91,35 @@ func TestWishlistToastFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(notificationSpec, "Wishlist/Tasks save, import, bulk, screenshot, image drop, and barcode feedback") {
+	requiredTaskBulkSnippets := []string{
+		"function taskBulkHistory(",
+		"source_label: 'Task bulk actions'",
+		"category: 'tasks'",
+		"'tasks-bulk-status'",
+		"'tasks-bulk-priority'",
+		"'tasks-bulk-export'",
+	}
+	for _, snippet := range requiredTaskBulkSnippets {
+		if !strings.Contains(taskBulkSource, snippet) {
+			t.Fatalf("task bulk feedback missing durable Inbox history metadata %q in %s", snippet, taskBulkPath)
+		}
+	}
+
+	requiredTaskDeleteSnippets := []string{
+		"function taskDeleteHistory(",
+		"source_label: 'Task delete dialog'",
+		"category: 'tasks'",
+		"'tasks-delete-confirmation-invalid'",
+		"'tasks-bulk-delete'",
+	}
+	for _, snippet := range requiredTaskDeleteSnippets {
+		if !strings.Contains(taskDeleteSource, snippet) {
+			t.Fatalf("task delete feedback missing durable Inbox history metadata %q in %s", snippet, taskDeletePath)
+		}
+	}
+
+	if !strings.Contains(notificationSpec, "Wishlist/Tasks save, import, bulk, screenshot, image drop, and barcode feedback") ||
+		!strings.Contains(notificationSpec, "generic Task table bulk status, priority, export, and delete feedback") {
 		t.Fatalf("notification Inbox spec must list Wishlist/Tasks feedback in #1438 emitter scope in %s", notificationSpecPath)
 	}
 
