@@ -57,6 +57,45 @@ func TestSubmittedDataFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 	}
 }
 
+func TestWishlistToastFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := repoRoot(t)
+	tasksPath := filepath.Join(root, "ui.web", "src", "features", "tasks", "index.tsx")
+	notificationSpecPath := filepath.Join(root, "openspec", "specs", "chats", "notification-inbox", "spec.md")
+	traceabilityPath := filepath.Join(root, "openspec", "traceability.md")
+
+	tasksSource := mustReadContractFile(t, tasksPath)
+	notificationSpec := mustReadContractFile(t, notificationSpecPath)
+	traceability := mustReadContractFile(t, traceabilityPath)
+
+	requiredTasksSnippets := []string{
+		"function wishlistToastHistory(",
+		"source_label: 'Wishlist / Tasks'",
+		"category: 'wishlist'",
+		"'wishlist-save-success'",
+		"'wishlist-inline-update-failed'",
+		"'wishlist-import-success'",
+		"'wishlist-bulk-delete-failed'",
+		"'wishlist-screenshot-save-failed'",
+		"'wishlist-image-drop-success'",
+		"'wishlist-barcode-save-failed'",
+	}
+	for _, snippet := range requiredTasksSnippets {
+		if !strings.Contains(tasksSource, snippet) {
+			t.Fatalf("wishlist/tasks toast feedback missing durable Inbox history metadata %q in %s", snippet, tasksPath)
+		}
+	}
+
+	if !strings.Contains(notificationSpec, "Wishlist/Tasks save, import, bulk, screenshot, image drop, and barcode feedback") {
+		t.Fatalf("notification Inbox spec must list Wishlist/Tasks feedback in #1438 emitter scope in %s", notificationSpecPath)
+	}
+
+	if !strings.Contains(traceability, "TestWishlistToastFeedbackCarriesInboxHistoryMetadata") {
+		t.Fatalf("traceability must list Wishlist/Tasks Inbox history contract test in %s", traceabilityPath)
+	}
+}
+
 func mustReadContractFile(t *testing.T, path string) string {
 	t.Helper()
 
