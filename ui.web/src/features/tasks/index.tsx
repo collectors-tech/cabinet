@@ -415,6 +415,18 @@ function inferWishlistTitleFromPaste(text: string) {
   return text.trim().slice(0, 80)
 }
 
+function wishlistToastHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Wishlist / Tasks',
+      category: 'wishlist',
+    },
+  } as never
+}
+
 async function captureWishlistScreenshotDataUrl() {
   const testDataUrl = (
     window as unknown as { cabinetWishlistScreenshotTestDataUrl?: string }
@@ -959,29 +971,65 @@ export function Tasks({
       try {
         await saveWishlistDraft(draft, currentRow)
         await refreshWishlistTable()
+        const message = currentRow
+          ? `${draft.title} updated.`
+          : `${draft.title} added to wishlist.`
         toast.success(
-          currentRow
-            ? `${draft.title} updated.`
-            : `${draft.title} added to wishlist.`
+          message,
+          wishlistToastHistory(
+            'wishlist-save-success',
+            message,
+            currentRow
+              ? 'Wishlist entry update feedback was preserved in Inbox history.'
+              : 'Wishlist entry create feedback was preserved in Inbox history.'
+          )
         )
       } catch (error) {
         if (
           error instanceof Error &&
           error.message === 'invalid_target_price'
         ) {
-          toast.error('Target price must be a positive number.')
+          toast.error(
+            'Target price must be a positive number.',
+            wishlistToastHistory(
+              'wishlist-save-invalid-target-price',
+              'Target price must be a positive number.',
+              'Wishlist save validation feedback was preserved in Inbox history.'
+            )
+          )
         } else if (
           error instanceof Error &&
           error.message === 'invalid_money'
         ) {
-          toast.error('Money fields must be positive numbers.')
+          toast.error(
+            'Money fields must be positive numbers.',
+            wishlistToastHistory(
+              'wishlist-save-invalid-money',
+              'Money fields must be positive numbers.',
+              'Wishlist save validation feedback was preserved in Inbox history.'
+            )
+          )
         } else if (
           error instanceof Error &&
           error.message === 'invalid_quantity'
         ) {
-          toast.error('Quantity fields must be whole numbers.')
+          toast.error(
+            'Quantity fields must be whole numbers.',
+            wishlistToastHistory(
+              'wishlist-save-invalid-quantity',
+              'Quantity fields must be whole numbers.',
+              'Wishlist save validation feedback was preserved in Inbox history.'
+            )
+          )
         } else {
-          toast.error('Wishlist save failed. Try again.')
+          toast.error(
+            'Wishlist save failed. Try again.',
+            wishlistToastHistory(
+              'wishlist-save-failed',
+              'Wishlist save failed. Try again.',
+              'Wishlist save failure feedback was preserved in Inbox history.'
+            )
+          )
         }
         throw error
       } finally {
@@ -995,7 +1043,14 @@ export function Tasks({
     async (task: Task, changes: WishlistInlineChanges) => {
       const wishlistEntryID = task.wishlistEntryID?.trim()
       if (!wishlistEntryID) {
-        toast.error('Wishlist entry is missing update metadata.')
+        toast.error(
+          'Wishlist entry is missing update metadata.',
+          wishlistToastHistory(
+            'wishlist-inline-update-missing-metadata',
+            'Wishlist entry is missing update metadata.',
+            'Wishlist inline update validation feedback was preserved in Inbox history.'
+          )
+        )
         return
       }
 
@@ -1123,9 +1178,23 @@ export function Tasks({
           throw new Error('wishlist_inline_update_failed')
         }
         await refreshWishlistTable()
-        toast.success('Wishlist row updated.')
+        toast.success(
+          'Wishlist row updated.',
+          wishlistToastHistory(
+            'wishlist-inline-update-success',
+            'Wishlist row updated.',
+            'Wishlist inline update feedback was preserved in Inbox history.'
+          )
+        )
       } catch {
-        toast.error('Wishlist row update failed. Try again.')
+        toast.error(
+          'Wishlist row update failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-inline-update-failed',
+            'Wishlist row update failed. Try again.',
+            'Wishlist inline update failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_inline_update_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1138,7 +1207,14 @@ export function Tasks({
     async (task: Task) => {
       const wishlistEntryID = task.wishlistEntryID?.trim()
       if (!wishlistEntryID) {
-        toast.error('Wishlist entry is missing delete metadata.')
+        toast.error(
+          'Wishlist entry is missing delete metadata.',
+          wishlistToastHistory(
+            'wishlist-delete-missing-metadata',
+            'Wishlist entry is missing delete metadata.',
+            'Wishlist delete validation feedback was preserved in Inbox history.'
+          )
+        )
         return
       }
 
@@ -1152,9 +1228,24 @@ export function Tasks({
           throw new Error('wishlist_delete_failed')
         }
         await refreshWishlistTable()
-        toast.success(`${task.title} removed from wishlist.`)
+        const message = `${task.title} removed from wishlist.`
+        toast.success(
+          message,
+          wishlistToastHistory(
+            'wishlist-delete-success',
+            message,
+            'Wishlist delete feedback was preserved in Inbox history.'
+          )
+        )
       } catch {
-        toast.error('Wishlist delete failed. Try again.')
+        toast.error(
+          'Wishlist delete failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-delete-failed',
+            'Wishlist delete failed. Try again.',
+            'Wishlist delete failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_delete_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1171,17 +1262,37 @@ export function Tasks({
           await saveWishlistDraft(entry)
         }
         await refreshWishlistTable()
+        const message = `Imported ${entries.length} wishlist entr${entries.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Imported ${entries.length} wishlist entr${entries.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-import-success',
+            message,
+            'Wishlist import feedback was preserved in Inbox history.'
+          )
         )
       } catch (error) {
         if (
           error instanceof Error &&
           error.message === 'invalid_target_price'
         ) {
-          toast.error('Target price must be a positive number.')
+          toast.error(
+            'Target price must be a positive number.',
+            wishlistToastHistory(
+              'wishlist-import-invalid-target-price',
+              'Target price must be a positive number.',
+              'Wishlist import validation feedback was preserved in Inbox history.'
+            )
+          )
         } else {
-          toast.error('Wishlist import failed. Try again.')
+          toast.error(
+            'Wishlist import failed. Try again.',
+            wishlistToastHistory(
+              'wishlist-import-failed',
+              'Wishlist import failed. Try again.',
+              'Wishlist import failure feedback was preserved in Inbox history.'
+            )
+          )
         }
         throw error
       } finally {
@@ -1217,11 +1328,24 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
+        const message = `Updated priority for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Updated priority for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-bulk-priority-success',
+            message,
+            'Wishlist bulk priority feedback was preserved in Inbox history.'
+          )
         )
       } catch {
-        toast.error('Bulk priority update failed. Try again.')
+        toast.error(
+          'Bulk priority update failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-bulk-priority-failed',
+            'Bulk priority update failed. Try again.',
+            'Wishlist bulk priority failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_bulk_priority_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1258,11 +1382,24 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
+        const message = `Updated watch status for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Updated watch status for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-bulk-watch-status-success',
+            message,
+            'Wishlist bulk watch-status feedback was preserved in Inbox history.'
+          )
         )
       } catch {
-        toast.error('Bulk watch status update failed. Try again.')
+        toast.error(
+          'Bulk watch status update failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-bulk-watch-status-failed',
+            'Bulk watch status update failed. Try again.',
+            'Wishlist bulk watch-status failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_bulk_status_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1289,11 +1426,24 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
+        const message = `Deleted ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Deleted ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-bulk-delete-success',
+            message,
+            'Wishlist bulk delete feedback was preserved in Inbox history.'
+          )
         )
       } catch {
-        toast.error('Bulk delete failed. Try again.')
+        toast.error(
+          'Bulk delete failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-bulk-delete-failed',
+            'Bulk delete failed. Try again.',
+            'Wishlist bulk delete failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_bulk_delete_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1313,8 +1463,14 @@ export function Tasks({
     anchor.click()
     anchor.remove()
     window.URL.revokeObjectURL(url)
+    const message = `Exported ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
     toast.success(
-      `Exported ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+      message,
+      wishlistToastHistory(
+        'wishlist-export-success',
+        message,
+        'Wishlist export feedback was preserved in Inbox history.'
+      )
     )
   }, [])
 
@@ -1348,7 +1504,14 @@ export function Tasks({
     const title =
       wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
     if (!content || !title) {
-      toast.error('Paste text or a URL before adding to wishlist.')
+      toast.error(
+        'Paste text or a URL before adding to wishlist.',
+        wishlistToastHistory(
+          'wishlist-paste-missing-content',
+          'Paste text or a URL before adding to wishlist.',
+          'Wishlist paste validation feedback was preserved in Inbox history.'
+        )
+      )
       return
     }
 
@@ -1446,11 +1609,26 @@ export function Tasks({
       }
 
       await refreshWishlistTable()
-      toast.success(`${title} added to wishlist with screenshot.`)
+      const message = `${title} added to wishlist with screenshot.`
+      toast.success(
+        message,
+        wishlistToastHistory(
+          'wishlist-screenshot-save-success',
+          message,
+          'Wishlist screenshot feedback was preserved in Inbox history.'
+        )
+      )
       handleWishlistScreenshotOpenChange(false)
     } catch {
       setWishlistScreenshotError('Screenshot wishlist save failed. Try again.')
-      toast.error('Screenshot wishlist save failed. Try again.')
+      toast.error(
+        'Screenshot wishlist save failed. Try again.',
+        wishlistToastHistory(
+          'wishlist-screenshot-save-failed',
+          'Screenshot wishlist save failed. Try again.',
+          'Wishlist screenshot failure feedback was preserved in Inbox history.'
+        )
+      )
     } finally {
       setIsWishlistMutating(false)
     }
@@ -1503,12 +1681,27 @@ export function Tasks({
 
         await refreshWishlistTable()
         setWishlistImageDropMessage(`${title} added from dropped image.`)
-        toast.success(`${title} added to wishlist from image.`)
+        const message = `${title} added to wishlist from image.`
+        toast.success(
+          message,
+          wishlistToastHistory(
+            'wishlist-image-drop-success',
+            message,
+            'Wishlist image-drop feedback was preserved in Inbox history.'
+          )
+        )
       } catch {
         setWishlistImageDropMessage(
           'Image drop failed. Try dropping the file again.'
         )
-        toast.error('Image drop failed. Try dropping the file again.')
+        toast.error(
+          'Image drop failed. Try dropping the file again.',
+          wishlistToastHistory(
+            'wishlist-image-drop-failed',
+            'Image drop failed. Try dropping the file again.',
+            'Wishlist image-drop failure feedback was preserved in Inbox history.'
+          )
+        )
       } finally {
         setIsWishlistMutating(false)
       }
@@ -1625,11 +1818,26 @@ export function Tasks({
       }
 
       await refreshWishlistTable()
-      toast.success(`${title} added to wishlist with barcode.`)
+      const message = `${title} added to wishlist with barcode.`
+      toast.success(
+        message,
+        wishlistToastHistory(
+          'wishlist-barcode-save-success',
+          message,
+          'Wishlist barcode feedback was preserved in Inbox history.'
+        )
+      )
       handleWishlistBarcodeOpenChange(false)
     } catch {
       setWishlistBarcodeError('Barcode wishlist save failed. Try again.')
-      toast.error('Barcode wishlist save failed. Try again.')
+      toast.error(
+        'Barcode wishlist save failed. Try again.',
+        wishlistToastHistory(
+          'wishlist-barcode-save-failed',
+          'Barcode wishlist save failed. Try again.',
+          'Wishlist barcode failure feedback was preserved in Inbox history.'
+        )
+      )
     } finally {
       setIsWishlistMutating(false)
     }
