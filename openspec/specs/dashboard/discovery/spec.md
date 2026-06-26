@@ -48,3 +48,50 @@ to Wishlist, Inventory, Purchase flow, or archive/ignore.
 - **AND** Inventory or Purchase promotion MUST create or link a downstream record/workflow only when the user confirms the item is owned or purchased
 - **AND** ignore/archive MUST preserve the audit trail and prevent the same source result from reappearing as an unreviewed discovery unless the source materially changes
 
+### Requirement DISCOVERY-005: Discoveries SHALL aggregate found opportunities into a collector-facing dashboard
+Cabinet SHALL treat Discoveries as the review dashboard for opportunities found by
+Wishlist matching, Market Watch output, provider/store scans, scanner runs, and public
+or trade-enabled inventory sources. Discoveries SHALL NOT own Market Watch query
+configuration or provider run controls; those source workflows publish reviewable
+outputs into Discoveries.
+
+#### Scenario: Found-opportunity dashboard aggregation
+- **GIVEN** Wishlist, Market Watch, provider/store, scanner, or public/shared inventory workflows emit candidate findings
+- **WHEN** Cabinet records candidates for Discoveries review
+- **THEN** Discoveries MUST support dashboard summary groups for best deals, wishlist matches, new findings, Market Watch outputs, and provider/store attention
+- **AND** Discoveries MUST support source filter groups for all discoveries, wishlist matches, great prices, Market Watch, stores/providers, other public or shared inventories, and ignored or archived candidates
+- **AND** Discoveries MUST distinguish Market Watch query controls from Discoveries output review by linking back to the originating query/run surface rather than duplicating query creation or run controls
+- **AND** "other inventories" MUST mean public, trade-enabled, or explicitly shared inventory sources only
+
+#### Scenario: Wishlist price-match candidate
+- **GIVEN** a Wishlist target has a target price and Cabinet finds a provider/store listing below that target
+- **WHEN** the listing becomes a Discoveries candidate
+- **THEN** the candidate MUST preserve wishlist id, match reason, target price, observed price, savings delta, source/provider, seller/source label, availability, first/last seen timestamps, source-result URL, and ranking score where available
+- **AND** the candidate MUST remain a wanted-opportunity record until the user explicitly promotes it to Wishlist follow-up, Purchase, Inventory, ignore, or archive
+
+#### Scenario: Market Watch output candidate
+- **GIVEN** Market Watch executes a saved query or scheduled refresh and emits matching output
+- **WHEN** Cabinet sends that output to Discoveries
+- **THEN** the Discoveries candidate MUST preserve provider, query set id, query name or run identifier, listing/result identifier, result URL, observed price/currency, seller/source label, availability, source trust or provider-health status, and current review status
+- **AND** Discoveries MUST expose a source-result review path and a Market Watch handoff path without presenting the candidate as a new query-run configuration surface
+
+### Requirement DISCOVERY-006: Discoveries SHALL rank and act on candidates without leaking private collection data
+Cabinet SHALL rank discovery candidates by collector value while preserving ownership
+and privacy boundaries. Private collector inventory, storage location, private notes, and
+unpublished collection value SHALL NOT be shown in Discoveries as source evidence or
+comparison material.
+
+#### Scenario: Candidate ranking and state model
+- **GIVEN** Discoveries has candidates with wishlist, pricing, source, stock, recency, confidence, and status metadata
+- **WHEN** the dashboard ranks and renders candidates
+- **THEN** wishlist matches and great-price opportunities MUST rank ahead of lower-signal candidates when their metadata supports that ordering
+- **AND** ranking MUST consider match type/reason, target price, baseline or market price, price delta amount and percent, availability, recency, source trust status, and confidence/review signal where available
+- **AND** each candidate MUST expose one current review status from `new`, `reviewing`, `wishlisted`, `purchase_candidate`, `inventory_candidate`, `ignored`, or `archived`
+
+#### Scenario: Privacy-safe contextual actions
+- **GIVEN** a discovery candidate comes from public/shared inventory, store/provider output, Wishlist matching, or Market Watch output
+- **WHEN** the user reviews contextual actions
+- **THEN** actions MUST be limited to source-result review, Wishlist follow-up, Purchase follow-up, Inventory handoff, ignore, archive, or return-to-source workflow where applicable
+- **AND** Inventory/Purchase actions MUST NOT claim ownership until the user explicitly confirms an owned or purchased state
+- **AND** Discoveries MUST NOT reveal private collector inventory records, private notes, storage locations, unpublished collection values, or non-shared inventory comparisons as source evidence
+
