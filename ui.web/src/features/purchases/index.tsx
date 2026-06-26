@@ -149,6 +149,8 @@ type PurchaseOrderListResponse = {
 
 type PurchaseReviewDimension = 'rating' | 'quality' | 'timeliness'
 
+type PurchaseDetailAction = 'receive' | 'reconcile' | 'review'
+
 type PurchaseReviewDraft = {
   targetType: 'order' | 'line_item'
   orderId: string
@@ -739,6 +741,13 @@ export function Purchases() {
     Record<PurchaseReviewDimension, number>
   >({ rating: 5, quality: 5, timeliness: 5 })
   const [bulkReviewComment, setBulkReviewComment] = useState('')
+  const [purchaseDetailAction, setPurchaseDetailAction] =
+    useState<PurchaseDetailAction | null>(null)
+  const [purchaseDetailActionNotes, setPurchaseDetailActionNotes] =
+    useState('')
+  const [purchaseDetailActionResult, setPurchaseDetailActionResult] = useState<
+    string | null
+  >(null)
   const [packageSuggestionSummary, setPackageSuggestionSummary] =
     useState<ForwarderPackageMatchSuggestionSummary | null>(null)
   const [
@@ -1194,6 +1203,64 @@ export function Purchases() {
       })
       return next
     })
+  }
+
+  const selectedPurchaseTargetName = selectedPurchaseLine
+    ? selectedPurchaseLine.title
+    : selectedPurchaseOrder?.order_id
+
+  const selectedPurchaseTargetKind = selectedPurchaseLine
+    ? 'line item'
+    : 'order'
+
+  const detailActionLabel = (action: PurchaseDetailAction) => {
+    if (action === 'receive') {
+      return selectedPurchaseLine ? 'Receive item' : 'Receive order'
+    }
+    if (action === 'reconcile') {
+      return 'Reconcile'
+    }
+    return 'Review'
+  }
+
+  const detailActionPurpose = (action: PurchaseDetailAction) => {
+    if (action === 'receive') {
+      return selectedPurchaseLine
+        ? 'Record received evidence for this line item before inventory reconciliation.'
+        : 'Record received evidence for this purchase order and its outstanding line items.'
+    }
+    if (action === 'reconcile') {
+      return selectedPurchaseLine
+        ? 'Prepare this line item for reconciliation into Cabinet inventory.'
+        : 'Prepare this purchase order for reconciliation against expected arrivals.'
+    }
+    return selectedPurchaseLine
+      ? 'Prepare item-level feedback for this purchase.'
+      : 'Prepare order-level purchase feedback.'
+  }
+
+  const openPurchaseDetailAction = (action: PurchaseDetailAction) => {
+    setPurchaseDetailAction(action)
+    setPurchaseDetailActionNotes('')
+    setPurchaseDetailActionResult(null)
+  }
+
+  const confirmPurchaseDetailAction = () => {
+    if (!purchaseDetailAction || !selectedPurchaseTargetName) {
+      return
+    }
+    setPurchaseDetailActionResult(
+      detailActionLabel(purchaseDetailAction) +
+        ' queued for ' +
+        selectedPurchaseTargetKind +
+        ' ' +
+        selectedPurchaseTargetName +
+        (purchaseDetailActionNotes.trim()
+          ? ' with notes: ' + purchaseDetailActionNotes.trim()
+          : '')
+    )
+    setPurchaseDetailAction(null)
+    setPurchaseDetailActionNotes('')
   }
 
   useEffect(() => {
@@ -2733,13 +2800,31 @@ export function Purchases() {
                     </div>
                     <Separator />
                     <div className='flex flex-wrap gap-2'>
-                      <Button type='button' size='sm' variant='outline'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='purchases-item-receive-action'
+                        onClick={() => openPurchaseDetailAction('receive')}
+                      >
                         Receive
                       </Button>
-                      <Button type='button' size='sm' variant='outline'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='purchases-item-reconcile-action'
+                        onClick={() => openPurchaseDetailAction('reconcile')}
+                      >
                         Reconcile
                       </Button>
-                      <Button type='button' size='sm' variant='outline'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='purchases-item-review-action'
+                        onClick={() => openPurchaseDetailAction('review')}
+                      >
                         Review
                       </Button>
                     </div>
@@ -2828,18 +2913,44 @@ export function Purchases() {
                     </div>
                     <Separator />
                     <div className='flex flex-wrap gap-2'>
-                      <Button type='button' size='sm' variant='outline'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='purchases-order-receive-action'
+                        onClick={() => openPurchaseDetailAction('receive')}
+                      >
                         Receive order
                       </Button>
-                      <Button type='button' size='sm' variant='outline'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='purchases-order-reconcile-action'
+                        onClick={() => openPurchaseDetailAction('reconcile')}
+                      >
                         Reconcile
                       </Button>
-                      <Button type='button' size='sm' variant='outline'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='purchases-order-review-action'
+                        onClick={() => openPurchaseDetailAction('review')}
+                      >
                         Review
                       </Button>
                     </div>
                   </div>
                 )}
+                {purchaseDetailActionResult ? (
+                  <p
+                    className='rounded-md border bg-muted/30 p-3 text-sm'
+                    data-testid='purchases-detail-action-result'
+                  >
+                    {purchaseDetailActionResult}
+                  </p>
+                ) : null}
                 {reviewModeEnabled ? (
                   <div
                     className='space-y-3 rounded-md border bg-muted/20 p-3 text-sm'
@@ -2901,6 +3012,89 @@ export function Purchases() {
             )}
           </aside>
         </div>
+
+        <Dialog
+          open={purchaseDetailAction !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPurchaseDetailAction(null)
+              setPurchaseDetailActionNotes('')
+            }
+          }}
+        >
+          <DialogContent
+            className='z-[60]'
+            data-testid='purchases-detail-action-dialog'
+          >
+            <DialogHeader>
+              <DialogTitle data-testid='purchases-detail-action-title'>
+                {purchaseDetailAction
+                  ? detailActionLabel(purchaseDetailAction)
+                  : 'Purchase action'}
+              </DialogTitle>
+              <DialogDescription data-testid='purchases-detail-action-description'>
+                {purchaseDetailAction
+                  ? detailActionPurpose(purchaseDetailAction)
+                  : 'Prepare the selected purchase action.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className='space-y-4'>
+              <div
+                className='rounded-md border bg-muted/30 p-3 text-sm'
+                data-testid='purchases-detail-action-target'
+              >
+                <p className='text-xs font-medium text-muted-foreground uppercase'>
+                  Target
+                </p>
+                <p className='font-medium'>
+                  {selectedPurchaseTargetKind}:{' '}
+                  {selectedPurchaseTargetName ?? 'No purchase selected'}
+                </p>
+                {selectedPurchaseOrder ? (
+                  <p className='text-xs text-muted-foreground'>
+                    Order {selectedPurchaseOrder.order_id} /{' '}
+                    {selectedPurchaseOrder.tracking || 'tracking pending'}
+                  </p>
+                ) : null}
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='purchases-detail-action-notes'>
+                  Notes or evidence
+                </Label>
+                <Textarea
+                  id='purchases-detail-action-notes'
+                  data-testid='purchases-detail-action-notes'
+                  value={purchaseDetailActionNotes}
+                  onChange={(event) =>
+                    setPurchaseDetailActionNotes(event.target.value)
+                  }
+                  placeholder='Add tracking, received condition, reconciliation evidence, or feedback notes'
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                data-testid='purchases-detail-action-cancel'
+                onClick={() => {
+                  setPurchaseDetailAction(null)
+                  setPurchaseDetailActionNotes('')
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type='button'
+                data-testid='purchases-detail-action-confirm'
+                disabled={!selectedPurchaseTargetName}
+                onClick={confirmPurchaseDetailAction}
+              >
+                Queue action
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {capturedReviewsOpen ? (
           <section

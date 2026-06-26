@@ -390,6 +390,81 @@ describe('purchases/purchase-inbox', () => {
     )
   })
 
+  it('COMMERCE-RECONCILIATION-015 opens modal-backed order and item detail actions', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', {
+      statusCode: 200,
+      body: {
+        page: 1,
+        page_size: 10,
+        total: 1,
+        total_pages: 1,
+        orders: [groupedPurchaseOrderFixture()],
+      },
+    }).as('listPurchaseOrdersForActions')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.wait('@listPurchaseOrdersForActions')
+
+    cy.get('[data-testid="purchases-order-receive-action"]').click()
+    cy.get('[data-testid="purchases-detail-action-dialog"]')
+      .should('be.visible')
+      .and('contain', 'Receive order')
+      .and('contain', 'EBAY-ORDER-100')
+      .and('contain', 'TRACK-100')
+    cy.get('[data-testid="purchases-detail-action-cancel"]').click()
+    cy.get('[data-testid="purchases-detail-action-dialog"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="purchases-detail-action-result"]').should(
+      'not.exist'
+    )
+
+    cy.get('[data-testid="purchases-order-reconcile-action"]').click()
+    cy.get('[data-testid="purchases-detail-action-dialog"]')
+      .should('contain', 'Reconcile')
+      .and('contain', 'Prepare this purchase order')
+    cy.get('[data-testid="purchases-detail-action-notes"]').type(
+      'Matched package and expected arrival evidence'
+    )
+    cy.get('[data-testid="purchases-detail-action-confirm"]').click()
+    cy.get('[data-testid="purchases-detail-action-result"]')
+      .should('be.visible')
+      .and('contain', 'Reconcile queued for order EBAY-ORDER-100')
+      .and('contain', 'Matched package and expected arrival evidence')
+
+    cy.contains(
+      '[data-testid="purchases-line-item-row"]',
+      'Mystery Pokemon card'
+    )
+      .find('[data-testid="purchases-line-item-select"]')
+      .click()
+    cy.get('[data-testid="purchases-item-review-action"]').click()
+    cy.get('[data-testid="purchases-detail-action-dialog"]')
+      .should('be.visible')
+      .and('contain', 'Review')
+      .and('contain', 'line item: Mystery Pokemon card')
+      .and('contain', 'Order EBAY-ORDER-100')
+    cy.get('[data-testid="purchases-detail-action-notes"]').type(
+      'Seller feedback ready'
+    )
+    cy.get('[data-testid="purchases-detail-action-confirm"]').click()
+    cy.get('[data-testid="purchases-detail-action-result"]')
+      .should('contain', 'Review queued for line item Mystery Pokemon card')
+      .and('contain', 'Seller feedback ready')
+
+    cy.get('[data-testid="purchases-item-receive-action"]').click()
+    cy.get('[data-testid="purchases-detail-action-dialog"]')
+      .should('contain', 'Receive item')
+      .and('contain', 'Record received evidence for this line item')
+    cy.get('[data-testid="purchases-detail-action-cancel"]').click()
+  })
+
   it('EBAY-PURCHASE-CAPTURE-008 drafts review-mode scores comments and bulk actions', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()

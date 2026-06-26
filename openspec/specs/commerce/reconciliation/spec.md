@@ -158,3 +158,13 @@ Cabinet SHALL present persisted purchase orders in an Inbox-style split pane wit
 - **THEN** the right detail pane MUST show item-level title, source listing identity where available, quantity, item price, linked Cabinet item/instance identifier where available, inherited tracking/shipping status, received/reconciled state, review/feedback state placeholder, notes/evidence identifiers, and clear receive/reconcile/review actions.
 - **AND** filtering, searching, or pagination MUST either preserve the selected record when still visible or fall back to the first visible persisted order.
 - **AND** the detail pane MUST show an explicit empty state when no persisted purchase is selected.
+
+### Requirement COMMERCE-RECONCILIATION-015: Purchases detail actions SHALL be modal-backed
+Cabinet SHALL open clear modal-backed action workflows from the Purchase & Feedback Centre order and line-item detail pane instead of rendering inert receive, reconcile, or review controls.
+
+#### Scenario: Queue order and item detail actions
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders
+- **WHEN** the user activates Receive, Reconcile, or Review from an order detail pane
+- **THEN** Cabinet MUST open a modal workflow that names the selected order, explains the action purpose, accepts notes or evidence, supports cancellation, and returns a visible queued outcome after confirmation.
+- **WHEN** the user activates Receive, Reconcile, or Review from a selected line-item detail pane
+- **THEN** Cabinet MUST open a modal workflow that names the selected line item, preserves the parent order context, accepts notes or evidence, supports cancellation, and returns a visible queued outcome after confirmation.
