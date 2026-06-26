@@ -174,6 +174,64 @@ describe('chats/chats-workspace', () => {
     })
   })
 
+  it('CHATS-WORKSPACE-008/#1503 dispatches normal main Chat text to app-control route planning without Inbox noise', () => {
+    openChats()
+    createThread('E2E Main Chat Route Planner')
+
+    cy.intercept('POST', '/api/chat/messages').as('mainChatPlannerMessage')
+    cy.get('[data-testid="chat-compose-input"]').type('open media')
+    cy.get('[data-testid="chat-send-button"]').click()
+
+    let threadId = ''
+    cy.wait('@mainChatPlannerMessage').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(String(request.body.thread_id).trim()).not.to.eq('')
+      expect(request.body.content).to.eq('open media')
+      expect(request.body.context.route.pathname).to.eq('/chats/')
+      expect(request.body.context.profile.id).to.eq('e2e-profile-001')
+      expect(request.body.context.assistant.provider).to.eq('openai')
+      expect(request.body.context.assistant.model).to.eq('gpt-4o-mini')
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.assistant_handoff).to.eq(undefined)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'navigate.open_surface'
+      )
+      expect(response?.body.app_control.route).to.eq('/media')
+      expect(response?.body.app_control.workflow_run.workflow_id).to.eq(
+        'chat.app_control.dispatch'
+      )
+      expect(response?.body.app_control.workflow_run.confirmation_state).to.eq(
+        'not_required'
+      )
+      threadId = String(request.body.thread_id)
+    })
+
+    cy.get('[data-testid="chat-message-list"]')
+      .should('contain', 'open media')
+      .and('contain', 'I can open Media from this thread')
+    cy.location('pathname').should('match', /^\/chats\/?$/)
+
+    cy.then(() => {
+      cy.request(
+        `/api/chat/workflow-runs?profile_id=e2e-profile-001&thread_id=${encodeURIComponent(
+          threadId
+        )}`
+      )
+        .its('body')
+        .should((payload) => {
+          const serialized = JSON.stringify(payload)
+          expect(serialized).to.include('chat.app_control.dispatch')
+          expect(serialized).to.include('navigate.open_surface')
+          expect(serialized).to.include('/media')
+        })
+      cy.request('/api/chat/inbox?profile_id=e2e-profile-001')
+        .its('body')
+        .should((payload) => {
+          expect(JSON.stringify(payload)).not.to.include(threadId)
+        })
+    })
+  })
+
   it('CHATS-WORKSPACE-007/#1508 previews and confirms a main Chat inventory update without mutating early', () => {
     openChats()
     createThread('E2E Main Chat Item Update')
