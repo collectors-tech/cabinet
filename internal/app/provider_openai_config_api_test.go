@@ -491,7 +491,7 @@ func TestEbayRegistrySetupStatusReflectsDegradedProviderHealth(t *testing.T) {
 	if settings.Code != http.StatusOK {
 		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
 	}
-	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, updated_at) VALUES ('ebay', 'error', 'Browse rate limited', CURRENT_TIMESTAMP)`); err != nil {
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'error', 'Browse rate limited', 120, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("seed degraded eBay provider health: %v", err)
 	}
 
@@ -512,6 +512,27 @@ func TestEbayRegistrySetupStatusReflectsDegradedProviderHealth(t *testing.T) {
 	setup, ok := ebay["setup_status"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected setup_status map, got %#v", ebay["setup_status"])
+	}
+	health, ok := ebay["health"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected health map, got %#v", ebay["health"])
+	}
+	for key, want := range map[string]string{
+		"status":      "error",
+		"state":       "degraded",
+		"message":     "Browse rate limited",
+		"last_error":  "Browse rate limited",
+		"next_action": "check_provider_health_and_credentials",
+	} {
+		if got := fmt.Sprintf("%v", health[key]); got != want {
+			t.Fatalf("health[%s] got %q want %q; health=%+v", key, got, want, health)
+		}
+	}
+	if got, ok := health["retry_after_seconds"].(float64); !ok || int(got) != 120 {
+		t.Fatalf("health retry_after_seconds got %v want 120; health=%+v", health["retry_after_seconds"], health)
+	}
+	if health["last_checked_at"] == nil {
+		t.Fatalf("health missing last_checked_at for registry surfacing: %+v", health)
 	}
 	for key, want := range map[string]string{
 		"token_state":       "stored",

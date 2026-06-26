@@ -8272,6 +8272,16 @@ func providerHealthResponse(health map[string]string) map[string]any {
 		}
 	}
 
+	var nextAction any
+	if state == "degraded" {
+		switch strings.ToLower(provider) {
+		case "ebay":
+			nextAction = "check_provider_health_and_credentials"
+		default:
+			nextAction = "review_provider_status"
+		}
+	}
+
 	return map[string]any{
 		"provider":            provider,
 		"status":              status,
@@ -8279,6 +8289,7 @@ func providerHealthResponse(health map[string]string) map[string]any {
 		"message":             message,
 		"last_error":          lastError,
 		"retry_after_seconds": retryAfter,
+		"next_action":         nextAction,
 		"updated_at":          updated,
 	}
 }
@@ -8493,12 +8504,23 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		}
 
 		healthStatus := "unknown"
-		healthMessage := ""
+		healthPayload := map[string]any{
+			"status":              healthStatus,
+			"state":               "disabled",
+			"message":             "",
+			"last_error":          nil,
+			"retry_after_seconds": nil,
+			"next_action":         nil,
+			"last_checked_at":     nil,
+			"updated_at":          nil,
+		}
 		lastChecked := any(nil)
 		lastRunStatus := "never"
 		lastRunFinished := any(nil)
 		if scannerSvc != nil {
 			if health, err := scannerSvc.ProviderHealth(ctx, providerID); err == nil {
+				healthPayload = providerHealthResponse(health)
+				healthPayload["last_checked_at"] = healthPayload["updated_at"]
 				if v := strings.TrimSpace(health["status"]); v != "" {
 					healthStatus = v
 					switch v {
@@ -8510,20 +8532,14 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 						lastRunStatus = "failed"
 					}
 				}
-				if v := strings.TrimSpace(health["message"]); v != "" {
-					healthMessage = v
-				}
 				if v := strings.TrimSpace(health["updated_at"]); v != "" {
 					lastChecked = v
 					lastRunFinished = v
 				}
 			}
 		}
-		provider["health"] = map[string]any{
-			"status":          healthStatus,
-			"message":         healthMessage,
-			"last_checked_at": lastChecked,
-		}
+		healthPayload["last_checked_at"] = lastChecked
+		provider["health"] = healthPayload
 		provider["last_run"] = map[string]any{
 			"status":      lastRunStatus,
 			"finished_at": lastRunFinished,

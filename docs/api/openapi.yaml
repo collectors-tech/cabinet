@@ -3402,6 +3402,10 @@ components:
         retry_after_seconds:
           type: integer
           nullable: true
+        next_action:
+          type: string
+          nullable: true
+          enum: [check_provider_health_and_credentials, review_provider_status]
         updated_at:
           type: string
           nullable: true

@@ -662,6 +662,8 @@ func TestOpenAPIDocumentsEbayProviderHealthContract(t *testing.T) {
 		"message: { type: string }",
 		"last_error:",
 		"retry_after_seconds:",
+		"next_action:",
+		"check_provider_health_and_credentials",
 		"updated_at:",
 	} {
 		if !strings.Contains(schema, token) {
