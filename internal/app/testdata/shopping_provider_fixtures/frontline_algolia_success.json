@@ -1,0 +1,12 @@
+{
+  "hits": [
+    {
+      "objectID": "fl-fixture-1",
+      "title": "Slot.it Nissan Skyline GT-R",
+      "handle": "/products/slot-it-nissan-skyline-gtr",
+      "price": 89.95,
+      "image_url": "https://cdn.frontlinehobbies.com.au/products/slot-it-nissan-skyline-gtr.jpg"
+    }
+  ],
+  "nbHits": 1
+}
