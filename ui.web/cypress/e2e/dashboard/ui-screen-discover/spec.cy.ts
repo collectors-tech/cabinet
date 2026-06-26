@@ -362,29 +362,130 @@ describe('dashboard/ui-screen-discover', () => {
     cy.get('[data-testid="discover-provenance-cand-005"]')
       .should('contain', 'Hobbytech Toys')
       .and('contain', 'result-555')
-      .and('contain', 'First seen Mar 1, 2026; last seen Mar 8, 2026')
-      .and('contain', 'reviewing - Confidence 92%')
       .and('contain', 'Provider listing')
+    cy.get('[data-testid="discover-candidate-row-cand-005"]')
+      .should('contain', 'First seen Mar 1, 2026')
+      .and('contain', 'Last seen Mar 8, 2026')
+      .and('contain', 'reviewing')
+      .and('contain', 'Confidence 92%')
 
-    cy.get('[data-testid="discover-source-result-cand-005"]')
+    cy.get('[data-testid="discover-action-review-source-cand-005"]')
       .should('have.attr', 'href', 'https://provider.test/result/mini-z')
-      .and('contain', 'Review source result')
-    cy.get('[data-testid="discover-action-review-source-cand-005"]').should('be.visible')
+      .and('have.attr', 'aria-label', 'Review source result')
     cy.get('[data-testid="discover-action-wishlist-cand-005"]').should(
-      'contain',
+      'have.attr',
+      'aria-label',
       'Promote to Wishlist'
     )
     cy.get('[data-testid="discover-action-create-cand-005"]').should(
-      'contain',
-      'Inventory Handoff'
+      'have.attr',
+      'aria-label',
+      'Inventory handoff'
     )
     cy.get('[data-testid="discover-action-track-cand-005"]').should(
-      'contain',
-      'Purchase Follow-up'
+      'have.attr',
+      'aria-label',
+      'Purchase follow-up'
     )
     cy.get('[data-testid="discover-action-ignore-cand-005"]').should(
-      'contain',
-      'Ignore / Archive'
+      'have.attr',
+      'aria-label',
+      'Ignore or archive'
+    )
+  })
+
+  it('UI-SCREEN-DISCOVER-007 + #1533 renders dashboard summary source filters and ranked deal table', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-deal-wishlist',
+            title: 'AFX Wishlist Deal',
+            price: 42,
+            currency: 'AUD',
+            target_price: 55,
+            market_price_baseline: 70,
+            price_delta_percent: 24,
+            deal_score: 92,
+            match_type: 'wishlist_match',
+            match_reason: 'Wishlist match below target',
+            wishlist_id: 'wish-001',
+            source_provider: 'Market Watch',
+            query_name: 'AFX saved search',
+            source_result_url: 'https://provider.test/deal',
+            listing_id: 'deal-001',
+            seller_label: 'Hobby store',
+            first_seen: '2026-06-20T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 2,
+            triage_status: 'new',
+            confidence: 0.96,
+          },
+          {
+            candidate_id: 'cand-provider-attention',
+            title: 'Provider Auth Candidate',
+            price: 88,
+            currency: 'AUD',
+            match_type: 'provider_search',
+            source_provider: 'Provider Store',
+            source_trust_status: 'auth attention',
+            first_seen: '2026-06-21T00:00:00Z',
+            last_seen: '2026-06-24T00:00:00Z',
+            stock_state: 'unknown',
+            stock_count: 0,
+            needs_review: true,
+          },
+          {
+            candidate_id: 'cand-archived',
+            title: 'Archived Candidate',
+            price: 12,
+            currency: 'AUD',
+            match_type: 'market_watch_result',
+            source_provider: 'Market Watch',
+            first_seen: '2026-06-18T00:00:00Z',
+            last_seen: '2026-06-19T00:00:00Z',
+            stock_state: 'out_of_stock',
+            stock_count: 0,
+            triage_status: 'archived',
+          },
+        ],
+      },
+    }).as('discoverDashboardList')
+
+    signInToDiscoveries()
+    cy.wait('@discoverDashboardList')
+
+    cy.get('[data-testid="discover-dashboard-summary"]')
+      .should('contain', 'Best deals found')
+      .and('contain', 'Wishlist matches')
+      .and('contain', 'New since last visit')
+      .and('contain', 'Market Watch review')
+      .and('contain', 'Provider attention')
+
+    cy.get('[data-testid="discover-list"] table').should('be.visible')
+    cy.get('[data-testid="discover-candidate-row-cand-deal-wishlist"]')
+      .should('contain', 'Wishlist match below target')
+      .and('contain', 'A$42.00')
+      .and('contain', 'Target A$55.00')
+      .and('contain', 'Baseline A$70.00')
+      .and('contain', '24% saving')
+    cy.get('[data-testid="discover-candidate-row-cand-archived"]').should(
+      'not.exist'
+    )
+
+    cy.get('[data-testid="discover-filter-tab-archived"]').click()
+    cy.get('[data-testid="discover-candidate-row-cand-archived"]').should(
+      'be.visible'
+    )
+
+    cy.get('[data-testid="discover-filter-tab-wishlist"]').click()
+    cy.get('[data-testid="discover-candidate-row-cand-deal-wishlist"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="discover-candidate-row-cand-provider-attention"]').should(
+      'not.exist'
     )
   })
 

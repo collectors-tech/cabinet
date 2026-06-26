@@ -94,6 +94,25 @@ has already been purchased or delivered.
 - **AND** the resulting Wishlist row/card MUST show `Purchased: No` and `Delivered: No`
 - **AND** the row MUST keep purchase action controls available for the later purchase workflow
 
+### Requirement UI-SCREEN-DISCOVER-007: Discoveries SHALL render a dashboard-first found-deals review surface
+Discoveries SHALL prioritize collector-useful found deals and source outputs while
+preserving the candidate-inbox destination workflow.
+
+#### Scenario: Dashboard summary and source filters
+- **GIVEN** authenticated Discoveries route receives candidates with wishlist, deal, source, and triage metadata
+- **WHEN** `/discoveries` renders
+- **THEN** the screen MUST show summary counts for best deals, wishlist matches, new findings, Market Watch outputs, and provider/store attention
+- **AND** the screen MUST expose source filter tabs for all discoveries, wishlist matches, great prices, Market Watch, stores/providers, other public or shared inventories, and ignored or archived candidates
+
+#### Scenario: Ranked deal table
+- **GIVEN** discovery candidates include wishlist match, target price, baseline price, source provenance, stock, recency, confidence, and status metadata where available
+- **WHEN** the results surface renders
+- **THEN** the main content MUST render as a table-style review surface rather than a loose candidate card list
+- **AND** wishlist and deal candidates MUST be ranked ahead of lower-signal candidates
+- **AND** rows MUST show match reason, source/provider, price, target price, baseline, savings delta, availability, seller/source, first/last seen, triage status, confidence/review signal, and source-result access where available
+- **AND** ignored or archived candidates MUST be hidden from the default view and reachable through an explicit filter
+- **AND** source-result, Wishlist, Purchase follow-up, Inventory handoff, and ignore/archive actions MUST remain contextual and accessible without claiming ownership by default
+
 ## Acceptance Criteria
 - UC IDs cover filtering and each primary action class.
 - E2E mappings include action outcomes.
@@ -123,3 +142,4 @@ has already been purchased or delivered.
 | UC-DIS-12 | Discover loading state | Pending candidate-list request shows loading feedback and resolves to loaded candidates without route transition | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-003 shows loading state before candidate list resolves` |
 | UC-DIS-13 | Candidate action failure | Failed candidate action surfaces deterministic feedback without losing route or reloading the candidate list as success | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-002 + UC-DIS-13 keeps candidate list stable when an action fails` |
 | UC-DIS-14 | Empty candidate inbox | Empty Discoveries state explains no pending found-item candidates, suppresses candidate mutation controls, and keeps Market Watch handoff reachable | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 + UC-DIS-14 renders empty candidate inbox without mutation controls` |
+| UC-DIS-15 | Discoveries deal dashboard | Dashboard summary, source filters, ranked table rows, wishlist/deal priority, and ignored/archive review filter render from candidate metadata | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-007 + #1533 renders dashboard summary source filters and ranked deal table` |
