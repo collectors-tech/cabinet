@@ -64,6 +64,7 @@ type Message = {
     selection?: { active_workspace_collection?: string }
     assistant?: { provider?: string; model?: string }
     assistant_handoff?: { status?: string; inbox_item_id?: string }
+    app_control?: AppControlContext
   }
 }
 
@@ -71,7 +72,20 @@ type ActionPreview = {
   id: string
   action: string
   status: string
-  payload?: { part_number?: string; title?: string }
+  payload?: { part_number?: string; title?: string; item_id?: string }
+}
+
+type AppControlContext = {
+  capability_id?: string
+  policy?: string
+  route?: string
+  setup_needed?: boolean
+  preview?: ActionPreview
+  workflow_run?: {
+    id?: string
+    status?: string
+    confirmation_state?: string
+  }
 }
 
 type ApplyActionResult = {
@@ -156,6 +170,41 @@ function resultLink(result: ApplyActionResult | null) {
   return null
 }
 
+function labelForRoute(route: string) {
+  const normalized = route.replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!normalized) {
+    return 'Open Cabinet'
+  }
+  return `Open ${normalized
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' / ')}`
+}
+
+function navigationActionFromAppControl(
+  appControl: AppControlContext | undefined
+): NavigationAction | null {
+  const route = appControl?.route?.trim()
+  if (!route) {
+    return null
+  }
+  return {
+    id: appControl?.capability_id || 'navigate.open_surface',
+    label: labelForRoute(route),
+    target: route,
+    reason:
+      appControl?.policy === 'preview-before-apply'
+        ? 'Cabinet planned this as a read-only navigation action from the assistant thread.'
+        : 'Cabinet planned this route action from the assistant thread.',
+  }
+}
+
+function latestAppControl(messages: Message[]) {
+  return [...messages].reverse().find((message) => message.context?.app_control)
+    ?.context?.app_control
+}
+
 async function loadAssistantDefaultSettings(profileId: string) {
   const response = await fetch(`/api/profiles/${profileId}/settings`)
   if (!response.ok) {
@@ -235,6 +284,12 @@ export function AssistantWorkspacePanel() {
         ?.models || [],
     [provider]
   )
+  const appControl = useMemo(() => latestAppControl(messages), [messages])
+  const backendNavigationAction = useMemo(
+    () => navigationActionFromAppControl(appControl),
+    [appControl]
+  )
+  const displayedNavigationAction = navigationAction ?? backendNavigationAction
 
   const selectedThreadTitle = useMemo(
     () =>
@@ -357,6 +412,19 @@ export function AssistantWorkspacePanel() {
     return nextThreads
   }
 
+  useEffect(() => {
+    const preview = appControl?.preview
+    if (!preview?.id || actionPreview?.id === preview.id) {
+      return
+    }
+    setActionPreview(preview)
+    setApplyResult(null)
+    setExecutionState('running')
+    setPermissionGuidance(
+      'Cabinet created this preview from the assistant thread. Confirm before any mutation is applied.'
+    )
+  }, [actionPreview?.id, appControl?.preview])
+
   async function handleSelectThread(nextThreadId: string) {
     if (!activeProfileId || !nextThreadId || nextThreadId === threadId) return
     const selected = threads.find((thread) => thread.id === nextThreadId)
@@ -365,6 +433,7 @@ export function AssistantWorkspacePanel() {
     setThreadMetadata(selected?.metadata ?? {})
     if (selected?.metadata?.provider) setProvider(selected.metadata.provider)
     if (selected?.metadata?.model) setModel(selected.metadata.model)
+    setMessages([])
     setActionPreview(null)
     setApplyResult(null)
     setExecutionState('idle')
@@ -590,6 +659,7 @@ export function AssistantWorkspacePanel() {
       setActionPreview(null)
       setApplyResult(null)
       setNavigationAction(null)
+      setMessages([])
       setExecutionState('idle')
       await loadMessages(activeProfileId, newThreadId)
     } catch (err) {
@@ -744,10 +814,7 @@ export function AssistantWorkspacePanel() {
   const applyLink = resultLink(applyResult)
 
   return (
-    <div
-      className='px-2 py-2'
-      data-testid='shell-assistant-workspace'
-    >
+    <div className='px-2 py-2' data-testid='shell-assistant-workspace'>
       <AssistantRuntimeProvider runtime={assistantRuntime}>
         <AssistantModalPrimitive.Root
           defaultOpen
@@ -923,9 +990,7 @@ export function AssistantWorkspacePanel() {
 
                 <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
                   <label className='space-y-1'>
-                    <span className='font-medium text-slate-300'>
-                      Provider
-                    </span>
+                    <span className='font-medium text-slate-300'>Provider</span>
                     <select
                       data-testid='shell-assistant-provider-select'
                       className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100'
@@ -983,7 +1048,7 @@ export function AssistantWorkspacePanel() {
                     reset creates a clean thread for the current profile.
                   </span>
                 </div>
-                {navigationAction ? (
+                {displayedNavigationAction ? (
                   <div
                     className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-3 text-sm'
                     data-testid='shell-assistant-navigation-action'
@@ -991,12 +1056,14 @@ export function AssistantWorkspacePanel() {
                     <div className='flex items-start gap-2'>
                       <ExternalLink className='mt-0.5 h-4 w-4 text-primary' />
                       <div className='min-w-0 flex-1'>
-                        <p className='font-medium'>{navigationAction.label}</p>
+                        <p className='font-medium'>
+                          {displayedNavigationAction.label}
+                        </p>
                         <p
                           className='mt-1 text-xs text-muted-foreground'
                           data-testid='shell-assistant-navigation-reason'
                         >
-                          {navigationAction.reason}
+                          {displayedNavigationAction.reason}
                         </p>
                         <Button
                           type='button'
@@ -1005,7 +1072,9 @@ export function AssistantWorkspacePanel() {
                           className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
                           data-testid='shell-assistant-navigation-action-open'
                           onClick={() =>
-                            void navigate({ to: navigationAction.target })
+                            void navigate({
+                              to: displayedNavigationAction.target,
+                            })
                           }
                         >
                           <ExternalLink className='h-3.5 w-3.5' />
@@ -1023,9 +1092,9 @@ export function AssistantWorkspacePanel() {
                   data-testid='shell-assistant-message-list'
                 >
                   {loading ? (
-                      <p className='text-sm text-slate-400'>
-                        Loading assistant workspace...
-                      </p>
+                    <p className='text-sm text-slate-400'>
+                      Loading assistant workspace...
+                    </p>
                   ) : null}
                   {!loading && messages.length === 0 ? (
                     <div className='rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-400'>
