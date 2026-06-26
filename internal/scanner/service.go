@@ -113,6 +113,10 @@ type Provider interface {
 	Search(ctx context.Context, q QuerySet) ([]CandidateInput, error)
 }
 
+type providerIdentifier interface {
+	ProviderID() string
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -520,6 +524,7 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 	if provider == nil {
 		return RunResult{}, fmt.Errorf("provider is required")
 	}
+	providerID := providerHealthID(provider, qs)
 	requestedItemsPerPage, effectiveItemsPerPage, itemsPerPageWarning := resolveItemsPerPage(
 		qs.ProviderScope,
 		qs.ItemsPerPage,
@@ -535,7 +540,7 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		items, lastErr = provider.Search(ctx, qs)
 		if lastErr == nil {
-			s.recordProviderHealth(ctx, "ebay", "ok", "")
+			s.recordProviderHealth(ctx, providerID, "ok", "")
 			result, persistErr := s.persistCandidatesForProfile(
 				ctx,
 				strings.TrimSpace(profileID),
@@ -548,8 +553,8 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 			)
 			return result, persistErr
 		}
-		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error(), retryAfterSecondsFromError(lastErr))
-		s.logFailure(ctx, strings.TrimSpace(profileID), qs.ID, "ebay", lastErr.Error())
+		s.recordProviderHealth(ctx, providerID, "error", lastErr.Error(), retryAfterSecondsFromError(lastErr))
+		s.logFailure(ctx, strings.TrimSpace(profileID), qs.ID, providerID, lastErr.Error())
 		if attempt < maxAttempts {
 			sleep := time.Duration(1000/qs.RateLimitRPS) * time.Millisecond
 			if sleep < 100*time.Millisecond {
@@ -566,6 +571,20 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 		PageCount:             0,
 		ItemsPerPageWarning:   itemsPerPageWarning,
 	}, fmt.Errorf("run failed: %w", lastErr)
+}
+
+func providerHealthID(provider Provider, qs QuerySet) string {
+	if identified, ok := provider.(providerIdentifier); ok {
+		if id := strings.TrimSpace(strings.ToLower(identified.ProviderID())); id != "" {
+			return id
+		}
+	}
+	for _, candidate := range qs.ProviderScope {
+		if id := strings.TrimSpace(strings.ToLower(candidate)); id != "" {
+			return id
+		}
+	}
+	return "ebay"
 }
 
 func (s *Service) RunScheduled(ctx context.Context, provider Provider) (int, error) {

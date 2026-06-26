@@ -32,6 +32,10 @@ type DisabledProvider struct {
 	name string
 }
 
+func (p DisabledProvider) ProviderID() string {
+	return p.name
+}
+
 func (p DisabledProvider) Search(context.Context, QuerySet) ([]CandidateInput, error) {
 	return nil, fmt.Errorf("%s provider is disabled", p.name)
 }
