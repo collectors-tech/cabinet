@@ -1,0 +1,14 @@
+{
+  "products": [
+    {
+      "id": "bc-fixture-1",
+      "name": "Scalextric Bathurst Mustang",
+      "url": "https://voglers.com.au/products/scalextric-bathurst-mustang",
+      "price": "59.95",
+      "image": "https://voglers.com.au/images/scalextric-bathurst-mustang.jpg"
+    }
+  ],
+  "meta": {
+    "total": 1
+  }
+}

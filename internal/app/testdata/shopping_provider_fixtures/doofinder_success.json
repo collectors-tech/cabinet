@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "id": "df-fixture-1",
+      "title": "Carrera Digital 132 Porsche",
+      "link": "https://www.mrtoys.com.au/products/carrera-digital-132-porsche",
+      "price": "72.50",
+      "image_link": "https://cdn.mrtoys.com.au/products/carrera-digital-132-porsche.jpg"
+    }
+  ],
+  "meta": {
+    "total": 1
+  }
+}

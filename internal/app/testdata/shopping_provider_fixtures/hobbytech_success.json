@@ -1,0 +1,14 @@
+{
+  "products": [
+    {
+      "id": "hb-fixture-1",
+      "title": "AFX Mega G+ Camaro",
+      "url": "https://hobbytechtoys.com.au/products/afx-mega-g-camaro",
+      "price": "24.95",
+      "image": "https://hobbytechtoys.com.au/cdn/afx-mega-g-camaro.jpg"
+    }
+  ],
+  "pagination": {
+    "total_pages": 1
+  }
+}
