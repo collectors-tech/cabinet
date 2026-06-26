@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Archive,
+  ArrowUpDown,
   ExternalLink,
   Heart,
   PackagePlus,
@@ -74,11 +75,14 @@ type DiscoveryTab =
   | 'other'
   | 'archived'
 
+type DiscoverySort = 'ranked' | 'deal' | 'last_seen'
+
 export function Discover() {
   const [query, setQuery] = useState('')
   const [priceMax, setPriceMax] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [activeTab, setActiveTab] = useState<DiscoveryTab>('all')
+  const [sortMode, setSortMode] = useState<DiscoverySort>('ranked')
   const [items, setItems] = useState<DiscoveryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -222,7 +226,11 @@ export function Discover() {
       return item.price_delta_percent
     }
     const baseline = item.target_price || item.market_price_baseline
-    if (typeof item.price === 'number' && typeof baseline === 'number' && baseline > 0) {
+    if (
+      typeof item.price === 'number' &&
+      typeof baseline === 'number' &&
+      baseline > 0
+    ) {
       return Math.round(((baseline - item.price) / baseline) * 100)
     }
     return undefined
@@ -271,14 +279,26 @@ export function Discover() {
     return 'Review ready'
   }
 
+  const dealScore = (item: DiscoveryItem) =>
+    (isArchived(item) ? -1000 : 0) +
+    (isWishlistMatch(item) ? 500 : 0) +
+    (isGreatDeal(item) ? 300 : 0) +
+    (item.deal_score ?? 0) +
+    (item.needs_review ? 10 : 0)
+
+  const lastSeenTime = (item: DiscoveryItem) => {
+    const parsed = new Date(item.last_seen)
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime()
+  }
+
   const sortedItems = [...items].sort((a, b) => {
-    const score = (item: DiscoveryItem) =>
-      (isArchived(item) ? -1000 : 0) +
-      (isWishlistMatch(item) ? 500 : 0) +
-      (isGreatDeal(item) ? 300 : 0) +
-      (item.deal_score ?? 0) +
-      (item.needs_review ? 10 : 0)
-    return score(b) - score(a)
+    if (sortMode === 'deal') {
+      return dealScore(b) - dealScore(a)
+    }
+    if (sortMode === 'last_seen') {
+      return lastSeenTime(b) - lastSeenTime(a)
+    }
+    return dealScore(b) - dealScore(a)
   })
 
   const visibleItems = sortedItems.filter((item) => {
@@ -293,9 +313,10 @@ export function Discover() {
         return isStoreOrProvider(item) && !isArchived(item)
       case 'other':
         return (
-          item.match_type === 'public_binder_match' ||
-          item.match_type === 'peer_session_match'
-        ) && !isArchived(item)
+          (item.match_type === 'public_binder_match' ||
+            item.match_type === 'peer_session_match') &&
+          !isArchived(item)
+        )
       case 'archived':
         return isArchived(item)
       default:
@@ -304,13 +325,15 @@ export function Discover() {
   })
 
   const summary = {
-    deals: items.filter((item) => isGreatDeal(item) && !isArchived(item)).length,
+    deals: items.filter((item) => isGreatDeal(item) && !isArchived(item))
+      .length,
     wishlist: items.filter((item) => isWishlistMatch(item) && !isArchived(item))
       .length,
     newFinds: items.filter((item) => statusLabel(item).toLowerCase() === 'new')
       .length,
-    marketWatch: items.filter((item) => isMarketWatch(item) && !isArchived(item))
-      .length,
+    marketWatch: items.filter(
+      (item) => isMarketWatch(item) && !isArchived(item)
+    ).length,
     attention: items.filter(
       (item) =>
         !isArchived(item) &&
@@ -373,9 +396,8 @@ export function Discover() {
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>Discoveries</h1>
           <p className='text-muted-foreground'>
-            Found deals and source outputs worth reviewing from wishlist,
-            Market Watch, stores, providers, and shared public discovery
-            surfaces.
+            Found deals and source outputs worth reviewing from wishlist, Market
+            Watch, stores, providers, and shared public discovery surfaces.
           </p>
         </div>
 
@@ -510,7 +532,10 @@ export function Discover() {
           </p>
         ) : null}
 
-        <div data-testid='discover-list' className='overflow-hidden rounded-md border'>
+        <div
+          data-testid='discover-list'
+          className='overflow-hidden rounded-md border'
+        >
           {loading ? (
             <p className='p-4 text-sm text-muted-foreground'>
               Loading discoveries... Checking provider signals.
@@ -542,10 +567,36 @@ export function Discover() {
                 <thead className='bg-muted/50 text-left text-xs text-muted-foreground'>
                   <tr>
                     <th className='px-3 py-2 font-medium'>Discovery</th>
-                    <th className='px-3 py-2 font-medium'>Deal</th>
+                    <th className='px-3 py-2 font-medium'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='ghost'
+                        className='h-auto px-0 text-xs font-medium text-muted-foreground hover:bg-transparent'
+                        data-testid='discover-sort-deal'
+                        aria-pressed={sortMode === 'deal'}
+                        onClick={() => setSortMode('deal')}
+                      >
+                        Deal
+                        <ArrowUpDown className='ml-1 h-3 w-3' />
+                      </Button>
+                    </th>
                     <th className='px-3 py-2 font-medium'>Source</th>
                     <th className='px-3 py-2 font-medium'>Stock</th>
-                    <th className='px-3 py-2 font-medium'>Seen</th>
+                    <th className='px-3 py-2 font-medium'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='ghost'
+                        className='h-auto px-0 text-xs font-medium text-muted-foreground hover:bg-transparent'
+                        data-testid='discover-sort-last-seen'
+                        aria-pressed={sortMode === 'last_seen'}
+                        onClick={() => setSortMode('last_seen')}
+                      >
+                        Seen
+                        <ArrowUpDown className='ml-1 h-3 w-3' />
+                      </Button>
+                    </th>
                     <th className='px-3 py-2 font-medium'>Status</th>
                     <th className='px-3 py-2 font-medium'>Actions</th>
                   </tr>
@@ -588,7 +639,11 @@ export function Discover() {
                           <div className='space-y-1'>
                             <p className='font-medium'>{formatMoney(item)}</p>
                             <p className='text-xs text-muted-foreground'>
-                              Target {formatMoneyValue(item.target_price, item.currency)}
+                              Target{' '}
+                              {formatMoneyValue(
+                                item.target_price,
+                                item.currency
+                              )}
                             </p>
                             <p className='text-xs text-muted-foreground'>
                               Baseline{' '}
@@ -612,7 +667,9 @@ export function Discover() {
                           <div className='space-y-1'>
                             <p>{sourceLabel(item)}</p>
                             <p className='text-xs text-muted-foreground'>
-                              {item.query_name?.trim() || item.source_trust_status || 'Source ready'}
+                              {item.query_name?.trim() ||
+                                item.source_trust_status ||
+                                'Source ready'}
                             </p>
                             <p className='text-xs text-muted-foreground'>
                               {item.source_result_id?.trim() ||

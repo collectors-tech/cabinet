@@ -664,6 +664,88 @@ describe('dashboard/ui-screen-discover', () => {
     cy.get('@unexpectedDiscoverAction.all').should('have.length', 0)
   })
 
+  it('UI-SCREEN-DISCOVER-007 sorts the dashboard table by deal and recency without mutating candidates', () => {
+    cy.intercept('POST', '/api/discovery/action').as('unexpectedDiscoverAction')
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-middle-deal',
+            title: 'Middle Deal Candidate',
+            price: 40,
+            currency: 'AUD',
+            target_price: 45,
+            market_price_baseline: 80,
+            deal_score: 60,
+            match_type: 'store_stock',
+            source_provider: 'Store Stock',
+            first_seen: '2026-06-19T00:00:00Z',
+            last_seen: '2026-06-23T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+            triage_status: 'new',
+          },
+          {
+            candidate_id: 'cand-best-deal',
+            title: 'Best Deal Candidate',
+            price: 25,
+            currency: 'AUD',
+            target_price: 35,
+            market_price_baseline: 90,
+            deal_score: 96,
+            match_type: 'wishlist_match',
+            source_provider: 'Market Watch',
+            first_seen: '2026-06-18T00:00:00Z',
+            last_seen: '2026-06-21T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 2,
+            triage_status: 'new',
+          },
+          {
+            candidate_id: 'cand-latest-seen',
+            title: 'Latest Seen Candidate',
+            price: 55,
+            currency: 'AUD',
+            target_price: 60,
+            market_price_baseline: 70,
+            deal_score: 35,
+            match_type: 'market_watch_result',
+            source_provider: 'Market Watch',
+            first_seen: '2026-06-20T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 4,
+            triage_status: 'reviewing',
+          },
+        ],
+      },
+    }).as('discoverSortableList')
+
+    signInToDiscoveries()
+    cy.wait('@discoverSortableList')
+
+    cy.get('[data-testid^="discover-candidate-row-"]')
+      .eq(0)
+      .should('have.attr', 'data-testid', 'discover-candidate-row-cand-best-deal')
+
+    cy.get('[data-testid="discover-sort-last-seen"]').click()
+    cy.get('[data-testid^="discover-candidate-row-"]')
+      .eq(0)
+      .should(
+        'have.attr',
+        'data-testid',
+        'discover-candidate-row-cand-latest-seen'
+      )
+
+    cy.get('[data-testid="discover-sort-deal"]').click()
+    cy.get('[data-testid^="discover-candidate-row-"]')
+      .eq(0)
+      .should('have.attr', 'data-testid', 'discover-candidate-row-cand-best-deal')
+    cy.get('[data-testid="discover-action-status"]').should('not.exist')
+    cy.get('@unexpectedDiscoverAction.all').should('have.length', 0)
+  })
+
   it('UI-SCREEN-DISCOVER-007 renders provider-attention no-match and promoted destination states', () => {
     cy.intercept('GET', '/api/discovery/not-in-collection*', {
       statusCode: 200,
