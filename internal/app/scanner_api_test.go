@@ -495,6 +495,9 @@ func TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance(t *testing.T) 
 	if healthPayload["state"] != "degraded" || healthPayload["last_error"] == nil {
 		t.Fatalf("expected degraded provider health with last_error, got %+v", healthPayload)
 	}
+	if healthPayload["next_action"] != "check_provider_health_and_credentials" {
+		t.Fatalf("expected degraded provider health next action, got %+v", healthPayload)
+	}
 	if got, ok := healthPayload["retry_after_seconds"].(float64); !ok || int(got) != 120 {
 		t.Fatalf("expected provider health retry_after_seconds=120, got %+v", healthPayload)
 	}
