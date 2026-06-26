@@ -92,6 +92,33 @@ func TestShoppingProviderFixturesNormalizeSharedCandidateShape(t *testing.T) {
 				return doofinderCandidatesForScanner(candidates, "mrtoys.com.au")
 			},
 		},
+		{
+			name:       "frontline algolia product fixture",
+			providerID: "frontlinehobbies",
+			run: func(t *testing.T, serverURL string, client *http.Client) []scanner.CandidateInput {
+				t.Helper()
+				candidates, total, err := runFrontlineAlgoliaSearch(
+					context.Background(),
+					client,
+					serverURL+"/frontline/algolia/query",
+					scanner.QuerySet{Name: "Slot.it", Keywords: []string{"Slot.it"}},
+					frontlineAlgoliaConfig{
+						ApplicationID: "fixture-app",
+						SearchKey:     "fixture-key",
+						IndexNames:    []string{"products"},
+					},
+					"https://www.frontlinehobbies.com.au",
+					24,
+				)
+				if err != nil {
+					t.Fatalf("runFrontlineAlgoliaSearch() error = %v", err)
+				}
+				if total != 1 {
+					t.Fatalf("expected total=1 from fixture, got %d", total)
+				}
+				return frontlineCandidatesForScanner(candidates)
+			},
+		},
 	}
 
 	server := shoppingFixtureServer(t)
@@ -255,6 +282,7 @@ func shoppingFixtureServer(t *testing.T) *httptest.Server {
 		"/bigcommerce/products/search":  readShoppingFixture(t, "bigcommerce_storefront_success.json"),
 		"/bigcommerce/graphql":          readShoppingFixture(t, "bigcommerce_graphql_stock_success.json"),
 		"/doofinder/search":             readShoppingFixture(t, "doofinder_success.json"),
+		"/frontline/algolia/query":      readShoppingFixture(t, "frontline_algolia_success.json"),
 		"/missing-fields/search":        readShoppingFixture(t, "missing_required_fields.json"),
 		"/wp-json/wc/store/v1/products": readShoppingFixture(t, "bonza_category_listing_success.json"),
 		"/unsupported/manual-fallback":  readShoppingFixture(t, "unsupported_manual_fallback.json"),
