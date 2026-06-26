@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent } from 'react'
-import { useLocation } from '@tanstack/react-router'
+import { useLocation, useNavigate } from '@tanstack/react-router'
 import {
   ArrowDown,
   ArrowUp,
@@ -8,10 +8,11 @@ import {
   EyeOff,
   GripVertical,
   MessageSquare,
+  MoreHorizontal,
   PanelLeft,
-  Pencil,
   SearchIcon,
-  X,
+  Settings,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
@@ -26,6 +27,12 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
@@ -67,8 +74,9 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 
 export function AppSidebar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { collapsible, variant } = useLayout()
-  const { state: sidebarState, isMobile } = useSidebar()
+  const { state: sidebarState, isMobile, setOpen } = useSidebar()
   const { t } = useTranslation('nav')
   const { open: searchOpen, setOpen: setSearchOpen } = useSearch()
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
@@ -85,6 +93,9 @@ export function AppSidebar() {
   const normalizeNavKey = (title: string) => navKeyForTitle(title)
   const [navEditMode, setNavEditMode] = useState(false)
   const [navEditOrder, setNavEditOrder] = useState<string[]>([])
+  const [navDraftPreferences, setNavDraftPreferences] = useState<
+    Record<string, NavPreference>
+  >({})
   const [draggedNavKey, setDraggedNavKey] = useState<string | null>(null)
   const [dragOverNavTarget, setDragOverNavTarget] = useState<{
     key: string
@@ -205,6 +216,36 @@ export function AppSidebar() {
     })
   }
 
+  const openNavEditor = () => {
+    clearNavDragState()
+    setOpen(true)
+    setActiveWorkspace('navigation')
+    setNavDraftPreferences(navPreferences)
+    setNavEditOrder(orderedPrimaryKeys)
+    setNavEditMode(true)
+  }
+
+  const closeNavEditor = () => {
+    clearNavDragState()
+    setNavEditMode(false)
+    setNavDraftPreferences({})
+    setNavEditOrder([])
+  }
+
+  const applyNavEditor = () => {
+    setNavPreferences(() => {
+      const nextPreferences: Record<string, NavPreference> = {}
+      navEditOrder.forEach((itemKey, index) => {
+        nextPreferences[itemKey] = {
+          order: index,
+          hidden: navDraftPreferences[itemKey]?.hidden ?? false,
+        }
+      })
+      return nextPreferences
+    })
+    closeNavEditor()
+  }
+
   const handleNavDragStart = (
     key: string,
     event: DragEvent<HTMLButtonElement>
@@ -258,7 +299,7 @@ export function AppSidebar() {
   }
 
   const togglePrimaryVisibility = (key: string) => {
-    setNavPreferences((current) => ({
+    setNavDraftPreferences((current) => ({
       ...current,
       [key]: {
         order:
@@ -283,6 +324,29 @@ export function AppSidebar() {
     const key = navKeyForTitle(item.title)
     return !navPreferences[key]?.hidden
   })
+  const visibleDraftItemCount = navEditOrder.filter(
+    (key) => !(navDraftPreferences[key]?.hidden ?? false)
+  ).length
+  const hasHiddenDraftItems = navEditOrder.some(
+    (key) => navDraftPreferences[key]?.hidden ?? false
+  )
+  const resetNavEditorDefaults = () => {
+    clearNavDragState()
+    setNavEditOrder(primaryItems.map((item) => navKeyForTitle(item.title)))
+    setNavDraftPreferences({})
+  }
+  const restoreHiddenDraftItems = () => {
+    setNavDraftPreferences((current) => {
+      const next = { ...current }
+      navEditOrder.forEach((itemKey, index) => {
+        next[itemKey] = {
+          order: current[itemKey]?.order ?? index,
+          hidden: false,
+        }
+      })
+      return next
+    })
+  }
 
   const translateItem = (item: NavItem): NavItem => {
     if ('items' in item) {
@@ -328,6 +392,11 @@ export function AppSidebar() {
   }
   const openWorkspaceSearch = () => {
     setSearchOpen(true)
+  }
+  const openSettingsDisplay = () => {
+    setNavEditMode(false)
+    setActiveWorkspace('navigation')
+    void navigate({ to: '/settings/display' })
   }
   const inboxActive = location.pathname.startsWith('/inbox')
   const navigationActive =
@@ -400,6 +469,39 @@ export function AppSidebar() {
                 data-testid='shell-workspace-bell-badge'
               />
             </a>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type='button'
+                  aria-label='Open workspace menu'
+                  title='Open workspace menu'
+                  data-testid='shell-workspace-menu-trigger'
+                  className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[state=open]:bg-slate-800 data-[state=open]:text-white'
+                >
+                  <MoreHorizontal className='h-4 w-4' aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align='start'
+                side={isCollapsedSidebar ? 'right' : 'bottom'}
+                className='w-48'
+              >
+                <DropdownMenuItem
+                  onSelect={openNavEditor}
+                  data-testid='shell-workspace-menu-customise-nav'
+                >
+                  <SlidersHorizontal className='h-4 w-4' aria-hidden />
+                  <span>Customise Nav</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={openSettingsDisplay}
+                  data-testid='shell-workspace-menu-settings'
+                >
+                  <Settings className='h-4 w-4' aria-hidden />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -407,67 +509,45 @@ export function AppSidebar() {
          /* if you want to use the normal app title instead of TeamSwitch dropdown */}
         {/* <AppTitle /> */}
       </SidebarHeader>
-      <SidebarContent>
-        {activeWorkspace === 'navigation'
-          ? translatedNavGroups.map((props) => (
-              <NavGroup key={props.title} {...props} />
-            ))
-          : null}
-        {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
-      </SidebarContent>
-      <SidebarFooter>
-        <div className='px-2 pb-2'>
-          <button
-            type='button'
-            className='inline-flex h-8 w-8 items-center justify-center rounded-full border text-muted-foreground hover:bg-muted'
-            data-testid='sidebar-nav-edit-toggle'
-            onClick={() => {
-              setNavEditMode((open) => {
-                const nextOpen = !open
-                clearNavDragState()
-                if (nextOpen) {
-                  setNavEditOrder(orderedPrimaryKeys)
-                } else {
-                  setNavPreferences((current) => {
-                    const nextPreferences = { ...current }
-                    navEditOrder.forEach((itemKey, index) => {
-                      nextPreferences[itemKey] = {
-                        order: index,
-                        hidden: current[itemKey]?.hidden ?? false,
-                      }
-                    })
-                    return nextPreferences
-                  })
-                }
-                return nextOpen
-              })
-            }}
+      <SidebarContent className={navEditMode ? 'overflow-hidden' : undefined}>
+        {navEditMode ? (
+          <div
+            className='flex min-h-full flex-col overflow-hidden px-2 py-2'
+            data-testid='sidebar-nav-edit-panel'
           >
-            {navEditMode ? (
-              <X className='h-4 w-4' />
-            ) : (
-              <Pencil className='h-4 w-4' />
-            )}
-          </button>
-          {navEditMode ? (
+            <div className='shrink-0 border-b border-sidebar-border/70 pb-2'>
+              <h2 className='text-sm font-semibold'>Customise Nav</h2>
+              <p className='mt-1 text-xs leading-5 text-muted-foreground'>
+                Reorder and hide primary nav without changing routes or
+                permissions.
+              </p>
+              <p
+                className='mt-2 text-xs font-medium'
+                data-testid='sidebar-nav-visible-count'
+              >
+                {visibleDraftItemCount} items visible in the sidebar
+              </p>
+            </div>
             <div
-              className='mt-2 space-y-1 rounded-md border p-2 text-xs'
-              data-testid='sidebar-nav-edit-panel'
+              className='min-h-0 flex-1 space-y-1 overflow-y-auto py-2 pr-1'
+              data-testid='sidebar-nav-edit-list'
             >
-              {navEditOrder.map((key) => {
+              {navEditOrder.map((key, index) => {
                 const item = primaryItemsByKey.get(key)
                 if (!item) {
                   return null
                 }
-                const hidden = navPreferences[key]?.hidden ?? false
+                const hidden = navDraftPreferences[key]?.hidden ?? false
                 const dragPosition =
                   dragOverNavTarget?.key === key
                     ? dragOverNavTarget.position
                     : null
+                const isFirst = index === 0
+                const isLast = index === navEditOrder.length - 1
                 return (
                   <div
                     key={key}
-                    className='relative'
+                    className='relative scroll-my-16'
                     data-testid={`sidebar-nav-edit-dropzone-${key}`}
                     onDragOver={(event) => handleNavDragOver(key, event)}
                     onDrop={(event) => handleNavDrop(key, event)}
@@ -479,12 +559,12 @@ export function AppSidebar() {
                   >
                     {dragPosition === 'before' ? (
                       <div
-                        className='absolute inset-x-1 -top-1 h-0.5 rounded-full bg-primary'
+                        className='mx-1 mb-1 h-0.5 rounded-full bg-primary'
                         data-testid={`sidebar-nav-drop-indicator-before-${key}`}
                       />
                     ) : null}
                     <div
-                      className='flex items-center justify-between gap-2 rounded-md border border-transparent px-1 py-1'
+                      className='rounded-md border border-sidebar-border bg-sidebar-accent/30 p-2'
                       data-testid={`sidebar-nav-edit-item-${key}`}
                       data-dragging={draggedNavKey === key ? 'true' : 'false'}
                     >
@@ -493,57 +573,78 @@ export function AppSidebar() {
                           type='button'
                           draggable
                           aria-label={`Drag ${item.title}`}
+                          title={`Drag ${item.title}`}
                           data-testid={`sidebar-nav-drag-handle-${key}`}
-                          className='cursor-grab rounded border p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing'
+                          className='cursor-grab rounded border border-sidebar-border p-1 text-muted-foreground hover:bg-sidebar-accent active:cursor-grabbing'
                           onDragStart={(event) =>
                             handleNavDragStart(key, event)
                           }
                           onDragEnd={clearNavDragState}
                         >
-                          <GripVertical className='h-3 w-3' />
+                          <GripVertical className='h-3 w-3' aria-hidden />
                         </button>
-                        <span
-                          className={
-                            hidden ? 'truncate opacity-50' : 'truncate'
-                          }
-                        >
-                          {item.title}
-                        </span>
+                        <div className='min-w-0 flex-1'>
+                          <p
+                            className={
+                              hidden
+                                ? 'truncate text-xs font-medium opacity-50'
+                                : 'truncate text-xs font-medium'
+                            }
+                          >
+                            {item.title}
+                          </p>
+                          <p
+                            className='truncate text-[11px] text-muted-foreground'
+                            data-testid={`sidebar-nav-stable-id-${key}`}
+                          >
+                            {key}
+                          </p>
+                        </div>
                       </div>
-                      <div className='flex items-center gap-1'>
+                      <div className='mt-2 grid grid-cols-3 gap-1'>
                         <button
                           type='button'
+                          aria-label={`Move ${item.title} up`}
+                          title={`Move ${item.title} up`}
                           data-testid={`sidebar-nav-move-up-${key}`}
-                          className='rounded border p-1 hover:bg-muted'
+                          disabled={isFirst}
+                          className='inline-flex h-7 items-center justify-center rounded border border-sidebar-border text-xs hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-45'
                           onClick={() => movePrimaryItem(key, 'up')}
                         >
-                          <ArrowUp className='h-3 w-3' />
+                          <ArrowUp className='h-3 w-3' aria-hidden />
+                          <span className='sr-only'>Move up</span>
                         </button>
                         <button
                           type='button'
+                          aria-label={`Move ${item.title} down`}
+                          title={`Move ${item.title} down`}
                           data-testid={`sidebar-nav-move-down-${key}`}
-                          className='rounded border p-1 hover:bg-muted'
+                          disabled={isLast}
+                          className='inline-flex h-7 items-center justify-center rounded border border-sidebar-border text-xs hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-45'
                           onClick={() => movePrimaryItem(key, 'down')}
                         >
-                          <ArrowDown className='h-3 w-3' />
+                          <ArrowDown className='h-3 w-3' aria-hidden />
+                          <span className='sr-only'>Move down</span>
                         </button>
                         <button
                           type='button'
                           data-testid={`sidebar-nav-visibility-${key}`}
-                          className='rounded border p-1 hover:bg-muted'
+                          aria-label={`${hidden ? 'Show' : 'Hide'} ${item.title}`}
+                          className='inline-flex h-7 items-center justify-center gap-1 rounded border border-sidebar-border px-1 text-xs hover:bg-sidebar-accent'
                           onClick={() => togglePrimaryVisibility(key)}
                         >
                           {hidden ? (
-                            <EyeOff className='h-3 w-3' />
+                            <Eye className='h-3 w-3' aria-hidden />
                           ) : (
-                            <Eye className='h-3 w-3' />
+                            <EyeOff className='h-3 w-3' aria-hidden />
                           )}
+                          <span>{hidden ? 'Show' : 'Hide'}</span>
                         </button>
                       </div>
                     </div>
                     {dragPosition === 'after' ? (
                       <div
-                        className='absolute inset-x-1 -bottom-1 h-0.5 rounded-full bg-primary'
+                        className='mx-1 mt-1 h-0.5 rounded-full bg-primary'
                         data-testid={`sidebar-nav-drop-indicator-after-${key}`}
                       />
                     ) : null}
@@ -551,8 +652,55 @@ export function AppSidebar() {
                 )
               })}
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : activeWorkspace === 'navigation' ? (
+          translatedNavGroups.map((props) => (
+            <NavGroup key={props.title} {...props} />
+          ))
+        ) : null}
+        {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
+      </SidebarContent>
+      <SidebarFooter>
+        {navEditMode ? (
+          <div
+            className='grid grid-cols-2 gap-1 border-t border-sidebar-border/70 pt-2'
+            data-testid='sidebar-nav-edit-footer'
+          >
+            <button
+              type='button'
+              className='rounded border border-sidebar-border px-2 py-1.5 text-xs hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-45'
+              data-testid='sidebar-nav-restore-hidden'
+              disabled={!hasHiddenDraftItems}
+              onClick={restoreHiddenDraftItems}
+            >
+              Restore hidden items
+            </button>
+            <button
+              type='button'
+              className='rounded border border-sidebar-border px-2 py-1.5 text-xs hover:bg-sidebar-accent'
+              data-testid='sidebar-nav-reset-defaults'
+              onClick={resetNavEditorDefaults}
+            >
+              Reset defaults
+            </button>
+            <button
+              type='button'
+              className='rounded border border-sidebar-border px-2 py-1.5 text-xs hover:bg-sidebar-accent'
+              data-testid='sidebar-nav-cancel'
+              onClick={closeNavEditor}
+            >
+              Cancel
+            </button>
+            <button
+              type='button'
+              className='rounded bg-primary px-2 py-1.5 text-xs text-primary-foreground hover:bg-primary/90'
+              data-testid='sidebar-nav-apply'
+              onClick={applyNavEditor}
+            >
+              Apply
+            </button>
+          </div>
+        ) : null}
         <NavUser user={sidebarUser} />
         {!isCollapsedSidebar ? (
           <div

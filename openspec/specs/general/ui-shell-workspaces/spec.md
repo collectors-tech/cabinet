@@ -49,3 +49,23 @@ When Inbox has no items, the workspace MUST provide clear actions so users are n
 - **WHEN** the empty state renders
 - **THEN** the workspace MUST show at least one explicit refresh or navigation affordance
 - **AND** users MUST be able to open a related communications surface without guessing
+
+### Requirement UI-SHELL-WORKSPACES-007: Workspace overflow menu SHALL expose Settings and left-panel navigation customisation
+Authenticated shell workspace rail MUST expose an overflow menu with `Customise Nav` and `Settings`. `Settings` MUST navigate to the Settings Display surface. `Customise Nav` MUST open a left workspace/sidebar panel that edits primary nav ordering and visibility as draft changes until the user applies them.
+
+#### Scenario: Open Settings from workspace overflow
+- **GIVEN** authenticated shell workspace rail is visible
+- **WHEN** user opens the overflow menu and selects `Settings`
+- **THEN** Cabinet MUST navigate to `/settings/display`
+- **AND** the overflow menu MUST close after selection
+
+#### Scenario: Customise primary nav in the left panel
+- **GIVEN** authenticated shell workspace rail is visible
+- **WHEN** user opens the overflow menu and selects `Customise Nav`
+- **THEN** the left workspace/sidebar panel MUST show `Customise Nav`
+- **AND** the panel MUST show visible item count, stable nav IDs, hide/show controls, move up/down controls, and drag handles where supported
+- **AND** the panel MUST keep footer actions visible for `Restore hidden items`, `Reset defaults`, `Cancel`, and `Apply`
+- **AND** move/hide draft changes MUST update the editor immediately without changing saved sidebar navigation until `Apply`
+- **AND** `Cancel` MUST discard pending changes
+- **AND** `Apply` MUST persist order and hidden state using shell/nav preference storage
+- **AND** hidden primary nav items MUST remain directly routable when permissions allow

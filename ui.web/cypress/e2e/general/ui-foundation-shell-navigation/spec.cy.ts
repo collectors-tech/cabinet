@@ -10,6 +10,12 @@ describe('ui-foundation-shell-navigation', () => {
     cy.contains('button', 'Sign in').click()
   }
 
+  function openCustomiseNav() {
+    visibleByTestId('shell-workspace-menu-trigger').click()
+    visibleByTestId('shell-workspace-menu-customise-nav').click()
+    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+  }
+
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
@@ -116,6 +122,7 @@ describe('ui-foundation-shell-navigation', () => {
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-market-watch',
           'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
           'sidebar-nav-link-integrations',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
@@ -123,14 +130,21 @@ describe('ui-foundation-shell-navigation', () => {
         ])
     })
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
-    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+    visibleByTestId('shell-workspace-menu-trigger').click()
+    visibleByTestId('shell-workspace-menu-settings').click()
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/settings\/display\/?$/
+    )
+    cy.go('back')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    openCustomiseNav()
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
       cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
         force: true,
       })
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .should(($items) => {
           const ids = [...$items].map(
             (item) => item.getAttribute('data-testid') || ''
@@ -144,6 +158,7 @@ describe('ui-foundation-shell-navigation', () => {
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-market-watch',
             'sidebar-nav-edit-item-inbox',
+            'sidebar-nav-edit-item-purchases',
             'sidebar-nav-edit-item-integrations',
             'sidebar-nav-edit-item-chats',
             'sidebar-nav-edit-item-users',
@@ -152,7 +167,38 @@ describe('ui-foundation-shell-navigation', () => {
         })
       cy.get('[data-testid="sidebar-nav-visibility-integrations"]').click()
     })
-    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-cancel').click()
+
+    visibleByTestId('sidebar-nav-group-general').within(() => {
+      cy.get('[data-testid^="sidebar-nav-link-"]')
+        .then(($links) =>
+          [...$links].map((link) => link.getAttribute('data-testid') || '')
+        )
+        .should('deep.equal', [
+          'sidebar-nav-link-dashboard',
+          'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
+          'sidebar-nav-link-collections',
+          'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-discoveries',
+          'sidebar-nav-link-market-watch',
+          'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
+          'sidebar-nav-link-integrations',
+          'sidebar-nav-link-chats',
+          'sidebar-nav-link-users',
+          'sidebar-nav-link-reports',
+        ])
+    })
+
+    openCustomiseNav()
+    visibleByTestId('sidebar-nav-edit-panel').within(() => {
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
+        force: true,
+      })
+      cy.get('[data-testid="sidebar-nav-visibility-integrations"]').click()
+    })
+    visibleByTestId('sidebar-nav-apply').click()
 
     visibleByTestId('sidebar-nav-group-general').within(() => {
       cy.get('[data-testid^="sidebar-nav-link-"]')
@@ -168,6 +214,7 @@ describe('ui-foundation-shell-navigation', () => {
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-market-watch',
           'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
           'sidebar-nav-link-reports',
@@ -189,26 +236,54 @@ describe('ui-foundation-shell-navigation', () => {
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-market-watch',
           'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
           'sidebar-nav-link-reports',
         ])
     })
+
+    openCustomiseNav()
+    visibleByTestId('sidebar-nav-restore-hidden').click()
+    visibleByTestId('sidebar-nav-apply').click()
+    visibleByTestId('sidebar-nav-link-integrations').should('be.visible')
+
+    openCustomiseNav()
+    visibleByTestId('sidebar-nav-reset-defaults').click()
+    visibleByTestId('sidebar-nav-apply').click()
+    visibleByTestId('sidebar-nav-group-general')
+      .find('[data-testid^="sidebar-nav-link-"]')
+      .then(($links) =>
+        [...$links].map((link) => link.getAttribute('data-testid') || '')
+      )
+      .should('deep.equal', [
+        'sidebar-nav-link-dashboard',
+        'sidebar-nav-link-inventory',
+        'sidebar-nav-link-media',
+        'sidebar-nav-link-collections',
+        'sidebar-nav-link-wishlist',
+        'sidebar-nav-link-discoveries',
+        'sidebar-nav-link-market-watch',
+        'sidebar-nav-link-inbox',
+        'sidebar-nav-link-purchases',
+        'sidebar-nav-link-integrations',
+        'sidebar-nav-link-chats',
+        'sidebar-nav-link-users',
+        'sidebar-nav-link-reports',
+      ])
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-007 reflects live nav edit order and saves the exact shown order', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
-    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+    openCustomiseNav()
 
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
       cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
         force: true,
       })
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .should(($items) => {
           const ids = [...$items].map(
             (item) => item.getAttribute('data-testid') || ''
@@ -222,6 +297,7 @@ describe('ui-foundation-shell-navigation', () => {
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-market-watch',
             'sidebar-nav-edit-item-inbox',
+            'sidebar-nav-edit-item-purchases',
             'sidebar-nav-edit-item-integrations',
             'sidebar-nav-edit-item-chats',
             'sidebar-nav-edit-item-users',
@@ -233,20 +309,20 @@ describe('ui-foundation-shell-navigation', () => {
       })
 
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .should(($items) => {
           const ids = [...$items].map(
             (item) => item.getAttribute('data-testid') || ''
           )
           expect(ids).to.deep.equal([
             'sidebar-nav-edit-item-dashboard',
-            'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-media',
             'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-market-watch',
             'sidebar-nav-edit-item-inbox',
+            'sidebar-nav-edit-item-purchases',
             'sidebar-nav-edit-item-integrations',
             'sidebar-nav-edit-item-chats',
             'sidebar-nav-edit-item-users',
@@ -255,19 +331,20 @@ describe('ui-foundation-shell-navigation', () => {
         })
     })
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-apply').click()
     visibleByTestId('sidebar-nav-group-general')
       .find('[data-testid^="sidebar-nav-link-"]')
       .then(($links) => [...$links].map((link) => link.getAttribute('data-testid') || ''))
       .should('deep.equal', [
         'sidebar-nav-link-dashboard',
-        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-inventory',
+        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-media',
         'sidebar-nav-link-collections',
         'sidebar-nav-link-discoveries',
         'sidebar-nav-link-market-watch',
         'sidebar-nav-link-inbox',
+        'sidebar-nav-link-purchases',
         'sidebar-nav-link-integrations',
         'sidebar-nav-link-chats',
         'sidebar-nav-link-users',
@@ -281,23 +358,23 @@ describe('ui-foundation-shell-navigation', () => {
 
     const dataTransfer = new DataTransfer()
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
-    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+    openCustomiseNav()
 
+    visibleByTestId('sidebar-nav-edit-item-wishlist').scrollIntoView()
     visibleByTestId('sidebar-nav-drag-handle-wishlist').should('be.visible')
 
-    cy.get('[data-testid="sidebar-nav-edit-item-inventory"]').then(($target) => {
+    cy.get('[data-testid="sidebar-nav-edit-item-media"]').then(($target) => {
       const rect = $target[0].getBoundingClientRect()
 
       visibleByTestId('sidebar-nav-drag-handle-wishlist').trigger('dragstart', {
         dataTransfer,
       })
-      cy.get('[data-testid="sidebar-nav-edit-dropzone-inventory"]').trigger('dragover', {
+      cy.get('[data-testid="sidebar-nav-edit-dropzone-media"]').trigger('dragover', {
         dataTransfer,
         clientY: rect.top + 2,
       })
-      visibleByTestId('sidebar-nav-drop-indicator-before-inventory').should('be.visible')
-      cy.get('[data-testid="sidebar-nav-edit-dropzone-inventory"]').trigger('drop', {
+      visibleByTestId('sidebar-nav-drop-indicator-before-media').should('be.visible')
+      cy.get('[data-testid="sidebar-nav-edit-dropzone-media"]').trigger('drop', {
         dataTransfer,
         clientY: rect.top + 2,
       })
@@ -305,40 +382,44 @@ describe('ui-foundation-shell-navigation', () => {
 
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .then(($items) => [...$items].map((item) => item.getAttribute('data-testid') || ''))
         .should('deep.equal', [
           'sidebar-nav-edit-item-dashboard',
-          'sidebar-nav-edit-item-wishlist',
           'sidebar-nav-edit-item-inventory',
+          'sidebar-nav-edit-item-wishlist',
           'sidebar-nav-edit-item-media',
           'sidebar-nav-edit-item-collections',
           'sidebar-nav-edit-item-discoveries',
           'sidebar-nav-edit-item-market-watch',
           'sidebar-nav-edit-item-inbox',
+          'sidebar-nav-edit-item-purchases',
           'sidebar-nav-edit-item-integrations',
           'sidebar-nav-edit-item-chats',
           'sidebar-nav-edit-item-users',
           'sidebar-nav-edit-item-reports',
         ])
 
+      cy.get('[data-testid="sidebar-nav-edit-item-wishlist"]').scrollIntoView({
+        block: 'center',
+      })
       cy.get('[data-testid="sidebar-nav-move-down-wishlist"]').should('be.visible')
       cy.get('[data-testid="sidebar-nav-visibility-wishlist"]').should('be.visible')
     })
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-apply').click()
     visibleByTestId('sidebar-nav-group-general')
       .find('[data-testid^="sidebar-nav-link-"]')
       .then(($links) => [...$links].map((link) => link.getAttribute('data-testid') || ''))
       .should('deep.equal', [
         'sidebar-nav-link-dashboard',
-        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-inventory',
+        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-media',
         'sidebar-nav-link-collections',
         'sidebar-nav-link-discoveries',
         'sidebar-nav-link-market-watch',
         'sidebar-nav-link-inbox',
+        'sidebar-nav-link-purchases',
         'sidebar-nav-link-integrations',
         'sidebar-nav-link-chats',
         'sidebar-nav-link-users',
