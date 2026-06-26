@@ -3517,9 +3517,10 @@ func New(cfg config.Config) (*App, error) {
 		}
 		priceMax, _ := strconv.ParseFloat(r.URL.Query().Get("price_max"), 64)
 		items, err := discoverySvc.ListNotInCollection(r.Context(), discovery.Filter{
-			Query:    r.URL.Query().Get("q"),
-			PriceMax: priceMax,
-			DateFrom: r.URL.Query().Get("date_from"),
+			Query:           r.URL.Query().Get("q"),
+			PriceMax:        priceMax,
+			DateFrom:        r.URL.Query().Get("date_from"),
+			IncludeArchived: r.URL.Query().Get("include_archived") == "true",
 		})
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_not_in_collection"}`, http.StatusInternalServerError)

@@ -456,6 +456,8 @@ describe('dashboard/ui-screen-discover', () => {
 
     signInToDiscoveries()
     cy.wait('@discoverDashboardList')
+      .its('request.query.include_archived')
+      .should('eq', 'true')
 
     cy.get('[data-testid="discover-dashboard-summary"]')
       .should('contain', 'Best deals found')
