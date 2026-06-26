@@ -23,6 +23,15 @@ type ToastLike = Partial<Record<ToastHistoryLevel, ToastMethod>> & {
   promise?: ToastMethod
 }
 
+type ToastHistoryMetadata = {
+  id?: string
+  level?: ToastHistoryLevel
+  title?: string
+  summary?: string
+  source_label?: string
+  category?: string
+}
+
 const MAX_TOAST_HISTORY = 100
 let installed = false
 
@@ -50,6 +59,14 @@ function summaryFromOptions(value: unknown) {
   }
   const candidate = value as { description?: unknown }
   return normalizeText(candidate.description)
+}
+
+function historyMetadataFromOptions(value: unknown): ToastHistoryMetadata {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+  const candidate = value as { history?: ToastHistoryMetadata }
+  return candidate.history ?? {}
 }
 
 function promiseMessage(
@@ -184,10 +201,14 @@ export function installToastHistoryCapture(toast: unknown) {
       return
     }
     toastLike[level] = (...args: unknown[]) => {
+      const history = historyMetadataFromOptions(args[1])
       recordToastHistory({
-        level,
-        title: normalizeText(args[0]),
-        summary: summaryFromOptions(args[1]),
+        id: history.id,
+        level: history.level ?? level,
+        title: titleFromValue(history.title, normalizeText(args[0])),
+        summary: history.summary || summaryFromOptions(args[1]),
+        source_label: history.source_label,
+        category: history.category,
       })
       return original(...args)
     }
