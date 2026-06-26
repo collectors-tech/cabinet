@@ -173,4 +173,104 @@ describe('chats/chats-workspace', () => {
       expect(titles).to.include('E2E Beta Search Thread')
     })
   })
+
+  it('CHATS-WORKSPACE-007/#1508 previews and confirms a main Chat inventory update without mutating early', () => {
+    openChats()
+    createThread('E2E Main Chat Item Update')
+
+    cy.request('POST', '/api/items', {
+      part_number: 'CHAT-UPDATE-001',
+      title: 'Main Chat Original Title',
+      brand: 'AFX',
+      category: 'Slot Cars',
+    }).then((createResponse) => {
+      expect(createResponse.status).to.eq(201)
+      const itemId = String(createResponse.body.id)
+      expect(itemId).not.to.eq('')
+
+      cy.get('[data-testid="chat-compose-input"]').type(
+        'rename the open item through governed chat preview'
+      )
+      cy.get('[data-testid="chat-send-button"]').click()
+      cy.get('[data-testid="chat-message-list"]').should(
+        'contain',
+        'rename the open item through governed chat preview'
+      )
+
+      cy.get('[data-testid="chat-preview-action-mode"]').select(
+        'update_inventory_item'
+      )
+      cy.get('[data-testid="chat-preview-target-item-id"]')
+        .clear()
+        .type(itemId)
+      cy.get('[data-testid="chat-preview-part-number"]')
+        .clear()
+        .type('CHAT-UPDATE-001-R1')
+      cy.get('[data-testid="chat-preview-title"]')
+        .clear()
+        .type('Main Chat Updated Title')
+      cy.intercept('POST', '/api/chat/actions/preview').as(
+        'mainChatUpdatePreview'
+      )
+      cy.get('[data-testid="chat-preview-action-button"]').click()
+      cy.wait('@mainChatUpdatePreview').then(({ request, response }) => {
+        expect(request.body.profile_id).to.eq('e2e-profile-001')
+        expect(request.body.action).to.eq('update_inventory_item')
+        expect(request.body.payload.item_id).to.eq(itemId)
+        expect(request.body.payload.part_number).to.eq('CHAT-UPDATE-001-R1')
+        expect(request.body.payload.title).to.eq('Main Chat Updated Title')
+        expect(response?.statusCode).to.eq(200)
+      })
+      cy.get('[data-testid="chat-action-preview"]')
+        .should('contain', 'update_inventory_item')
+        .and('contain', `target=${itemId}`)
+        .and('contain', 'part_number=CHAT-UPDATE-001-R1')
+        .and('contain', 'title=Main Chat Updated Title')
+
+      cy.request('/api/items?profile_id=e2e-profile-001')
+        .its('body')
+        .should((items) => {
+          const serialized = JSON.stringify(items)
+          expect(serialized).to.include('Main Chat Original Title')
+          expect(serialized).not.to.include('Main Chat Updated Title')
+          expect(serialized).not.to.include('CHAT-UPDATE-001-R1')
+        })
+
+      cy.intercept('POST', '/api/chat/actions/apply').as('mainChatUpdateApply')
+      cy.get('[data-testid="chat-apply-action-button"]').click()
+      cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
+      cy.get('[data-testid="chat-apply-confirm-summary"]')
+        .should('contain', 'update_inventory_item')
+        .and('contain', itemId)
+        .and('contain', 'Main Chat Updated Title')
+      cy.get('[data-testid="chat-apply-confirm-submit"]').click()
+      cy.wait('@mainChatUpdateApply').then(({ request, response }) => {
+        expect(request.body.profile_id).to.eq('e2e-profile-001')
+        expect(request.body.confirm).to.eq(true)
+        expect(response?.statusCode).to.eq(200)
+        expect(response?.body.applied).to.eq(true)
+        expect(response?.body.action).to.eq('update_inventory_item')
+        expect(response?.body.item_id).to.eq(itemId)
+        expect(response?.body.part_number).to.eq('CHAT-UPDATE-001-R1')
+        expect(response?.body.title).to.eq('Main Chat Updated Title')
+      })
+      cy.get('[data-testid="chat-action-apply-result"]')
+        .should('contain', 'Applied update_inventory_item')
+        .and('contain', itemId)
+        .and('contain', 'part_number=CHAT-UPDATE-001-R1')
+        .and('contain', 'title=Main Chat Updated Title')
+      cy.get('[data-testid="chat-message-list"]')
+        .should('contain', 'Applied update_inventory_item')
+        .and('contain', 'Main Chat Updated Title')
+
+      cy.request('/api/items?profile_id=e2e-profile-001')
+        .its('body')
+        .should((items) => {
+          const serialized = JSON.stringify(items)
+          expect(serialized).to.include('CHAT-UPDATE-001-R1')
+          expect(serialized).to.include('Main Chat Updated Title')
+          expect(serialized).not.to.include('Main Chat Original Title')
+        })
+    })
+  })
 })

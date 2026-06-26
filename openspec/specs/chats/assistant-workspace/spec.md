@@ -86,3 +86,4 @@ Assistant workspace capability/action cards MUST make preview, confirmation, exe
 - **THEN** the execution state MUST report success
 - **AND** the result card MUST expose an item result link
 - **AND** a refreshed inventory data query MUST include the applied item under the active profile
+- **AND** the active chat thread MUST persist an assistant/action audit message that records the confirmed mutation outcome
