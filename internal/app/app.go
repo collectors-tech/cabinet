@@ -8709,6 +8709,10 @@ func (p amazonContractProvider) Search(context.Context, scanner.QuerySet) ([]sca
 	return p.candidates, nil
 }
 
+func (p amazonContractProvider) ProviderID() string {
+	return "amazon"
+}
+
 func buildAmazonCandidateContract(qs scanner.QuerySet) []scanner.CandidateInput {
 	keyword := "collectible"
 	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {

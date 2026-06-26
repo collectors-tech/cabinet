@@ -71,6 +71,10 @@ func NewProvider(cfg ProviderConfig) *Provider {
 	}
 }
 
+func (p *Provider) ProviderID() string {
+	return "ebay"
+}
+
 func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.CandidateInput, error) {
 	if p.bearerToken == "" {
 		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_MISSING", Message: "missing ebay bearer token"}

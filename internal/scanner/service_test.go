@@ -10,9 +10,14 @@ import (
 )
 
 type testProvider struct {
-	failures int
-	calls    int
-	items    []CandidateInput
+	providerID string
+	failures   int
+	calls      int
+	items      []CandidateInput
+}
+
+func (p *testProvider) ProviderID() string {
+	return p.providerID
 }
 
 func (p *testProvider) Search(_ context.Context, _ QuerySet) ([]CandidateInput, error) {
@@ -291,6 +296,67 @@ func TestFailureSnapshotsAreProfileScoped(t *testing.T) {
 	}
 	if reloadedOther.LastRunStatus != "never" || reloadedOther.LastRunMessage != "" {
 		t.Fatalf("expected profile-b clean snapshot, got %+v", reloadedOther)
+	}
+}
+
+func TestRunNowRecordsProviderHealthForExecutingProvider(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Bonza scoped health",
+		Keywords:      []string{"afx"},
+		ProviderScope: []string{"bonzaslotcars"},
+		Enabled:       true,
+		MaxRetryCount: 0,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile() error = %v", err)
+	}
+
+	_, err = svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, &testProvider{
+		providerID: "bonzaslotcars",
+		failures:   1,
+	})
+	if err == nil {
+		t.Fatal("expected bonzaslotcars run failure")
+	}
+
+	bonzaHealth, err := svc.ProviderHealth(context.Background(), "bonzaslotcars")
+	if err != nil {
+		t.Fatalf("ProviderHealth(bonzaslotcars) error = %v", err)
+	}
+	if bonzaHealth["status"] != "error" || bonzaHealth["message"] != "temporary failure" {
+		t.Fatalf("expected bonzaslotcars health failure, got %+v", bonzaHealth)
+	}
+	ebayHealth, err := svc.ProviderHealth(context.Background(), "ebay")
+	if err != nil {
+		t.Fatalf("ProviderHealth(ebay) error = %v", err)
+	}
+	if ebayHealth["status"] != "unknown" || ebayHealth["message"] != "" {
+		t.Fatalf("non-ebay provider failure must not poison ebay health, got %+v", ebayHealth)
+	}
+	failures, err := svc.ListFailuresByProfile(context.Background(), "profile-a")
+	if err != nil {
+		t.Fatalf("ListFailuresByProfile(profile-a) error = %v", err)
+	}
+	if len(failures) != 1 {
+		t.Fatalf("expected one provider-scoped failure, got %+v", failures)
+	}
+	for key, expected := range map[string]string{
+		"provider":       "bonzaslotcars",
+		"retry_guidance": "Review provider status and retry the operation.",
+		"next_action":    "review_provider_status",
+	} {
+		if got := failures[0][key]; got != expected {
+			t.Fatalf("expected scoped failure %s=%q, got %q in %+v", key, expected, got, failures[0])
+		}
 	}
 }
 
