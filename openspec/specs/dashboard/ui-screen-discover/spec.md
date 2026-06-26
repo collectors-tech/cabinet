@@ -113,6 +113,13 @@ preserving the candidate-inbox destination workflow.
 - **AND** ignored or archived candidates MUST be hidden from the default view and reachable through an explicit filter
 - **AND** source-result, Wishlist, Purchase follow-up, Inventory handoff, and ignore/archive actions MUST remain contextual and accessible without claiming ownership by default
 
+#### Scenario: Dashboard API fields and archived opt-in
+- **GIVEN** scanner candidates include wishlist linkage, saved-search provenance, price snapshots, provider health, thumbnails, and ignored or archived status
+- **WHEN** Discoveries requests `/api/discovery/not-in-collection?include_archived=true`
+- **THEN** the API response MUST include dashboard display fields for currency, triage status, seller/source labels, thumbnail URL, match type/reason, wishlist IDs, target price, market baseline, price delta amount and percent, deal score, source trust status, and availability
+- **AND** ignored or archived candidates MUST be returned only when the request explicitly opts into archived records
+- **AND** the default API request without the archived opt-in MUST continue hiding ignored or archived candidates
+
 ## Acceptance Criteria
 - UC IDs cover filtering and each primary action class.
 - E2E mappings include action outcomes.
@@ -143,3 +150,4 @@ preserving the candidate-inbox destination workflow.
 | UC-DIS-13 | Candidate action failure | Failed candidate action surfaces deterministic feedback without losing route or reloading the candidate list as success | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-002 + UC-DIS-13 keeps candidate list stable when an action fails` |
 | UC-DIS-14 | Empty candidate inbox | Empty Discoveries state explains no pending found-item candidates, suppresses candidate mutation controls, and keeps Market Watch handoff reachable | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 + UC-DIS-14 renders empty candidate inbox without mutation controls` |
 | UC-DIS-15 | Discoveries deal dashboard | Dashboard summary, source filters, ranked table rows, wishlist/deal priority, and ignored/archive review filter render from candidate metadata | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-007 + #1533 renders dashboard summary source filters and ranked deal table` |
+| UC-DIS-16 | Discoveries dashboard API fields | Backend returns deal ranking, wishlist linkage, provider trust, display labels, and archived candidates only through explicit opt-in | implemented: `internal/discovery/service_test.go` `TestListNotInCollectionDashboardFieldsAndArchivedOptIn`; `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-007 + #1533 renders dashboard summary source filters and ranked deal table` |

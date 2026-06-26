@@ -308,6 +308,105 @@ func TestDiscoveryCandidateContractIncludesStatusAndSourceResultAuditLink(t *tes
 	}
 }
 
+func TestListNotInCollectionDashboardFieldsAndArchivedOptIn(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO provider_health(provider, status, message) VALUES ('market_watch', 'auth attention', 'reauth required')`); err != nil {
+		t.Fatalf("seed provider health: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title, status) VALUES ('wish-item','AFX','Cars','WISH-1533','Wishlist Target','wishlist')`); err != nil {
+		t.Fatalf("seed wishlist item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO wishlist_entries(id, item_id, target_price, priority) VALUES ('wish-1533','wish-item',55,'high')`); err != nil {
+		t.Fatalf("seed wishlist entry: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO price_snapshots(id, item_id, snapshot_date, source, median_price, latest_price) VALUES ('price-1533','wish-item','2026-06-25','market',70,68)`); err != nil {
+		t.Fatalf("seed price snapshot: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('q1','AFX deals','["afx"]','[]','["market_watch"]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO scanner_candidates(
+			id, query_set_id, listing_id, title, price, shipping, url, image, seller,
+			first_seen, last_seen, status, source, observed_currency, source_result_url,
+			stock_state, stock_count
+		) VALUES (
+			'c-deal','q1','listing-deal','AFX Wishlist Deal',42,0,'https://example.test/deal','https://example.test/deal.jpg','Hobby store',
+			'2026-06-20T00:00:00Z','2026-06-26T00:00:00Z','new','market_watch','AUD','https://provider.test/deal',
+			'in_stock',2
+		)
+	`); err != nil {
+		t.Fatalf("seed deal candidate: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES ('c-deal','wish-item','not_in_collection',0.96,0,'WISH-1533',CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed deal match: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, seller, first_seen, last_seen, status, source, observed_currency, stock_state, stock_count)
+		VALUES ('c-archived','q1','listing-archived','Archived Discovery',12,0,'https://example.test/archived','Seller','2026-06-18T00:00:00Z','2026-06-19T00:00:00Z','archived','market_watch','AUD','out_of_stock',0)
+	`); err != nil {
+		t.Fatalf("seed archived candidate: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES ('c-archived','','not_in_collection',0.4,1,'ARCH-1533',CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed archived match: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO ignored_candidates(candidate_id) VALUES ('c-archived')`); err != nil {
+		t.Fatalf("seed ignored candidate: %v", err)
+	}
+
+	svc := NewService(conn)
+	defaultItems, err := svc.ListNotInCollection(context.Background(), Filter{})
+	if err != nil {
+		t.Fatalf("ListNotInCollection(default) error = %v", err)
+	}
+	if len(defaultItems) != 1 || defaultItems[0].CandidateID != "c-deal" {
+		t.Fatalf("expected default list to hide archived candidate, got %+v", defaultItems)
+	}
+
+	items, err := svc.ListNotInCollection(context.Background(), Filter{IncludeArchived: true})
+	if err != nil {
+		t.Fatalf("ListNotInCollection(include archived) error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected archived opt-in to return 2 items, got %d: %+v", len(items), items)
+	}
+	deal := items[0]
+	if deal.CandidateID != "c-deal" {
+		t.Fatalf("expected newest deal first, got %+v", deal)
+	}
+	if deal.Currency != "AUD" || deal.TriageStatus != "new" || deal.SellerLabel != "Hobby store" || deal.ThumbnailURL == "" {
+		t.Fatalf("expected dashboard display aliases, got %+v", deal)
+	}
+	if deal.MatchType != "wishlist_match" || deal.MatchReason != "Wishlist match below target" {
+		t.Fatalf("expected wishlist match fields, got %+v", deal)
+	}
+	if deal.WishlistID != "wish-1533" || deal.WishlistItemID != "wish-item" {
+		t.Fatalf("expected wishlist linkage, got %+v", deal)
+	}
+	if deal.TargetPrice != 55 || deal.MarketBaseline != 70 || deal.PriceDeltaAmount != 13 || deal.PriceDeltaPct != 23.64 {
+		t.Fatalf("expected target/baseline/delta fields, got %+v", deal)
+	}
+	if deal.DealScore <= 70 || deal.SourceTrust != "auth attention" || !strings.Contains(deal.Availability, "2 available") {
+		t.Fatalf("expected deal score, trust, and availability, got %+v", deal)
+	}
+	var archived Item
+	for _, item := range items {
+		if item.CandidateID == "c-archived" {
+			archived = item
+		}
+	}
+	if archived.CandidateID == "" || archived.TriageStatus != "archived" {
+		t.Fatalf("expected archived candidate in opt-in response, got %+v", items)
+	}
+}
+
 func TestApplyActionPersistsDestinationStatusesAndWishlistDoesNotClaimOwnership(t *testing.T) {
 	t.Parallel()
 

@@ -12,9 +12,10 @@ import (
 )
 
 type Filter struct {
-	Query    string
-	PriceMax float64
-	DateFrom string
+	Query           string
+	PriceMax        float64
+	DateFrom        string
+	IncludeArchived bool
 }
 
 type Item struct {
@@ -38,6 +39,23 @@ type Item struct {
 	ExtractedPart    string  `json:"extracted_part_number"`
 	StockState       string  `json:"stock_state"`
 	StockCount       int     `json:"stock_count"`
+	Currency         string  `json:"currency"`
+	TriageStatus     string  `json:"triage_status"`
+	SellerLabel      string  `json:"seller_label"`
+	SourceLabel      string  `json:"source_label"`
+	MatchType        string  `json:"match_type"`
+	MatchReason      string  `json:"match_reason"`
+	WishlistID       string  `json:"wishlist_id"`
+	WishlistItemID   string  `json:"wishlist_item_id"`
+	TargetPrice      float64 `json:"target_price"`
+	MarketBaseline   float64 `json:"market_price_baseline"`
+	PriceDeltaAmount float64 `json:"price_delta_amount"`
+	PriceDeltaPct    float64 `json:"price_delta_percent"`
+	DealScore        float64 `json:"deal_score"`
+	SourceTrust      string  `json:"source_trust_status"`
+	ThumbnailURL     string  `json:"thumbnail_url"`
+	DestinationLink  string  `json:"destination_link"`
+	Availability     string  `json:"availability"`
 }
 
 type ActionType string
@@ -78,14 +96,26 @@ func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, er
 			c.title, c.price, c.observed_currency, c.url, c.seller, c.first_seen, c.last_seen,
 			c.status, m.confidence, m.needs_review, c.reviewer_notes,
 			COALESCE(NULLIF(c.source_result_url, ''), c.url), m.extracted_part_number,
-			c.stock_state, c.stock_count
+			c.stock_state, c.stock_count, c.image, COALESCE(m.item_id, ''),
+			COALESCE(w.id, ''), COALESCE(w.target_price, 0), COALESCE(ps.market_price_baseline, 0),
+			COALESCE(ph.status, '')
 		FROM scanner_candidates c
 		JOIN scanner_matches m ON m.candidate_id = c.id
 		LEFT JOIN scanner_query_sets q ON q.id = c.query_set_id
 		LEFT JOIN ignored_candidates i ON i.candidate_id = c.id
+		LEFT JOIN wishlist_entries w ON w.item_id = m.item_id
+		LEFT JOIN provider_health ph ON ph.provider = c.source
+		LEFT JOIN (
+			SELECT item_id, MAX(median_price) AS market_price_baseline
+			FROM price_snapshots
+			GROUP BY item_id
+		) ps ON ps.item_id = m.item_id
 		WHERE m.state = 'not_in_collection' AND i.candidate_id IS NULL
 	`
 	args := []any{}
+	if f.IncludeArchived {
+		q = strings.Replace(q, " AND i.candidate_id IS NULL", "", 1)
+	}
 	if strings.TrimSpace(f.Query) != "" {
 		q += ` AND LOWER(c.title) LIKE ?`
 		args = append(args, "%"+strings.ToLower(strings.TrimSpace(f.Query))+"%")
@@ -108,21 +138,124 @@ func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, er
 	for rows.Next() {
 		var it Item
 		var needsReview int
+		var itemID string
 		if err := rows.Scan(
 			&it.CandidateID, &it.SourceProvider, &it.QuerySetID, &it.QueryName, &it.ListingID,
 			&it.Title, &it.Price, &it.ObservedCurrency, &it.URL, &it.Seller, &it.FirstSeen, &it.LastSeen,
 			&it.Status, &it.Confidence, &needsReview, &it.ReviewerNotes, &it.SourceResultURL,
-			&it.ExtractedPart, &it.StockState, &it.StockCount,
+			&it.ExtractedPart, &it.StockState, &it.StockCount, &it.ThumbnailURL, &itemID,
+			&it.WishlistID, &it.TargetPrice, &it.MarketBaseline, &it.SourceTrust,
 		); err != nil {
 			return nil, fmt.Errorf("scan not_in_collection row: %w", err)
 		}
 		it.NeedsReview = needsReview != 0
+		it.Currency = strings.TrimSpace(it.ObservedCurrency)
+		it.TriageStatus = strings.TrimSpace(it.Status)
+		it.SellerLabel = strings.TrimSpace(it.Seller)
+		it.SourceLabel = strings.TrimSpace(it.SourceProvider)
+		it.WishlistItemID = strings.TrimSpace(itemID)
+		it.MatchType = discoveryMatchType(it, itemID)
+		it.MatchReason = discoveryMatchReason(it)
+		it.PriceDeltaAmount, it.PriceDeltaPct = discoveryPriceDelta(it)
+		it.DealScore = discoveryDealScore(it)
+		it.DestinationLink = discoveryDestinationLink(it, itemID)
+		it.Availability = discoveryAvailability(it)
 		out = append(out, it)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate not_in_collection rows: %w", err)
 	}
 	return out, nil
+}
+
+func discoveryMatchType(it Item, itemID string) string {
+	if strings.TrimSpace(it.WishlistID) != "" {
+		return "wishlist_match"
+	}
+	if strings.TrimSpace(it.QuerySetID) != "" {
+		return "market_watch_result"
+	}
+	if strings.Contains(strings.ToLower(it.StockState), "stock") {
+		return "store_stock"
+	}
+	if strings.TrimSpace(it.SourceProvider) != "" {
+		return "provider_search"
+	}
+	if strings.TrimSpace(itemID) != "" {
+		return "import_candidate"
+	}
+	return "provider_search"
+}
+
+func discoveryMatchReason(it Item) string {
+	switch it.MatchType {
+	case "wishlist_match":
+		if it.TargetPrice > 0 && it.Price > 0 && it.Price <= it.TargetPrice {
+			return "Wishlist match below target"
+		}
+		return "Wishlist match"
+	case "market_watch_result":
+		return "New Market Watch result"
+	case "store_stock":
+		return "Store stock found"
+	default:
+		return "Provider search result"
+	}
+}
+
+func discoveryPriceDelta(it Item) (float64, float64) {
+	baseline := it.TargetPrice
+	if baseline <= 0 {
+		baseline = it.MarketBaseline
+	}
+	if baseline <= 0 || it.Price <= 0 {
+		return 0, 0
+	}
+	amount := math.Round((baseline-it.Price)*100) / 100
+	percent := math.Round((amount/baseline)*10000) / 100
+	return amount, percent
+}
+
+func discoveryDealScore(it Item) float64 {
+	score := 0.0
+	if it.MatchType == "wishlist_match" {
+		score += 50
+	}
+	if it.PriceDeltaPct > 0 {
+		score += math.Min(40, it.PriceDeltaPct)
+	}
+	if it.Confidence > 0 {
+		score += math.Min(10, it.Confidence*10)
+	}
+	return math.Round(score*100) / 100
+}
+
+func discoveryDestinationLink(it Item, itemID string) string {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return ""
+	}
+	switch strings.TrimSpace(it.Status) {
+	case "wishlisted":
+		return "/wishlist/?item_id=" + itemID
+	case "inventory_candidate":
+		return "/inventory/?item_id=" + itemID
+	case "purchase_candidate":
+		return "/purchases/?item_id=" + itemID
+	default:
+		return ""
+	}
+}
+
+func discoveryAvailability(it Item) string {
+	state := strings.TrimSpace(it.StockState)
+	if state == "" {
+		state = "unknown"
+	}
+	if it.StockCount >= 0 {
+		return fmt.Sprintf("%s (%d available)", state, it.StockCount)
+	}
+	return state
 }
 
 func (s *Service) ApplyAction(ctx context.Context, a Action) error {

@@ -89,6 +89,7 @@ export function Discover() {
     setError(null)
     try {
       const params = new URLSearchParams()
+      params.set('include_archived', 'true')
       if (query.trim()) {
         params.set('q', query.trim())
       }
