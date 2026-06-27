@@ -159,6 +159,63 @@ func TestRunNowPersistsObservedCurrency(t *testing.T) {
 	}
 }
 
+func TestRunNowDoesNotReintroduceArchivedDiscoveryCandidate(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySet(context.Background(), QuerySet{
+		Name:     "Archived duplicate",
+		Keywords: []string{"afx"},
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySet() error = %v", err)
+	}
+	provider := &testProvider{items: []CandidateInput{{
+		ListingID: "ARCHIVED-DISCOVERY-1",
+		Title:     "Archived AFX candidate",
+		Price:     42.5,
+		Currency:  "AUD",
+		URL:       "https://example.test/provider/archived",
+		Source:    "frontlinehobbies",
+	}}}
+	if _, err := svc.RunNow(context.Background(), qs.ID, provider); err != nil {
+		t.Fatalf("RunNow() first pass error = %v", err)
+	}
+	if _, err := conn.Exec(`UPDATE scanner_candidates SET status = 'archived' WHERE listing_id = 'ARCHIVED-DISCOVERY-1'`); err != nil {
+		t.Fatalf("archive candidate: %v", err)
+	}
+	provider.items[0].Price = 39.95
+	if _, err := svc.RunNow(context.Background(), qs.ID, provider); err != nil {
+		t.Fatalf("RunNow() duplicate pass error = %v", err)
+	}
+
+	var status string
+	var price float64
+	if err := conn.QueryRow(`SELECT status, price FROM scanner_candidates WHERE listing_id = 'ARCHIVED-DISCOVERY-1'`).Scan(&status, &price); err != nil {
+		t.Fatalf("load candidate: %v", err)
+	}
+	if status != "archived" {
+		t.Fatalf("duplicate provider refresh reintroduced archived candidate with status=%q", status)
+	}
+	if price != 39.95 {
+		t.Fatalf("expected duplicate refresh to update metadata without changing status, price=%v", price)
+	}
+
+	var matchCount int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_matches WHERE candidate_id = (SELECT id FROM scanner_candidates WHERE listing_id = 'ARCHIVED-DISCOVERY-1')`).Scan(&matchCount); err != nil {
+		t.Fatalf("load match count: %v", err)
+	}
+	if matchCount != 1 {
+		t.Fatalf("expected one stable discovery match row, got %d", matchCount)
+	}
+}
+
 func TestUpdateQuerySetPreservesProviderScopeWhenOmitted(t *testing.T) {
 	t.Parallel()
 

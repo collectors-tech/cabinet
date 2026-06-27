@@ -220,6 +220,28 @@ const indexName = 'frontline_products_live';
 		}
 	}
 
+	discoveries := doRequest(t, a, http.MethodGet, "/api/discovery/not-in-collection?q=AFX", nil, nil)
+	if discoveries.Code != http.StatusOK {
+		t.Fatalf("discovery list status=%d body=%s", discoveries.Code, discoveries.Body.String())
+	}
+	var discoveryPayload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(discoveries.Body).Decode(&discoveryPayload); err != nil {
+		t.Fatalf("decode discovery payload: %v", err)
+	}
+	if len(discoveryPayload.Items) != 2 {
+		t.Fatalf("expected persisted provider candidates to enter Discoveries, got %+v", discoveryPayload.Items)
+	}
+	for _, item := range discoveryPayload.Items {
+		if item["source_provider"] != "frontlinehobbies" || item["query_set_id"] != qs.ID {
+			t.Fatalf("expected Discoveries item to retain provider/query provenance, got %+v", item)
+		}
+		if item["triage_status"] != "new" || item["match_type"] != "market_watch_result" {
+			t.Fatalf("expected provider output to be a new Market Watch discovery, got %+v", item)
+		}
+	}
+
 	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
 	if reloaded.Code != http.StatusOK {
 		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())

@@ -662,20 +662,37 @@ func (s *Service) persistCandidatesForProfile(
 		stockState := normalizeStockState(it.StockState, stockCount)
 		res, err := s.db.ExecContext(ctx, `
 			UPDATE scanner_candidates
-			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP, status = 'seen', source = ?, stock_state = ?, stock_count = ?, observed_currency = ?
+			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP,
+				status = CASE WHEN status IN ('ignored', 'archived', 'wishlisted', 'purchase_candidate', 'inventory_candidate') THEN status ELSE 'seen' END,
+				source = ?, stock_state = ?, stock_count = ?, observed_currency = ?
 			WHERE listing_id = ? AND (? = '' OR profile_id = ?)
 		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 		if err != nil {
 			return RunResult{}, fmt.Errorf("update candidate: %w", err)
 		}
 		affected, _ := res.RowsAffected()
+		var candidateID string
 		if affected == 0 {
+			candidateID = uuid.NewString()
 			_, err := s.db.ExecContext(ctx, `
 				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, observed_currency)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?, ?, ?, ?)
-			`, uuid.NewString(), strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency)
+			`, candidateID, strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency)
 			if err != nil {
 				return RunResult{}, fmt.Errorf("insert candidate: %w", err)
+			}
+		} else {
+			if err := s.db.QueryRowContext(ctx, `
+				SELECT id
+				FROM scanner_candidates
+				WHERE listing_id = ? AND (? = '' OR profile_id = ?)
+			`, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&candidateID); err != nil {
+				return RunResult{}, fmt.Errorf("load candidate id for discovery match: %w", err)
+			}
+		}
+		if strings.TrimSpace(candidateID) != "" {
+			if err := s.ensureDiscoveryMatch(ctx, candidateID, it); err != nil {
+				return RunResult{}, err
 			}
 		}
 		saved++
@@ -689,6 +706,22 @@ func (s *Service) persistCandidatesForProfile(
 		PageCount:             calculatePageCount(saved, effectiveItemsPerPage),
 		ItemsPerPageWarning:   itemsPerPageWarning,
 	}, nil
+}
+
+func (s *Service) ensureDiscoveryMatch(ctx context.Context, candidateID string, it CandidateInput) error {
+	partNumber := strings.TrimSpace(it.ListingID)
+	if partNumber == "" {
+		partNumber = strings.TrimSpace(it.Title)
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+		VALUES (?, '', 'not_in_collection', 0, 1, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(candidate_id) DO NOTHING
+	`, strings.TrimSpace(candidateID), partNumber)
+	if err != nil {
+		return fmt.Errorf("ensure discovery match: %w", err)
+	}
+	return nil
 }
 
 func calculatePageCount(saved, pageSize int) int {
