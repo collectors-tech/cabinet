@@ -11,6 +11,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/media"
@@ -28,6 +29,8 @@ type onboardingSampleSeedResult struct {
 	CreatedInstances        int    `json:"created_instances"`
 	CreatedPhotos           int    `json:"created_photos"`
 	CreatedWishlistEntries  int    `json:"created_wishlist_entries"`
+	CreatedPurchaseOrders   int    `json:"created_purchase_orders"`
+	TotalPurchaseOrders     int    `json:"total_purchase_orders"`
 	TotalItems              int    `json:"total_items"`
 	TotalWishlistEntries    int    `json:"total_wishlist_entries"`
 	AlreadySeededForProfile bool   `json:"already_seeded_for_profile"`
@@ -53,6 +56,22 @@ type onboardingPriceSnapshot struct {
 	MedianPrice  float64
 	LatestPrice  float64
 	StockCount   int
+}
+
+type onboardingPurchaseSampleLine struct {
+	EntryID        string
+	ArrivalID      string
+	ItemPartNumber string
+	OrderID        string
+	Source         string
+	Seller         string
+	Tracking       string
+	Quantity       int
+	Amount         float64
+	Status         string
+	ExpectedOn     string
+	DeliveredOn    string
+	Notes          string
 }
 
 func generatedShowcasePriceHistory(sequence int, anchorPrice float64) []onboardingPriceSnapshot {
@@ -288,6 +307,118 @@ func seedShowcaseItemPhotos(ctx context.Context, mediaSvc *media.Service, item c
 		created++
 	}
 	return created, nil
+}
+
+func onboardingPurchaseSamples() []onboardingPurchaseSampleLine {
+	return []onboardingPurchaseSampleLine{
+		{
+			EntryID:        "sample-purchase-life-ebay-watch-001",
+			ArrivalID:      "sample-purchase-arrival-ebay-watch-001",
+			ItemPartNumber: "CAB-DEMO-001",
+			OrderID:        "EBAY-SAMPLE-1001",
+			Source:         "ebay",
+			Seller:         "seller-one",
+			Tracking:       "TRACK-SAMPLE-1001",
+			Quantity:       2,
+			Amount:         17.98,
+			Status:         "expected",
+			ExpectedOn:     "2026-02-08",
+			Notes:          "source_url=https://example.test/orders/EBAY-SAMPLE-1001 review_state=pending_reconciliation",
+		},
+		{
+			EntryID:        "sample-purchase-life-ebay-watch-002",
+			ArrivalID:      "sample-purchase-arrival-ebay-watch-002",
+			ItemPartNumber: "CAB-DEMO-003",
+			OrderID:        "EBAY-SAMPLE-1001",
+			Source:         "ebay",
+			Seller:         "seller-one",
+			Tracking:       "TRACK-SAMPLE-1001",
+			Quantity:       1,
+			Amount:         15.25,
+			Status:         "delivered",
+			ExpectedOn:     "2026-02-08",
+			DeliveredOn:    "2026-02-07",
+			Notes:          "source_url=https://example.test/orders/EBAY-SAMPLE-1001 review_state=needs_review received_state=partial",
+		},
+		{
+			EntryID:        "sample-purchase-life-manual-2001",
+			ArrivalID:      "sample-purchase-arrival-manual-2001",
+			ItemPartNumber: "CAB-DEMO-006",
+			OrderID:        "MANUAL-SAMPLE-2001",
+			Source:         "manual",
+			Seller:         "Local-collectors-fair",
+			Tracking:       "PICKUP-SAMPLE-2001",
+			Quantity:       1,
+			Amount:         19.95,
+			Status:         "delivered",
+			ExpectedOn:     "2026-02-02",
+			DeliveredOn:    "2026-02-02",
+			Notes:          "source_url=https://example.test/orders/MANUAL-SAMPLE-2001 review_state=ready received_state=complete",
+		},
+		{
+			EntryID:        "sample-purchase-life-shop-3001",
+			ArrivalID:      "sample-purchase-arrival-shop-3001",
+			ItemPartNumber: "CAB-DEMO-004",
+			OrderID:        "SHOP-SAMPLE-3001",
+			Source:         "storefront",
+			Seller:         "Toy-Shop-AU",
+			Tracking:       "AUSPOST-SAMPLE-3001",
+			Quantity:       1,
+			Amount:         24.99,
+			Status:         "expected",
+			ExpectedOn:     "2026-02-12",
+			Notes:          "source_url=https://example.test/orders/SHOP-SAMPLE-3001 review_state=tracking_in_transit received_state=unreceived",
+		},
+	}
+}
+
+func seedOnboardingPurchaseSamples(ctx context.Context, dbConn *sql.DB, profileID string, itemByPart map[string]collection.Item) (int, int, error) {
+	samples := onboardingPurchaseSamples()
+	createdOrderKeys := map[string]struct{}{}
+	for _, sample := range samples {
+		item, ok := itemByPart[sample.ItemPartNumber]
+		if !ok {
+			return 0, 0, fmt.Errorf("purchase sample item %s missing", sample.ItemPartNumber)
+		}
+
+		notes := fmt.Sprintf(
+			"seller=%s tracking=%s %s",
+			sample.Seller,
+			sample.Tracking,
+			sample.Notes,
+		)
+		result, err := dbConn.ExecContext(ctx, `
+			INSERT OR IGNORE INTO commerce_lifecycle_entries(
+				id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes
+			) VALUES (?, ?, ?, 'purchase', ?, ?, ?, ?, 'AUD', ?)
+		`, sample.EntryID, profileID, item.ID, sample.Source, sample.OrderID, sample.Quantity, sample.Amount, notes)
+		if err != nil {
+			return 0, 0, fmt.Errorf("insert purchase sample lifecycle %s: %w", sample.EntryID, err)
+		}
+		if rows, _ := result.RowsAffected(); rows > 0 {
+			createdOrderKeys[strings.ToLower(sample.Source)+":"+sample.OrderID] = struct{}{}
+		}
+		if _, err := dbConn.ExecContext(ctx, `
+			INSERT OR IGNORE INTO expected_arrivals(
+				id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, expected_on, delivered_on, notes
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?)
+		`, sample.ArrivalID, profileID, item.ID, sample.EntryID, sample.Source, sample.OrderID, sample.Quantity, sample.Amount, sample.Status, sample.ExpectedOn, sample.DeliveredOn, notes); err != nil {
+			return 0, 0, fmt.Errorf("insert purchase sample arrival %s: %w", sample.ArrivalID, err)
+		}
+	}
+
+	var totalOrders int
+	if err := dbConn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT source, external_ref
+			FROM commerce_lifecycle_entries
+			WHERE profile_id = ? AND state = 'purchase'
+			GROUP BY source, external_ref
+		)
+	`, profileID).Scan(&totalOrders); err != nil {
+		return 0, 0, fmt.Errorf("count purchase sample orders: %w", err)
+	}
+	return len(createdOrderKeys), totalOrders, nil
 }
 
 func seedOnboardingSampleData(
@@ -622,6 +753,13 @@ func seedOnboardingSampleData(
 			}
 		}
 	}
+
+	createdPurchaseEntries, totalPurchaseOrders, err := seedOnboardingPurchaseSamples(ctx, dbConn, active.ID, itemByPart)
+	if err != nil {
+		return onboardingSampleSeedResult{}, err
+	}
+	result.CreatedPurchaseOrders = createdPurchaseEntries
+	result.TotalPurchaseOrders = totalPurchaseOrders
 
 	totalItems, err := collectionRepo.ListItemsByProfile(ctx, active.ID)
 	if err != nil {

@@ -147,6 +147,13 @@ Cabinet SHALL expose active-profile purchase lifecycle and expected-arrival reco
 - **AND** the table MUST render each returned purchase order as an order-centred row with grouped line-item rows visible beneath it.
 - **AND** the table MUST expose pagination controls and an empty state that distinguishes no persisted purchases from no matching filtered purchases.
 
+#### Scenario: Sample data seeds realistic purchase orders
+- **GIVEN** the onboarding sample/demo profile seed runs for an active profile
+- **WHEN** the sample data seed completes
+- **THEN** Cabinet MUST create deterministic purchase lifecycle and expected-arrival records owned by the onboarding sample seed service.
+- **AND** `GET /api/commerce/purchase-orders` MUST expose at least three realistic grouped sample orders spanning manual, storefront, and eBay-like sources.
+- **AND** the seeded orders MUST include at least one multi-line order, one partially received order, one fully received order, one shipped/unreceived order, and one review-needed order so `/purchases` filters and detail panes have stable demo data.
+
 ### Requirement COMMERCE-RECONCILIATION-014: Purchases SHALL expose split-pane order and item detail
 Cabinet SHALL present persisted purchase orders in an Inbox-style split pane with a table/list on the left and stable order or item detail on the right.
 
