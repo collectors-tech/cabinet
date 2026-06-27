@@ -10723,13 +10723,29 @@ func detectProviderFamily(ctx context.Context, client *http.Client, providerURL,
 	return best.name, best.score, best.evidence, domain, nil
 }
 
+var (
+	buildRevision string
+	buildDate     string
+)
+
 func runtimeBuildMetadata() (string, string) {
 	version := "dev"
-	buildDate := "unknown"
+	resolvedBuildDate := "unknown"
+
+	if strings.TrimSpace(buildRevision) != "" {
+		short := strings.TrimSpace(buildRevision)
+		if len(short) > 12 {
+			short = short[:12]
+		}
+		version = "rev-" + short
+	}
+	if strings.TrimSpace(buildDate) != "" {
+		resolvedBuildDate = strings.TrimSpace(buildDate)
+	}
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return version, buildDate
+		return version, resolvedBuildDate
 	}
 
 	if strings.TrimSpace(info.Main.Version) != "" && info.Main.Version != "(devel)" {
@@ -10743,7 +10759,7 @@ func runtimeBuildMetadata() (string, string) {
 			vcsRevision = strings.TrimSpace(setting.Value)
 		case "vcs.time":
 			if strings.TrimSpace(setting.Value) != "" {
-				buildDate = strings.TrimSpace(setting.Value)
+				resolvedBuildDate = strings.TrimSpace(setting.Value)
 			}
 		}
 	}
@@ -10756,7 +10772,7 @@ func runtimeBuildMetadata() (string, string) {
 		version = "rev-" + short
 	}
 
-	return version, buildDate
+	return version, resolvedBuildDate
 }
 
 func (a *App) Run(ctx context.Context) error {

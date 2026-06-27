@@ -28,7 +28,33 @@ if ($LASTEXITCODE -ne 0) {
 Write-CabinetSection "Runtime"
 Write-CabinetKeyValue -Key "Output" -Value $targetPath
 Write-CabinetStatus -State "run" -Message "Building Cabinet executable."
-go build -o $targetPath ./cmd/cabinet
+$buildRevision = ""
+$buildDate = ""
+try {
+  $buildRevision = (& git -C $repoRoot rev-parse HEAD 2>$null).Trim()
+  $buildDate = (& git -C $repoRoot show -s --format=%cI HEAD 2>$null).Trim()
+}
+catch {
+  $buildRevision = ""
+  $buildDate = ""
+}
+
+$ldflags = @()
+if (-not [string]::IsNullOrWhiteSpace($buildRevision)) {
+  $ldflags += "-X"
+  $ldflags += "github.com/collectors-tech/cabinet/internal/app.buildRevision=$buildRevision"
+}
+if (-not [string]::IsNullOrWhiteSpace($buildDate)) {
+  $ldflags += "-X"
+  $ldflags += "github.com/collectors-tech/cabinet/internal/app.buildDate=$buildDate"
+}
+
+if ($ldflags.Count -gt 0) {
+  Write-CabinetKeyValue -Key "Revision" -Value $buildRevision
+  go build -ldflags ($ldflags -join " ") -o $targetPath ./cmd/cabinet
+} else {
+  go build -o $targetPath ./cmd/cabinet
+}
 if ($LASTEXITCODE -ne 0) {
   throw "go build failed with exit code $LASTEXITCODE"
 }

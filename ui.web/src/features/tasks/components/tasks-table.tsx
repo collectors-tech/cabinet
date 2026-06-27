@@ -916,6 +916,31 @@ export function TasksTable({
     purchaseUrl,
   ])
 
+  const viewModeControls = (
+    <div className='flex shrink-0 items-center gap-2'>
+      <Button
+        size='sm'
+        variant={viewMode === 'rows' ? 'default' : 'outline'}
+        onClick={() => setViewMode('rows')}
+        onKeyDown={(event) => handleViewModeKeyDown('rows', event)}
+        aria-pressed={viewMode === 'rows'}
+        aria-label='Switch to rows view'
+      >
+        Rows
+      </Button>
+      <Button
+        size='sm'
+        variant={viewMode === 'cards' ? 'default' : 'outline'}
+        onClick={() => setViewMode('cards')}
+        onKeyDown={(event) => handleViewModeKeyDown('cards', event)}
+        aria-pressed={viewMode === 'cards'}
+        aria-label='Switch to cards view'
+      >
+        Cards
+      </Button>
+    </div>
+  )
+
   return (
     <div
       data-testid={
@@ -999,123 +1024,101 @@ export function TasksTable({
               ]
         }
         customFilters={customFilters}
+        actions={!isInventoryRoute ? viewModeControls : undefined}
       />
 
-      <div className='flex flex-wrap items-center justify-between gap-2'>
-        <div className='flex flex-wrap items-center gap-2'>
-          {isInventoryRoute ? (
-            <>
-              <select
-                className='h-9 min-w-[12rem] rounded-md border bg-background px-2 text-sm'
-                data-testid='inventory-saved-view-select'
-                value={activeSavedViewID}
-                disabled={inventoryProfileSettingsLoading}
-                onChange={(event) => {
-                  const nextID = event.target.value
-                  if (nextID === '') {
-                    setActiveSavedViewID('')
-                    setSavedViewFeedback(null)
-                    setSavedViewError(null)
-                    return
-                  }
-                  const nextView = inventorySavedViews.find(
-                    (view) => view.id === nextID
-                  )
-                  if (!nextView) {
-                    return
-                  }
-                  applyInventorySavedView(nextView)
-                }}
-              >
-                <option value=''>Saved views</option>
-                {inventorySavedViews.map((view) => (
-                  <option key={view.id} value={view.id}>
-                    {view.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                type='button'
-                size='sm'
-                variant='outline'
-                data-testid='inventory-saved-view-save'
-                disabled={
-                  inventoryProfileSettingsLoading ||
-                  inventoryProfileSettingsSaving
-                }
-                onClick={() => {
-                  setSaveViewDialogOpen(true)
+      {isInventoryRoute ? (
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <select
+              className='h-9 min-w-[12rem] rounded-md border bg-background px-2 text-sm'
+              data-testid='inventory-saved-view-select'
+              value={activeSavedViewID}
+              disabled={inventoryProfileSettingsLoading}
+              onChange={(event) => {
+                const nextID = event.target.value
+                if (nextID === '') {
+                  setActiveSavedViewID('')
                   setSavedViewFeedback(null)
                   setSavedViewError(null)
-                  setSaveViewName((previous) =>
-                    previous !== ''
-                      ? previous
-                      : activeSavedViewID !== ''
-                        ? (inventorySavedViews.find(
-                            (view) => view.id === activeSavedViewID
-                          )?.name ?? '')
-                        : ''
-                  )
-                }}
-              >
-                Save View
-              </Button>
-              <Button
-                type='button'
-                size='sm'
-                variant='outline'
-                data-testid='inventory-saved-view-delete'
-                disabled={
-                  activeSavedViewID === '' ||
-                  inventoryProfileSettingsLoading ||
-                  inventoryProfileSettingsSaving
+                  return
                 }
-                onClick={() => void handleDeleteInventoryView()}
+                const nextView = inventorySavedViews.find(
+                  (view) => view.id === nextID
+                )
+                if (!nextView) {
+                  return
+                }
+                applyInventorySavedView(nextView)
+              }}
+            >
+              <option value=''>Saved views</option>
+              {inventorySavedViews.map((view) => (
+                <option key={view.id} value={view.id}>
+                  {view.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              data-testid='inventory-saved-view-save'
+              disabled={
+                inventoryProfileSettingsLoading ||
+                inventoryProfileSettingsSaving
+              }
+              onClick={() => {
+                setSaveViewDialogOpen(true)
+                setSavedViewFeedback(null)
+                setSavedViewError(null)
+                setSaveViewName((previous) =>
+                  previous !== ''
+                    ? previous
+                    : activeSavedViewID !== ''
+                      ? (inventorySavedViews.find(
+                          (view) => view.id === activeSavedViewID
+                        )?.name ?? '')
+                      : ''
+                )
+              }}
+            >
+              Save View
+            </Button>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              data-testid='inventory-saved-view-delete'
+              disabled={
+                activeSavedViewID === '' ||
+                inventoryProfileSettingsLoading ||
+                inventoryProfileSettingsSaving
+              }
+              onClick={() => void handleDeleteInventoryView()}
+            >
+              Delete View
+            </Button>
+            {savedViewFeedback ? (
+              <p
+                className='text-xs text-muted-foreground'
+                data-testid='inventory-saved-view-feedback'
               >
-                Delete View
-              </Button>
-            </>
-          ) : null}
-          {savedViewFeedback ? (
-            <p
-              className='text-xs text-muted-foreground'
-              data-testid='inventory-saved-view-feedback'
-            >
-              {savedViewFeedback}
-            </p>
-          ) : null}
-          {savedViewError ? (
-            <p
-              className='text-xs text-destructive'
-              data-testid='inventory-saved-view-error'
-            >
-              {savedViewError}
-            </p>
-          ) : null}
+                {savedViewFeedback}
+              </p>
+            ) : null}
+            {savedViewError ? (
+              <p
+                className='text-xs text-destructive'
+                data-testid='inventory-saved-view-error'
+              >
+                {savedViewError}
+              </p>
+            ) : null}
+          </div>
+          {viewModeControls}
         </div>
-        <div className='flex items-center gap-2'>
-          <Button
-            size='sm'
-            variant={viewMode === 'rows' ? 'default' : 'outline'}
-            onClick={() => setViewMode('rows')}
-            onKeyDown={(event) => handleViewModeKeyDown('rows', event)}
-            aria-pressed={viewMode === 'rows'}
-            aria-label='Switch to rows view'
-          >
-            Rows
-          </Button>
-          <Button
-            size='sm'
-            variant={viewMode === 'cards' ? 'default' : 'outline'}
-            onClick={() => setViewMode('cards')}
-            onKeyDown={(event) => handleViewModeKeyDown('cards', event)}
-            aria-pressed={viewMode === 'cards'}
-            aria-label='Switch to cards view'
-          >
-            Cards
-          </Button>
-        </div>
-      </div>
+      ) : null}
 
       {viewMode === 'rows' ? (
         <div

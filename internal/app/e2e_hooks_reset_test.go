@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/config"
@@ -50,6 +51,33 @@ func TestE2EResetEndpointClearsWishlistPurchaseDeliveryState(t *testing.T) {
 	assertTableEmpty(t, a, "wishlist_entries")
 	assertTableEmpty(t, a, "instances")
 	assertTableEmpty(t, a, "canonical_items")
+}
+
+func TestE2EBootstrapEndpointSeedsWishlistFixtures(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+
+	reset := doRequest(t, a, http.MethodPost, "/api/test/reset", nil, nil)
+	if reset.Code != http.StatusOK {
+		t.Fatalf("reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+	setupStatus := doRequest(t, a, http.MethodPost, "/api/test/runtime/setup-status", strings.NewReader(`{"state":"present"}`), map[string]string{"Content-Type": "application/json"})
+	if setupStatus.Code != http.StatusOK {
+		t.Fatalf("setup status=%d body=%s", setupStatus.Code, setupStatus.Body.String())
+	}
+	bootstrap := doRequest(t, a, http.MethodPost, "/api/test/bootstrap", nil, nil)
+	if bootstrap.Code != http.StatusOK {
+		t.Fatalf("bootstrap status=%d body=%s", bootstrap.Code, bootstrap.Body.String())
+	}
+
+	var wishlistCount int
+	if err := a.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM wishlist_entries WHERE profile_id = 'e2e-profile-001'`).Scan(&wishlistCount); err != nil {
+		t.Fatalf("count wishlist fixtures: %v", err)
+	}
+	if wishlistCount != 3 {
+		t.Fatalf("expected 3 seeded wishlist entries, got %d", wishlistCount)
+	}
 }
 
 func seedLegacyResetState(t *testing.T, a *App) {

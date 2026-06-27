@@ -126,12 +126,24 @@ describe("ui-screen-wishlist", () => {
   }
 
   function openWishlistRowActions(rowText: string) {
-    cy.contains("tr", rowText)
+    cy.contains("tr", rowText, { timeout: 15000 })
       .find('[data-testid="task-row-actions-trigger"]')
-      .scrollIntoView()
       .should("be.visible")
-      .click({ force: true });
-    cy.get('[role="menu"]').should("be.visible");
+      .then(($trigger) => {
+        const rowId = $trigger.attr("data-row-id");
+        cy.get(
+          `[data-testid="task-row-actions-trigger"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        )
+          .should("be.visible")
+          .click({ force: true });
+        cy.get(
+          `[data-testid="task-row-actions-menu"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        )
+          .filter(":visible")
+          .should("have.length", 1);
+      });
   }
 
   function collectionFilterOptionKey(value: string) {
@@ -702,7 +714,7 @@ describe("ui-screen-wishlist", () => {
       ensureScrollable: false,
     });
     cy.contains("th", "Purchased").should("exist");
-    cy.contains("th", "Delivered").should("exist");
+    cy.contains("th", "Delivered").should("not.exist");
     cy.contains("th", "Category").should("exist");
     cy.contains("th", "Owned").should("not.exist");
     cy.get('[data-testid="wishlist-category-item-collector-1"]').should(
@@ -710,9 +722,7 @@ describe("ui-screen-wishlist", () => {
       "Slot Cars"
     );
     cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]')
-      .scrollIntoView()
-      .should("be.visible")
-      .and("have.attr", "aria-checked", "false");
+      .should("not.exist");
 
     openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
     cy.contains('[role="menuitem"]', "Edit").click({ force: true });
@@ -745,9 +755,7 @@ describe("ui-screen-wishlist", () => {
       "Race Cars"
     );
     cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]').should(
-      "have.attr",
-      "aria-checked",
-      "true"
+      "not.exist"
     );
 
     cy.contains("button", "Cards").click();
