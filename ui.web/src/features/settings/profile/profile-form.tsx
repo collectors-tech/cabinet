@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ProfileContextBlocked } from '../components/profile-context-blocked'
+import { recordSettingsFeedbackHistory } from '../settings-feedback-history'
 import { useProfileSettings } from '../use-profile-settings'
 
 const profileFormSchema = z.object({
@@ -131,10 +132,26 @@ export function ProfileForm() {
         'profile.urls': JSON.stringify(data.urls ?? []),
       })
       setSaveMessage('Profile settings saved.')
+      recordSettingsFeedbackHistory({
+        id: 'settings-profile-save-success',
+        level: 'success',
+        title: 'Profile settings saved.',
+        summary: 'Profile preference save feedback was preserved for review.',
+        source: 'profile',
+        sourceLabel: 'Profile',
+      })
     } catch (err) {
-      setSaveError(
+      const message =
         err instanceof Error ? err.message : 'failed_to_save_profile'
-      )
+      setSaveError(message)
+      recordSettingsFeedbackHistory({
+        id: 'settings-profile-save-failed',
+        level: 'error',
+        title: 'Profile settings failed to save.',
+        summary: message,
+        source: 'profile',
+        sourceLabel: 'Profile',
+      })
     } finally {
       mutationLockRef.current = false
     }

@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { ProfileContextBlocked } from '../components/profile-context-blocked'
+import { recordSettingsFeedbackHistory } from '../settings-feedback-history'
 import { useProfileSettings } from '../use-profile-settings'
 
 const items = [
@@ -98,10 +99,26 @@ export function DisplayForm() {
         'display.items': data.items.join(','),
       })
       setSaveMessage('Display settings saved.')
+      recordSettingsFeedbackHistory({
+        id: 'settings-display-save-success',
+        level: 'success',
+        title: 'Display settings saved.',
+        summary: 'Display preference save feedback was preserved for review.',
+        source: 'display',
+        sourceLabel: 'Display',
+      })
     } catch (err) {
-      setSaveError(
+      const message =
         err instanceof Error ? err.message : 'failed_to_save_display'
-      )
+      setSaveError(message)
+      recordSettingsFeedbackHistory({
+        id: 'settings-display-save-failed',
+        level: 'error',
+        title: 'Display settings failed to save.',
+        summary: message,
+        source: 'display',
+        sourceLabel: 'Display',
+      })
     }
   }
 
@@ -112,6 +129,15 @@ export function DisplayForm() {
           const selectedItems = form.getValues('items') ?? []
           if (selectedItems.length === 0) {
             event.preventDefault()
+            recordSettingsFeedbackHistory({
+              id: 'settings-display-selection-invalid',
+              level: 'warning',
+              title: 'Display selection is required.',
+              summary:
+                'Display settings rejected an empty sidebar selection before save.',
+              source: 'display',
+              sourceLabel: 'Display',
+            })
             form.setError('items', {
               type: 'manual',
               message: 'You have to select at least one item.',
