@@ -20,6 +20,7 @@ describe('ui-screen-users', () => {
   }
 
   beforeEach(() => {
+    cy.viewport(2048, 900)
     cy.clearCookies()
     cy.clearLocalStorage()
     cy.intercept('GET', '/api/users*').as('listUsers')
@@ -27,8 +28,44 @@ describe('ui-screen-users', () => {
     cy.wait('@listUsers')
   })
 
+  it('UI-SCREEN-USERS-009 keeps primary actions in the Users shell header and table controls in the toolbar', () => {
+    cy.get('[data-testid="users-shell-header"]').should('be.visible')
+    cy.get('[data-testid="users-header-title"]')
+      .should('be.visible')
+      .and('contain', 'Users')
+      .and('have.attr', 'title', 'Manage users and roles.')
+    cy.get('[data-testid="users-global-header-actions"]')
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="users-invite-action"]')
+          .should('be.visible')
+          .and('contain', 'Invite User')
+        cy.get('[data-testid="users-add-action"]')
+          .should('be.visible')
+          .and('contain', 'Add User')
+      })
+    cy.get('[data-testid="users-header-action-separator"]').should('be.visible')
+    cy.get('[data-testid="users-workspace"]').should('be.visible')
+    cy.contains('h2', 'User List').should('not.exist')
+    cy.contains('Manage your users and their roles here.').should('not.exist')
+    cy.get('input[placeholder="Filter users..."]').should('be.visible')
+    cy.contains('button', 'Status').should('be.visible')
+    cy.contains('button', 'Role').should('be.visible')
+    cy.contains('button', 'View').should('be.visible')
+
+    cy.get('[data-testid="users-invite-action"]').then(($invite) => {
+      const inviteTop = $invite[0].getBoundingClientRect().top
+      cy.get('input[placeholder="Filter users..."]').then(($search) => {
+        const searchTop = $search[0].getBoundingClientRect().top
+        expect(inviteTop, 'header actions appear before toolbar').to.be.lessThan(
+          searchTop
+        )
+      })
+    })
+  })
+
   it('UI-SCREEN-USERS-001 reads users table from Cabinet API and supports filter/sort/pagination workflows', () => {
-    cy.contains('h2', 'User List').should('be.visible')
+    cy.get('[data-testid="users-header-title"]').should('contain', 'Users')
     cy.get('tbody tr').first().find('td').eq(1).invoke('text').then((usernameRaw) => {
       const username = usernameRaw.trim()
       const token = username.slice(0, Math.min(4, username.length))
@@ -48,7 +85,7 @@ describe('ui-screen-users', () => {
     cy.intercept('POST', '/api/users').as('createUser')
     cy.intercept('POST', '/api/users/invite').as('inviteUser')
 
-    cy.contains('button', 'Add User').click()
+    cy.get('[data-testid="users-add-action"]').click()
     cy.contains('[role="dialog"]', 'Add New User').should('be.visible')
     cy.get('input[placeholder="John"]').type('Auto')
     cy.get('input[placeholder="Doe"]').type('User')
@@ -64,7 +101,7 @@ describe('ui-screen-users', () => {
     cy.get('input[placeholder="Filter users..."]').clear().type(username)
     cy.contains(username).should('be.visible')
 
-    cy.contains('button', 'Invite User').click()
+    cy.get('[data-testid="users-invite-action"]').click()
     cy.contains('[role="dialog"]', 'Invite User').should('be.visible')
     cy.get('input[placeholder="eg: john.doe@gmail.com"]').type(inviteEmail)
     cy.get('[role="dialog"] button[role="combobox"]').first().click()
@@ -259,7 +296,7 @@ describe('ui-screen-users', () => {
     cy.wait('@retryUsersList').its('response.statusCode').should('eq', 200)
 
     cy.get('[data-testid="users-load-error"]').should('not.exist')
-    cy.contains('h2', 'User List').should('be.visible')
+    cy.get('[data-testid="users-header-title"]').should('contain', 'Users')
     cy.contains('retry_user').should('be.visible')
   })
 
@@ -273,9 +310,9 @@ describe('ui-screen-users', () => {
     }).as('emptyUsersList')
 
     cy.reload()
-    cy.contains('h2', 'User List').should('be.visible')
-    cy.contains('button', 'Invite User').should('be.visible')
-    cy.contains('button', 'Add User').should('be.visible')
+    cy.get('[data-testid="users-header-title"]').should('contain', 'Users')
+    cy.get('[data-testid="users-invite-action"]').should('be.visible')
+    cy.get('[data-testid="users-add-action"]').should('be.visible')
     cy.contains('Loading users...').should('be.visible')
 
     cy.wait('@emptyUsersList').its('response.statusCode').should('eq', 200)
@@ -288,7 +325,7 @@ describe('ui-screen-users', () => {
 
   it('UI-SCREEN-USERS-007 hides optional table columns from the View menu', () => {
     cy.viewport(1280, 900)
-    cy.contains('h2', 'User List').should('be.visible')
+    cy.get('[data-testid="users-header-title"]').should('contain', 'Users')
     cy.contains('th', 'Username').should('be.visible')
     cy.contains('th', 'Email').should('be.visible')
     cy.contains('th', 'Status').should('be.visible')

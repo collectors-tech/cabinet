@@ -12,6 +12,6 @@ describe('ui-screen-users-fallback-profile-scope', () => {
 
     cy.wait('@listUsers').its('response.statusCode').should('eq', 200)
     cy.contains('users_fetch_failed_404').should('not.exist')
-    cy.contains('h2', 'User List').should('be.visible')
+    cy.get('[data-testid="users-header-title"]').should('contain', 'Users')
   })
 })

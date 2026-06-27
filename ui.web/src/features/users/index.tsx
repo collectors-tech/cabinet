@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
 import { Users as UsersIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -50,7 +51,7 @@ export function Users() {
 
   return (
     <UsersProvider>
-      <Header fixed>
+      <Header fixed data-testid='users-shell-header'>
         <Search />
         <HeaderTitle
           title='Users'
@@ -60,26 +61,30 @@ export function Users() {
           iconTestId='users-page-icon'
         />
         <div
-          className='ms-auto flex items-center space-x-4'
+          className='ms-auto flex min-w-0 items-center gap-3'
           data-header-title-avoid='true'
         >
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
+          <div
+            className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+            data-testid='users-global-header-actions'
+          >
+            <UsersPrimaryButtons />
+          </div>
+          <Separator
+            orientation='vertical'
+            className='h-6'
+            data-testid='users-header-action-separator'
+          />
+          <div className='flex items-center gap-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ConfigDrawer />
+            <ProfileDropdown />
+          </div>
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div className='flex flex-wrap items-end justify-between gap-2'>
-          <div>
-            <h2 className='text-2xl font-bold tracking-tight'>User List</h2>
-            <p className='text-muted-foreground'>
-              Manage your users and their roles here.
-            </p>
-          </div>
-          <UsersPrimaryButtons />
-        </div>
+      <Main fixed className='gap-3 sm:gap-4' data-testid='users-workspace'>
         {loadError ? (
           <div
             className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
