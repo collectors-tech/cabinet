@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -111,10 +112,11 @@ func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, er
 			GROUP BY item_id
 		) ps ON ps.item_id = m.item_id
 		WHERE m.state = 'not_in_collection' AND i.candidate_id IS NULL
+			AND c.status NOT IN ('ignored', 'archived')
 	`
 	args := []any{}
 	if f.IncludeArchived {
-		q = strings.Replace(q, " AND i.candidate_id IS NULL", "", 1)
+		q = strings.Replace(q, " AND i.candidate_id IS NULL\n\t\t\tAND c.status NOT IN ('ignored', 'archived')", "", 1)
 	}
 	if strings.TrimSpace(f.Query) != "" {
 		q += ` AND LOWER(c.title) LIKE ?`
@@ -165,6 +167,12 @@ func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, er
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate not_in_collection rows: %w", err)
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].DealScore != out[j].DealScore {
+			return out[i].DealScore > out[j].DealScore
+		}
+		return out[i].LastSeen > out[j].LastSeen
+	})
 	return out, nil
 }
 
@@ -217,6 +225,10 @@ func discoveryPriceDelta(it Item) (float64, float64) {
 }
 
 func discoveryDealScore(it Item) float64 {
+	switch strings.TrimSpace(it.Status) {
+	case "wishlisted", "purchase_candidate", "inventory_candidate", "ignored", "archived":
+		return 0
+	}
 	score := 0.0
 	if it.MatchType == "wishlist_match" {
 		score += 50
@@ -555,6 +567,20 @@ func payloadConfirmsOwnedOrPurchased(payload map[string]any) bool {
 }
 
 func (s *Service) ResetIgnored(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM ignored_candidates`)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin reset ignored candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ignored_candidates`); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete ignored candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE scanner_candidates SET status = 'new' WHERE status = 'ignored'`); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("reset ignored candidate status: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit reset ignored candidates: %w", err)
+	}
+	return nil
 }

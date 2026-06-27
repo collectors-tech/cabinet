@@ -407,6 +407,75 @@ func TestListNotInCollectionDashboardFieldsAndArchivedOptIn(t *testing.T) {
 	}
 }
 
+func TestListNotInCollectionRanksWishlistDealsAndSuppressesHandledStatuses(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title, status) VALUES ('wish-item','AFX','Cars','WISH-1547','Wishlist Target','wishlist')`); err != nil {
+		t.Fatalf("seed wishlist item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO wishlist_entries(id, item_id, target_price, priority) VALUES ('wish-1547','wish-item',80,'high')`); err != nil {
+		t.Fatalf("seed wishlist entry: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('q1','AFX ranked deals','["afx"]','[]','["market_watch"]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	seedCandidate := func(id, listingID, itemID, title, status, lastSeen string, price, confidence float64) {
+		t.Helper()
+		if _, err := conn.Exec(`
+			INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, stock_state, stock_count)
+			VALUES (?, 'q1', ?, ?, ?, 0, 'https://example.test/source', '', 'seller', '2026-06-20T00:00:00Z', ?, ?, 'market_watch', 'AUD', 'in_stock', 3)
+		`, id, listingID, title, price, lastSeen, status); err != nil {
+			t.Fatalf("seed candidate %s: %v", id, err)
+		}
+		if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES (?, ?, 'not_in_collection', ?, 0, ?, CURRENT_TIMESTAMP)`, id, itemID, confidence, listingID); err != nil {
+			t.Fatalf("seed match %s: %v", id, err)
+		}
+	}
+	seedCandidate("c-low-recent", "LOW-1547", "", "Recent low-signal result", "new", "2026-06-27T00:00:00Z", 20, 0.2)
+	seedCandidate("c-deal-older", "DEAL-1547", "wish-item", "Older wishlist deal", "new", "2026-06-21T00:00:00Z", 40, 0.8)
+	seedCandidate("c-promoted", "PROMOTED-1547", "wish-item", "Already promoted wishlist deal", "wishlisted", "2026-06-28T00:00:00Z", 35, 0.9)
+	seedCandidate("c-archived-status", "ARCH-1547", "wish-item", "Archived status-only deal", "archived", "2026-06-29T00:00:00Z", 30, 0.9)
+
+	svc := NewService(conn)
+	items, err := svc.ListNotInCollection(context.Background(), Filter{})
+	if err != nil {
+		t.Fatalf("ListNotInCollection(default) error = %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected default list to hide archived status-only candidate, got %d: %+v", len(items), items)
+	}
+	if items[0].CandidateID != "c-deal-older" {
+		t.Fatalf("expected wishlist deal to rank ahead of newer low-signal result, got %+v", items)
+	}
+	if items[0].DealScore <= items[1].DealScore || items[0].MatchType != "wishlist_match" || items[0].PriceDeltaAmount != 40 {
+		t.Fatalf("expected deterministic wishlist deal score and metadata, got first=%+v second=%+v", items[0], items[1])
+	}
+	if items[2].CandidateID != "c-promoted" || items[2].DealScore != 0 || items[2].DestinationLink != "/wishlist/?item_id=wish-item" {
+		t.Fatalf("expected already-promoted candidate to keep destination state without actionable deal ranking, got %+v", items[2])
+	}
+
+	withArchived, err := svc.ListNotInCollection(context.Background(), Filter{IncludeArchived: true})
+	if err != nil {
+		t.Fatalf("ListNotInCollection(include archived) error = %v", err)
+	}
+	var archived Item
+	for _, item := range withArchived {
+		if item.CandidateID == "c-archived-status" {
+			archived = item
+			break
+		}
+	}
+	if archived.CandidateID == "" || archived.DealScore != 0 || archived.TriageStatus != "archived" {
+		t.Fatalf("expected archived status-only candidate only through opt-in with no deal ranking, got %+v", withArchived)
+	}
+}
+
 func TestApplyActionPersistsDestinationStatusesAndWishlistDoesNotClaimOwnership(t *testing.T) {
 	t.Parallel()
 
