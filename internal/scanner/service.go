@@ -31,6 +31,7 @@ type QuerySet struct {
 	LastRunStatus      string   `json:"last_run_status,omitempty"`
 	LastRunAt          string   `json:"last_run_at,omitempty"`
 	LastRunMessage     string   `json:"last_run_message,omitempty"`
+	NextRunAt          string   `json:"next_run_at,omitempty"`
 	LastCandidateCount int      `json:"last_candidate_count,omitempty"`
 }
 
@@ -278,16 +279,45 @@ func (s *Service) populateQuerySetRunSnapshot(ctx context.Context, profileID str
 		return nil
 	}
 	var candidateCount int
-	var latestCandidateAt sql.NullString
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(*), MAX(last_seen)
+		SELECT COUNT(*)
 		FROM scanner_candidates
 		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
-	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&candidateCount, &latestCandidateAt); err != nil {
+	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&candidateCount); err != nil {
 		return fmt.Errorf("query set run candidate snapshot: %w", err)
 	}
-	var failureMessage, failureAt string
+	q.LastCandidateCount = candidateCount
+	q.LastRunStatus = "never"
+
+	var runStatus, finishedAt, errorMessage sql.NullString
 	err := s.db.QueryRowContext(ctx, `
+		SELECT status, finished_at, error_message
+		FROM scanner_runs
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
+		ORDER BY finished_at DESC, started_at DESC
+		LIMIT 1
+	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&runStatus, &finishedAt, &errorMessage)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("query set durable run snapshot: %w", err)
+	}
+	if err == nil {
+		q.LastRunStatus = normalizeRunStatus(runStatus.String)
+		q.LastRunAt = strings.TrimSpace(finishedAt.String)
+		q.LastRunMessage = strings.TrimSpace(errorMessage.String)
+		q.NextRunAt = computeNextRunAt(q.ScheduleCron, q.LastRunAt, time.Now().UTC())
+		return nil
+	}
+
+	var latestCandidateAt sql.NullString
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT MAX(last_seen)
+		FROM scanner_candidates
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
+	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&latestCandidateAt); err != nil {
+		return fmt.Errorf("query set legacy candidate snapshot: %w", err)
+	}
+	var failureMessage, failureAt string
+	err = s.db.QueryRowContext(ctx, `
 		SELECT message, created_at
 		FROM scanner_failures
 		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
@@ -298,8 +328,6 @@ func (s *Service) populateQuerySetRunSnapshot(ctx context.Context, profileID str
 		return fmt.Errorf("query set run failure snapshot: %w", err)
 	}
 
-	q.LastCandidateCount = candidateCount
-	q.LastRunStatus = "never"
 	if latestCandidateAt.Valid && strings.TrimSpace(latestCandidateAt.String) != "" {
 		q.LastRunStatus = "succeeded"
 		q.LastRunAt = latestCandidateAt.String
@@ -309,7 +337,133 @@ func (s *Service) populateQuerySetRunSnapshot(ctx context.Context, profileID str
 		q.LastRunAt = failureAt
 		q.LastRunMessage = failureMessage
 	}
+	q.NextRunAt = computeNextRunAt(q.ScheduleCron, q.LastRunAt, time.Now().UTC())
 	return nil
+}
+
+func normalizeRunStatus(status string) string {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case "succeeded":
+		return "succeeded"
+	case "failed":
+		return "failed"
+	default:
+		return "never"
+	}
+}
+
+func computeNextRunAt(scheduleCron, lastRunAt string, now time.Time) string {
+	schedule, ok := parseSimpleCron(scheduleCron)
+	if !ok {
+		return ""
+	}
+	base := now.UTC()
+	if parsed, ok := parseScannerTime(lastRunAt); ok && parsed.After(base) {
+		base = parsed
+	}
+	next, ok := nextSimpleCronTime(schedule, base)
+	if !ok {
+		return ""
+	}
+	return next.Format(time.RFC3339)
+}
+
+type simpleCronSchedule struct {
+	minutes []int
+	hours   []int
+}
+
+func parseSimpleCron(expr string) (simpleCronSchedule, bool) {
+	fields := strings.Fields(strings.TrimSpace(expr))
+	if len(fields) != 5 {
+		return simpleCronSchedule{}, false
+	}
+	if fields[2] != "*" || fields[3] != "*" || fields[4] != "*" {
+		return simpleCronSchedule{}, false
+	}
+	minutes, ok := parseCronField(fields[0], 0, 59)
+	if !ok {
+		return simpleCronSchedule{}, false
+	}
+	hours, ok := parseCronField(fields[1], 0, 23)
+	if !ok {
+		return simpleCronSchedule{}, false
+	}
+	return simpleCronSchedule{minutes: minutes, hours: hours}, true
+}
+
+func parseCronField(field string, minValue, maxValue int) ([]int, bool) {
+	field = strings.TrimSpace(field)
+	if field == "*" {
+		return cronRange(minValue, maxValue, 1), true
+	}
+	if strings.HasPrefix(field, "*/") {
+		step, ok := parseCronInt(strings.TrimPrefix(field, "*/"))
+		if !ok || step <= 0 {
+			return nil, false
+		}
+		return cronRange(minValue, maxValue, step), true
+	}
+	value, ok := parseCronInt(field)
+	if !ok || value < minValue || value > maxValue {
+		return nil, false
+	}
+	return []int{value}, true
+}
+
+func parseCronInt(raw string) (int, bool) {
+	value := 0
+	for _, r := range raw {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		value = value*10 + int(r-'0')
+	}
+	return value, strings.TrimSpace(raw) != ""
+}
+
+func cronRange(minValue, maxValue, step int) []int {
+	out := make([]int, 0, maxValue-minValue+1)
+	for value := minValue; value <= maxValue; value += step {
+		out = append(out, value)
+	}
+	return out
+}
+
+func nextSimpleCronTime(schedule simpleCronSchedule, base time.Time) (time.Time, bool) {
+	start := base.UTC().Truncate(time.Minute).Add(time.Minute)
+	allowedMinutes := make(map[int]struct{}, len(schedule.minutes))
+	for _, minute := range schedule.minutes {
+		allowedMinutes[minute] = struct{}{}
+	}
+	allowedHours := make(map[int]struct{}, len(schedule.hours))
+	for _, hour := range schedule.hours {
+		allowedHours[hour] = struct{}{}
+	}
+	for candidate := start; candidate.Before(start.Add(366 * 24 * time.Hour)); candidate = candidate.Add(time.Minute) {
+		if _, ok := allowedMinutes[candidate.Minute()]; !ok {
+			continue
+		}
+		if _, ok := allowedHours[candidate.Hour()]; !ok {
+			continue
+		}
+		return candidate, true
+	}
+	return time.Time{}, false
+}
+
+func parseScannerTime(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05"} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed.UTC(), true
+		}
+	}
+	return time.Time{}, false
 }
 
 func defaultProviderScope(region string) []string {

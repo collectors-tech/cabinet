@@ -29,6 +29,9 @@ func TestScannerQuerySetsAndProviderHealthEndpoints(t *testing.T) {
 	if len(payload.QuerySets) != 1 {
 		t.Fatalf("expected one query set, got %d", len(payload.QuerySets))
 	}
+	if got, _ := payload.QuerySets[0]["next_run_at"].(string); strings.TrimSpace(got) == "" {
+		t.Fatalf("expected scheduled query set to expose computed next_run_at, got %+v", payload.QuerySets[0])
+	}
 	health := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=ebay", nil, nil)
 	if health.Code != http.StatusOK {
 		t.Fatalf("provider health status=%d body=%s", health.Code, health.Body.String())

@@ -1064,6 +1064,7 @@ func TestOpenAPIDocumentsEbayQuerySetContract(t *testing.T) {
 		"enum: [never, succeeded, failed]",
 		"last_run_at: { type: string }",
 		"last_run_message: { type: string }",
+		"next_run_at: { type: string }",
 		"last_candidate_count: { type: integer }",
 	} {
 		if !strings.Contains(querySetSchema, token) {

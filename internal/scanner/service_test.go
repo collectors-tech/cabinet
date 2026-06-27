@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/collectors-tech/cabinet/internal/db"
 )
@@ -401,6 +402,89 @@ func TestRunScheduled(t *testing.T) {
 	}
 	if ran != 1 {
 		t.Fatalf("expected 1 scheduled run, got %d", ran)
+	}
+}
+
+func TestQuerySetRunSnapshotUsesDurableRunRecordsAndComputesNextRun(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Scheduled durable watch",
+		Keywords:      []string{"afx"},
+		ProviderScope: []string{"bonzaslotcars"},
+		ScheduleCron:  "*/15 * * * *",
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile() error = %v", err)
+	}
+	provider := &testProvider{
+		providerID: "bonzaslotcars",
+		items: []CandidateInput{{
+			ListingID: "SCHEDULE-1",
+			Title:     "Scheduled result",
+			URL:       "https://shop.test/schedule-1",
+			Source:    "bonzaslotcars",
+		}},
+	}
+	if _, err := svc.RunScheduledForProfile(context.Background(), "profile-a", provider); err != nil {
+		t.Fatalf("RunScheduledForProfile() error = %v", err)
+	}
+
+	reloaded, err := svc.GetQuerySetForProfile(context.Background(), "profile-a", qs.ID)
+	if err != nil {
+		t.Fatalf("GetQuerySetForProfile() error = %v", err)
+	}
+	if reloaded.LastRunStatus != "succeeded" {
+		t.Fatalf("expected latest durable run status succeeded, got %+v", reloaded)
+	}
+	if reloaded.LastRunAt == "" {
+		t.Fatalf("expected latest durable run timestamp, got %+v", reloaded)
+	}
+	if reloaded.LastCandidateCount != 1 {
+		t.Fatalf("expected candidate count from durable watch scope, got %+v", reloaded)
+	}
+	nextRun, ok := parseScannerTime(reloaded.NextRunAt)
+	if !ok {
+		t.Fatalf("expected computed next_run_at timestamp, got %+v", reloaded)
+	}
+	lastRun, ok := parseScannerTime(reloaded.LastRunAt)
+	if !ok {
+		t.Fatalf("expected parseable last_run_at timestamp, got %+v", reloaded)
+	}
+	if !nextRun.After(lastRun) {
+		t.Fatalf("expected next_run_at after last_run_at, got last=%s next=%s", reloaded.LastRunAt, reloaded.NextRunAt)
+	}
+}
+
+func TestComputeNextRunAtSupportsCommonMarketWatchSchedules(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, 6, 27, 17, 46, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		schedule string
+		want     string
+	}{
+		{name: "quarter-hour", schedule: "*/15 * * * *", want: "2026-06-27T18:00:00Z"},
+		{name: "six-hourly", schedule: "0 */6 * * *", want: "2026-06-27T18:00:00Z"},
+		{name: "fixed-daily", schedule: "30 8 * * *", want: "2026-06-28T08:30:00Z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := computeNextRunAt(tc.schedule, "", base); got != tc.want {
+				t.Fatalf("computeNextRunAt(%q)=%q, want %q", tc.schedule, got, tc.want)
+			}
+		})
+	}
+	if got := computeNextRunAt("not a cron", "", base); got != "" {
+		t.Fatalf("invalid schedule should not produce next run, got %q", got)
 	}
 }
 
