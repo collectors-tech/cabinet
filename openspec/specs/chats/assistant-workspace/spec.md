@@ -98,3 +98,14 @@ The shell Assistant side-panel MUST remain open and connected to the active guid
 - **AND** the compact Action Timeline MUST show the navigation step, target highlight step, and next required action
 - **AND** route changes MUST NOT clear pending preview, confirmation, recipe, or target state for the active profile/thread
 - **AND** closing the side-panel MUST not apply or cancel a mutating step unless the user explicitly chooses that action
+
+### Requirement ASSISTANT-WORKSPACE-009: Assistant side-panel SHALL dispatch normal user text through governed app-control planning
+The shell Assistant side-panel MUST send normal user text with route, profile, thread, selection, and assistant context so deterministic app-control requests can return governed route or action results instead of defaulting to an Inbox handoff.
+
+#### Scenario: Dispatch a route-opening request from the Assistant side-panel
+- **GIVEN** the shell Assistant side-panel is open on an authenticated route
+- **WHEN** user sends `open media`
+- **THEN** the chat message API response MUST include a `navigate.open_surface` app-control result for `/media`
+- **AND** the response MUST include workflow-run audit evidence for the governed dispatch
+- **AND** the side-panel MUST render a route action card without navigating the page until the user chooses the action
+- **AND** the handled app-control request MUST NOT create a default assistant Inbox handoff
