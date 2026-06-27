@@ -51,7 +51,10 @@ describe('ui-screen-users', () => {
     cy.get('input[placeholder="Filter users..."]').should('be.visible')
     cy.contains('button', 'Status').should('be.visible')
     cy.contains('button', 'Role').should('be.visible')
-    cy.contains('button', 'View').should('be.visible')
+    cy.get('[data-testid="users-view-selected-action"]')
+      .should('be.visible')
+      .and('be.disabled')
+    cy.contains('button', /^View$/).should('be.visible')
 
     cy.get('[data-testid="users-invite-action"]').then(($invite) => {
       const inviteTop = $invite[0].getBoundingClientRect().top
@@ -138,7 +141,7 @@ describe('ui-screen-users', () => {
     })
   })
 
-  it('UI-SCREEN-USERS-003 opens the real edit dialog for the double-clicked user row', () => {
+  it('UI-SCREEN-USERS-003 selects rows and opens details from View user and row double-click', () => {
     cy.get('tbody tr').should('have.length.greaterThan', 1)
 
     cy.get('tbody tr')
@@ -150,9 +153,15 @@ describe('ui-screen-users', () => {
         const firstUsername = visibleCellText(firstUsernameRaw)
 
         cy.get('tbody tr').eq(0).click()
+        cy.get('tbody tr').eq(0).should('have.attr', 'data-state', 'selected')
+        cy.get('[data-testid="users-view-selected-action"]').should('be.enabled').click()
         cy.contains('[data-testid="users-row-details-modal"]', firstUsername)
           .should('be.visible')
-        cy.get('body').type('{esc}')
+        cy.get('[data-testid="users-row-details-modal"]')
+          .find('button')
+          .last()
+          .click()
+        cy.get('[data-testid="users-row-details-modal"]').should('not.exist')
       })
 
     cy.get('tbody tr')
@@ -164,14 +173,9 @@ describe('ui-screen-users', () => {
         const secondUsername = visibleCellText(secondUsernameRaw)
 
         cy.get('tbody tr').eq(1).dblclick()
-        cy.contains('[role="dialog"]', 'Edit User')
+        cy.contains('[data-testid="users-row-details-modal"]', secondUsername)
           .should('be.visible')
-          .within(() => {
-            cy.get('input[placeholder="john_doe"]').should(
-              'have.value',
-              secondUsername
-            )
-          })
+        cy.get('tbody tr').eq(1).should('have.attr', 'data-state', 'selected')
       })
   })
 
@@ -224,7 +228,8 @@ describe('ui-screen-users', () => {
     cy.wait('@editUsersList')
     cy.contains('editable_collector').should('be.visible')
 
-    cy.get('tbody tr').first().dblclick()
+    cy.contains('span', 'Open menu').first().parents('button').first().click()
+    cy.contains('[role="menuitem"]', 'Edit').click()
     cy.contains('[role="dialog"]', 'Edit User')
       .should('be.visible')
       .within(() => {
@@ -332,7 +337,7 @@ describe('ui-screen-users', () => {
     cy.get('tbody tr').first().find('td').eq(1).invoke('text').then((usernameRaw) => {
       const username = visibleCellText(usernameRaw)
 
-      cy.contains('button', 'View').click()
+      cy.contains('button', /^View$/).click()
       cy.contains('[role="menuitemcheckbox"]', 'email').click()
       cy.contains('th', 'Email').should('not.exist')
       cy.contains('th', 'Username').should('be.visible')

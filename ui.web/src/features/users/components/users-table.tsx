@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo, useState } from 'react'
 import {
   type SortingState,
   type VisibilityState,
@@ -13,6 +13,7 @@ import {
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,6 @@ import { roles } from '../data/data'
 import { type User } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { usersColumns as columns } from './users-columns'
-import { useUsers } from './users-provider'
 
 type DataTableProps = {
   data: User[]
@@ -54,8 +54,6 @@ export function UsersTable({
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedUserID, setSelectedUserID] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const clickTimerRef = useRef<number | null>(null)
-  const { open, setOpen, setCurrentRow } = useUsers()
 
   // Local state management for table (uncomment to use local-only state, not synced with URL)
   // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
@@ -110,14 +108,6 @@ export function UsersTable({
     ensurePageInRange(table.getPageCount())
   }, [table, ensurePageInRange])
 
-  useEffect(() => {
-    return () => {
-      if (clickTimerRef.current !== null) {
-        window.clearTimeout(clickTimerRef.current)
-      }
-    }
-  }, [])
-
   const selectedUser = useMemo(
     () => data.find((user) => user.id === selectedUserID) ?? null,
     [data, selectedUserID]
@@ -141,36 +131,26 @@ export function UsersTable({
     }
   }
 
+  const openSelectedDetails = () => {
+    if (!selectedUser) {
+      return
+    }
+    setDetailsOpen(true)
+  }
+
   const handleRowClick = (id: string, event: MouseEvent<HTMLElement>) => {
     if (isInteractiveTarget(event.target)) {
       return
     }
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current)
-    }
-    clickTimerRef.current = window.setTimeout(() => {
-      setSelectedContext(id)
-      setDetailsOpen(true)
-    }, 180)
+    setSelectedContext(id)
   }
 
   const handleRowDoubleClick = (id: string, event: MouseEvent<HTMLElement>) => {
     if (isInteractiveTarget(event.target)) {
       return
     }
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current)
-      clickTimerRef.current = null
-    }
     setSelectedContext(id)
-    setDetailsOpen(false)
-    const user = data.find((record) => record.id === id)
-    if (user) {
-      setCurrentRow(user)
-      if (open !== 'edit') {
-        setOpen('edit')
-      }
-    }
+    setDetailsOpen(true)
   }
 
   return (
@@ -184,6 +164,19 @@ export function UsersTable({
         table={table}
         searchPlaceholder='Filter users...'
         searchKey='username'
+        customFilters={
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='h-8'
+            disabled={!selectedUser}
+            data-testid='users-view-selected-action'
+            onClick={openSelectedDetails}
+          >
+            View user
+          </Button>
+        }
         filters={[
           {
             columnId: 'status',
@@ -235,7 +228,11 @@ export function UsersTable({
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
+                  data-state={
+                    (row.getIsSelected() ||
+                      row.original.id === selectedUserID) &&
+                    'selected'
+                  }
                   className='group/row'
                   onClick={(event) => handleRowClick(row.original.id, event)}
                   onDoubleClick={(event) =>

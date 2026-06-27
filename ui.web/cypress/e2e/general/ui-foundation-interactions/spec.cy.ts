@@ -143,14 +143,16 @@ describe('ui-foundation-interactions', () => {
     signInWithRedirect('/users/', 'e2e-users@example.com')
     cy.wait('@users')
     cy.get('tbody tr').eq(0).find('td').eq(1).click()
-    cy.get('[data-testid="users-row-details-modal"]').should('be.visible')
+    cy.get('tbody tr').eq(0).should('have.attr', 'data-state', 'selected')
+    cy.get('[data-testid="users-row-details-modal"]').should('not.exist')
     cy.location('search').should('contain', 'selected=')
+    cy.get('[data-testid="users-view-selected-action"]').click()
+    cy.get('[data-testid="users-row-details-modal"]').should('be.visible')
+    cy.get('body').type('{esc}')
+    cy.get('tbody tr').eq(0).find('td').eq(1).dblclick()
+    cy.get('[data-testid="users-row-details-modal"]').should('be.visible')
     cy.get('body').type('{esc}')
     cy.get('[data-testid="users-row-details-modal"]').should('not.exist')
-    cy.get('tbody tr').eq(0).find('td').eq(1).dblclick()
-    cy.get('[data-testid="users-row-edit-modal"]').should('be.visible')
-    cy.get('body').type('{esc}')
-    cy.get('[data-testid="users-row-edit-modal"]').should('not.exist')
 
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
