@@ -1030,7 +1030,9 @@ describe('dashboard/ui-screen-discover', () => {
         'be.visible'
       )
       cy.get('[data-testid="wishlist-delivered-checkbox-item-promoted-1"]').should(
-        'not.exist'
+        'have.attr',
+        'aria-checked',
+        'false'
       )
       cy.contains('Promoted from Discoveries result-promotion-001').should('be.visible')
     })

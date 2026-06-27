@@ -733,7 +733,7 @@ describe("ui-screen-wishlist", () => {
       ensureScrollable: false,
     });
     cy.contains("th", "Purchased").should("exist");
-    cy.contains("th", "Delivered").should("not.exist");
+    cy.contains("th", "Delivered").should("exist");
     cy.contains("th", "Category").should("exist");
     cy.contains("th", "Owned").should("not.exist");
     cy.get('[data-testid="wishlist-category-item-collector-1"]').should(
@@ -741,7 +741,9 @@ describe("ui-screen-wishlist", () => {
       "Slot Cars"
     );
     cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]')
-      .should("not.exist");
+      .scrollIntoView()
+      .should("be.visible")
+      .and("have.attr", "aria-checked", "false");
 
     openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
     cy.contains('[role="menuitem"]', "Edit").click({ force: true });
@@ -774,7 +776,9 @@ describe("ui-screen-wishlist", () => {
       "Race Cars"
     );
     cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]').should(
-      "not.exist"
+      "have.attr",
+      "aria-checked",
+      "true"
     );
 
     cy.contains("button", "Cards").click();
