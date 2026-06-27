@@ -373,7 +373,15 @@ describe('chats/notification-inbox', () => {
     cy.visit('/forgot-password')
     cy.get('input[name="email"]').clear().type('e2e-toast-capture@example.com')
     cy.get('[data-testid="forgot-password-submit"]').click()
-    cy.contains('Sending email...').should('be.visible')
+    cy.window().should((win) => {
+      const history = JSON.parse(
+        win.localStorage.getItem('cabinet.toastHistory.v1') || '[]'
+      )
+      expect(JSON.stringify(history)).to.include('Password reset email feedback')
+      expect(JSON.stringify(history)).to.include(
+        'Password reset email feedback for e2e-toast-capture@example.com'
+      )
+    })
     cy.contains('Email sent to e2e-toast-capture@example.com', {
       timeout: 5000,
     }).should('be.visible')
@@ -392,16 +400,15 @@ describe('chats/notification-inbox', () => {
       .should('have.length.at.least', 1)
       .first()
       .should('contain', 'Email sent to e2e-toast-capture@example.com')
-      .and('contain', 'Toast History')
-      .and('contain', 'system')
+      .and('contain', 'Auth forgot password')
     cy.get('[data-testid="notification-inbox-row"]').first().click()
     cy.get('[data-testid="notification-inbox-detail-pane"]')
       .should('contain', 'Email sent to e2e-toast-capture@example.com')
       .and(
         'contain',
-        'Promise toast settled and was preserved in Inbox history.'
+        'Password reset email feedback for e2e-toast-capture@example.com'
       )
-      .and('contain', 'Toast History')
+      .and('contain', 'Auth forgot password')
   })
 
   it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves confirmation dialog warnings in Inbox history', () => {
