@@ -44,10 +44,10 @@ export function DataTableToolbar<TData>({
 
   return (
     <div
-      className='flex flex-wrap items-center justify-between gap-2'
+      className='flex flex-wrap items-center justify-between gap-2 lg:flex-nowrap'
       data-testid={toolbarTestId}
     >
-      <div className='flex flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2'>
+      <div className='flex min-w-0 flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2'>
         {searchKey ? (
           <Input
             placeholder={searchPlaceholder}
@@ -102,7 +102,7 @@ export function DataTableToolbar<TData>({
           </Button>
         )}
       </div>
-      <div className='ms-auto flex flex-wrap items-center justify-end gap-2'>
+      <div className='ms-auto flex shrink-0 flex-nowrap items-center justify-end gap-2'>
         {actions}
         <DataTableViewOptions table={table} />
       </div>
