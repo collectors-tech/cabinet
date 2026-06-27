@@ -63,7 +63,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfigDrawer } from '@/components/config-drawer'
 import {
@@ -810,8 +809,6 @@ export function Media() {
     getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
-  const filteredAssetCount = table.getFilteredRowModel().rows.length
-
   const previewAssignment = async () => {
     if (!assignmentAsset) return
     setAssignmentLoading(true)
@@ -986,83 +983,6 @@ export function Media() {
             Drop image to add media
           </div>
         ) : null}
-        <div className='flex flex-wrap items-center justify-between gap-3'>
-          <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Media</h1>
-            <p className='text-muted-foreground'>
-              Table-first asset management for uploaded photos, unlinked
-              evidence, and assignment follow-up.
-            </p>
-          </div>
-          <div className='flex flex-wrap gap-2'>
-            <Button
-              type='button'
-              size='icon'
-              aria-label='Add new asset'
-              data-testid='media-upload-action'
-              onClick={() => {
-                setAddMediaOpen(true)
-                setAddMediaError(null)
-              }}
-            >
-              <ImagePlus />
-            </Button>
-            <Button
-              variant='outline'
-              disabled={selectedAssetIds.length === 0 || downloadLoading}
-              data-testid='media-download-selected-action'
-              onClick={() => void previewDownload()}
-            >
-              <Download />
-              {downloadLoading ? 'Previewing...' : 'Download selected'}
-            </Button>
-          </div>
-        </div>
-
-        <Tabs
-          value={filter}
-          onValueChange={(value) =>
-            setFilter(value === 'unlinked' ? 'unlinked' : 'all')
-          }
-        >
-          <TabsList aria-label='Media filters'>
-            <TabsTrigger value='all' data-testid='media-filter-all'>
-              All
-            </TabsTrigger>
-            <TabsTrigger value='unlinked' data-testid='media-filter-unlinked'>
-              Unlinked
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <div className='flex flex-wrap items-center justify-between gap-3'>
-          <div className='text-sm text-muted-foreground'>
-            {loading
-              ? 'Loading view'
-              : `${assets.length} asset${assets.length === 1 ? '' : 's'} in ${filter === 'unlinked' ? 'Unlinked' : 'All'} view`}
-          </div>
-          <div className='flex items-center gap-2' aria-label='Media view mode'>
-            <Button
-              type='button'
-              variant={viewMode === 'cards' ? 'default' : 'outline'}
-              aria-pressed={viewMode === 'cards'}
-              data-testid='media-view-mode-cards'
-              onClick={() => setViewMode('cards')}
-            >
-              Cards
-            </Button>
-            <Button
-              type='button'
-              variant={viewMode === 'rows' ? 'default' : 'outline'}
-              aria-pressed={viewMode === 'rows'}
-              data-testid='media-view-mode-rows'
-              onClick={() => setViewMode('rows')}
-            >
-              Rows
-            </Button>
-          </div>
-        </div>
-
         {error ? (
           <Card data-testid='media-error-state'>
             <CardHeader>
@@ -1143,18 +1063,91 @@ export function Media() {
                 table={table}
                 searchPlaceholder='Filter media...'
                 searchInputTestId='media-table-search-input'
+                customFilters={
+                  <Select
+                    value={filter}
+                    onValueChange={(value) =>
+                      setFilter(value === 'unlinked' ? 'unlinked' : 'all')
+                    }
+                  >
+                    <SelectTrigger
+                      className='h-8 w-[132px]'
+                      aria-label='Linked'
+                      data-testid='media-linkage-filter-trigger'
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='all' data-testid='media-filter-all'>
+                        All
+                      </SelectItem>
+                      <SelectItem
+                        value='unlinked'
+                        data-testid='media-filter-unlinked'
+                      >
+                        Unlinked
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                }
+                actions={
+                  <>
+                    <Button
+                      type='button'
+                      size='icon'
+                      className='h-8 w-8'
+                      aria-label='Add new asset'
+                      data-testid='media-upload-action'
+                      onClick={() => {
+                        setAddMediaOpen(true)
+                        setAddMediaError(null)
+                      }}
+                    >
+                      <ImagePlus />
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      className='h-8'
+                      disabled={
+                        selectedAssetIds.length === 0 || downloadLoading
+                      }
+                      data-testid='media-download-selected-action'
+                      onClick={() => void previewDownload()}
+                    >
+                      <Download />
+                      {downloadLoading ? 'Previewing...' : 'Download selected'}
+                    </Button>
+                    <div
+                      className='flex items-center gap-1'
+                      aria-label='Media view mode'
+                    >
+                      <Button
+                        type='button'
+                        size='sm'
+                        className='h-8'
+                        variant={viewMode === 'cards' ? 'default' : 'outline'}
+                        aria-pressed={viewMode === 'cards'}
+                        data-testid='media-view-mode-cards'
+                        onClick={() => setViewMode('cards')}
+                      >
+                        Cards
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        className='h-8'
+                        variant={viewMode === 'rows' ? 'default' : 'outline'}
+                        aria-pressed={viewMode === 'rows'}
+                        data-testid='media-view-mode-rows'
+                        onClick={() => setViewMode('rows')}
+                      >
+                        Rows
+                      </Button>
+                    </div>
+                  </>
+                }
               />
-            </div>
-            <div
-              className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'
-              data-testid='media-table-summary'
-            >
-              <span>
-                Showing {filteredAssetCount} of {assets.length} media assets.
-              </span>
-              <span>
-                {filter === 'unlinked' ? 'Unlinked media' : 'All media'}
-              </span>
             </div>
             <div
               className='min-h-0 flex-1 overflow-auto rounded-md border'

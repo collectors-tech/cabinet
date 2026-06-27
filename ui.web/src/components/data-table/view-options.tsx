@@ -24,6 +24,7 @@ export function DataTableViewOptions<TData>({
           variant='outline'
           size='sm'
           className='ms-auto hidden h-8 lg:flex'
+          data-testid='data-table-view-options-trigger'
         >
           <MixerHorizontalIcon className='size-4' />
           View
