@@ -573,34 +573,6 @@ function WishlistPurchasedCell({
   )
 }
 
-function WishlistDeliveredCell({
-  task,
-  onWishlistInlineUpdate,
-}: {
-  task: Task
-  onWishlistInlineUpdate?: (
-    task: Task,
-    changes: WishlistInlineChanges
-  ) => Promise<void>
-}) {
-  const toggleDelivered = (checked: boolean) => {
-    void onWishlistInlineUpdate?.(task, {
-      delivered: checked,
-      owned: checked ? true : task.owned,
-    })
-  }
-
-  return (
-    <Checkbox
-      checked={Boolean(task.delivered)}
-      data-testid={`wishlist-delivered-checkbox-${task.id}`}
-      aria-label={`Delivered for ${task.title}`}
-      onClick={(event) => event.stopPropagation()}
-      onCheckedChange={(checked) => toggleDelivered(Boolean(checked))}
-    />
-  )
-}
-
 function WishlistPricePaidCell({ task }: { task: Task }) {
   return (
     <span
@@ -914,23 +886,6 @@ export function getTasksColumns({
               <WishlistPurchasedCell
                 task={row.original}
                 onWishlistPurchaseRow={onWishlistPurchaseRow}
-              />
-            ),
-            enableSorting: false,
-          } satisfies ColumnDef<Task>,
-          {
-            accessorKey: 'delivered',
-            header: ({ column }) => (
-              <DataTableColumnHeader column={column} title='Delivered' />
-            ),
-            meta: {
-              className: 'w-[7rem] min-w-[7rem] ps-1',
-              tdClassName: 'ps-4 pe-3',
-            },
-            cell: ({ row }) => (
-              <WishlistDeliveredCell
-                task={row.original}
-                onWishlistInlineUpdate={onWishlistInlineUpdate}
               />
             ),
             enableSorting: false,
