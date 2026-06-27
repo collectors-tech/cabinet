@@ -3311,8 +3311,7 @@ components:
         message: { type: string, description: Structured upstream Browse failure details preserved for diagnostics. }
         next_action: { type: string, enum: [check_provider_health_and_credentials] }
         retry_after_seconds:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: Upstream eBay Retry-After seconds when Browse rate limiting provides retry timing.
         query_set_id: { type: string }
     ProviderRegistryResponse:
@@ -3397,18 +3396,14 @@ components:
           enum: [ready, degraded, disabled]
         message: { type: string }
         last_error:
-          type: string
-          nullable: true
+          type: [string, "null"]
         retry_after_seconds:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
         next_action:
-          type: string
-          nullable: true
-          enum: [check_provider_health_and_credentials, review_provider_status]
+          type: [string, "null"]
+          enum: [check_provider_health_and_credentials, review_provider_status, null]
         updated_at:
-          type: string
-          nullable: true
+          type: [string, "null"]
     ProviderTestResponse:
       type: object
       required: [provider, status, code, provider_test_passed, checked_at]
@@ -3434,8 +3429,7 @@ components:
             - OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED
             - OPENAI_BROWSER_AUTH_PROOF_REQUIRED
         auth_method:
-          type: string
-          nullable: true
+          type: [string, "null"]
         credential_present:
           type: boolean
         provider_test_passed:
@@ -3444,17 +3438,13 @@ components:
           type: string
           format: date-time
         base_domain:
-          type: string
-          nullable: true
+          type: [string, "null"]
         browser_auth_state:
-          type: string
-          nullable: true
+          type: [string, "null"]
         provider_test_state:
-          type: string
-          nullable: true
+          type: [string, "null"]
         provider_test_artifact_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
         message:
           type: string
         next_action:
@@ -3552,7 +3542,9 @@ components:
         last_seen: { type: string }
         status: { type: string }
         source: { type: string, enum: [ebay] }
-        stock_state: { type: string, description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown. }
+        stock_state:
+          type: string
+          description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown.
         stock_count: { type: integer }
     EbayProviderRunSnapshot:
       type: object
@@ -3819,7 +3811,9 @@ components:
         first_seen: { type: string }
         last_seen: { type: string }
         status: { type: string }
-        stock_state: { type: string, description: Normalized provider stock state such as in_stock, low_stock, out_of_stock, or unknown. }
+        stock_state:
+          type: string
+          description: Normalized provider stock state such as in_stock, low_stock, out_of_stock, or unknown.
         stock_count: { type: integer, description: Normalized provider stock quantity when available; -1 indicates unknown. }
         source: { type: string, description: Source provider id such as ebay. }
     MatchResult:

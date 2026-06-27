@@ -26,3 +26,12 @@ Every documented OpenAPI operation SHALL include at least one explicit `4XX` res
 - **WHEN** the OpenAPI validation gate inspects operation responses
 - **THEN** every operation MUST declare at least one `4XX` response
 - **AND** shared client-error responses MUST use the canonical error response schema where applicable
+
+### Requirement API-DOCS-004: OpenAPI source SHALL pass Redocly merge-gate validation
+Cabinet's OpenAPI source SHALL use OpenAPI 3.1-compatible schema forms and YAML syntax that Redocly can parse without structural lint failures.
+
+#### Scenario: Validate OpenAPI source with Redocly
+- **GIVEN** `docs/api/openapi.yaml` is the API documentation source of truth
+- **WHEN** the Redocly lint and docs-build gates run against the document
+- **THEN** nullable response fields MUST use OpenAPI 3.1 schema representations accepted by Redocly
+- **AND** inline descriptions MUST be represented so punctuation in prose is parsed as description text rather than object properties
