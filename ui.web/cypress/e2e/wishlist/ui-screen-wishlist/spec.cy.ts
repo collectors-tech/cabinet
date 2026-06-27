@@ -190,6 +190,37 @@ describe("ui-screen-wishlist", () => {
     cy.contains("No results.").should("be.visible");
   });
 
+  it("UI-SCREEN-WISHLIST-001 keeps view controls inline and omits Delivered from rows", () => {
+    cy.viewport(1280, 720);
+    signInToWishlist();
+
+    cy.get('[data-testid="wishlist-table-toolbar"]').should("be.visible");
+    cy.get('[data-testid="data-table-view-options-trigger"]').should(
+      "be.visible"
+    );
+    cy.get('button[aria-label="Switch to rows view"]').should("be.visible");
+    cy.get('button[aria-label="Switch to cards view"]').should("be.visible");
+
+    cy.get('[data-testid="data-table-view-options-trigger"]').then(($view) => {
+      const viewTop = Math.round($view[0].getBoundingClientRect().top);
+      cy.get('button[aria-label="Switch to rows view"]').should(($rows) => {
+        expect(
+          Math.round($rows[0].getBoundingClientRect().top),
+          "Rows control top aligns with View"
+        ).to.eq(viewTop);
+      });
+      cy.get('button[aria-label="Switch to cards view"]').should(($cards) => {
+        expect(
+          Math.round($cards[0].getBoundingClientRect().top),
+          "Cards control top aligns with View"
+        ).to.eq(viewTop);
+      });
+    });
+
+    cy.contains("th", "Purchased").should("exist");
+    cy.contains("th", "Delivered").should("not.exist");
+  });
+
   it("UI-SCREEN-WISHLIST-013 renders representative seeded wishlist rows without stubs", () => {
     signInToWishlist({ skipStub: true });
 
