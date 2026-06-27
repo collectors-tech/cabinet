@@ -18,13 +18,19 @@ Users screen SHALL provide `Invite User` and `Add User` actions that persist thr
 - **WHEN** user submits `Add User` (`POST /api/users`) or `Invite User` (`POST /api/users/invite`)
 - **THEN** API response MUST be successful (`201`/`200`) and table MUST refresh with the new/updated user row
 
-### Requirement UI-SCREEN-USERS-003: Users screen SHALL support edit/delete actions from row context
-Users screen SHALL support row-level role/status edit and delete actions with API persistence.
+### Requirement UI-SCREEN-USERS-003: Users screen SHALL support row selection, details, edit, and delete actions from row context
+Users screen SHALL support row selection, details viewing, and row-level role/status edit and delete actions with API persistence.
 
-#### Scenario: Open edit dialog from row double-click
+#### Scenario: Select a row and open user details
 - **GIVEN** an authenticated desktop user has the Users table loaded and at least two visible rows are available
-- **WHEN** the user single-clicks one row and then double-clicks a different row
-- **THEN** Cabinet MUST open the real edit user dialog for the double-clicked row, populate the form with that row's user data, and preserve explicit row-action edit access.
+- **WHEN** the user single-clicks a row
+- **THEN** Cabinet MUST mark that user as the selected row without opening the details dialog or invoking bulk checkbox selection
+- **AND** the selected-row `View user` action MUST open the details dialog for that selected user.
+
+#### Scenario: Open details from row double-click
+- **GIVEN** an authenticated desktop user has the Users table loaded and at least two visible rows are available
+- **WHEN** the user double-clicks a user row
+- **THEN** Cabinet MUST open the user details dialog for the double-clicked row, preserve the selected row context, and avoid invoking edit/delete row actions.
 
 ### Requirement UI-SCREEN-USERS-004: Users screen SHALL expose actionable retry when list fetch fails
 When `GET /api/users` fails, Users screen SHALL render deterministic error state with `Retry` control.
@@ -93,7 +99,7 @@ Users screen SHALL present route identity and primary user actions in the shared
 | UC-USR-01 | Filter by username | Table reflects filtered rows and URL state | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-001 reads users table from Cabinet API and supports filter/sort/pagination workflows` |
 | UC-USR-02 | Add user | Add dialog opens, saves, and refreshed table shows the new user | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-002 persists add and invite actions through Cabinet API` |
 | UC-USR-03 | Invite user | Invite dialog opens, submits, and refreshed table shows the invited user | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-002 persists add and invite actions through Cabinet API` |
-| UC-USR-04 | Edit/delete user | Row action dialogs, row double-click selected context, edit save, and delete persistence are covered | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-003 opens the real edit dialog for the double-clicked user row`; `UI-SCREEN-USERS-003 persists edit saves through Cabinet API and refreshes the edited row`; `UI-SCREEN-USERS-003 persists delete actions through Cabinet API row context` |
+| UC-USR-04 | View/edit/delete user | Row selection, selected-row View details, row double-click details, explicit row action edit dialog, edit save, and delete persistence are covered | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-003 selects rows and opens details from View user and row double-click`; `UI-SCREEN-USERS-003 persists edit saves through Cabinet API and refreshes the edited row`; `UI-SCREEN-USERS-003 persists delete actions through Cabinet API row context` |
 | UC-USR-05 | Users fetch failure retry | Error state `Retry` re-attempts list fetch deterministically | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-004 retries users list after a fetch failure` |
 | UC-USR-06 | Missing active profile fallback | Users screen loads list without 404 fallback error | `ui.web/cypress/e2e/users/ui-screen-users/fallback-profile-scope.cy.ts` |
 | UC-USR-07 | Loading and empty list states | Pending users list shows loading feedback; empty API response renders table empty state without stale rows or error banner | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-006 renders deterministic loading and empty states` |
