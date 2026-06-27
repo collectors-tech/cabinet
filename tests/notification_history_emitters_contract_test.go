@@ -318,6 +318,47 @@ func TestIntegrationsFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 	}
 }
 
+func TestMediaFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := repoRoot(t)
+	mediaPath := filepath.Join(root, "ui.web", "src", "features", "media", "index.tsx")
+	notificationSpecPath := filepath.Join(root, "openspec", "specs", "chats", "notification-inbox", "spec.md")
+	traceabilityPath := filepath.Join(root, "openspec", "traceability.md")
+
+	mediaSource := mustReadContractFile(t, mediaPath)
+	notificationSpec := mustReadContractFile(t, notificationSpecPath)
+	traceability := mustReadContractFile(t, traceabilityPath)
+
+	requiredMediaSnippets := []string{
+		"function recordMediaStatusHistory(",
+		"source_label: 'Media workspace'",
+		"category: 'media'",
+		"`media-assets-load-failed-${filter}`",
+		"`media-add-invalid-drop-${notificationHistoryID(file.name)}`",
+		"'media-add-missing-file'",
+		"`media-add-success-${notificationHistoryID(addMediaFile.name)}`",
+		"'media-download-preview-failed'",
+		"`media-analysis-${notificationHistoryID(payload.id)}-${payload.status}`",
+		"`media-assignment-preview-${notificationHistoryID(assignmentAsset.id)}-${notificationHistoryID(assignmentTargetID)}`",
+		"`media-assignment-confirm-${notificationHistoryID(assignmentAsset.id)}-${notificationHistoryID(payload.target_id)}`",
+		"`media-metadata-update-${notificationHistoryID(editAsset.id)}`",
+	}
+	for _, snippet := range requiredMediaSnippets {
+		if !strings.Contains(mediaSource, snippet) {
+			t.Fatalf("Media workspace feedback missing durable Inbox history metadata %q in %s", snippet, mediaPath)
+		}
+	}
+
+	if !strings.Contains(notificationSpec, "Media workspace load, add, metadata edit, download preview, assignment, and image-analysis workflow feedback") {
+		t.Fatalf("notification Inbox spec must list Media workspace feedback in #1438 emitter scope in %s", notificationSpecPath)
+	}
+
+	if !strings.Contains(traceability, "TestMediaFeedbackCarriesInboxHistoryMetadata") {
+		t.Fatalf("traceability must list Media workspace Inbox history contract test in %s", traceabilityPath)
+	}
+}
+
 func mustReadContractFile(t *testing.T, path string) string {
 	t.Helper()
 

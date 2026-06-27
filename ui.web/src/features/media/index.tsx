@@ -27,6 +27,8 @@ import {
   Link2,
   WandSparkles,
 } from 'lucide-react'
+import { recordNotificationHistory } from '@/lib/toast-history'
+import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -69,7 +71,6 @@ import {
   DataTablePagination,
   DataTableToolbar,
 } from '@/components/data-table'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -123,7 +124,13 @@ type AssignmentPreview = {
 
 type AnalysisWorkflowRun = {
   id: string
-  status: 'queued' | 'running' | 'needs_input' | 'completed' | 'failed' | 'cancelled'
+  status:
+    | 'queued'
+    | 'running'
+    | 'needs_input'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
   capability_id: string
   provider_trace?: Record<string, string>
 }
@@ -160,6 +167,36 @@ function analysisLabel(status: MediaAsset['analysis_status']) {
     default:
       return 'Not analyzed'
   }
+}
+
+function notificationHistoryID(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+}
+
+function recordMediaStatusHistory({
+  id,
+  title,
+  summary,
+  level = 'info',
+}: {
+  id: string
+  title: string
+  summary: string
+  level?: 'info' | 'success' | 'warning' | 'error'
+}) {
+  recordNotificationHistory({
+    id,
+    title,
+    summary,
+    level,
+    source_label: 'Media workspace',
+    category: 'media',
+  })
 }
 
 function buildMediaColumns({
@@ -424,9 +461,16 @@ export function Media() {
         )
       )
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'media_assets_failed'
       setAssets([])
       setSelectedAssetIds([])
-      setError(err instanceof Error ? err.message : 'media_assets_failed')
+      setError(message)
+      recordMediaStatusHistory({
+        id: `media-assets-load-failed-${filter}`,
+        title: 'Media assets load failed',
+        summary: message,
+        level: 'error',
+      })
     } finally {
       setLoading(false)
     }
@@ -486,6 +530,12 @@ export function Media() {
     if (validationError) {
       setAddMediaFile(null)
       setAddMediaError(validationError)
+      recordMediaStatusHistory({
+        id: `media-add-invalid-drop-${notificationHistoryID(file.name)}`,
+        title: 'Media upload file type blocked',
+        summary: validationError,
+        level: 'warning',
+      })
       return
     }
     setAddMediaFile(file)
@@ -514,11 +564,23 @@ export function Media() {
   const saveAddMedia = async () => {
     if (!addMediaFile) {
       setAddMediaError('Choose an image before saving.')
+      recordMediaStatusHistory({
+        id: 'media-add-missing-file',
+        title: 'Media upload needs an image',
+        summary: 'Choose an image before saving.',
+        level: 'warning',
+      })
       return
     }
     const validationError = validateImageFile(addMediaFile)
     if (validationError) {
       setAddMediaError(validationError)
+      recordMediaStatusHistory({
+        id: 'media-add-invalid-file',
+        title: 'Media upload file type blocked',
+        summary: validationError,
+        level: 'warning',
+      })
       return
     }
     setAddMediaSaving(true)
@@ -538,11 +600,23 @@ export function Media() {
       }
       resetAddMedia()
       setAssignmentSuccess('Media asset added to the unlinked review queue.')
+      recordMediaStatusHistory({
+        id: `media-add-success-${notificationHistoryID(addMediaFile.name)}`,
+        title: 'Media asset added',
+        summary: `${addMediaFile.name} was added to the unlinked review queue.`,
+        level: 'success',
+      })
       await loadAssets()
     } catch (err) {
-      setAddMediaError(
+      const message =
         err instanceof Error ? err.message : 'media_asset_save_failed'
-      )
+      setAddMediaError(message)
+      recordMediaStatusHistory({
+        id: 'media-add-failed',
+        title: 'Media asset add failed',
+        summary: message,
+        level: 'error',
+      })
     } finally {
       setAddMediaSaving(false)
     }
@@ -566,10 +640,22 @@ export function Media() {
       }
       const payload = (await response.json()) as DownloadPreview
       setDownloadPreview(payload)
+      recordMediaStatusHistory({
+        id: `media-download-preview-success-${selectedAssetIds.length}`,
+        title: 'Media download preview ready',
+        summary: `${payload.count} file${payload.count === 1 ? '' : 's'} ready with human-readable filenames.`,
+        level: 'success',
+      })
     } catch (err) {
-      setDownloadError(
+      const message =
         err instanceof Error ? err.message : 'media_download_preview_failed'
-      )
+      setDownloadError(message)
+      recordMediaStatusHistory({
+        id: 'media-download-preview-failed',
+        title: 'Media download preview failed',
+        summary: message,
+        level: 'error',
+      })
     } finally {
       setDownloadLoading(false)
     }
@@ -626,10 +712,22 @@ export function Media() {
         }
         const payload = (await response.json()) as AnalysisWorkflowRun
         setAnalysisRun(payload)
+        recordMediaStatusHistory({
+          id: `media-analysis-${notificationHistoryID(payload.id)}-${payload.status}`,
+          title: 'Media analysis workflow queued',
+          summary: `Run ${payload.id} is ${payload.status} for media ${asset.id}.`,
+          level: 'success',
+        })
       } catch (err) {
-        setAnalysisError(
+        const message =
           err instanceof Error ? err.message : 'media_analysis_failed'
-        )
+        setAnalysisError(message)
+        recordMediaStatusHistory({
+          id: `media-analysis-failed-${notificationHistoryID(asset.id)}`,
+          title: 'Media analysis workflow failed',
+          summary: message,
+          level: 'error',
+        })
       } finally {
         setAnalysisLoading(false)
       }
@@ -734,10 +832,24 @@ export function Media() {
       }
       const payload = (await response.json()) as AssignmentPreview
       setAssignmentPreview(payload)
+      recordMediaStatusHistory({
+        id: `media-assignment-preview-${notificationHistoryID(assignmentAsset.id)}-${notificationHistoryID(assignmentTargetID)}`,
+        title: 'Media assignment preview ready',
+        summary:
+          payload.audit_summary ??
+          `Previewed ${assignmentAsset.title} for ${payload.target_type} target ${payload.target_id}.`,
+        level: payload.allowed ? 'success' : 'warning',
+      })
     } catch (err) {
-      setAssignmentError(
+      const message =
         err instanceof Error ? err.message : 'media_assignment_preview_failed'
-      )
+      setAssignmentError(message)
+      recordMediaStatusHistory({
+        id: `media-assignment-preview-failed-${notificationHistoryID(assignmentAsset.id)}`,
+        title: 'Media assignment preview failed',
+        summary: message,
+        level: 'error',
+      })
     } finally {
       setAssignmentLoading(false)
     }
@@ -761,16 +873,28 @@ export function Media() {
         throw new Error(`media_assignment_${response.status}`)
       }
       const payload = (await response.json()) as AssignmentPreview
-      setAssignmentSuccess(
+      const successMessage =
         payload.audit_summary ??
-          `Assigned ${assignmentAsset.title} to ${payload.target_type} target ${payload.target_id}.`
-      )
+        `Assigned ${assignmentAsset.title} to ${payload.target_type} target ${payload.target_id}.`
+      setAssignmentSuccess(successMessage)
+      recordMediaStatusHistory({
+        id: `media-assignment-confirm-${notificationHistoryID(assignmentAsset.id)}-${notificationHistoryID(payload.target_id)}`,
+        title: 'Media assignment saved',
+        summary: successMessage,
+        level: 'success',
+      })
       resetAssignment()
       await loadAssets()
     } catch (err) {
-      setAssignmentError(
+      const message =
         err instanceof Error ? err.message : 'media_assignment_failed'
-      )
+      setAssignmentError(message)
+      recordMediaStatusHistory({
+        id: `media-assignment-confirm-failed-${notificationHistoryID(assignmentAsset.id)}`,
+        title: 'Media assignment failed',
+        summary: message,
+        level: 'error',
+      })
     } finally {
       setAssignmentLoading(false)
     }
@@ -801,11 +925,23 @@ export function Media() {
       }
       resetMetadataEditor()
       setAssignmentSuccess('Media metadata updated.')
+      recordMediaStatusHistory({
+        id: `media-metadata-update-${notificationHistoryID(editAsset.id)}`,
+        title: 'Media metadata updated',
+        summary: `${payload.title || editAsset.title} metadata was updated.`,
+        level: 'success',
+      })
       await loadAssets()
     } catch (err) {
-      setEditError(
+      const message =
         err instanceof Error ? err.message : 'media_metadata_update_failed'
-      )
+      setEditError(message)
+      recordMediaStatusHistory({
+        id: `media-metadata-update-failed-${notificationHistoryID(editAsset.id)}`,
+        title: 'Media metadata update failed',
+        summary: message,
+        level: 'error',
+      })
     } finally {
       setEditSaving(false)
     }
