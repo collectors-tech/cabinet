@@ -371,6 +371,9 @@ describe('chats/assistant-workspace', () => {
           'show me a config for layout'
         )
         cy.get('[data-testid="shell-assistant-send-button"]').click()
+        cy.wait('@assistantLayoutMessage')
+          .its('response.statusCode')
+          .should('eq', 201)
         cy.get('[data-testid="shell-assistant-navigation-action-open"]').click()
         cy.location('pathname', { timeout: 15000 }).should(
           'match',
