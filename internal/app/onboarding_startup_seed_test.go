@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/config"
@@ -48,6 +49,7 @@ func TestStartupSampleDataBootstrapSeedsShowcaseArtifacts(t *testing.T) {
 
 	a := newTestAppWithConfig(t, cfg)
 	assertStartupSampleWishlistSeeded(t, a)
+	assertStartupSamplePurchasesSeeded(t, a)
 	assertStartupSamplePriceHistorySeeded(t, a)
 	assertStartupSamplePhotosSeeded(t, a)
 }
@@ -70,6 +72,79 @@ func assertStartupSampleWishlistSeeded(t *testing.T, a *App) {
 	}
 	if len(payload.Items) < 3 {
 		t.Fatalf("expected startup sample seed to create wishlist rows, got %+v", payload.Items)
+	}
+}
+
+func assertStartupSamplePurchasesSeeded(t *testing.T, a *App) {
+	t.Helper()
+
+	resp := doRequest(t, a, http.MethodGet, "/api/commerce/purchase-orders?status=all&page=1&page_size=10", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("purchase orders status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Total  int `json:"total"`
+		Orders []struct {
+			OrderID         string `json:"order_id"`
+			Source          string `json:"source"`
+			Seller          string `json:"seller"`
+			Tracking        string `json:"tracking"`
+			Status          string `json:"status"`
+			LineItemCount   int    `json:"line_item_count"`
+			ReceivedCount   int    `json:"received_count"`
+			UnreceivedCount int    `json:"unreceived_count"`
+			LineItems       []struct {
+				Title  string `json:"title"`
+				Status string `json:"status"`
+			} `json:"line_items"`
+		} `json:"orders"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode purchase order payload: %v", err)
+	}
+	if payload.Total < 3 {
+		t.Fatalf("expected at least three seeded sample purchase orders, got %+v", payload.Orders)
+	}
+
+	var foundMultiLinePartial, foundReceived, foundShipped bool
+	for _, order := range payload.Orders {
+		switch order.OrderID {
+		case "EBAY-SAMPLE-1001":
+			foundMultiLinePartial = order.Source == "ebay" &&
+				order.Seller == "seller-one" &&
+				order.Tracking == "TRACK-SAMPLE-1001" &&
+				order.LineItemCount == 2 &&
+				order.ReceivedCount == 1 &&
+				order.UnreceivedCount == 1 &&
+				order.Status == "active"
+		case "MANUAL-SAMPLE-2001":
+			foundReceived = order.Source == "manual" &&
+				order.ReceivedCount == 1 &&
+				order.UnreceivedCount == 0 &&
+				order.Status == "received"
+		case "SHOP-SAMPLE-3001":
+			foundShipped = order.Source == "storefront" &&
+				order.Tracking == "AUSPOST-SAMPLE-3001" &&
+				order.UnreceivedCount == 1
+		}
+	}
+	if !foundMultiLinePartial {
+		t.Fatalf("expected seeded eBay multi-line partial purchase order, got %+v", payload.Orders)
+	}
+	if !foundReceived {
+		t.Fatalf("expected seeded manual fully received purchase order, got %+v", payload.Orders)
+	}
+	if !foundShipped {
+		t.Fatalf("expected seeded shipped/unreceived purchase order, got %+v", payload.Orders)
+	}
+
+	reviews := doRequest(t, a, http.MethodGet, "/api/commerce/purchase-orders?status=reviews", nil, nil)
+	if reviews.Code != http.StatusOK || !strings.Contains(reviews.Body.String(), "EBAY-SAMPLE-1001") {
+		t.Fatalf("expected review filter to include partial sample purchase, status=%d body=%s", reviews.Code, reviews.Body.String())
+	}
+	received := doRequest(t, a, http.MethodGet, "/api/commerce/purchase-orders?status=received", nil, nil)
+	if received.Code != http.StatusOK || !strings.Contains(received.Body.String(), "MANUAL-SAMPLE-2001") {
+		t.Fatalf("expected received filter to include manual received sample, status=%d body=%s", received.Code, received.Body.String())
 	}
 }
 
