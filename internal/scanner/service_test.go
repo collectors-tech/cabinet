@@ -218,6 +218,9 @@ func TestRunNowPersistsDurableRunRecordAndDedupesResults(t *testing.T) {
 	if _, err := conn.Exec(`UPDATE scanner_candidates SET status = 'wishlisted' WHERE query_set_id = ? AND listing_id = ?`, qs.ID, "AFX-100"); err != nil {
 		t.Fatalf("seed decision state: %v", err)
 	}
+	if _, err := conn.Exec(`UPDATE scanner_candidates SET status = 'archived' WHERE query_set_id = ? AND url = ?`, qs.ID, "https://shop.test/url-only"); err != nil {
+		t.Fatalf("seed URL-only decision state: %v", err)
+	}
 	if _, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, provider); err != nil {
 		t.Fatalf("RunNowForProfile() second pass error = %v", err)
 	}
@@ -246,12 +249,19 @@ func TestRunNowPersistsDurableRunRecordAndDedupesResults(t *testing.T) {
 	if price != 39.95 {
 		t.Fatalf("expected rerun to refresh listing metadata, got price=%v", price)
 	}
-	var urlOnlyListingID string
-	if err := conn.QueryRow(`SELECT listing_id FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND url = ?`, "profile-a", qs.ID, "https://shop.test/url-only").Scan(&urlOnlyListingID); err != nil {
+	var urlOnlyListingID, urlOnlyStatus string
+	var urlOnlyPrice float64
+	if err := conn.QueryRow(`SELECT listing_id, status, price FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND url = ?`, "profile-a", qs.ID, "https://shop.test/url-only").Scan(&urlOnlyListingID, &urlOnlyStatus, &urlOnlyPrice); err != nil {
 		t.Fatalf("load URL-only result: %v", err)
 	}
 	if urlOnlyListingID == "" {
 		t.Fatal("expected URL-only result to receive a durable synthetic listing key")
+	}
+	if urlOnlyStatus != "archived" {
+		t.Fatalf("expected URL-only rerun to preserve archived decision status, got %q", urlOnlyStatus)
+	}
+	if urlOnlyPrice != 17.5 {
+		t.Fatalf("expected URL-only rerun to refresh result metadata, got price=%v", urlOnlyPrice)
 	}
 }
 
