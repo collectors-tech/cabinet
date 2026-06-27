@@ -93,6 +93,12 @@ Cabinet notification-like UI events, including toast messages, promise-based suc
 - **THEN** the Notification Inbox MUST include a captured status/banner history record
 - **AND** the record MUST show source, time, level/category metadata, title, and detail sufficient to identify the operational status after it disappears or is replaced.
 
+#### Scenario: Provider health validation failures appear in Inbox
+- **GIVEN** a connected Integrations provider health validation returns a retryable failure
+- **WHEN** the user later opens the Notification Inbox
+- **THEN** the Notification Inbox MUST include a captured provider-health failure history record
+- **AND** the record MUST preserve Integrations as the source, error-level metadata, and failure copy sufficient to diagnose the failed validation after the inline error is gone.
+
 #### Scenario: Local notification history is promoted to durable Inbox storage
 - **GIVEN** local notification history contains a captured notification-like UI event and an active profile is available
 - **WHEN** the Notification Inbox syncs history with `/api/chat/inbox`

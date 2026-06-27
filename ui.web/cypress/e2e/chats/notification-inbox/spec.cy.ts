@@ -873,6 +873,93 @@ describe('chats/notification-inbox', () => {
     cy.wait('@loadNotifications')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1501 preserves Integrations provider health failures in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'e2e-profile-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.ebay.enabled': 'true' } },
+    }).as('settings')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 503,
+      body: {
+        error: 'provider_health_retry_required',
+        retry_after_seconds: 120,
+      },
+    }).as('providerHealthFailure')
+    cy.intercept('POST', '/api/chat/inbox', (req) => {
+      const record = req.body.records.find(
+        (candidate: Record<string, unknown>) =>
+          candidate.local_history_id ===
+          'integrations-provider-health-ebay-failed'
+      )
+      expect(record).to.deep.include({
+        level: 'error',
+        title: 'validate_failed_503',
+        summary: 'Provider health validation status from Integrations.',
+        source_label: 'Integrations',
+        category: 'system',
+      })
+      expect(record.created_at).to.match(/\d{4}-\d{2}-\d{2}T/)
+      req.reply({ statusCode: 201, body: { items: [] } })
+    }).as('syncIntegrationsHealthFailureHistory')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/integrations/',
+    })
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.contains('button', 'Validate').click()
+    cy.wait('@providerHealthFailure')
+    cy.contains('validate_failed_503').scrollIntoView().should('be.visible')
+
+    cy.visit('/inbox/')
+    cy.wait('@syncIntegrationsHealthFailureHistory')
+    cy.wait('@loadNotifications')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 syncs local history into durable server Inbox without duplicates', () => {
     cy.viewport(1366, 768)
     cy.e2eReset()
