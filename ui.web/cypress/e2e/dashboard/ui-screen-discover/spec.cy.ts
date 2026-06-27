@@ -833,6 +833,102 @@ describe('dashboard/ui-screen-discover', () => {
     )
   })
 
+  it('UI-SCREEN-DISCOVER-007 + #1556 shows contextual actions for wishlist, new, and archived candidates', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-wishlist-match-actions',
+            title: 'Wishlist Match Action Candidate',
+            price: 35,
+            currency: 'AUD',
+            match_type: 'wishlist_match',
+            wishlist_id: 'wish-action-1',
+            wishlist_item_id: 'item-action-1',
+            source_result_url: 'https://provider.test/wishlist-match',
+            first_seen: '2026-06-21T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+            triage_status: 'new',
+          },
+          {
+            candidate_id: 'cand-new-actions',
+            title: 'New Discovery Action Candidate',
+            price: 22,
+            currency: 'AUD',
+            match_type: 'provider_search',
+            source_result_url: 'https://provider.test/new-result',
+            first_seen: '2026-06-21T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 3,
+            triage_status: 'new',
+          },
+          {
+            candidate_id: 'cand-archived-actions',
+            title: 'Archived Action Candidate',
+            price: 18,
+            currency: 'AUD',
+            match_type: 'provider_search',
+            source_result_url: 'https://provider.test/archived-result',
+            first_seen: '2026-06-20T00:00:00Z',
+            last_seen: '2026-06-26T00:00:00Z',
+            stock_state: 'out_of_stock',
+            stock_count: 0,
+            triage_status: 'archived',
+          },
+        ],
+      },
+    }).as('discoverContextActionsList')
+
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body).to.deep.equal({
+        candidate_id: 'cand-archived-actions',
+        type: 'review',
+        payload: {},
+      })
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('discoverRestoreAction')
+
+    signInToDiscoveries()
+    cy.wait('@discoverContextActionsList')
+
+    cy.get('[data-testid="discover-candidate-row-cand-wishlist-match-actions"]')
+      .should('contain', 'Wishlist match')
+      .within(() => {
+        cy.get('[data-testid="discover-action-review-source-cand-wishlist-match-actions"]').should('exist')
+        cy.get('[data-testid="discover-action-track-cand-wishlist-match-actions"]').should('exist')
+        cy.get('[data-testid="discover-action-ignore-cand-wishlist-match-actions"]').should('exist')
+        cy.get('[data-testid="discover-action-wishlist-cand-wishlist-match-actions"]').should('not.exist')
+        cy.get('[data-testid="discover-action-create-cand-wishlist-match-actions"]').should('not.exist')
+      })
+
+    cy.get('[data-testid="discover-candidate-row-cand-new-actions"]').within(() => {
+      cy.get('[data-testid="discover-action-review-source-cand-new-actions"]').should('exist')
+      cy.get('[data-testid="discover-action-wishlist-cand-new-actions"]').should('exist')
+      cy.get('[data-testid="discover-action-track-cand-new-actions"]').should('exist')
+      cy.get('[data-testid="discover-action-create-cand-new-actions"]').should('exist')
+      cy.get('[data-testid="discover-action-ignore-cand-new-actions"]').should('exist')
+    })
+
+    cy.get('[data-testid="discover-filter-tab-archived"]').click()
+    cy.get('[data-testid="discover-candidate-row-cand-archived-actions"]').within(() => {
+      cy.get('[data-testid="discover-action-restore-cand-archived-actions"]').should('exist')
+      cy.get('[data-testid="discover-action-wishlist-cand-archived-actions"]').should('not.exist')
+      cy.get('[data-testid="discover-action-track-cand-archived-actions"]').should('not.exist')
+      cy.get('[data-testid="discover-action-create-cand-archived-actions"]').should('not.exist')
+    })
+
+    cy.get('[data-testid="discover-action-restore-cand-archived-actions"]').click()
+    cy.wait('@discoverRestoreAction')
+    cy.get('[data-testid="discover-action-status"]').should(
+      'contain',
+      'review:cand-archived-actions'
+    )
+  })
+
   it('UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state', () => {
     let wishlistEntries: Array<Record<string, unknown>> = []
     let wishlistItems: Array<Record<string, unknown>> = []

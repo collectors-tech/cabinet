@@ -114,6 +114,14 @@ preserving the candidate-inbox destination workflow.
 - **AND** ignored or archived candidates MUST be hidden from the default view and reachable through an explicit filter
 - **AND** source-result, Wishlist, Purchase follow-up, Inventory handoff, and ignore/archive actions MUST remain contextual and accessible without claiming ownership by default
 
+#### Scenario: Contextual action set by candidate state
+- **GIVEN** Discoveries renders wishlist-match, new non-wishlist, promoted, and ignored or archived candidates
+- **WHEN** row actions are shown
+- **THEN** wishlist-match rows MUST expose source review, purchase follow-up, and ignore/archive actions without duplicate Wishlist or Inventory promotion controls
+- **AND** new non-wishlist rows MUST expose source review, Wishlist promotion, Purchase follow-up, Inventory handoff, and ignore/archive actions
+- **AND** promoted rows MUST expose linked destination access where available and suppress duplicate promotion controls
+- **AND** ignored or archived rows MUST be reachable only through the explicit ignored/archived filter and expose restore-for-review only when the data model can return them to the review queue
+
 #### Scenario: Dashboard API fields and archived opt-in
 - **GIVEN** scanner candidates include wishlist linkage, saved-search provenance, price snapshots, provider health, thumbnails, and ignored or archived status
 - **WHEN** Discoveries requests `/api/discovery/not-in-collection?include_archived=true`
@@ -154,3 +162,4 @@ preserving the candidate-inbox destination workflow.
 | UC-DIS-16 | Discoveries dashboard API fields | Backend returns deal ranking, wishlist linkage, provider trust, display labels, and archived candidates only through explicit opt-in | implemented: `internal/discovery/service_test.go` `TestListNotInCollectionDashboardFieldsAndArchivedOptIn`; `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-007 + #1533 renders dashboard summary source filters and ranked deal table` |
 | UC-DIS-17 | Source filters and ranking stability | Source filters and table sort controls narrow or reorder visible rows without posting discovery actions or mutating candidate state, while wishlist/deal candidates remain ranked ahead of lower-signal rows by default | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-007 keeps ranking and source filters deterministic without mutating candidates`; `UI-SCREEN-DISCOVER-007 sorts the dashboard table by deal and recency without mutating candidates` |
 | UC-DIS-18 | Provider attention, no-match, and promoted states | Provider-attention, unmatched/no-match, and already-promoted candidates render distinct review states, and promoted rows expose destination access instead of duplicate promotion actions | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-007 renders provider-attention no-match and promoted destination states` |
+| UC-DIS-19 | Contextual discovery actions | Wishlist-match, new non-wishlist, promoted, and ignored/archived candidates expose only state-safe actions, and restore returns archived candidates to review | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-007 + #1556 shows contextual actions for wishlist, new, and archived candidates`; `internal/discovery/service_test.go` `TestReviewActionRestoresIgnoredCandidateForDefaultQueue` |

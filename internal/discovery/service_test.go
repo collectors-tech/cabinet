@@ -569,3 +569,60 @@ func TestApplyActionPersistsDestinationStatusesAndWishlistDoesNotClaimOwnership(
 		t.Fatalf("confirmed inventory promotion created %d item(s), want 1", ownedCreateCount)
 	}
 }
+
+func TestReviewActionRestoresIgnoredCandidateForDefaultQueue(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json) VALUES ('q1','Restore Query','["restore"]','[]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source) VALUES ('c-restore','q1','RESTORE-001','Restore Candidate',25,0,'https://example.test/restore','','seller',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'ignored','ebay')`); err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES ('c-restore','','not_in_collection',0.7,1,'RESTORE-001',CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed match: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO ignored_candidates(candidate_id) VALUES ('c-restore')`); err != nil {
+		t.Fatalf("seed ignored candidate: %v", err)
+	}
+
+	svc := NewService(conn)
+	defaultItems, err := svc.ListNotInCollection(context.Background(), Filter{})
+	if err != nil {
+		t.Fatalf("ListNotInCollection(default) error = %v", err)
+	}
+	if len(defaultItems) != 0 {
+		t.Fatalf("expected ignored candidate hidden by default, got %+v", defaultItems)
+	}
+
+	if err := svc.ApplyAction(context.Background(), Action{
+		CandidateID: "c-restore",
+		Type:        ActionReview,
+		Payload: map[string]any{
+			"reviewer_notes": "restore for follow-up",
+		},
+	}); err != nil {
+		t.Fatalf("ApplyAction(review) error = %v", err)
+	}
+
+	restored, err := svc.ListNotInCollection(context.Background(), Filter{})
+	if err != nil {
+		t.Fatalf("ListNotInCollection(restored) error = %v", err)
+	}
+	if len(restored) != 1 || restored[0].CandidateID != "c-restore" || restored[0].TriageStatus != "reviewing" {
+		t.Fatalf("expected restored reviewing candidate in default queue, got %+v", restored)
+	}
+	var ignoredCount int
+	if err := conn.QueryRow(`SELECT COUNT(1) FROM ignored_candidates WHERE candidate_id = 'c-restore'`).Scan(&ignoredCount); err != nil {
+		t.Fatalf("load ignored count: %v", err)
+	}
+	if ignoredCount != 0 {
+		t.Fatalf("expected review restore to remove ignored marker, got %d", ignoredCount)
+	}
+}

@@ -5,6 +5,7 @@ import {
   ExternalLink,
   Heart,
   PackagePlus,
+  RotateCcw,
   ShoppingCart,
   Telescope,
 } from 'lucide-react'
@@ -65,6 +66,8 @@ type DiscoveryActionType =
   | 'add_to_wishlist'
   | 'track_price'
   | 'create_item'
+  | 'review'
+  | 'archive'
 
 type DiscoveryTab =
   | 'all'
@@ -197,6 +200,16 @@ export function Discover() {
   const isArchived = (item: DiscoveryItem) => {
     const status = statusLabel(item).toLowerCase()
     return status.includes('ignored') || status.includes('archived')
+  }
+
+  const isPromotedStatus = (item: DiscoveryItem) => {
+    const status = statusLabel(item).toLowerCase()
+    return (
+      Boolean(item.destination_link) ||
+      status.includes('wishlisted') ||
+      status.includes('purchase_candidate') ||
+      status.includes('inventory_candidate')
+    )
   }
 
   const isWishlistMatch = (item: DiscoveryItem) =>
@@ -604,7 +617,13 @@ export function Discover() {
                 <tbody className='divide-y'>
                   {visibleItems.map((item) => {
                     const delta = dealDeltaPercent(item)
-                    const alreadyPromoted = Boolean(item.destination_link)
+                    const alreadyPromoted = isPromotedStatus(item)
+                    const archived = isArchived(item)
+                    const canPromoteWishlist =
+                      !archived && !alreadyPromoted && !isWishlistMatch(item)
+                    const canPurchaseFollowUp = !archived && !alreadyPromoted
+                    const canInventoryHandoff =
+                      !archived && !alreadyPromoted && !isWishlistMatch(item)
                     return (
                       <tr
                         key={item.candidate_id}
@@ -700,7 +719,7 @@ export function Discover() {
                           </p>
                         </td>
                         <td className='px-3 py-3 align-top'>
-                          {alreadyPromoted ? (
+                          {alreadyPromoted && item.destination_link ? (
                             <Button size='sm' variant='outline' asChild>
                               <a
                                 href={item.destination_link}
@@ -725,62 +744,90 @@ export function Discover() {
                                   </a>
                                 </Button>
                               ) : null}
-                              <Button
-                                size='icon'
-                                variant='outline'
-                                aria-label='Ignore or archive'
-                                title='Ignore or archive'
-                                data-testid={`discover-action-ignore-${item.candidate_id}`}
-                                onClick={() =>
-                                  void applyAction(item.candidate_id, 'ignore')
-                                }
-                              >
-                                <Archive className='h-4 w-4' />
-                              </Button>
-                              <Button
-                                size='icon'
-                                variant='outline'
-                                aria-label='Promote to Wishlist'
-                                title='Promote to Wishlist'
-                                data-testid={`discover-action-wishlist-${item.candidate_id}`}
-                                onClick={() =>
-                                  void applyAction(
-                                    item.candidate_id,
-                                    'add_to_wishlist'
-                                  )
-                                }
-                              >
-                                <Heart className='h-4 w-4' />
-                              </Button>
-                              <Button
-                                size='icon'
-                                variant='outline'
-                                aria-label='Purchase follow-up'
-                                title='Purchase follow-up'
-                                data-testid={`discover-action-track-${item.candidate_id}`}
-                                onClick={() =>
-                                  void applyAction(
-                                    item.candidate_id,
-                                    'track_price'
-                                  )
-                                }
-                              >
-                                <ShoppingCart className='h-4 w-4' />
-                              </Button>
-                              <Button
-                                size='icon'
-                                aria-label='Inventory handoff'
-                                title='Inventory handoff'
-                                data-testid={`discover-action-create-${item.candidate_id}`}
-                                onClick={() =>
-                                  void applyAction(
-                                    item.candidate_id,
-                                    'create_item'
-                                  )
-                                }
-                              >
-                                <PackagePlus className='h-4 w-4' />
-                              </Button>
+                              {archived ? (
+                                <Button
+                                  size='icon'
+                                  variant='outline'
+                                  aria-label='Restore for review'
+                                  title='Restore for review'
+                                  data-testid={`discover-action-restore-${item.candidate_id}`}
+                                  onClick={() =>
+                                    void applyAction(
+                                      item.candidate_id,
+                                      'review'
+                                    )
+                                  }
+                                >
+                                  <RotateCcw className='h-4 w-4' />
+                                </Button>
+                              ) : null}
+                              {!archived ? (
+                                <Button
+                                  size='icon'
+                                  variant='outline'
+                                  aria-label='Ignore or archive'
+                                  title='Ignore or archive'
+                                  data-testid={`discover-action-ignore-${item.candidate_id}`}
+                                  onClick={() =>
+                                    void applyAction(
+                                      item.candidate_id,
+                                      'ignore'
+                                    )
+                                  }
+                                >
+                                  <Archive className='h-4 w-4' />
+                                </Button>
+                              ) : null}
+                              {canPromoteWishlist ? (
+                                <Button
+                                  size='icon'
+                                  variant='outline'
+                                  aria-label='Promote to Wishlist'
+                                  title='Promote to Wishlist'
+                                  data-testid={`discover-action-wishlist-${item.candidate_id}`}
+                                  onClick={() =>
+                                    void applyAction(
+                                      item.candidate_id,
+                                      'add_to_wishlist'
+                                    )
+                                  }
+                                >
+                                  <Heart className='h-4 w-4' />
+                                </Button>
+                              ) : null}
+                              {canPurchaseFollowUp ? (
+                                <Button
+                                  size='icon'
+                                  variant='outline'
+                                  aria-label='Purchase follow-up'
+                                  title='Purchase follow-up'
+                                  data-testid={`discover-action-track-${item.candidate_id}`}
+                                  onClick={() =>
+                                    void applyAction(
+                                      item.candidate_id,
+                                      'track_price'
+                                    )
+                                  }
+                                >
+                                  <ShoppingCart className='h-4 w-4' />
+                                </Button>
+                              ) : null}
+                              {canInventoryHandoff ? (
+                                <Button
+                                  size='icon'
+                                  aria-label='Inventory handoff'
+                                  title='Inventory handoff'
+                                  data-testid={`discover-action-create-${item.candidate_id}`}
+                                  onClick={() =>
+                                    void applyAction(
+                                      item.candidate_id,
+                                      'create_item'
+                                    )
+                                  }
+                                >
+                                  <PackagePlus className='h-4 w-4' />
+                                </Button>
+                              ) : null}
                             </div>
                           )}
                         </td>
