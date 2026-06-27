@@ -131,7 +131,12 @@ describe("ui-screen-wishlist", () => {
       .should("be.visible")
       .then(($trigger) => {
         const rowId = $trigger.attr("data-row-id");
-        cy.wrap($trigger).click();
+        cy.get(
+          `[data-testid="task-row-actions-trigger"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        )
+          .should("be.visible")
+          .click({ force: true });
         cy.get(
           `[data-testid="task-row-actions-menu"][data-row-id="${rowId}"]`,
           { timeout: 15000 }
