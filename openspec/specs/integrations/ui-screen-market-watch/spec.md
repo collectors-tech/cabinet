@@ -176,6 +176,21 @@ Market Watch output-detail Discoveries handoff SHALL use the saved watch keyword
 - **THEN** UI MUST request Discoveries candidates using the saved watch keyword as the query
 - **AND** UI MUST show a testable Discoveries handoff status with the returned item count
 
+### Requirement UI-SCREEN-MARKET-WATCH-013: Market Watch SHALL persist run and result records within profile and watch scope
+Market Watch SHALL store saved-watch executions as durable run records and SHALL dedupe discovered results within the current profile and saved watch so private watch state, result decisions, and rerun metadata survive reloads without leaking across profiles.
+
+#### Scenario: Durable run record for saved watch execution
+- **GIVEN** a saved Market Watch query exists for the active profile
+- **WHEN** the query is run manually or by schedule
+- **THEN** the backend MUST create a durable run record with run ID, profile ID, query-set ID, provider, trigger type, started/finished timestamps, status, result count, new-result count, and actionable error/retry metadata when the run fails
+
+#### Scenario: Scoped result dedupe preserves user decisions
+- **GIVEN** a provider returns the same listing ID or source URL across repeated runs
+- **WHEN** Market Watch persists the run results
+- **THEN** results MUST dedupe within the same profile, saved watch, provider, and listing/source URL key
+- **AND** existing user decision status such as ignored, archived, wishlisted, purchase candidate, or inventory candidate MUST be preserved while refreshed result metadata is updated
+- **AND** the same provider listing may be tracked independently by another profile or another saved watch without corrupting the original watch state
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -194,3 +209,4 @@ Market Watch output-detail Discoveries handoff SHALL use the saved watch keyword
 | UC-MW-13 | Inventory handoff from output detail | Output detail Inventory handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Inventory route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance` |
 | UC-MW-14 | Route handoff bootstrap | Barcode handoff route pre-fills saved-query fields and persists the selected provider scope when created | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state` |
 | UC-MW-15 | Discoveries handoff from output detail | Output detail Discoveries handoff queries Discoveries with the saved watch keyword and reports returned item count | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword` |
+| UC-MW-16 | Persist saved-watch run/result records | Manual and scheduled runs create durable run records; results dedupe by profile/watch/provider/listing or source URL while preserving decision state | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsDurableRunRecordAndDedupesResults`; `TestRunNowDedupeIsScopedByProfileAndWatch` |
