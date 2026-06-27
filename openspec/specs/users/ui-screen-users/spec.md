@@ -40,7 +40,7 @@ When no active profile is currently set for the authenticated session, `GET /api
 #### Scenario: Users route loads without an active profile
 - **GIVEN** an authenticated user lands on `/users` and profile runtime returns no active profile id
 - **WHEN** the screen requests `GET /api/users`
-- **THEN** API response MUST be `200` with `users[]` payload and the screen MUST render `User List` without `users_fetch_failed_404`
+- **THEN** API response MUST be `200` with `users[]` payload and the screen MUST render the `Users` shell title without `users_fetch_failed_404`
 
 ### Requirement UI-SCREEN-USERS-006: Users screen SHALL expose deterministic loading and empty states
 Users screen SHALL keep the route shell and primary controls visible while list data loads, and SHALL render a deterministic empty table state when the Cabinet users API returns no rows.
@@ -76,6 +76,17 @@ Users screen SHALL make selected-row bulk invite, status, and delete actions dur
 - **AND** status actions MUST call `PUT /api/users/{id}` for each selected user and refresh the table with the persisted status
 - **AND** delete actions MUST require explicit confirmation, call `DELETE /api/users/{id}` for each selected user, refresh the table, and remove deleted rows from the visible source-of-truth state
 
+### Requirement UI-SCREEN-USERS-009: Users screen SHALL use compact global header actions with table controls in the toolbar
+Users screen SHALL present route identity and primary user actions in the shared Cabinet shell header while keeping search, filters, and table view controls visually attached to the table toolbar.
+
+#### Scenario: Render Users actions in the shell header action lane
+- **GIVEN** an authenticated desktop user opens `/users`
+- **WHEN** the Users screen renders ready, loading, or empty table states
+- **THEN** the sticky shell header MUST expose `Users`, `Invite User`, and `Add User` in the global header action lane
+- **AND** the workspace MUST NOT render a duplicate `User List` heading block above the table
+- **AND** the table toolbar MUST retain the username search, status filter, role filter, and `View` column-control action next to the table
+- **AND** keyboard focus order MUST reach shell actions before table toolbar controls.
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -88,3 +99,4 @@ Users screen SHALL make selected-row bulk invite, status, and delete actions dur
 | UC-USR-07 | Loading and empty list states | Pending users list shows loading feedback; empty API response renders table empty state without stale rows or error banner | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-006 renders deterministic loading and empty states` |
 | UC-USR-08 | Table view options | View menu hides optional columns while preserving core row context | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-007 hides optional table columns from the View menu` |
 | UC-USR-09 | Bulk user actions | Selected-row invite, status, and delete actions call Cabinet APIs, refresh the users list, and prove persisted table outcomes | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-008 persists bulk invite, status, and delete actions through Cabinet API` |
+| UC-USR-10 | Compact global header actions | Users title, Invite User, and Add User render in the shell header while search/filter/View controls remain in the table toolbar and duplicate page chrome is absent | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-009 keeps primary actions in the Users shell header and table controls in the toolbar` |
