@@ -274,6 +274,50 @@ func TestAuthAndGlobalErrorFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 	}
 }
 
+func TestIntegrationsFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := repoRoot(t)
+	appsPath := filepath.Join(root, "ui.web", "src", "features", "apps", "index.tsx")
+	notificationSpecPath := filepath.Join(root, "openspec", "specs", "chats", "notification-inbox", "spec.md")
+	traceabilityPath := filepath.Join(root, "openspec", "traceability.md")
+
+	appsSource := mustReadContractFile(t, appsPath)
+	notificationSpec := mustReadContractFile(t, notificationSpecPath)
+	traceability := mustReadContractFile(t, traceabilityPath)
+
+	requiredAppsSnippets := []string{
+		"function recordIntegrationsStatusHistory(",
+		"source_label: 'Integrations'",
+		"category: 'system'",
+		"'integrations-openai-save-success'",
+		"integrations-token-field-${notificationHistoryID(message)}",
+		"integrations-provider-save-${notificationHistoryID(editingProvider.provider_id)}",
+		"'integrations-openai-api-key-disconnect-success'",
+		"integrations-buyer-interest-${mode}-success",
+		"integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}preview-success",
+		"integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}execute-failed",
+		"integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}preview-success",
+		"integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}execute-failed",
+		"'integrations-landed-cost-preview-success'",
+		"'integrations-landed-cost-preview-failed'",
+	}
+	for _, snippet := range requiredAppsSnippets {
+		if !strings.Contains(appsSource, snippet) {
+			t.Fatalf("Integrations feedback missing durable Inbox history metadata %q in %s", snippet, appsPath)
+		}
+	}
+
+	if !strings.Contains(notificationSpec, "Integrations provider configuration save/disconnect feedback") ||
+		!strings.Contains(notificationSpec, "Integrations buyer-interest, seller operation, listing lifecycle, and landed-cost action feedback") {
+		t.Fatalf("notification Inbox spec must list Integrations action feedback in #1438 emitter scope in %s", notificationSpecPath)
+	}
+
+	if !strings.Contains(traceability, "TestIntegrationsFeedbackCarriesInboxHistoryMetadata") {
+		t.Fatalf("traceability must list Integrations Inbox history contract test in %s", traceabilityPath)
+	}
+}
+
 func mustReadContractFile(t *testing.T, path string) string {
 	t.Helper()
 

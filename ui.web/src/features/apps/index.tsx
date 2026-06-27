@@ -509,6 +509,27 @@ function notificationHistoryID(value: string) {
   return value.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
 }
 
+function recordIntegrationsStatusHistory({
+  id,
+  level = 'success',
+  title,
+  summary = 'Operational status from Integrations.',
+}: {
+  id: string
+  level?: 'success' | 'error' | 'warning'
+  title: string
+  summary?: string
+}) {
+  recordNotificationHistory({
+    id,
+    level,
+    title,
+    summary,
+    source_label: 'Integrations',
+    category: 'system',
+  })
+}
+
 function isConnected(
   provider: ProviderRecord,
   settings: Record<string, string>
@@ -1058,6 +1079,12 @@ export function Apps({
 
   const showTokenFieldError = (message: string) => {
     setTokenFieldError(message)
+    recordIntegrationsStatusHistory({
+      id: `integrations-token-field-${notificationHistoryID(message)}`,
+      level: 'error',
+      title: message,
+      summary: 'Provider credential field validation status from Integrations.',
+    })
     window.setTimeout(() => tokenInputRef.current?.focus(), 0)
   }
 
@@ -1146,7 +1173,13 @@ export function Apps({
               : provider
           )
         )
-        setActionMessage('OpenAI configuration saved.')
+        const message = 'OpenAI configuration saved.'
+        setActionMessage(message)
+        recordIntegrationsStatusHistory({
+          id: 'integrations-openai-save-success',
+          title: message,
+          summary: 'Provider configuration save status from Integrations.',
+        })
         closeIntegration()
         return
       }
@@ -1199,17 +1232,37 @@ export function Apps({
             : provider
         )
       )
-      setActionMessage('Provider configuration saved.')
+      const message = 'Provider configuration saved.'
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-provider-save-${notificationHistoryID(editingProvider.provider_id)}`,
+        title: message,
+        summary: 'Provider configuration save status from Integrations.',
+      })
       closeIntegration()
     } catch (err) {
+      const message =
+        err instanceof Error && err.message === 'token_required_for_provider'
+          ? 'Token is required for this provider.'
+          : err instanceof Error
+            ? err.message
+            : 'save_failed'
       if (
         err instanceof Error &&
         err.message === 'token_required_for_provider'
       ) {
-        setSaveError('Token is required for this provider.')
+        setSaveError(message)
       } else {
-        setSaveError(err instanceof Error ? err.message : 'save_failed')
+        setSaveError(message)
       }
+      recordIntegrationsStatusHistory({
+        id: editingProvider
+          ? `integrations-provider-save-${notificationHistoryID(editingProvider.provider_id)}-failed`
+          : 'integrations-provider-save-failed',
+        level: 'error',
+        title: message,
+        summary: 'Provider configuration save status from Integrations.',
+      })
     } finally {
       setSaving(false)
     }
@@ -1383,9 +1436,23 @@ export function Apps({
       )
       setReplaceToken(true)
       setForm((prev) => ({ ...prev, token: '' }))
-      setActionMessage('OpenAI API key disconnected.')
+      const message = 'OpenAI API key disconnected.'
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: 'integrations-openai-api-key-disconnect-success',
+        title: message,
+        summary: 'Provider credential disconnect status from Integrations.',
+      })
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'disconnect_failed')
+      const message =
+        error instanceof Error ? error.message : 'disconnect_failed'
+      setSaveError(message)
+      recordIntegrationsStatusHistory({
+        id: 'integrations-openai-api-key-disconnect-failed',
+        level: 'error',
+        title: message,
+        summary: 'Provider credential disconnect status from Integrations.',
+      })
     } finally {
       setSaving(false)
     }
@@ -1413,19 +1480,30 @@ export function Apps({
       }
       const payload = (await response.json()) as BuyerInterestSyncResult
       setBuyerInterestResult(payload)
-      setActionMessage(
+      const message =
         mode === 'preview'
           ? 'Buyer-interest preview mapped without remote write-back.'
           : 'Buyer-interest import persisted local Wishlist and Discovery state.'
-      )
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-buyer-interest-${mode}-success`,
+        title: message,
+        summary: 'Buyer-interest action status from Integrations.',
+      })
     } catch (error) {
-      setBuyerInterestError(
+      const message =
         error instanceof SyntaxError
           ? 'Buyer-interest payload must be valid JSON.'
           : error instanceof Error
             ? error.message
             : 'buyer_interest_sync_failed'
-      )
+      setBuyerInterestError(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-buyer-interest-${mode}-failed`,
+        level: 'error',
+        title: message,
+        summary: 'Buyer-interest action status from Integrations.',
+      })
     } finally {
       setBuyerInterestWorking(false)
     }
@@ -1465,17 +1543,28 @@ export function Apps({
       }
       const payload = (await response.json()) as SellerOperationPreviewResult
       setSellerOperationResult(payload)
-      setActionMessage(
+      const message =
         payload.preview?.remote_write
           ? 'Seller operation preview is allowed only after explicit confirmation.'
           : 'Seller operation preview completed without remote write.'
-      )
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}preview-success`,
+        title: message,
+        summary: 'Seller operation preview status from Integrations.',
+      })
     } catch (error) {
-      setSellerOperationError(
+      const message =
         error instanceof Error
           ? error.message
           : 'seller_operation_preview_failed'
-      )
+      setSellerOperationError(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}preview-failed`,
+        level: 'error',
+        title: message,
+        summary: 'Seller operation preview status from Integrations.',
+      })
     } finally {
       setSellerOperationWorking(null)
     }
@@ -1518,17 +1607,28 @@ export function Apps({
             `seller_operation_execute_failed_${response.status}`
         )
       }
-      setActionMessage(
+      const message =
         payload.execution?.local_only
           ? 'Seller operation read-only sync completed locally without remote write.'
           : 'Seller operation execute request returned without local completion.'
-      )
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}execute-success`,
+        title: message,
+        summary: 'Seller operation execute status from Integrations.',
+      })
     } catch (error) {
-      setSellerOperationError(
+      const message =
         error instanceof Error
           ? error.message
           : 'seller_operation_execute_failed'
-      )
+      setSellerOperationError(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}execute-failed`,
+        level: 'error',
+        title: message,
+        summary: 'Seller operation execute status from Integrations.',
+      })
     } finally {
       setSellerOperationWorking(null)
     }
@@ -1577,17 +1677,28 @@ export function Apps({
             `listing_lifecycle_preview_failed_${response.status}`
         )
       }
-      setActionMessage(
+      const message =
         payload.preview?.remote_write
           ? 'Listing lifecycle preview requires explicit confirmation before any eBay write.'
           : 'Listing lifecycle preview completed without remote write.'
-      )
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}preview-success`,
+        title: message,
+        summary: 'Listing lifecycle preview status from Integrations.',
+      })
     } catch (error) {
-      setListingLifecycleError(
+      const message =
         error instanceof Error
           ? error.message
           : 'listing_lifecycle_preview_failed'
-      )
+      setListingLifecycleError(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}preview-failed`,
+        level: 'error',
+        title: message,
+        summary: 'Listing lifecycle preview status from Integrations.',
+      })
     } finally {
       setListingLifecycleWorking(null)
     }
@@ -1623,17 +1734,28 @@ export function Apps({
             `listing_lifecycle_execute_failed_${response.status}`
         )
       }
-      setActionMessage(
+      const message =
         payload.execution?.local_only
           ? 'Listing draft was created locally without eBay remote write.'
           : 'Listing lifecycle execute request returned without remote completion.'
-      )
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}execute-success`,
+        title: message,
+        summary: 'Listing lifecycle execute status from Integrations.',
+      })
     } catch (error) {
-      setListingLifecycleError(
+      const message =
         error instanceof Error
           ? error.message
           : 'listing_lifecycle_execute_failed'
-      )
+      setListingLifecycleError(message)
+      recordIntegrationsStatusHistory({
+        id: `integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}execute-failed`,
+        level: 'error',
+        title: message,
+        summary: 'Listing lifecycle execute status from Integrations.',
+      })
     } finally {
       setListingLifecycleWorking(null)
     }
@@ -1658,17 +1780,28 @@ export function Apps({
       if (!response.ok) {
         throw new Error('landed_cost_plan_failed_' + response.status)
       }
-      setActionMessage(
+      const message =
         'Landed-cost plan previewed without mutating inventory or shipment state.'
-      )
+      setActionMessage(message)
+      recordIntegrationsStatusHistory({
+        id: 'integrations-landed-cost-preview-success',
+        title: message,
+        summary: 'Landed-cost preview status from Integrations.',
+      })
     } catch (error) {
-      setLandedCostError(
+      const message =
         error instanceof SyntaxError
           ? 'Landed-cost payload must be valid JSON.'
           : error instanceof Error
             ? error.message
             : 'landed_cost_plan_failed'
-      )
+      setLandedCostError(message)
+      recordIntegrationsStatusHistory({
+        id: 'integrations-landed-cost-preview-failed',
+        level: 'error',
+        title: message,
+        summary: 'Landed-cost preview status from Integrations.',
+      })
     } finally {
       setLandedCostWorking(false)
     }
