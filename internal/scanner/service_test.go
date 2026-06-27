@@ -231,6 +231,88 @@ func TestRunNowPersistsDurableRunRecordAndDedupesResults(t *testing.T) {
 	}
 }
 
+func TestRunNowPreservesDownstreamDecisionStatuses(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Decision handoff watch",
+		Keywords:      []string{"afx"},
+		ProviderScope: []string{"ebay"},
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile() error = %v", err)
+	}
+	provider := &testProvider{
+		providerID: "ebay",
+		items: []CandidateInput{
+			{ListingID: "DECISION-IGNORED", Title: "Ignored result", Price: 10, Currency: "AUD", URL: "https://market.test/ignored", Source: "ebay"},
+			{ListingID: "DECISION-ARCHIVED", Title: "Archived result", Price: 20, Currency: "AUD", URL: "https://market.test/archived", Source: "ebay"},
+			{ListingID: "DECISION-WISHLISTED", Title: "Wishlisted result", Price: 30, Currency: "AUD", URL: "https://market.test/wishlisted", Source: "ebay"},
+			{ListingID: "DECISION-PURCHASE", Title: "Purchase result", Price: 40, Currency: "AUD", URL: "https://market.test/purchase", Source: "ebay"},
+			{ListingID: "DECISION-INVENTORY", Title: "Inventory result", Price: 50, Currency: "AUD", URL: "https://market.test/inventory", Source: "ebay"},
+		},
+	}
+	if _, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, provider); err != nil {
+		t.Fatalf("RunNowForProfile() first pass error = %v", err)
+	}
+
+	decisions := map[string]string{
+		"DECISION-IGNORED":    "ignored",
+		"DECISION-ARCHIVED":   "archived",
+		"DECISION-WISHLISTED": "wishlisted",
+		"DECISION-PURCHASE":   "purchase_candidate",
+		"DECISION-INVENTORY":  "inventory_candidate",
+	}
+	refreshedPrices := map[string]float64{}
+	for listingID, status := range decisions {
+		if _, err := conn.Exec(`UPDATE scanner_candidates SET status = ? WHERE profile_id = ? AND query_set_id = ? AND listing_id = ?`, status, "profile-a", qs.ID, listingID); err != nil {
+			t.Fatalf("seed %s decision status: %v", listingID, err)
+		}
+	}
+	for i := range provider.items {
+		provider.items[i].Price += 0.75
+		refreshedPrices[provider.items[i].ListingID] = provider.items[i].Price
+	}
+	if _, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, provider); err != nil {
+		t.Fatalf("RunNowForProfile() second pass error = %v", err)
+	}
+
+	candidates, err := svc.ListCandidates(context.Background(), qs.ID)
+	if err != nil {
+		t.Fatalf("ListCandidates() error = %v", err)
+	}
+	if len(candidates) != len(decisions) {
+		t.Fatalf("expected %d decision results after rerun, got %d: %+v", len(decisions), len(candidates), candidates)
+	}
+	for _, candidate := range candidates {
+		expected, ok := decisions[candidate.ListingID]
+		if !ok {
+			t.Fatalf("unexpected candidate after rerun: %+v", candidate)
+		}
+		if candidate.Status != expected {
+			t.Fatalf("expected %s to preserve status %q, got %q", candidate.ListingID, expected, candidate.Status)
+		}
+		if candidate.Price != refreshedPrices[candidate.ListingID] || candidate.Currency != "AUD" {
+			t.Fatalf("expected rerun to refresh metadata while preserving %s, got %+v", candidate.ListingID, candidate)
+		}
+	}
+
+	var runCount int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ? AND provider = ?`, "profile-a", qs.ID, "ebay").Scan(&runCount); err != nil {
+		t.Fatalf("count run records: %v", err)
+	}
+	if runCount != 2 {
+		t.Fatalf("expected both decision-preserving runs to be durable, got %d", runCount)
+	}
+}
+
 func TestRunNowDedupeIsScopedByProfileAndWatch(t *testing.T) {
 	t.Parallel()
 
