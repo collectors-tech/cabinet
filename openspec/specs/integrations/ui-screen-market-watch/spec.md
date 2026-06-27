@@ -185,6 +185,12 @@ Market Watch SHALL store saved-watch executions as durable run records and SHALL
 - **THEN** the backend MUST create a durable run record with run ID, profile ID, query-set ID, provider, trigger type, started/finished timestamps, status, result count, new-result count, and actionable error/retry metadata when the run fails
 - **AND** saved-query reloads MUST derive latest run status, latest run timestamp, latest run message, candidate count, and computed next scheduled run timestamp from durable run/watch state rather than transient in-memory execution state
 
+#### Scenario: Scheduled partial failure preserves unrelated watch state
+- **GIVEN** multiple enabled scheduled Market Watch queries exist for the active profile
+- **WHEN** one provider-backed scheduled query fails and another scheduled query succeeds in the same scheduled refresh
+- **THEN** the failed query MUST store a durable failed scheduled run with actionable retry guidance
+- **AND** the successful query MUST still run, store durable result records, and reload as succeeded without being corrupted by the failed query
+
 #### Scenario: Scoped result dedupe preserves user decisions
 - **GIVEN** a provider returns the same listing ID or source URL across repeated runs
 - **WHEN** Market Watch persists the run results
@@ -211,4 +217,4 @@ Market Watch SHALL store saved-watch executions as durable run records and SHALL
 | UC-MW-13 | Inventory handoff from output detail | Output detail Inventory handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Inventory route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance` |
 | UC-MW-14 | Route handoff bootstrap | Barcode handoff route pre-fills saved-query fields and persists the selected provider scope when created | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state` |
 | UC-MW-15 | Discoveries handoff from output detail | Output detail Discoveries handoff queries Discoveries with the saved watch keyword and reports returned item count | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword` |
-| UC-MW-16 | Persist saved-watch run/result records | Manual and scheduled runs create durable run records; results dedupe by profile/watch/provider/listing or source URL while preserving decision state; saved-query reloads expose durable latest-run and next scheduled run state | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsDurableRunRecordAndDedupesResults`; `TestRunNowPreservesDownstreamDecisionStatuses`; `TestRunNowDedupeIsScopedByProfileAndWatch`; `TestQuerySetRunSnapshotUsesDurableRunRecordsAndComputesNextRun` |
+| UC-MW-16 | Persist saved-watch run/result records | Manual and scheduled runs create durable run records; scheduled partial failures preserve unrelated watch state; results dedupe by profile/watch/provider/listing or source URL while preserving decision state; saved-query reloads expose durable latest-run and next scheduled run state | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsDurableRunRecordAndDedupesResults`; `TestRunNowPreservesDownstreamDecisionStatuses`; `TestRunNowDedupeIsScopedByProfileAndWatch`; `TestQuerySetRunSnapshotUsesDurableRunRecordsAndComputesNextRun`; `TestRunScheduledRecordsPartialFailureWithoutBlockingOtherWatches` |

@@ -17,6 +17,30 @@ type testProvider struct {
 	items      []CandidateInput
 }
 
+type scheduledMixedProvider struct{}
+
+func (p *scheduledMixedProvider) ProviderID() string {
+	return "ebay"
+}
+
+func (p *scheduledMixedProvider) Search(_ context.Context, q QuerySet) ([]CandidateInput, error) {
+	switch q.Name {
+	case "Scheduled failing watch":
+		return nil, errors.New("provider outage")
+	case "Scheduled healthy watch":
+		return []CandidateInput{{
+			ListingID: "SCHEDULED-OK-1",
+			Title:     "Scheduled healthy result",
+			Price:     33,
+			Currency:  "AUD",
+			URL:       "https://market.test/scheduled-ok-1",
+			Source:    "ebay",
+		}}, nil
+	default:
+		return nil, errors.New("unexpected scheduled watch")
+	}
+}
+
 func (p *testProvider) ProviderID() string {
 	return p.providerID
 }
@@ -702,6 +726,83 @@ func TestRunNowRecordsProviderHealthForExecutingProvider(t *testing.T) {
 		if got := failures[0][key]; got != expected {
 			t.Fatalf("expected scoped failure %s=%q, got %q in %+v", key, expected, got, failures[0])
 		}
+	}
+}
+
+func TestRunScheduledRecordsPartialFailureWithoutBlockingOtherWatches(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	failingQuery, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Scheduled failing watch",
+		Keywords:      []string{"afx fail"},
+		ProviderScope: []string{"ebay"},
+		ScheduleCron:  "*/15 * * * *",
+		Enabled:       true,
+		MaxRetryCount: 0,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile(failing) error = %v", err)
+	}
+	healthyQuery, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Scheduled healthy watch",
+		Keywords:      []string{"afx ok"},
+		ProviderScope: []string{"ebay"},
+		ScheduleCron:  "*/15 * * * *",
+		Enabled:       true,
+		MaxRetryCount: 0,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile(healthy) error = %v", err)
+	}
+
+	ran, err := svc.RunScheduledForProfile(context.Background(), "profile-a", &scheduledMixedProvider{})
+	if err == nil {
+		t.Fatal("expected partial scheduled failure error")
+	}
+	if ran != 1 {
+		t.Fatalf("expected one healthy scheduled watch to run after one failed watch, got %d", ran)
+	}
+
+	var failedRuns, healthyRuns, healthyResults int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ? AND trigger_type = 'scheduled' AND status = 'failed' AND error_category = 'provider_error' AND error_message = 'provider outage' AND retry_guidance <> ''`, "profile-a", failingQuery.ID).Scan(&failedRuns); err != nil {
+		t.Fatalf("query failed scheduled runs: %v", err)
+	}
+	if failedRuns != 1 {
+		t.Fatalf("expected durable failed scheduled run with retry guidance, got %d", failedRuns)
+	}
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ? AND trigger_type = 'scheduled' AND status = 'succeeded' AND result_count = 1 AND new_result_count = 1`, "profile-a", healthyQuery.ID).Scan(&healthyRuns); err != nil {
+		t.Fatalf("query healthy scheduled runs: %v", err)
+	}
+	if healthyRuns != 1 {
+		t.Fatalf("expected durable successful scheduled run after partial failure, got %d", healthyRuns)
+	}
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND listing_id = 'SCHEDULED-OK-1'`, "profile-a", healthyQuery.ID).Scan(&healthyResults); err != nil {
+		t.Fatalf("query healthy scheduled candidates: %v", err)
+	}
+	if healthyResults != 1 {
+		t.Fatalf("expected healthy watch candidate to persist despite partial failure, got %d", healthyResults)
+	}
+
+	reloadedFailing, err := svc.GetQuerySetForProfile(context.Background(), "profile-a", failingQuery.ID)
+	if err != nil {
+		t.Fatalf("GetQuerySetForProfile(failing) error = %v", err)
+	}
+	if reloadedFailing.LastRunStatus != "failed" || reloadedFailing.LastRunMessage != "provider outage" {
+		t.Fatalf("expected failed scheduled snapshot, got %+v", reloadedFailing)
+	}
+	reloadedHealthy, err := svc.GetQuerySetForProfile(context.Background(), "profile-a", healthyQuery.ID)
+	if err != nil {
+		t.Fatalf("GetQuerySetForProfile(healthy) error = %v", err)
+	}
+	if reloadedHealthy.LastRunStatus != "succeeded" || reloadedHealthy.LastCandidateCount != 1 {
+		t.Fatalf("expected healthy scheduled snapshot to remain succeeded, got %+v", reloadedHealthy)
 	}
 }
 
