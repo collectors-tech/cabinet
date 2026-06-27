@@ -126,12 +126,19 @@ describe("ui-screen-wishlist", () => {
   }
 
   function openWishlistRowActions(rowText: string) {
-    cy.contains("tr", rowText)
+    cy.contains("tr", rowText, { timeout: 15000 })
       .find('[data-testid="task-row-actions-trigger"]')
-      .scrollIntoView()
       .should("be.visible")
-      .trigger("click", { force: true });
-    cy.get('[data-testid="task-row-actions-menu"]').should("be.visible");
+      .then(($trigger) => {
+        const rowId = $trigger.attr("data-row-id");
+        cy.wrap($trigger).click();
+        cy.get(
+          `[data-testid="task-row-actions-menu"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        )
+          .filter(":visible")
+          .should("have.length", 1);
+      });
   }
 
   function collectionFilterOptionKey(value: string) {

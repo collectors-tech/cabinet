@@ -1128,8 +1128,16 @@ export function getTasksColumns({
     {
       id: 'actions',
       meta: {
-        className: isInventoryRoute ? 'w-44' : undefined,
-        tdClassName: isInventoryRoute ? 'max-w-none' : undefined,
+        className: isInventoryRoute
+          ? 'w-44'
+          : isWishlistRoute
+            ? 'sticky right-0 z-20 w-12 bg-background text-right'
+            : undefined,
+        tdClassName: isInventoryRoute
+          ? 'max-w-none'
+          : isWishlistRoute
+            ? 'max-w-none'
+            : undefined,
       },
       cell: ({ row }) => (
         <div className='flex items-center justify-end gap-1'>
