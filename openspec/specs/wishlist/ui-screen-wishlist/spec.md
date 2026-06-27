@@ -124,9 +124,9 @@ Wishlist rows SHALL expose Purchased state and purchase details through dedicate
 - **AND** saving MUST persist Purchased state, price paid, quantity, condition, purchase date, and URL
 - **AND** Wishlist row actions MUST NOT include `Mark owned`
 
-### Requirement UI-SCREEN-WISHLIST-020: Wishlist rows SHALL expose Purchased, Delivered, and Category workflow fields
+### Requirement UI-SCREEN-WISHLIST-020: Wishlist rows SHALL expose Purchased and Category workflow fields without a Delivered table column
 
-Wishlist rows, cards, filters, forms, and detail surfaces SHALL use `Purchased` wording instead of `Owned`, SHALL expose explicit Delivered state, and SHALL preserve Category when wishlist items move into downstream purchase and inventory records.
+Wishlist rows, cards, filters, forms, and detail surfaces SHALL use `Purchased` wording instead of `Owned`, SHALL preserve Category when wishlist items move into downstream purchase and inventory records, and SHALL NOT expose `Delivered` as a first-class Wishlist table column. Delivery/received reconciliation belongs in Purchases/Inventory flows or an explicit detail workflow, not the default Wishlist rows table.
 
 #### Scenario: Edit purchase-to-delivery workflow fields
 
@@ -136,6 +136,13 @@ Wishlist rows, cards, filters, forms, and detail surfaces SHALL use `Purchased` 
 - **AND** the UI MUST persist Category on the canonical item record
 - **AND** Delivered MUST either set Purchased or block the save with clear validation guidance
 - **AND** downstream Purchases and Inventory views MUST be able to show the resulting records with wishlist provenance
+
+#### Scenario: Hide Delivered from default rows table
+
+- **GIVEN** wishlist route shows rows view
+- **WHEN** the default Wishlist table renders
+- **THEN** the table headers MUST include `Purchased`
+- **AND** the table headers MUST NOT include `Delivered`
 
 ### Requirement UI-SCREEN-WISHLIST-016: Wishlist rows and cards SHALL render stable date context
 Wishlist rows and cards SHALL render date context without implying that normal edits refreshed price data.
