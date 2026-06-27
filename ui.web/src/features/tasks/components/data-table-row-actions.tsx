@@ -46,6 +46,7 @@ export function DataTableRowActions<TData>({
           aria-label={`Open actions for ${task.title}`}
           onPointerDown={(event) => {
             event.stopPropagation()
+            setOpen(true)
           }}
           onClick={(event) => {
             event.stopPropagation()
