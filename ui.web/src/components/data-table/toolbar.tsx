@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react'
 import { Cross2Icon } from '@radix-ui/react-icons'
 import { type Table } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,8 @@ type DataTableToolbarProps<TData> = {
   searchKey?: string
   searchInputTestId?: string
   toolbarTestId?: string
-  customFilters?: React.ReactNode
+  actions?: ReactNode
+  customFilters?: ReactNode
   filters?: {
     columnId: string
     title: string
@@ -33,6 +35,7 @@ export function DataTableToolbar<TData>({
   searchKey,
   searchInputTestId,
   toolbarTestId,
+  actions,
   customFilters,
   filters = [],
 }: DataTableToolbarProps<TData>) {
@@ -99,7 +102,10 @@ export function DataTableToolbar<TData>({
           </Button>
         )}
       </div>
-      <DataTableViewOptions table={table} />
+      <div className='ms-auto flex flex-wrap items-center justify-end gap-2'>
+        {actions}
+        <DataTableViewOptions table={table} />
+      </div>
     </div>
   )
 }

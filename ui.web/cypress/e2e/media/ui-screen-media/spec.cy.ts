@@ -65,6 +65,11 @@ describe('ui-screen-media', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
+  function chooseMediaLinkageFilter(value: 'all' | 'unlinked') {
+    cy.get('[data-testid="media-linkage-filter-trigger"]').click()
+    cy.get(`[data-testid="media-filter-${value}"]`).click()
+  }
+
   it('UI-SCREEN-MEDIA-006 opens Media workspace shell from navigation', () => {
     cy.intercept('GET', '/api/media/assets', {
       statusCode: 200,
@@ -92,15 +97,35 @@ describe('ui-screen-media', () => {
     cy.wait('@mediaAssets')
 
     cy.get('[data-testid="media-workspace"]').should('be.visible')
-    cy.get('[data-testid="media-header-title"]')
-      .should('be.visible')
-      .and('have.attr', 'data-centered', 'true')
-      .and('contain', 'Media')
-    cy.get('[data-testid="media-page-icon"]').should('be.visible')
+    cy.get('[data-testid="media-workspace"]').within(() => {
+      cy.contains('h1', /^Media$/).should('not.exist')
+      cy.contains(
+        'Table-first asset management for uploaded photos, unlinked evidence, and assignment follow-up.'
+      ).should('not.exist')
+      cy.contains(/assets? in (All|Unlinked) view/).should('not.exist')
+      cy.contains(/Showing \d+ of \d+ media assets/).should('not.exist')
+      cy.get('[role="tab"]').should('not.exist')
+      cy.get('[data-testid="media-table-summary"]').should('not.exist')
+    })
     cy.get('[data-testid="media-shared-table"]')
       .should('be.visible')
       .and('have.attr', 'data-table-surface', 'true')
-    cy.get('[data-testid="media-table-toolbar"]').should('be.visible')
+    cy.get('[data-testid="media-table-toolbar"]').within(() => {
+      cy.get('[data-testid="media-table-search-input"]').should('be.visible')
+      cy.get('[data-testid="media-linkage-filter-trigger"]')
+        .should('be.visible')
+        .and('contain', 'All')
+      cy.get('[data-testid="media-upload-action"]').should('be.enabled')
+      cy.get('[data-testid="media-download-selected-action"]').should(
+        'be.disabled'
+      )
+      cy.get('[data-testid="media-view-mode-cards"]').should('be.visible')
+      cy.get('[data-testid="media-view-mode-rows"]').should('be.visible')
+      cy.get('[data-testid="data-table-view-options-trigger"]').should(
+        'contain',
+        'View'
+      )
+    })
     cy.get('[data-testid="media-row-table"]')
       .should('be.visible')
       .find('tr[data-testid^="media-row-media-"]')
@@ -122,14 +147,13 @@ describe('ui-screen-media', () => {
       'be.enabled'
     )
     cy.contains(/^Ready for review$/).should('not.exist')
-    cy.get('[data-testid="media-upload-action"]')
-      .should('be.enabled')
-      .and('have.attr', 'aria-label', 'Add new asset')
-    cy.get('[data-testid="media-download-selected-action"]').should(
-      'be.disabled'
+    cy.get('[data-testid="media-upload-action"]').and(
+      'have.attr',
+      'aria-label',
+      'Add new asset'
     )
 
-    cy.get('[data-testid="media-filter-unlinked"]').click()
+    chooseMediaLinkageFilter('unlinked')
     cy.wait('@unlinkedMediaAssets')
     cy.get('[data-testid="media-row-table"]')
       .find('tr[data-testid^="media-row-media-"]')
@@ -320,8 +344,17 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-table-search-input"]')
       .should('be.visible')
       .type('porsche')
-    cy.get('[data-testid="media-filter-all"]').should('be.visible')
-    cy.get('[data-testid="media-filter-unlinked"]').should('be.visible')
+    cy.get('[data-testid="media-table-toolbar"]').within(() => {
+      cy.get('[data-testid="media-linkage-filter-trigger"]')
+        .should('be.visible')
+        .and('contain', 'All')
+      cy.get('[data-testid="media-view-mode-cards"]').should('be.visible')
+      cy.get('[data-testid="media-view-mode-rows"]').should('be.visible')
+      cy.get('[data-testid="data-table-view-options-trigger"]').should(
+        'contain',
+        'View'
+      )
+    })
     cy.get('[data-testid="media-row-table"]')
       .find('tr[data-testid^="media-row-media-"]')
       .should('have.length', 1)
