@@ -159,6 +159,128 @@ func TestRunNowPersistsObservedCurrency(t *testing.T) {
 	}
 }
 
+func TestRunNowPersistsDurableRunRecordAndDedupesResults(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Durable AFX watch",
+		Keywords:      []string{"afx"},
+		ProviderScope: []string{"bonzaslotcars"},
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile() error = %v", err)
+	}
+	provider := &testProvider{
+		providerID: "bonzaslotcars",
+		items: []CandidateInput{
+			{ListingID: "AFX-100", Title: "AFX listing", Price: 42.5, Currency: "AUD", Shipping: 9.5, URL: "https://shop.test/afx-100", Source: "bonzaslotcars"},
+			{Title: "URL-only listing", Price: 18, Currency: "AUD", URL: "https://shop.test/url-only", Source: "bonzaslotcars"},
+		},
+	}
+	if _, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, provider); err != nil {
+		t.Fatalf("RunNowForProfile() first pass error = %v", err)
+	}
+	provider.items[0].Price = 39.95
+	provider.items[1].Price = 17.5
+	if _, err := conn.Exec(`UPDATE scanner_candidates SET status = 'wishlisted' WHERE query_set_id = ? AND listing_id = ?`, qs.ID, "AFX-100"); err != nil {
+		t.Fatalf("seed decision state: %v", err)
+	}
+	if _, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, provider); err != nil {
+		t.Fatalf("RunNowForProfile() second pass error = %v", err)
+	}
+
+	var runCount, resultCount int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ? AND provider = ? AND status = 'succeeded'`, "profile-a", qs.ID, "bonzaslotcars").Scan(&runCount); err != nil {
+		t.Fatalf("query run records: %v", err)
+	}
+	if runCount != 2 {
+		t.Fatalf("expected two durable run records, got %d", runCount)
+	}
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ?`, "profile-a", qs.ID).Scan(&resultCount); err != nil {
+		t.Fatalf("query result records: %v", err)
+	}
+	if resultCount != 2 {
+		t.Fatalf("expected listing-id and source-url dedupe to keep two results after rerun, got %d", resultCount)
+	}
+	var status string
+	var price float64
+	if err := conn.QueryRow(`SELECT status, price FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND listing_id = ?`, "profile-a", qs.ID, "AFX-100").Scan(&status, &price); err != nil {
+		t.Fatalf("load deduped listing result: %v", err)
+	}
+	if status != "wishlisted" {
+		t.Fatalf("expected rerun to preserve user decision status, got %q", status)
+	}
+	if price != 39.95 {
+		t.Fatalf("expected rerun to refresh listing metadata, got price=%v", price)
+	}
+	var urlOnlyListingID string
+	if err := conn.QueryRow(`SELECT listing_id FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND url = ?`, "profile-a", qs.ID, "https://shop.test/url-only").Scan(&urlOnlyListingID); err != nil {
+		t.Fatalf("load URL-only result: %v", err)
+	}
+	if urlOnlyListingID == "" {
+		t.Fatal("expected URL-only result to receive a durable synthetic listing key")
+	}
+}
+
+func TestRunNowDedupeIsScopedByProfileAndWatch(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	profileAWatch, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{Name: "A watch", Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile(profile-a) error = %v", err)
+	}
+	profileASecondWatch, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{Name: "A second watch", Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile(profile-a second) error = %v", err)
+	}
+	profileBWatch, err := svc.CreateQuerySetForProfile(context.Background(), "profile-b", QuerySet{Name: "B watch", Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile(profile-b) error = %v", err)
+	}
+	provider := &testProvider{providerID: "ebay", items: []CandidateInput{{
+		ListingID: "SHARED-LISTING",
+		Title:     "Shared listing",
+		URL:       "https://market.test/shared-listing",
+		Source:    "ebay",
+	}}}
+
+	for _, run := range []struct {
+		profileID  string
+		querySetID string
+	}{
+		{"profile-a", profileAWatch.ID},
+		{"profile-a", profileASecondWatch.ID},
+		{"profile-b", profileBWatch.ID},
+	} {
+		if _, err := svc.RunNowForProfile(context.Background(), run.profileID, run.querySetID, provider); err != nil {
+			t.Fatalf("RunNowForProfile(%s, %s) error = %v", run.profileID, run.querySetID, err)
+		}
+	}
+
+	var count int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_candidates WHERE listing_id = 'SHARED-LISTING'`).Scan(&count); err != nil {
+		t.Fatalf("count shared listing candidates: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("expected shared provider listing to persist once per profile/watch, got %d", count)
+	}
+}
+
 func TestRunNowDoesNotReintroduceArchivedDiscoveryCandidate(t *testing.T) {
 	t.Parallel()
 

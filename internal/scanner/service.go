@@ -100,8 +100,10 @@ type RecognitionReview struct {
 }
 
 type RunResult struct {
+	RunID                 string `json:"run_id,omitempty"`
 	Attempts              int    `json:"attempts"`
 	Saved                 int    `json:"saved"`
+	NewResults            int    `json:"new_results"`
 	ItemsPerPageRequested int    `json:"items_per_page_requested"`
 	ItemsPerPageEffective int    `json:"items_per_page_effective"`
 	ObservedPageSize      int    `json:"observed_page_size"`
@@ -517,6 +519,10 @@ func (s *Service) RunNow(ctx context.Context, querySetID string, provider Provid
 }
 
 func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID string, provider Provider) (RunResult, error) {
+	return s.runNowForProfile(ctx, profileID, querySetID, provider, "manual")
+}
+
+func (s *Service) runNowForProfile(ctx context.Context, profileID, querySetID string, provider Provider, triggerType string) (RunResult, error) {
 	qs, err := s.GetQuerySetForProfile(ctx, strings.TrimSpace(profileID), querySetID)
 	if err != nil {
 		return RunResult{}, err
@@ -525,6 +531,8 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 		return RunResult{}, fmt.Errorf("provider is required")
 	}
 	providerID := providerHealthID(provider, qs)
+	runID := uuid.NewString()
+	startedAt := time.Now().UTC()
 	requestedItemsPerPage, effectiveItemsPerPage, itemsPerPageWarning := resolveItemsPerPage(
 		qs.ProviderScope,
 		qs.ItemsPerPage,
@@ -551,6 +559,22 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 				effectiveItemsPerPage,
 				itemsPerPageWarning,
 			)
+			result.RunID = runID
+			if persistErr == nil {
+				if err := s.recordRun(ctx, runRecord{
+					ID:             runID,
+					ProfileID:      strings.TrimSpace(profileID),
+					QuerySetID:     qs.ID,
+					Provider:       providerID,
+					TriggerType:    triggerType,
+					StartedAt:      startedAt,
+					Status:         "succeeded",
+					ResultCount:    result.Saved,
+					NewResultCount: result.NewResults,
+				}); err != nil {
+					return RunResult{}, err
+				}
+			}
 			return result, persistErr
 		}
 		s.recordProviderHealth(ctx, providerID, "error", lastErr.Error(), retryAfterSecondsFromError(lastErr))
@@ -563,14 +587,32 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 			time.Sleep(sleep * time.Duration(attempt))
 		}
 	}
-	return RunResult{
+	result := RunResult{
+		RunID:                 runID,
 		Attempts:              maxAttempts,
 		ItemsPerPageRequested: requestedItemsPerPage,
 		ItemsPerPageEffective: effectiveItemsPerPage,
 		ObservedPageSize:      effectiveItemsPerPage,
 		PageCount:             0,
 		ItemsPerPageWarning:   itemsPerPageWarning,
-	}, fmt.Errorf("run failed: %w", lastErr)
+	}
+	if err := s.recordRun(ctx, runRecord{
+		ID:             runID,
+		ProfileID:      strings.TrimSpace(profileID),
+		QuerySetID:     qs.ID,
+		Provider:       providerID,
+		TriggerType:    triggerType,
+		StartedAt:      startedAt,
+		Status:         "failed",
+		ResultCount:    0,
+		NewResultCount: 0,
+		ErrorCategory:  "provider_error",
+		ErrorMessage:   lastErr.Error(),
+		RetryGuidance:  retryGuidanceForProviderFailure(providerID),
+	}); err != nil {
+		return RunResult{}, err
+	}
+	return result, fmt.Errorf("run failed: %w", lastErr)
 }
 
 func providerHealthID(provider Provider, qs QuerySet) string {
@@ -601,12 +643,46 @@ func (s *Service) RunScheduledForProfile(ctx context.Context, profileID string, 
 		if !qs.Enabled || strings.TrimSpace(qs.ScheduleCron) == "" {
 			continue
 		}
-		if _, err := s.RunNowForProfile(ctx, strings.TrimSpace(profileID), qs.ID, provider); err != nil {
+		if _, err := s.runNowForProfile(ctx, strings.TrimSpace(profileID), qs.ID, provider, "scheduled"); err != nil {
 			return ran, err
 		}
 		ran++
 	}
 	return ran, nil
+}
+
+type runRecord struct {
+	ID             string
+	ProfileID      string
+	QuerySetID     string
+	Provider       string
+	TriggerType    string
+	StartedAt      time.Time
+	Status         string
+	ResultCount    int
+	NewResultCount int
+	ErrorCategory  string
+	ErrorMessage   string
+	RetryGuidance  string
+}
+
+func (s *Service) recordRun(ctx context.Context, record runRecord) error {
+	triggerType := strings.TrimSpace(record.TriggerType)
+	if triggerType == "" {
+		triggerType = "manual"
+	}
+	startedAt := record.StartedAt
+	if startedAt.IsZero() {
+		startedAt = time.Now().UTC()
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO scanner_runs(id, profile_id, query_set_id, provider, trigger_type, started_at, finished_at, status, result_count, new_result_count, error_category, error_message, retry_guidance)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?)
+	`, strings.TrimSpace(record.ID), strings.TrimSpace(record.ProfileID), strings.TrimSpace(record.QuerySetID), strings.TrimSpace(record.Provider), triggerType, startedAt.Format(time.RFC3339Nano), strings.TrimSpace(record.Status), record.ResultCount, record.NewResultCount, strings.TrimSpace(record.ErrorCategory), strings.TrimSpace(record.ErrorMessage), strings.TrimSpace(record.RetryGuidance))
+	if err != nil {
+		return fmt.Errorf("record scanner run: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) persistCandidates(ctx context.Context, querySetID string, items []CandidateInput, attempts int) (RunResult, error) {
@@ -646,8 +722,13 @@ func (s *Service) persistCandidatesForProfile(
 	itemsPerPageWarning string,
 ) (RunResult, error) {
 	saved := 0
+	newResults := 0
 	for _, it := range items {
-		if strings.TrimSpace(it.ListingID) == "" {
+		listingID := strings.TrimSpace(it.ListingID)
+		if listingID == "" && strings.TrimSpace(it.URL) != "" {
+			listingID = "url:" + strings.TrimSpace(it.URL)
+		}
+		if listingID == "" {
 			continue
 		}
 		source := strings.TrimSpace(it.Source)
@@ -665,8 +746,8 @@ func (s *Service) persistCandidatesForProfile(
 			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP,
 				status = CASE WHEN status IN ('ignored', 'archived', 'wishlisted', 'purchase_candidate', 'inventory_candidate') THEN status ELSE 'seen' END,
 				source = ?, stock_state = ?, stock_count = ?, observed_currency = ?
-			WHERE listing_id = ? AND (? = '' OR profile_id = ?)
-		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+			WHERE query_set_id = ? AND source = ? AND listing_id = ? AND (? = '' OR profile_id = ?)
+		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, querySetID, source, listingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 		if err != nil {
 			return RunResult{}, fmt.Errorf("update candidate: %w", err)
 		}
@@ -677,16 +758,17 @@ func (s *Service) persistCandidatesForProfile(
 			_, err := s.db.ExecContext(ctx, `
 				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, observed_currency)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?, ?, ?, ?)
-			`, candidateID, strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency)
+			`, candidateID, strings.TrimSpace(profileID), querySetID, listingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency)
 			if err != nil {
 				return RunResult{}, fmt.Errorf("insert candidate: %w", err)
 			}
+			newResults++
 		} else {
 			if err := s.db.QueryRowContext(ctx, `
 				SELECT id
 				FROM scanner_candidates
-				WHERE listing_id = ? AND (? = '' OR profile_id = ?)
-			`, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&candidateID); err != nil {
+				WHERE query_set_id = ? AND source = ? AND listing_id = ? AND (? = '' OR profile_id = ?)
+			`, querySetID, source, listingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&candidateID); err != nil {
 				return RunResult{}, fmt.Errorf("load candidate id for discovery match: %w", err)
 			}
 		}
@@ -700,6 +782,7 @@ func (s *Service) persistCandidatesForProfile(
 	return RunResult{
 		Attempts:              attempts,
 		Saved:                 saved,
+		NewResults:            newResults,
 		ItemsPerPageRequested: requestedItemsPerPage,
 		ItemsPerPageEffective: effectiveItemsPerPage,
 		ObservedPageSize:      effectiveItemsPerPage,

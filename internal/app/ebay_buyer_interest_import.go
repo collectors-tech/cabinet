@@ -156,7 +156,7 @@ func persistEbayBuyerInterestDiscovery(ctx context.Context, conn *sql.DB, profil
 	if _, err := conn.ExecContext(ctx, `
 		INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, url, source, last_seen, status, stock_state)
 		VALUES (?, ?, ?, ?, ?, ?, 'ebay_buyer_interest', COALESCE(NULLIF(?, ''), CURRENT_TIMESTAMP), 'new', 'unknown')
-		ON CONFLICT(listing_id) DO UPDATE SET
+		ON CONFLICT(profile_id, query_set_id, source, listing_id) DO UPDATE SET
 			title = excluded.title,
 			url = excluded.url,
 			last_seen = excluded.last_seen,
@@ -165,7 +165,7 @@ func persistEbayBuyerInterestDiscovery(ctx context.Context, conn *sql.DB, profil
 	`, candidateID, profileID, querySetID, mapped.ProvenanceKey, strings.TrimSpace(mapped.Title), strings.TrimSpace(mapped.URL), strings.TrimSpace(mapped.ObservedAt)); err != nil {
 		return "", fmt.Errorf("upsert buyer interest discovery candidate: %w", err)
 	}
-	if err := conn.QueryRowContext(ctx, `SELECT id FROM scanner_candidates WHERE listing_id = ?`, mapped.ProvenanceKey).Scan(&candidateID); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT id FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND source = 'ebay_buyer_interest' AND listing_id = ?`, profileID, querySetID, mapped.ProvenanceKey).Scan(&candidateID); err != nil {
 		return "", fmt.Errorf("load buyer interest discovery candidate: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -224,7 +225,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL DEFAULT '',
 			query_set_id TEXT NOT NULL,
-			listing_id TEXT NOT NULL UNIQUE,
+			listing_id TEXT NOT NULL,
 			title TEXT NOT NULL,
 			price REAL NOT NULL DEFAULT 0,
 			shipping REAL NOT NULL DEFAULT 0,
@@ -243,6 +244,25 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_scanner_candidates_query_set_id ON scanner_candidates(query_set_id);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_scanner_candidates_result_scope ON scanner_candidates(profile_id, query_set_id, source, listing_id);`,
+		`CREATE TABLE IF NOT EXISTS scanner_runs (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			query_set_id TEXT NOT NULL DEFAULT '',
+			provider TEXT NOT NULL DEFAULT '',
+			trigger_type TEXT NOT NULL DEFAULT 'manual',
+			started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			finished_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			status TEXT NOT NULL,
+			result_count INTEGER NOT NULL DEFAULT 0,
+			new_result_count INTEGER NOT NULL DEFAULT 0,
+			error_category TEXT NOT NULL DEFAULT '',
+			error_message TEXT NOT NULL DEFAULT '',
+			retry_guidance TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_scanner_runs_query_set_id ON scanner_runs(query_set_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_scanner_runs_profile_id ON scanner_runs(profile_id);`,
 		`CREATE TABLE IF NOT EXISTS scanner_matches (
 			candidate_id TEXT PRIMARY KEY,
 			item_id TEXT NOT NULL DEFAULT '',
@@ -758,6 +778,41 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
 	}
+	if err := rebuildScannerCandidatesWithoutGlobalListingUnique(ctx, tx); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_scanner_candidates_result_scope ON scanner_candidates(profile_id, query_set_id, source, listing_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates scoped result index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS scanner_runs (
+		id TEXT PRIMARY KEY,
+		profile_id TEXT NOT NULL DEFAULT '',
+		query_set_id TEXT NOT NULL DEFAULT '',
+		provider TEXT NOT NULL DEFAULT '',
+		trigger_type TEXT NOT NULL DEFAULT 'manual',
+		started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		finished_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		status TEXT NOT NULL,
+		result_count INTEGER NOT NULL DEFAULT 0,
+		new_result_count INTEGER NOT NULL DEFAULT 0,
+		error_category TEXT NOT NULL DEFAULT '',
+		error_message TEXT NOT NULL DEFAULT '',
+		retry_guidance TEXT NOT NULL DEFAULT '',
+		FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
+	);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_runs table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_runs_query_set_id ON scanner_runs(query_set_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_runs query set index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_runs_profile_id ON scanner_runs(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_runs profile index: %w", err)
+	}
 	if err := ensureColumn(ctx, tx, tx, "scanner_failures", "query_set_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_failures.query_set_id: %w", err)
@@ -808,6 +863,54 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	}
 
 	return conn, nil
+}
+
+func rebuildScannerCandidatesWithoutGlobalListingUnique(ctx context.Context, tx *sql.Tx) error {
+	var ddl string
+	if err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scanner_candidates'`).Scan(&ddl); err != nil {
+		return fmt.Errorf("inspect scanner_candidates schema: %w", err)
+	}
+	if !strings.Contains(strings.ToUpper(ddl), "LISTING_ID TEXT NOT NULL UNIQUE") {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE scanner_candidates RENAME TO scanner_candidates_legacy_unique_listing`); err != nil {
+		return fmt.Errorf("rename legacy scanner_candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE scanner_candidates (
+		id TEXT PRIMARY KEY,
+		profile_id TEXT NOT NULL DEFAULT '',
+		query_set_id TEXT NOT NULL,
+		listing_id TEXT NOT NULL,
+		title TEXT NOT NULL,
+		price REAL NOT NULL DEFAULT 0,
+		shipping REAL NOT NULL DEFAULT 0,
+		url TEXT NOT NULL,
+		image TEXT NOT NULL DEFAULT '',
+		seller TEXT NOT NULL DEFAULT '',
+		first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		status TEXT NOT NULL DEFAULT 'new',
+		source TEXT NOT NULL DEFAULT '',
+		observed_currency TEXT NOT NULL DEFAULT '',
+		reviewer_notes TEXT NOT NULL DEFAULT '',
+		source_result_url TEXT NOT NULL DEFAULT '',
+		stock_state TEXT NOT NULL DEFAULT 'unknown',
+		stock_count INTEGER NOT NULL DEFAULT -1,
+		FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
+	);`); err != nil {
+		return fmt.Errorf("create rebuilt scanner_candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO scanner_candidates(
+		id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count
+	)
+	SELECT id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count
+	FROM scanner_candidates_legacy_unique_listing;`); err != nil {
+		return fmt.Errorf("copy rebuilt scanner_candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE scanner_candidates_legacy_unique_listing`); err != nil {
+		return fmt.Errorf("drop legacy scanner_candidates: %w", err)
+	}
+	return nil
 }
 
 func ensureColumn(ctx context.Context, query queryRower, exec execer, table, column, definition string) error {
