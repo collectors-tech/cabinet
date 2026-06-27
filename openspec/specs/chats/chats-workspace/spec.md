@@ -84,3 +84,15 @@ Chats workspace MUST let deterministic app-control planning convert normal user 
 - **AND** the preview MUST include the parsed item payload and pending confirmation workflow-run audit evidence
 - **AND** inventory MUST NOT include the item before the user explicitly applies the preview
 - **AND** the response MUST NOT create a default assistant Inbox handoff for the handled app-control request
+
+### Requirement CHATS-WORKSPACE-010: `/chats` SHALL render governed app-control route and setup-needed results
+Chats workspace MUST expose deterministic app-control outcomes from normal chat messages as visible, user-activated UI instead of relying only on API metadata.
+
+#### Scenario: Activate a route-opening result and expose provider setup-needed guidance
+- **GIVEN** user opens `/chats` with an active profile and selected thread
+- **WHEN** user sends `open media`
+- **THEN** the workspace MUST render a route action card for `/media`
+- **AND** Cabinet MUST stay on `/chats` until the user activates the card
+- **AND** activating the card MUST navigate to `/media`
+- **WHEN** user sends a provider-backed request that cannot run without provider readiness
+- **THEN** the workspace MUST show visible setup-needed guidance instead of pretending success

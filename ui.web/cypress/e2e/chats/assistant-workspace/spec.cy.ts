@@ -191,6 +191,42 @@ describe('chats/assistant-workspace', () => {
     })
   })
 
+  it('ASSISTANT-WORKSPACE-010/#1508 shows provider setup-needed guidance for unavailable provider-backed side-panel actions', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/messages').as('assistantProviderSetup')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type(
+      'generate listing content for this item'
+    )
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+
+    cy.wait('@assistantProviderSetup').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.content).to.eq(
+        'generate listing content for this item'
+      )
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'content_generate'
+      )
+      expect(response?.body.app_control.setup_needed).to.eq(true)
+      expect(response?.body.app_control.workflow_run.confirmation_state).to.eq(
+        'not_required'
+      )
+    })
+
+    cy.get('[data-testid="shell-assistant-message-list"]')
+      .should('contain', 'generate listing content for this item')
+      .and('contain', 'needs provider setup')
+    cy.get('[data-testid="shell-assistant-permission-guidance"]')
+      .should('contain', 'Provider setup is needed')
+    cy.get('[data-testid="shell-assistant-navigation-action"]').should(
+      'not.exist'
+    )
+    cy.location('pathname').should('match', /^\/inventory\/?$/)
+  })
+
   it('ASSISTANT-WORKSPACE-003 changes provider/model with deterministic forked-thread semantics', () => {
     bootstrapInventory()
     let originalThreadId = ''
@@ -302,10 +338,12 @@ describe('chats/assistant-workspace', () => {
           2
         )
 
+        cy.intercept('POST', '/api/chat/messages').as('assistantLayoutMessage')
         cy.get('[data-testid="shell-assistant-compose-input"]').type(
           'show me a config for layout'
         )
         cy.get('[data-testid="shell-assistant-send-button"]').click()
+        cy.wait('@assistantLayoutMessage').its('response.statusCode').should('eq', 201)
         cy.get('[data-testid="shell-assistant-navigation-action"]')
           .should('be.visible')
           .and('contain', 'Open layout settings')
