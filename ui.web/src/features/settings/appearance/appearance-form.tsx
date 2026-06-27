@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/form'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { ProfileContextBlocked } from '../components/profile-context-blocked'
+import { recordSettingsFeedbackHistory } from '../settings-feedback-history'
 import { useProfileSettings } from '../use-profile-settings'
 
 const appearanceFormSchema = z.object({
@@ -101,10 +102,27 @@ export function AppearanceForm() {
         await i18n.changeLanguage(data.language)
       }
       setSaveMessage('Appearance settings saved.')
+      recordSettingsFeedbackHistory({
+        id: 'settings-appearance-save-success',
+        level: 'success',
+        title: 'Appearance settings saved.',
+        summary:
+          'Appearance preference save feedback was preserved for review.',
+        source: 'appearance',
+        sourceLabel: 'Appearance',
+      })
     } catch (err) {
-      setSaveError(
+      const message =
         err instanceof Error ? err.message : 'failed_to_save_appearance'
-      )
+      setSaveError(message)
+      recordSettingsFeedbackHistory({
+        id: 'settings-appearance-save-failed',
+        level: 'error',
+        title: 'Appearance settings failed to save.',
+        summary: message,
+        source: 'appearance',
+        sourceLabel: 'Appearance',
+      })
     }
   }
 

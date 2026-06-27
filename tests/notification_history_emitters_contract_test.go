@@ -359,6 +359,92 @@ func TestMediaFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
 	}
 }
 
+func TestSettingsPreferenceFeedbackCarriesInboxHistoryMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := repoRoot(t)
+	helperPath := filepath.Join(root, "ui.web", "src", "features", "settings", "settings-feedback-history.ts")
+	accountPath := filepath.Join(root, "ui.web", "src", "features", "settings", "account", "account-form.tsx")
+	appearancePath := filepath.Join(root, "ui.web", "src", "features", "settings", "appearance", "appearance-form.tsx")
+	displayPath := filepath.Join(root, "ui.web", "src", "features", "settings", "display", "display-form.tsx")
+	profilePath := filepath.Join(root, "ui.web", "src", "features", "settings", "profile", "profile-form.tsx")
+	notificationSpecPath := filepath.Join(root, "openspec", "specs", "chats", "notification-inbox", "spec.md")
+	traceabilityPath := filepath.Join(root, "openspec", "traceability.md")
+
+	helperSource := mustReadContractFile(t, helperPath)
+	accountSource := mustReadContractFile(t, accountPath)
+	appearanceSource := mustReadContractFile(t, appearancePath)
+	displaySource := mustReadContractFile(t, displayPath)
+	profileSource := mustReadContractFile(t, profilePath)
+	notificationSpec := mustReadContractFile(t, notificationSpecPath)
+	traceability := mustReadContractFile(t, traceabilityPath)
+
+	requiredHelperSnippets := []string{
+		"recordSettingsFeedbackHistory",
+		"source_label: `Settings ${sourceLabel}`",
+		"category: 'settings'",
+	}
+	for _, snippet := range requiredHelperSnippets {
+		if !strings.Contains(helperSource, snippet) {
+			t.Fatalf("settings feedback helper missing durable Inbox history metadata %q in %s", snippet, helperPath)
+		}
+	}
+
+	requiredForms := map[string][]string{
+		accountPath: {
+			"recordSettingsFeedbackHistory",
+			"source: 'account'",
+			"sourceLabel: 'Account'",
+			"id: 'settings-account-save-success'",
+			"id: 'settings-account-save-failed'",
+		},
+		appearancePath: {
+			"recordSettingsFeedbackHistory",
+			"source: 'appearance'",
+			"sourceLabel: 'Appearance'",
+			"id: 'settings-appearance-save-success'",
+			"id: 'settings-appearance-save-failed'",
+		},
+		displayPath: {
+			"recordSettingsFeedbackHistory",
+			"source: 'display'",
+			"sourceLabel: 'Display'",
+			"id: 'settings-display-save-success'",
+			"id: 'settings-display-save-failed'",
+			"id: 'settings-display-selection-invalid'",
+		},
+		profilePath: {
+			"recordSettingsFeedbackHistory",
+			"source: 'profile'",
+			"sourceLabel: 'Profile'",
+			"id: 'settings-profile-save-success'",
+			"id: 'settings-profile-save-failed'",
+		},
+	}
+	sources := map[string]string{
+		accountPath:    accountSource,
+		appearancePath: appearanceSource,
+		displayPath:    displaySource,
+		profilePath:    profileSource,
+	}
+	for path, snippets := range requiredForms {
+		source := sources[path]
+		for _, snippet := range snippets {
+			if !strings.Contains(source, snippet) {
+				t.Fatalf("settings preference feedback missing durable Inbox history metadata %q in %s", snippet, path)
+			}
+		}
+	}
+
+	if !strings.Contains(notificationSpec, "Settings Account, Appearance, Display, and Profile preference save/load or validation feedback") {
+		t.Fatalf("notification Inbox spec must list Settings preference feedback in #1438 emitter scope in %s", notificationSpecPath)
+	}
+
+	if !strings.Contains(traceability, "TestSettingsPreferenceFeedbackCarriesInboxHistoryMetadata") {
+		t.Fatalf("traceability must list Settings preference Inbox history contract test in %s", traceabilityPath)
+	}
+}
+
 func mustReadContractFile(t *testing.T, path string) string {
 	t.Helper()
 

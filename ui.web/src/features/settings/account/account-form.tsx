@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/popover'
 import { DatePicker } from '@/components/date-picker'
 import { ProfileContextBlocked } from '../components/profile-context-blocked'
+import { recordSettingsFeedbackHistory } from '../settings-feedback-history'
 import { useProfileSettings } from '../use-profile-settings'
 
 const languages = [
@@ -101,10 +102,26 @@ export function AccountForm() {
         'account.dob': data.dob.toISOString(),
       })
       setSaveMessage('Account settings saved.')
+      recordSettingsFeedbackHistory({
+        id: 'settings-account-save-success',
+        level: 'success',
+        title: 'Account settings saved.',
+        summary: 'Account preference save feedback was preserved for review.',
+        source: 'account',
+        sourceLabel: 'Account',
+      })
     } catch (err) {
-      setSaveError(
+      const message =
         err instanceof Error ? err.message : 'failed_to_save_account'
-      )
+      setSaveError(message)
+      recordSettingsFeedbackHistory({
+        id: 'settings-account-save-failed',
+        level: 'error',
+        title: 'Account settings failed to save.',
+        summary: message,
+        source: 'account',
+        sourceLabel: 'Account',
+      })
     }
   }
 
