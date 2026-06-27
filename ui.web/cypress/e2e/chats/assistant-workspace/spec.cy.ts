@@ -123,6 +123,74 @@ describe('chats/assistant-workspace', () => {
       })
   })
 
+  it('ASSISTANT-WORKSPACE-009/#1503 dispatches normal side-panel text to app-control route planning without Inbox noise', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/messages').as('assistantSidePanelPlanner')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type('open media')
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+
+    let threadId = ''
+    cy.wait('@assistantSidePanelPlanner').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(String(request.body.thread_id).trim()).not.to.eq('')
+      expect(request.body.content).to.eq('open media')
+      expect(request.body.context.route.pathname).to.match(/^\/inventory\/?$/)
+      expect(request.body.context.profile.id).to.eq('e2e-profile-001')
+      expect(request.body.context.selection.active_workspace_collection).to.eq(
+        'All Items'
+      )
+      expect(request.body.context.assistant.provider).to.eq('openai')
+      expect(request.body.context.assistant.model).to.eq('gpt-4o-mini')
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.assistant_handoff).to.eq(undefined)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'navigate.open_surface'
+      )
+      expect(response?.body.app_control.route).to.eq('/media')
+      expect(response?.body.app_control.workflow_run.workflow_id).to.eq(
+        'chat.app_control.dispatch'
+      )
+      expect(response?.body.app_control.workflow_run.confirmation_state).to.eq(
+        'not_required'
+      )
+      threadId = String(request.body.thread_id)
+    })
+
+    cy.get('[data-testid="shell-assistant-navigation-action"]')
+      .should('be.visible')
+      .and('contain', 'Open Media')
+    cy.get('[data-testid="shell-assistant-navigation-reason"]').should(
+      'contain',
+      'read-only navigation action'
+    )
+    cy.location('pathname').should('match', /^\/inventory\/?$/)
+    cy.get('[data-testid="shell-assistant-message-list"]')
+      .should('contain', 'open media')
+      .and('contain', 'I can open Media from this thread')
+
+    cy.then(() => {
+      cy.request(
+        `/api/chat/workflow-runs?profile_id=e2e-profile-001&thread_id=${encodeURIComponent(
+          threadId
+        )}`
+      )
+        .its('body')
+        .should((payload) => {
+          const serialized = JSON.stringify(payload)
+          expect(serialized).to.include('chat.app_control.dispatch')
+          expect(serialized).to.include('navigate.open_surface')
+          expect(serialized).to.include('/media')
+        })
+      cy.request('/api/chat/inbox?profile_id=e2e-profile-001')
+        .its('body')
+        .should((payload) => {
+          expect(JSON.stringify(payload)).not.to.include(threadId)
+        })
+    })
+  })
+
   it('ASSISTANT-WORKSPACE-003 changes provider/model with deterministic forked-thread semantics', () => {
     bootstrapInventory()
     let originalThreadId = ''
