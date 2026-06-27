@@ -130,8 +130,8 @@ describe("ui-screen-wishlist", () => {
       .find('[data-testid="task-row-actions-trigger"]')
       .scrollIntoView()
       .should("be.visible")
-      .click({ force: true });
-    cy.get('[role="menu"]').should("be.visible");
+      .trigger("click", { force: true });
+    cy.get('[data-testid="task-row-actions-menu"]').should("be.visible");
   }
 
   function collectionFilterOptionKey(value: string) {
