@@ -290,6 +290,9 @@ export function AssistantWorkspacePanel() {
     [appControl]
   )
   const displayedNavigationAction = navigationAction ?? backendNavigationAction
+  const displayedPermissionGuidance = appControl?.setup_needed
+    ? 'Provider setup is needed before Cabinet can run this assistant action.'
+    : permissionGuidance
 
   const selectedThreadTitle = useMemo(
     () =>
@@ -841,7 +844,7 @@ export function AssistantWorkspacePanel() {
             align='start'
             sideOffset={8}
             collisionPadding={12}
-            className='z-50 flex h-[min(44rem,calc(100vh-7rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
+            className='z-[100] flex h-[min(44rem,calc(100vh-7rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
             data-testid='shell-assistant-modal-content'
           >
             <section
@@ -1125,7 +1128,7 @@ export function AssistantWorkspacePanel() {
                       className='mt-2 text-slate-400'
                       data-testid='shell-assistant-permission-guidance'
                     >
-                      {permissionGuidance}
+                      {displayedPermissionGuidance}
                     </p>
                     <div className='mt-3 grid gap-2'>
                       <Input

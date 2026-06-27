@@ -209,7 +209,16 @@ describe('chats/chats-workspace', () => {
     cy.get('[data-testid="chat-message-list"]')
       .should('contain', 'open media')
       .and('contain', 'I can open Media from this thread')
+    cy.get('[data-testid="chat-navigation-action"]')
+      .should('be.visible')
+      .and('contain', 'Open Media')
+    cy.get('[data-testid="chat-navigation-reason"]').should(
+      'contain',
+      'read-only navigation action'
+    )
     cy.location('pathname').should('match', /^\/chats\/?$/)
+    cy.get('[data-testid="chat-navigation-action-open"]').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/media\/?$/)
 
     cy.then(() => {
       cy.request(
@@ -230,6 +239,41 @@ describe('chats/chats-workspace', () => {
           expect(JSON.stringify(payload)).not.to.include(threadId)
         })
     })
+  })
+
+  it('CHATS-WORKSPACE-010/#1508 shows provider setup-needed guidance for unavailable provider-backed main Chat actions', () => {
+    openChats()
+    createThread('E2E Main Chat Provider Setup Needed')
+
+    cy.intercept('POST', '/api/chat/messages').as('mainChatProviderSetup')
+    cy.get('[data-testid="chat-compose-input"]').type(
+      'generate listing content for this item'
+    )
+    cy.get('[data-testid="chat-send-button"]').click()
+
+    cy.wait('@mainChatProviderSetup').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.content).to.eq(
+        'generate listing content for this item'
+      )
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'content_generate'
+      )
+      expect(response?.body.app_control.setup_needed).to.eq(true)
+      expect(response?.body.app_control.workflow_run.confirmation_state).to.eq(
+        'not_required'
+      )
+    })
+
+    cy.get('[data-testid="chat-message-list"]')
+      .should('contain', 'generate listing content for this item')
+      .and('contain', 'needs provider setup')
+    cy.get('[data-testid="chat-setup-needed-guidance"]')
+      .should('be.visible')
+      .and('contain', 'Provider setup is needed')
+    cy.get('[data-testid="chat-navigation-action"]').should('not.exist')
+    cy.location('pathname').should('match', /^\/chats\/?$/)
   })
 
   it('CHATS-WORKSPACE-009/#1503 dispatches normal main Chat text to a pending create-item preview without mutating early', () => {

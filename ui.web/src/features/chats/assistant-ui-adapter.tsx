@@ -17,6 +17,7 @@ export type CabinetAssistantUiMessage = {
     route?: { pathname?: string; search?: string }
     profile?: { id?: string }
     assistant?: { provider?: string; model?: string }
+    app_control?: unknown
   }
 }
 

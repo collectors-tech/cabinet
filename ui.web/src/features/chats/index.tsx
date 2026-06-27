@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   AssistantRuntimeProvider,
   type AppendMessage,
@@ -6,6 +7,7 @@ import {
 } from '@assistant-ui/react'
 import {
   Bot,
+  ExternalLink,
   MessageCircle,
   MessagesSquare,
   Mic,
@@ -13,6 +15,7 @@ import {
   PanelLeft,
   Plus,
   Search as SearchIcon,
+  ShieldAlert,
   Share2,
   Sparkles,
 } from 'lucide-react'
@@ -57,7 +60,20 @@ type ChatMessage = {
   thread_id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  context?: {
+    route?: { pathname?: string; search?: string }
+    profile?: { id?: string }
+    assistant?: { provider?: string; model?: string }
+    app_control?: ChatAppControlContext
+  }
   created_at: string
+}
+
+type ChatAppControlContext = {
+  capability_id?: string
+  policy?: string
+  route?: string
+  setup_needed?: boolean
 }
 
 type ChatAttachment = {
@@ -140,7 +156,25 @@ function threadInitial(title: string) {
 
 const promptChips = ['Weather', 'Code', 'Write', 'Analyze', 'Brainstorm']
 
+function labelForRoute(route: string) {
+  const normalized = route.replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!normalized) {
+    return 'Open Cabinet'
+  }
+  return `Open ${normalized
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' / ')}`
+}
+
+function latestAppControl(messages: ChatMessage[]) {
+  return [...messages].reverse().find((message) => message.context?.app_control)
+    ?.context?.app_control
+}
+
 export function Chats() {
+  const navigate = useNavigate()
   const [activeProfileId, setActiveProfileId] = useState('')
   const [assistantDefaults, setAssistantDefaults] = useState<AssistantDefaults>(
     {
@@ -193,6 +227,10 @@ export function Chats() {
       thread.title.toLowerCase().includes(query)
     )
   }, [threadSearch, threads])
+
+  const appControl = useMemo(() => latestAppControl(messages), [messages])
+  const navigationRoute = appControl?.route?.trim() ?? ''
+  const setupNeeded = Boolean(appControl?.setup_needed)
 
   const threadCreationDisabled = loading || Boolean(error) || !activeProfileId
 
@@ -910,6 +948,55 @@ export function Chats() {
                           assistantBubble: 'chat-message-bubble-assistant',
                         }}
                       />
+                      {navigationRoute ? (
+                        <div
+                          className='rounded-md border border-slate-800 bg-slate-900 p-3 text-sm text-slate-100'
+                          data-testid='chat-navigation-action'
+                        >
+                          <div className='flex items-start gap-2'>
+                            <ExternalLink className='mt-0.5 h-4 w-4 text-cyan-300' />
+                            <div className='min-w-0 flex-1'>
+                              <p className='font-medium'>
+                                {labelForRoute(navigationRoute)}
+                              </p>
+                              <p
+                                className='mt-1 text-xs text-slate-400'
+                                data-testid='chat-navigation-reason'
+                              >
+                                Cabinet planned this as a read-only navigation
+                                action from the chat thread.
+                              </p>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                                data-testid='chat-navigation-action-open'
+                                onClick={() =>
+                                  void navigate({ to: navigationRoute })
+                                }
+                              >
+                                <ExternalLink className='h-3.5 w-3.5' />
+                                Open screen
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                      {setupNeeded ? (
+                        <div
+                          className='rounded-md border border-amber-500/40 bg-amber-950/30 p-3 text-sm text-amber-100'
+                          data-testid='chat-setup-needed-guidance'
+                        >
+                          <div className='flex items-start gap-2'>
+                            <ShieldAlert className='mt-0.5 h-4 w-4 text-amber-300' />
+                            <p>
+                              Provider setup is needed before Cabinet can run
+                              this assistant action.
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
                     </ScrollArea>
                     <div
                       className='relative z-10 mx-auto mt-auto w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-950 p-3 shadow-xl'

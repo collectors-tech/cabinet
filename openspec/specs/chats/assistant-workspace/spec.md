@@ -109,3 +109,13 @@ The shell Assistant side-panel MUST send normal user text with route, profile, t
 - **AND** the response MUST include workflow-run audit evidence for the governed dispatch
 - **AND** the side-panel MUST render a route action card without navigating the page until the user chooses the action
 - **AND** the handled app-control request MUST NOT create a default assistant Inbox handoff
+
+### Requirement ASSISTANT-WORKSPACE-010: Assistant side-panel SHALL render setup-needed app-control guidance
+The shell Assistant side-panel MUST turn provider-backed app-control setup-needed results into visible guidance so users can tell the requested assistant action is blocked by provider readiness.
+
+#### Scenario: Provider-backed request shows setup-needed guidance
+- **GIVEN** the shell Assistant side-panel is open on an authenticated route
+- **WHEN** user sends a provider-backed request that cannot run without provider readiness
+- **THEN** the chat message API response MUST include `setup_needed=true`
+- **AND** the side-panel MUST render visible provider setup-needed guidance
+- **AND** the side-panel MUST NOT render a route action card for the unavailable provider-backed request
