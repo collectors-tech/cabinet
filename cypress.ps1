@@ -203,6 +203,17 @@ function Stop-PortListener([string]$url) {
   }
 }
 
+function Reset-CypressRuntimeDataDir([string]$runtimeDataDir) {
+  if ([string]::IsNullOrWhiteSpace($runtimeDataDir)) {
+    return
+  }
+  if (-not (Test-Path $runtimeDataDir)) {
+    return
+  }
+  Write-Step "Clearing managed Cypress runtime data dir: $runtimeDataDir"
+  Remove-Item -LiteralPath $runtimeDataDir -Recurse -Force
+}
+
 function Test-IsEphemeralRuntimePath([string]$path) {
   if ([string]::IsNullOrWhiteSpace($path)) {
     return $false
@@ -576,6 +587,7 @@ try {
     }
     else {
       Write-Step "Starting Cabinet server..."
+      Reset-CypressRuntimeDataDir $e2eDataDir
       if (-not [string]::IsNullOrWhiteSpace($resolvedRuntimeExecutablePath)) {
         Write-Step "Runtime executable resolved: $resolvedRuntimeExecutablePath"
         $serverProc = Start-Process -FilePath $resolvedRuntimeExecutablePath -ArgumentList @(
