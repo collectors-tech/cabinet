@@ -73,3 +73,14 @@ Chats workspace MUST send normal conversation text with profile, thread, route, 
 - **THEN** the chat message API response MUST include a `navigate.open_surface` app-control result for `/media`
 - **AND** the route-opening action MUST create durable workflow-run audit evidence for the selected thread
 - **AND** the response MUST NOT create a default assistant Inbox handoff for the handled app-control request
+
+### Requirement CHATS-WORKSPACE-009: `/chats` SHALL preview normal-text mutations before apply
+Chats workspace MUST let deterministic app-control planning convert normal user text into preview-required mutation actions without mutating records before explicit confirmation.
+
+#### Scenario: Dispatch item-create chat text as a pending preview
+- **GIVEN** user opens `/chats` with an active profile and selected thread
+- **WHEN** user sends `create an inventory item ...`
+- **THEN** the chat message API response MUST include an `inventory.item.create` app-control result with a `create_inventory_item` preview
+- **AND** the preview MUST include the parsed item payload and pending confirmation workflow-run audit evidence
+- **AND** inventory MUST NOT include the item before the user explicitly applies the preview
+- **AND** the response MUST NOT create a default assistant Inbox handoff for the handled app-control request

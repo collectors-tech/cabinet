@@ -232,6 +232,88 @@ describe('chats/chats-workspace', () => {
     })
   })
 
+  it('CHATS-WORKSPACE-009/#1503 dispatches normal main Chat text to a pending create-item preview without mutating early', () => {
+    openChats()
+    createThread('E2E Main Chat Preview Planner')
+
+    const command =
+      'create an inventory item CHAT-PLAN-1503 Planner Preview Coupe'
+    cy.intercept('POST', '/api/chat/messages').as('mainChatPreviewPlanner')
+    cy.get('[data-testid="chat-compose-input"]').type(command)
+    cy.get('[data-testid="chat-send-button"]').click()
+
+    let threadId = ''
+    let previewId = ''
+    cy.wait('@mainChatPreviewPlanner').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(String(request.body.thread_id).trim()).not.to.eq('')
+      expect(request.body.content).to.eq(command)
+      expect(request.body.context.route.pathname).to.eq('/chats/')
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.assistant_handoff).to.eq(undefined)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'inventory.item.create'
+      )
+      expect(response?.body.app_control.preview.action).to.eq(
+        'create_inventory_item'
+      )
+      expect(response?.body.app_control.preview.payload.part_number).to.eq(
+        'CHAT-PLAN-1503'
+      )
+      expect(response?.body.app_control.preview.payload.title).to.eq(
+        'Planner Preview Coupe'
+      )
+      expect(response?.body.app_control.workflow_run.workflow_id).to.eq(
+        'chat.app_control.dispatch'
+      )
+      expect(response?.body.app_control.workflow_run.confirmation_state).to.eq(
+        'pending'
+      )
+      expect(response?.body.app_control.workflow_run.result.preview_id).to.eq(
+        response?.body.app_control.preview.id
+      )
+      expect(
+        response?.body.app_control.workflow_run.result.confirmation_required
+      ).to.eq(true)
+      threadId = String(request.body.thread_id)
+      previewId = String(response?.body.app_control.preview.id)
+    })
+
+    cy.get('[data-testid="chat-message-list"]')
+      .should('contain', command)
+      .and('contain', 'I prepared a preview to create CHAT-PLAN-1503')
+    cy.location('pathname').should('match', /^\/chats\/?$/)
+
+    cy.then(() => {
+      expect(previewId).not.to.eq('')
+      cy.request(
+        `/api/chat/workflow-runs?profile_id=e2e-profile-001&thread_id=${encodeURIComponent(
+          threadId
+        )}`
+      )
+        .its('body')
+        .should((payload) => {
+          const serialized = JSON.stringify(payload)
+          expect(serialized).to.include('chat.app_control.dispatch')
+          expect(serialized).to.include('inventory.item.create')
+          expect(serialized).to.include(previewId)
+          expect(serialized).to.include('confirmation_required')
+        })
+      cy.request('/api/items?profile_id=e2e-profile-001')
+        .its('body')
+        .should((items) => {
+          const serialized = JSON.stringify(items)
+          expect(serialized).not.to.include('CHAT-PLAN-1503')
+          expect(serialized).not.to.include('Planner Preview Coupe')
+        })
+      cy.request('/api/chat/inbox?profile_id=e2e-profile-001')
+        .its('body')
+        .should((payload) => {
+          expect(JSON.stringify(payload)).not.to.include(threadId)
+        })
+    })
+  })
+
   it('CHATS-WORKSPACE-007/#1508 previews and confirms a main Chat inventory update without mutating early', () => {
     openChats()
     createThread('E2E Main Chat Item Update')
