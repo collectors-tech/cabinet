@@ -304,6 +304,10 @@ func (s *Service) ApplyActionWithResult(ctx context.Context, a Action) (ActionRe
 
 	switch a.Type {
 	case ActionReview:
+		_, err = s.db.ExecContext(ctx, `DELETE FROM ignored_candidates WHERE candidate_id = ?`, a.CandidateID)
+		if err != nil {
+			return ActionResult{}, fmt.Errorf("restore ignored candidate for review: %w", err)
+		}
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "reviewing", reviewerNotes); err != nil {
 			return ActionResult{}, err
 		}
