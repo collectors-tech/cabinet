@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { requestUiGuidance } from '@/lib/ui-target-registry'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
   AlertDialog,
@@ -1083,6 +1084,28 @@ export function AssistantWorkspacePanel() {
                           <ExternalLink className='h-3.5 w-3.5' />
                           Open screen
                         </Button>
+                        {displayedNavigationAction.target.startsWith(
+                          '/inventory'
+                        ) ? (
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            className='mt-2 ml-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                            data-testid='shell-assistant-navigation-action-highlight'
+                            onClick={() =>
+                              requestUiGuidance({
+                                targetId: 'inventory.surface',
+                                title: 'Inventory workspace',
+                                instruction:
+                                  'Guided walkthroughs use registered target ids before they highlight controls or ask for changes.',
+                              })
+                            }
+                          >
+                            <Sparkles className='h-3.5 w-3.5' />
+                            Show target
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   </div>
