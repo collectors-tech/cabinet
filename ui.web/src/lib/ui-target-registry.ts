@@ -27,6 +27,7 @@ export type UiGuidanceRequest = {
 }
 
 export const uiGuidanceEventName = 'cabinet:ui-guidance'
+export const uiGuidanceClearEventName = 'cabinet:ui-guidance-clear'
 
 export const uiTargets: UiTarget[] = [
   {
@@ -168,4 +169,8 @@ export function uiTargetsForRoute(pathname: string) {
 
 export function requestUiGuidance(detail: UiGuidanceRequest) {
   window.dispatchEvent(new CustomEvent(uiGuidanceEventName, { detail }))
+}
+
+export function clearUiGuidance() {
+  window.dispatchEvent(new CustomEvent(uiGuidanceClearEventName))
 }
