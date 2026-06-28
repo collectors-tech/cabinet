@@ -17,6 +17,8 @@ type chatAppControlIntent struct {
 	Route             string
 	ConfirmationState string
 	Message           string
+	ErrorCode         string
+	ErrorMessage      string
 	SetupNeeded       bool
 }
 
@@ -34,6 +36,9 @@ func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, p
 	}
 	if intent.SetupNeeded {
 		result["setup_needed"] = true
+	}
+	if intent.ErrorCode != "" {
+		result["error"] = map[string]any{"code": intent.ErrorCode, "message": intent.ErrorMessage}
 	}
 
 	run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
@@ -78,12 +83,19 @@ func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, p
 			}
 		}
 	} else if runErr == nil {
+		status := "completed"
+		var runError map[string]any
+		if intent.ErrorCode != "" {
+			status = "failed"
+			runError = map[string]any{"code": intent.ErrorCode, "message": intent.ErrorMessage}
+		}
 		updated, updateErr := chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
 			ProfileID:         profileID,
 			RunID:             run.ID,
-			Status:            "completed",
+			Status:            status,
 			ProviderTrace:     map[string]any{"mode": "deterministic_app_control_planner", "live_provider": false},
 			Result:            map[string]any{"route": intent.Route, "setup_needed": intent.SetupNeeded},
+			Error:             runError,
 			ConfirmationState: intent.ConfirmationState,
 		})
 		if updateErr == nil {
@@ -111,6 +123,15 @@ func planChatMessageAppControl(content string, envelope map[string]any) (chatApp
 			Route:             route,
 			ConfirmationState: "not_required",
 			Message:           fmt.Sprintf("I can open %s from this thread without changing Cabinet data.", label),
+		}, true
+	}
+	if requestsOpenSurfaceRejection(normalized) {
+		return chatAppControlIntent{
+			CapabilityID:      "navigate.open_surface",
+			ConfirmationState: "not_required",
+			Message:           "I can only open known Cabinet surfaces from chat. Choose a listed Cabinet surface such as Dashboard, Inventory, Media, Integrations, Chats, Inbox, or Settings.",
+			ErrorCode:         "unknown_surface",
+			ErrorMessage:      "Unknown or unsafe Cabinet surface target.",
 		}, true
 	}
 	if partNumber, title, ok := plannedCreateInventoryItem(content); ok {
@@ -156,30 +177,52 @@ func normalizePlannerText(content string) string {
 }
 
 func plannedOpenSurface(normalized string) (string, string, bool) {
-	if !strings.Contains(normalized, "open ") && !strings.Contains(normalized, "go to ") && !strings.Contains(normalized, "show ") {
+	if !requestsOpenSurface(normalized) {
 		return "", "", false
 	}
-	surfaces := []struct {
-		aliases []string
-		route   string
-		label   string
-	}{
-		{[]string{"media", "photos", "images"}, "/media", "Media"},
-		{[]string{"inventory", "items"}, "/inventory", "Inventory"},
-		{[]string{"wishlist", "wish list"}, "/wishlist", "Wishlist"},
-		{[]string{"collections"}, "/collections", "Collections"},
-		{[]string{"integrations", "apps"}, "/integrations", "Integrations"},
-		{[]string{"settings"}, "/settings", "Settings"},
-		{[]string{"chats", "chat"}, "/chats", "Chats"},
-	}
-	for _, surface := range surfaces {
-		for _, alias := range surface.aliases {
+	for _, target := range assistantOpenSurfaceTargets() {
+		for _, alias := range target.Aliases {
 			if strings.Contains(normalized, alias) {
-				return surface.route, surface.label, true
+				return target.Route, target.Label, true
 			}
 		}
 	}
 	return "", "", false
+}
+
+func requestsOpenSurface(normalized string) bool {
+	return strings.Contains(normalized, "open ") ||
+		strings.Contains(normalized, "go to ") ||
+		strings.Contains(normalized, "navigate to ") ||
+		strings.Contains(normalized, "show ")
+}
+
+func requestsOpenSurfaceRejection(normalized string) bool {
+	return strings.Contains(normalized, "open ") ||
+		strings.Contains(normalized, "go to ") ||
+		strings.Contains(normalized, "navigate to ")
+}
+
+func assistantOpenSurfaceTargets() []assistantCapabilityTarget {
+	return []assistantCapabilityTarget{
+		{ID: "dashboard", Label: "Dashboard", Route: "/dashboard", Aliases: []string{"dashboard", "home"}},
+		{ID: "inventory", Label: "Inventory", Route: "/inventory", Aliases: []string{"inventory", "items"}},
+		{ID: "wishlist", Label: "Wishlist", Route: "/wishlist", Aliases: []string{"wishlist", "wish list", "watchlist", "watch list", "saved views"}},
+		{ID: "collections", Label: "Collections", Route: "/collections", Aliases: []string{"collections"}},
+		{ID: "media", Label: "Media", Route: "/media", Aliases: []string{"media", "photos", "images"}},
+		{ID: "discoveries", Label: "Discoveries", Route: "/discoveries", Aliases: []string{"discoveries", "discover"}},
+		{ID: "scanner", Label: "Scanner", Route: "/scanner", Aliases: []string{"scanner", "manual capture", "capture"}},
+		{ID: "market_watch", Label: "Market Watch", Route: "/scanner", Aliases: []string{"market watch", "market scanner"}},
+		{ID: "purchases", Label: "Purchases", Route: "/purchases", Aliases: []string{"purchases", "orders"}},
+		{ID: "integrations", Label: "Integrations", Route: "/integrations", Aliases: []string{"integrations", "apps", "providers"}},
+		{ID: "chats", Label: "Chats", Route: "/chats", Aliases: []string{"chats", "chat", "assistant"}},
+		{ID: "inbox", Label: "Inbox", Route: "/inbox", Aliases: []string{"inbox", "notifications"}},
+		{ID: "settings_profile", Label: "Settings / Profile", Route: "/settings/profile", Aliases: []string{"settings profile", "profile settings"}},
+		{ID: "settings_account", Label: "Settings / Account", Route: "/settings/account", Aliases: []string{"settings account", "account settings"}},
+		{ID: "settings_appearance", Label: "Settings / Appearance", Route: "/settings/appearance", Aliases: []string{"settings appearance", "appearance settings", "theme settings"}},
+		{ID: "settings_storage", Label: "Settings / Storage", Route: "/settings/storage", Aliases: []string{"settings storage", "storage settings"}},
+		{ID: "settings", Label: "Settings", Route: "/settings", Aliases: []string{"settings"}},
+	}
 }
 
 func plannedCreateInventoryItem(content string) (string, string, bool) {

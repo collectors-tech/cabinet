@@ -505,6 +505,11 @@ func TestCabinetAgentAppControlCapabilitiesAndOpenItemTitleMutation(t *testing.T
 	if !strings.Contains(body, `"id":"navigate.open_surface"`) || !strings.Contains(body, `"input_schema":"agent.navigate.open_surface.v1"`) || !strings.Contains(body, `"result_link":"/media"`) {
 		t.Fatalf("expected navigate.open_surface app-control capability with Media target, body=%s", body)
 	}
+	for _, expectedTarget := range []string{`"id":"dashboard"`, `"route":"/inventory"`, `"route":"/wishlist"`, `"route":"/collections"`, `"route":"/media"`, `"route":"/discoveries"`, `"route":"/scanner"`, `"route":"/purchases"`, `"route":"/integrations"`, `"route":"/chats"`, `"route":"/inbox"`, `"route":"/settings/profile"`, `"route":"/settings/account"`, `"route":"/settings/appearance"`, `"route":"/settings/storage"`} {
+		if !strings.Contains(body, expectedTarget) {
+			t.Fatalf("expected navigate.open_surface allowlist target %s, body=%s", expectedTarget, body)
+		}
+	}
 	if !strings.Contains(body, `"id":"update_open_item_title"`) || !strings.Contains(body, `"mode":"confirm-required"`) || !strings.Contains(body, `"input_schema":"agent.update_open_item_title.v1"`) {
 		t.Fatalf("expected confirm-required open item title capability, body=%s", body)
 	}
@@ -596,6 +601,30 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 		t.Fatalf("expected navigate.open_surface app-control route result, body=%s", routeBody)
 	}
 
+	integrationsResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"go to integrations","context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if integrationsResp.Code != http.StatusCreated {
+		t.Fatalf("integrations app-control status=%d body=%s", integrationsResp.Code, integrationsResp.Body.String())
+	}
+	integrationsBody := integrationsResp.Body.String()
+	if strings.Contains(integrationsBody, `"assistant_handoff"`) {
+		t.Fatalf("handled integrations route must not create default inbox handoff, body=%s", integrationsBody)
+	}
+	if !strings.Contains(integrationsBody, `"capability_id":"navigate.open_surface"`) || !strings.Contains(integrationsBody, `"route":"/integrations"`) || !strings.Contains(integrationsBody, `"confirmation_state":"not_required"`) {
+		t.Fatalf("expected integrations open-surface route result, body=%s", integrationsBody)
+	}
+
+	unsafeResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"open admin console","context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if unsafeResp.Code != http.StatusCreated {
+		t.Fatalf("unsafe app-control status=%d body=%s", unsafeResp.Code, unsafeResp.Body.String())
+	}
+	unsafeBody := unsafeResp.Body.String()
+	if strings.Contains(unsafeBody, `"assistant_handoff"`) {
+		t.Fatalf("rejected unsafe route must not create default inbox handoff, body=%s", unsafeBody)
+	}
+	if !strings.Contains(unsafeBody, `"capability_id":"navigate.open_surface"`) || !strings.Contains(unsafeBody, `"code":"unknown_surface"`) || strings.Contains(unsafeBody, `"route":"/admin`) {
+		t.Fatalf("expected unknown surface rejection without unsafe route, body=%s", unsafeBody)
+	}
+
 	createResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"create an inventory item AFX-001 Test Car","context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
 	if createResp.Code != http.StatusCreated {
 		t.Fatalf("create preview app-control status=%d body=%s", createResp.Code, createResp.Body.String())
@@ -645,7 +674,7 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 	if runs.Code != http.StatusOK {
 		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
 	}
-	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) || !strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) || !strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) || !strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) {
+	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) || !strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) || !strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) || !strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) || !strings.Contains(runs.Body.String(), `"status":"failed"`) || !strings.Contains(runs.Body.String(), `"code":"unknown_surface"`) {
 		t.Fatalf("expected durable app-control workflow audit runs, body=%s", runs.Body.String())
 	}
 }
