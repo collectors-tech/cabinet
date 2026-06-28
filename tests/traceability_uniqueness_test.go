@@ -62,12 +62,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestGuidedWalkthroughModesGovernCommandPermissions",
 			"ASSISTANT-EXECUTION-010 preserves confirm-before-apply across walkthrough modes",
 		},
-		"ASSISTANT-EXECUTION-013": {
-			"| planned |",
-			"#1512/#1514",
-			"TestGuidedCommandBusDispatchesNavigationHighlightAndPreviewStates",
-			"ASSISTANT-EXECUTION-013 keeps side-panel Chat open while commands navigate",
-		},
 		"ASSISTANT-EXECUTION-014": {
 			"| planned |",
 			"#1507/#1514",
@@ -79,11 +73,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"#1513/#1514",
 			"TestGuidedInventoryItemUpdateRequiresConfirmationAndPersistsResult",
 			"ASSISTANT-EXECUTION-015 guides inventory item update with persistence proof",
-		},
-		"ASSISTANT-WORKSPACE-008": {
-			"| planned |",
-			"#1509/#1512/#1514",
-			"ASSISTANT-WORKSPACE-008 preserves guided side-panel state across route navigation",
 		},
 		"UI-SCREEN-CHAT-COPILOT-018": {
 			"| planned |",
