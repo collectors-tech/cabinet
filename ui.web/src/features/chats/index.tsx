@@ -45,6 +45,12 @@ import {
   CabinetAssistantUiMessageList,
   cabinetMessageToAssistantUi,
 } from './assistant-ui-adapter'
+import {
+  fetchChatWorkflowRuns,
+  type ChatWorkflowRun,
+  workflowRunResultSummary,
+  workflowRunTimestamp,
+} from './workflow-runs'
 
 type ChatThread = {
   id: string
@@ -209,6 +215,9 @@ export function Chats() {
   const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
   const [applyNotice, setApplyNotice] = useState('')
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
+  const [workflowRuns, setWorkflowRuns] = useState<ChatWorkflowRun[]>([])
+  const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false)
+  const [workflowRunsError, setWorkflowRunsError] = useState('')
 
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
@@ -238,26 +247,38 @@ export function Chats() {
     async (profileID: string, threadID: string) => {
       if (!profileID || !threadID) {
         setMessages([])
+        setWorkflowRuns([])
         return
       }
       setMessagesLoading(true)
+      setWorkflowRunsLoading(true)
       setSendError(null)
       try {
-        const response = await fetch(
-          `/api/chat/messages?profile_id=${encodeURIComponent(profileID)}&thread_id=${encodeURIComponent(threadID)}`
-        )
+        const [response, runs] = await Promise.all([
+          fetch(
+            `/api/chat/messages?profile_id=${encodeURIComponent(profileID)}&thread_id=${encodeURIComponent(threadID)}`
+          ),
+          fetchChatWorkflowRuns(profileID, threadID),
+        ])
         if (!response.ok) {
           throw new Error(`chat_messages_${response.status}`)
         }
         const payload = (await response.json()) as { messages?: ChatMessage[] }
         setMessages(payload.messages ?? [])
+        setWorkflowRuns(runs)
+        setWorkflowRunsError('')
       } catch (err) {
         setSendError(
           err instanceof Error ? err.message : 'failed_to_load_chat_messages'
         )
         setMessages([])
+        setWorkflowRuns([])
+        setWorkflowRunsError(
+          err instanceof Error ? err.message : 'failed_to_load_workflow_runs'
+        )
       } finally {
         setMessagesLoading(false)
+        setWorkflowRunsLoading(false)
       }
     },
     []
@@ -515,6 +536,7 @@ export function Chats() {
     const preview = (await response.json()) as ChatActionPreview
     setActionPreview(preview)
     writeStoredActionPreview(selectedActionPreviewStorageKey, preview)
+    await loadMessages(activeProfileId, selectedThreadId)
   }
 
   const applyPreviewAction = async () => {
@@ -997,6 +1019,72 @@ export function Chats() {
                           </div>
                         </div>
                       ) : null}
+                      <div
+                        className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-3 text-sm text-slate-100'
+                        data-testid='chat-action-timeline'
+                      >
+                        <div className='mb-2 flex items-center justify-between gap-2'>
+                          <p className='font-medium'>Action Timeline</p>
+                          <span
+                            className='rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs uppercase text-slate-400'
+                            data-testid='chat-action-timeline-count'
+                          >
+                            {workflowRuns.length} records
+                          </span>
+                        </div>
+                        {workflowRunsLoading ? (
+                          <p className='text-xs text-slate-400'>
+                            Loading workflow runs...
+                          </p>
+                        ) : null}
+                        {!workflowRunsLoading && workflowRuns.length === 0 ? (
+                          <p
+                            className='text-xs text-slate-400'
+                            data-testid='chat-action-timeline-empty'
+                          >
+                            Durable workflow records appear here after Cabinet
+                            plans, previews, applies, cancels, or fails an
+                            assistant action.
+                          </p>
+                        ) : null}
+                        {workflowRunsError && workflowRuns.length === 0 ? (
+                          <p
+                            className='text-xs text-red-300'
+                            data-testid='chat-action-timeline-error'
+                          >
+                            {workflowRunsError}
+                          </p>
+                        ) : null}
+                        <div className='space-y-2'>
+                          {workflowRuns.map((run) => (
+                            <div
+                              key={run.id}
+                              className='rounded border border-slate-800 bg-slate-950 px-3 py-2'
+                              data-testid='chat-action-timeline-run'
+                              data-workflow-status={run.status}
+                              data-capability-id={run.capability_id}
+                            >
+                              <div className='flex flex-wrap items-center justify-between gap-2'>
+                                <span className='font-medium text-slate-100'>
+                                  {run.capability_id}
+                                </span>
+                                <span className='rounded border border-slate-700 px-2 py-0.5 text-[11px] uppercase text-cyan-200'>
+                                  {run.status}
+                                </span>
+                              </div>
+                              <p className='mt-1 text-xs text-slate-400'>
+                                {run.workflow_id} / {run.confirmation_state}
+                              </p>
+                              <p className='mt-1 text-xs text-slate-300'>
+                                {workflowRunResultSummary(run)}
+                              </p>
+                              <p className='mt-1 text-[11px] text-slate-500'>
+                                {workflowRunTimestamp(run)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </ScrollArea>
                     <div
                       className='relative z-10 mx-auto mt-auto w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-950 p-3 shadow-xl'

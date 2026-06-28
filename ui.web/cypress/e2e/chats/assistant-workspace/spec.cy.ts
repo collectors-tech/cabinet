@@ -232,6 +232,17 @@ describe('chats/assistant-workspace', () => {
       'contain',
       'read-only navigation action'
     )
+    cy.get('[data-testid="shell-assistant-action-timeline"]').should(
+      'not.have.attr',
+      'open'
+    )
+    cy.get('[data-testid="shell-assistant-action-timeline"] summary').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-workflow-run"]')
+      .should('contain', 'navigate.open_surface')
+      .and('contain', 'completed')
+      .and('contain', '/media')
     cy.location('pathname').should('match', /^\/inventory\/?$/)
     cy.get('[data-testid="shell-assistant-message-list"]')
       .should('contain', 'open media')

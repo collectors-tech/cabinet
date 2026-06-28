@@ -44,6 +44,12 @@ import {
   CabinetAssistantUiMessageList,
   cabinetMessageToAssistantUi,
 } from '@/features/chats/assistant-ui-adapter'
+import {
+  fetchChatWorkflowRuns,
+  type ChatWorkflowRun,
+  workflowRunResultSummary,
+  workflowRunTimestamp,
+} from '@/features/chats/workflow-runs'
 
 type ThreadMetadata = {
   provider?: string
@@ -263,6 +269,9 @@ export function AssistantWorkspacePanel() {
   const [navigationAction, setNavigationAction] =
     useState<NavigationAction | null>(null)
   const [commandEvents, setCommandEvents] = useState<ShellCommandEvent[]>([])
+  const [workflowRuns, setWorkflowRuns] = useState<ChatWorkflowRun[]>([])
+  const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false)
+  const [workflowRunsError, setWorkflowRunsError] = useState('')
 
   const routeContext = useMemo(
     () => ({
@@ -397,14 +406,30 @@ export function AssistantWorkspacePanel() {
   }
 
   async function loadMessages(profileId: string, targetThreadId: string) {
-    const resp = await fetch(
-      `/api/chat/messages?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(targetThreadId)}`
-    )
-    if (!resp.ok) {
-      throw new Error('failed_to_load_assistant_messages')
+    setWorkflowRunsLoading(true)
+    try {
+      const [resp, runs] = await Promise.all([
+        fetch(
+          `/api/chat/messages?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(targetThreadId)}`
+        ),
+        fetchChatWorkflowRuns(profileId, targetThreadId),
+      ])
+      if (!resp.ok) {
+        throw new Error('failed_to_load_assistant_messages')
+      }
+      const payload = (await resp.json()) as { messages?: Message[] }
+      setMessages(payload.messages ?? [])
+      setWorkflowRuns(runs)
+      setWorkflowRunsError('')
+    } catch (err) {
+      setWorkflowRuns([])
+      setWorkflowRunsError(
+        err instanceof Error ? err.message : 'failed_to_load_workflow_runs'
+      )
+      throw err
+    } finally {
+      setWorkflowRunsLoading(false)
     }
-    const payload = (await resp.json()) as { messages?: Message[] }
-    setMessages(payload.messages ?? [])
   }
 
   async function loadThreads(profileId: string) {
@@ -445,6 +470,8 @@ export function AssistantWorkspacePanel() {
     setActionPreview(null)
     setApplyResult(null)
     setExecutionState('idle')
+    setWorkflowRuns([])
+    setWorkflowRunsError('')
     setNavigationAction(null)
     setError('')
     setLoading(true)
@@ -843,8 +870,10 @@ export function AssistantWorkspacePanel() {
       const preview = (await response.json()) as ActionPreview
       setActionPreview(preview)
       setExecutionState('running')
+      await loadMessages(activeProfileId, threadId)
     } catch (err) {
       setExecutionState('failure')
+      setWorkflowRunsLoading(false)
       setError(err instanceof Error ? err.message : 'assistant_preview_failed')
       setPermissionGuidance(
         'This action could not be previewed under the active policy. Read-only browsing remains available; mutation preview/apply may be unavailable.'
@@ -872,8 +901,10 @@ export function AssistantWorkspacePanel() {
       setApplyResult(result)
       setExecutionState('success')
       setConfirmApplyOpen(false)
+      await loadMessages(activeProfileId, threadId)
     } catch (err) {
       setExecutionState('failure')
+      setWorkflowRunsLoading(false)
       setError(err instanceof Error ? err.message : 'assistant_apply_failed')
       setPermissionGuidance(
         'Apply is confirm-required. If apply remains blocked, the active policy may be preview-only for this action class.'
@@ -1334,12 +1365,51 @@ export function AssistantWorkspacePanel() {
                       className='mt-2 space-y-2 text-slate-400'
                       data-testid='shell-assistant-command-timeline'
                     >
-                      {commandEvents.length === 0 ? (
+                      {workflowRunsLoading ? (
+                        <p>Loading durable workflow records...</p>
+                      ) : null}
+                      {!workflowRunsLoading &&
+                      workflowRuns.length === 0 &&
+                      commandEvents.length === 0 ? (
                         <p>
-                          Previewed and applied actions appear here after the
-                          user confirms a governed operation.
+                          Durable workflow records appear here after Cabinet
+                          plans, previews, applies, cancels, or fails an
+                          assistant action.
                         </p>
                       ) : null}
+                      {workflowRunsError && workflowRuns.length === 0 ? (
+                        <p
+                          className='text-red-300'
+                          data-testid='shell-assistant-action-timeline-error'
+                        >
+                          {workflowRunsError}
+                        </p>
+                      ) : null}
+                      {workflowRuns.map((run) => (
+                        <div
+                          key={run.id}
+                          className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                          data-testid='shell-assistant-workflow-run'
+                          data-workflow-status={run.status}
+                          data-capability-id={run.capability_id}
+                        >
+                          <div className='flex items-center justify-between gap-2'>
+                            <span className='font-medium text-slate-200'>
+                              {run.status}
+                            </span>
+                            <span className='text-[10px] uppercase text-slate-500'>
+                              {run.confirmation_state}
+                            </span>
+                          </div>
+                          <p>{run.capability_id}</p>
+                          <p className='text-slate-500'>
+                            {workflowRunResultSummary(run)}
+                          </p>
+                          <p className='text-[10px] text-slate-600'>
+                            {workflowRunTimestamp(run)}
+                          </p>
+                        </div>
+                      ))}
                       {commandEvents.map((event, index) => (
                         <div
                           key={`${event.id}-${event.status}-${index}`}
