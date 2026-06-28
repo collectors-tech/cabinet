@@ -27,6 +27,9 @@ type RuntimeSetupCompletePayload = {
   instance_name?: string
   profile_key?: string
   config_path?: string
+  auth_mode?: 'local' | 'clerk'
+  local_login_username?: string
+  local_login_password?: string
   data_dir?: string
   media_dir?: string
   runtime_url?: string
@@ -481,6 +484,36 @@ export function SignIn() {
                   {setupCompleteState.runtime_port ?? 0}
                 </span>
               </p>
+              {setupCompleteState.auth_mode === 'local' ? (
+                <div
+                  className='rounded-md border bg-muted/40 p-3 text-sm'
+                  data-testid='setup-complete-local-credentials'
+                >
+                  <p className='font-medium'>Local login credentials</p>
+                  <p className='text-muted-foreground'>
+                    Write these down before continuing.
+                  </p>
+                  <p>
+                    Username:{' '}
+                    <span
+                      className='font-medium'
+                      data-testid='setup-complete-local-username'
+                    >
+                      {setupCompleteState.local_login_username ??
+                        'admin@cabinet.local'}
+                    </span>
+                  </p>
+                  <p>
+                    Password:{' '}
+                    <span
+                      className='font-medium'
+                      data-testid='setup-complete-local-password'
+                    >
+                      {setupCompleteState.local_login_password ?? 'password123'}
+                    </span>
+                  </p>
+                </div>
+              ) : null}
               {setupCompleteFeedback ? (
                 <p
                   className='text-xs text-muted-foreground'
