@@ -1223,7 +1223,9 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'Candidates: 4')
   })
 
-  it('UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action', () => {
+  it('UI-SCREEN-MARKET-WATCH-005 + #1545 opens saved-watch details from table row activation and actions', () => {
+    const updateRequests: Array<Record<string, unknown>> = []
+
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
       body: {
@@ -1237,6 +1239,13 @@ describe('integrations/ui-screen-market-watch', () => {
         ],
       },
     }).as('querySets')
+    cy.intercept('PUT', '/api/scanner/query-sets/qs-mw-detail-1', (req) => {
+      updateRequests.push(req.body as Record<string, unknown>)
+      req.reply({
+        statusCode: 200,
+        body: req.body,
+      })
+    }).as('updateQuerySet')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
       'failures'
     )
@@ -1266,10 +1275,33 @@ describe('integrations/ui-screen-market-watch', () => {
     signInToMarketWatch()
     cy.wait(['@querySets', '@failures', '@providerHealth'])
 
-    cy.get('[data-testid="scanner-run-qs-mw-detail-1"]').click()
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-run-now-qs-mw-detail-1"]').click()
     cy.wait('@runBonzaQuery')
 
-    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-toggle-enabled-qs-mw-detail-1"]').click()
+    cy.wait('@updateQuerySet')
+    cy.wrap(updateRequests).its('0.enabled').should('equal', false)
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Manual / paused').should('be.visible')
+      cy.get('[data-testid="market-watch-edit-qs-mw-detail-1"]').should('be.visible')
+      cy.get('[data-testid="market-watch-delete-qs-mw-detail-1"]').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-toggle-enabled-qs-mw-detail-1"]').click()
+    cy.wait('@updateQuerySet')
+    cy.wrap(updateRequests).its('1.enabled').should('equal', true)
+
+    cy.get('[data-testid="market-watch-query-row-qs-mw-detail-1"]').dblclick()
+    cy.get('[data-testid="market-watch-output-detail"]').within(() => {
+      cy.contains('Bonza AFX Watch').should('be.visible')
+      cy.contains('Provider Scope').should('be.visible')
+      cy.contains('bonzaslotcars').should('be.visible')
+      cy.contains('Pages scanned').should('be.visible')
+      cy.contains('2').should('be.visible')
+      cy.contains('Candidates').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-query-row-qs-mw-detail-1"]').focus().type('{enter}')
+    cy.get('[data-testid="market-watch-output-detail"]').should('contain', 'Bonza AFX Watch')
     cy.get('[data-testid="market-watch-open-output-qs-mw-detail-1"]').click()
     cy.get('[data-testid="market-watch-output-detail"]').within(() => {
       cy.contains('Bonza AFX Watch').should('be.visible')

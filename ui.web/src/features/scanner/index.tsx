@@ -644,6 +644,38 @@ export function Scanner() {
     cancelEditQuerySet()
   }
 
+  const setQuerySetEnabled = async (querySet: QuerySet, enabled: boolean) => {
+    const payload: QuerySet = {
+      ...querySet,
+      enabled,
+    }
+    const response = await fetch(
+      `/api/scanner/query-sets/${encodeURIComponent(querySet.id)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    )
+    if (!response.ok) {
+      setActionStatus('update_query_set_failed')
+      setActionFeedback(
+        mapScannerActionError(
+          'run',
+          response.status,
+          `update_query_set_${response.status}`
+        )
+      )
+      return
+    }
+    const updated = (await response.json()) as QuerySet
+    setQuerySets((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    )
+    setActionStatus(`query_set_${enabled ? 'resumed' : 'paused'}_${updated.id}`)
+    setActionFeedback(null)
+  }
+
   const deleteQuerySet = async (querySetID: string) => {
     const response = await fetch(
       `/api/scanner/query-sets/${encodeURIComponent(querySetID)}`,
@@ -2218,8 +2250,8 @@ export function Scanner() {
                           className='h-9 rounded-md border bg-background px-3 text-sm'
                           value={editingCadence}
                           onChange={(event) => {
-                            const cadence =
-                              event.target.value as MarketWatchCadenceValue
+                            const cadence = event.target
+                              .value as MarketWatchCadenceValue
                             setEditingCadence(cadence)
                             const option = MARKET_WATCH_CADENCE_OPTIONS.find(
                               (item) => item.value === cadence
@@ -2351,7 +2383,27 @@ export function Scanner() {
                 </thead>
                 <tbody>
                   {filteredQuerySets.map((querySet) => (
-                    <tr key={querySet.id} className='border-t'>
+                    <tr
+                      key={querySet.id}
+                      role='button'
+                      tabIndex={0}
+                      aria-label={`Open Market Watch output details for ${querySet.name}`}
+                      className='cursor-pointer border-t align-top hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                      data-testid={`market-watch-query-row-${querySet.id}`}
+                      onDoubleClick={() =>
+                        setSelectedOutputQuerySetID(querySet.id)
+                      }
+                      onKeyDown={(event) => {
+                        if (
+                          event.target !== event.currentTarget ||
+                          event.key !== 'Enter'
+                        ) {
+                          return
+                        }
+                        event.preventDefault()
+                        setSelectedOutputQuerySetID(querySet.id)
+                      }}
+                    >
                       <td className='px-3 py-2'>{querySet.name}</td>
                       <td className='px-3 py-2'>
                         {querySet.keywords?.join(', ') || 'no keywords'}
@@ -2372,17 +2424,60 @@ export function Scanner() {
                         {formatResultCount(querySet.id)}
                       </td>
                       <td className='px-3 py-2'>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          data-testid={`market-watch-open-output-${querySet.id}`}
-                          onClick={() =>
-                            setSelectedOutputQuerySetID(querySet.id)
-                          }
-                        >
-                          Inspect Output
-                        </Button>
+                        <div className='flex flex-wrap gap-2'>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-run-now-${querySet.id}`}
+                            onClick={() => void runNow(querySet)}
+                          >
+                            Run Now
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-toggle-enabled-${querySet.id}`}
+                            onClick={() =>
+                              void setQuerySetEnabled(
+                                querySet,
+                                querySet.enabled === false
+                              )
+                            }
+                          >
+                            {querySet.enabled === false ? 'Resume' : 'Pause'}
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-edit-${querySet.id}`}
+                            onClick={() => startEditQuerySet(querySet)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-open-output-${querySet.id}`}
+                            onClick={() =>
+                              setSelectedOutputQuerySetID(querySet.id)
+                            }
+                          >
+                            Inspect Output
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-delete-${querySet.id}`}
+                            onClick={() => void deleteQuerySet(querySet.id)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
