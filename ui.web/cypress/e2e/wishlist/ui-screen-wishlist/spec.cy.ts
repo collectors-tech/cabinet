@@ -23,6 +23,10 @@ describe("ui-screen-wishlist", () => {
         ],
       },
     }).as("wishlistItems");
+    cy.intercept("GET", "/api/wishlist?deleted=true", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("deletedWishlistItems");
     cy.intercept("GET", "/api/items?status=wishlist", {
       statusCode: 200,
       body: {
@@ -46,6 +50,10 @@ describe("ui-screen-wishlist", () => {
         ],
       },
     }).as("catalogItems");
+    cy.intercept("GET", "/api/items?status=active", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("activeItems");
     cy.intercept("GET", "/api/pricing/stats?item_id=item-collector-1", {
       statusCode: 200,
       body: { min: 35, median: 40, latest: 42.5 },
@@ -106,7 +114,11 @@ describe("ui-screen-wishlist", () => {
       stubWishlistData();
     } else if (!options.useExistingIntercepts) {
       cy.intercept("GET", "/api/wishlist").as("wishlistItems");
+      cy.intercept("GET", "/api/wishlist?deleted=true").as(
+        "deletedWishlistItems"
+      );
       cy.intercept("GET", "/api/items?status=wishlist").as("catalogItems");
+      cy.intercept("GET", "/api/items?status=active").as("activeItems");
     }
     cy.intercept("GET", "/api/profiles/*/settings").as("profileSettings");
     cy.e2eReset();
@@ -681,9 +693,17 @@ describe("ui-screen-wishlist", () => {
     cy.intercept("GET", "/api/wishlist", (req) => {
       req.reply({ statusCode: 200, body: { items: wishlistEntries } });
     }).as("wishlistItems");
+    cy.intercept("GET", "/api/wishlist?deleted=true", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("deletedWishlistItems");
     cy.intercept("GET", "/api/items?status=wishlist", (req) => {
       req.reply({ statusCode: 200, body: { items: wishlistItems } });
     }).as("catalogItems");
+    cy.intercept("GET", "/api/items?status=active", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("activeItems");
     cy.intercept("PUT", "/api/items/item-collector-1", (req) => {
       expect(req.body.category).to.eq("Race Cars");
       wishlistItems = wishlistItems.map((item) =>
@@ -1060,8 +1080,8 @@ describe("ui-screen-wishlist", () => {
           .should("be.visible")
           .click({ force: true });
       });
-    cy.contains("Delete this wishlist entry").should("be.visible");
-    cy.contains("button", "Delete").click();
+    cy.contains("Hide this wishlist entry").should("be.visible");
+    cy.contains("button", "Hide").click();
 
     cy.wait("@deleteWishlistEntry");
     cy.wait("@wishlistItems");
