@@ -65,6 +65,33 @@ describe('chats/assistant-workspace', () => {
   it('ASSISTANT-WORKSPACE-008/#1503 renders app-control route and preview cards from assistant thread context', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
+    cy.request('POST', '/api/chat/threads', {
+      profile_id: 'e2e-profile-001',
+      title: 'Assistant Workspace #1512 Command Bus',
+      metadata: {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        thread_semantics: 'assistant_workspace_session',
+      },
+    }).then((response) => {
+      expect(response.status).to.eq(201)
+      const assistantThreadId = String(response.body.id)
+      expect(assistantThreadId).not.to.eq('')
+      cy.window().then((win) => {
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.thread.e2e-profile-001',
+          assistantThreadId
+        )
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.provider.e2e-profile-001',
+          'openai'
+        )
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.model.e2e-profile-001',
+          'gpt-4o-mini'
+        )
+      })
+    })
     openAssistantWorkspace()
 
     cy.get('[data-testid="shell-assistant-compose-input"]').type('open media')
@@ -85,6 +112,46 @@ describe('chats/assistant-workspace', () => {
     )
     cy.get('[data-testid="shell-assistant-navigation-action-open"]').click()
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/media\/?$/)
+    cy.get('[data-testid="shell-assistant-modal-content"]').should('be.visible')
+    cy.get('[data-testid="shell-assistant-command-event"]')
+      .filter('[data-command-type="navigate.open_surface"]')
+      .last()
+      .should('have.attr', 'data-command-status', 'success')
+      .and('contain', 'Opened /media without mutation')
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type('open inventory')
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+    cy.wait('@assistantMessage').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'navigate.open_surface'
+      )
+      expect(response?.body.app_control.route).to.eq('/inventory')
+    })
+    cy.get('[data-testid="shell-assistant-navigation-action"]').should(
+      'contain',
+      'Open Inventory'
+    )
+    cy.get('[data-testid="shell-assistant-navigation-action-open"]').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.get('[data-testid="shell-assistant-modal-content"]').should('be.visible')
+    cy.get('[data-testid="shell-assistant-navigation-action-highlight"]').click()
+    cy.get('[data-testid="ui-guidance-overlay"]').should('exist')
+    cy.get('[data-testid="ui-guidance-highlight"]').should(($highlight) => {
+      const rect = $highlight[0].getBoundingClientRect()
+      expect(rect.width).to.be.greaterThan(0)
+      expect(rect.height).to.be.greaterThan(0)
+    })
+    cy.get('[data-testid="ui-guidance-callout"]').should('be.visible')
+    cy.get('[data-testid="shell-assistant-command-event"]')
+      .filter('[data-command-type="ui.highlight_target"]')
+      .last()
+      .should('have.attr', 'data-command-status', 'success')
+      .and('contain', 'Highlighted inventory.surface')
+    cy.get('[data-testid="shell-assistant-command-cancel"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="ui-guidance-overlay"]').should('not.exist')
 
     cy.get('[data-testid="shell-assistant-compose-input"]').type(
       'create an inventory item APP-1503 Thread Preview'
@@ -573,7 +640,7 @@ describe('chats/assistant-workspace', () => {
       expect(response?.statusCode).to.eq(200)
     })
     cy.get('[data-testid="shell-assistant-action-preview"]')
-      .should('contain', 'create_item_stub')
+      .should('contain', 'create_inventory_item')
       .and('contain', 'WS-1083')
       .and('contain', 'Workspace Execution Proof')
     cy.request('/api/items?profile_id=e2e-profile-001')
@@ -607,7 +674,7 @@ describe('chats/assistant-workspace', () => {
       'success'
     )
     cy.get('[data-testid="shell-assistant-apply-result"]')
-      .should('contain', 'Applied create_item_stub')
+      .should('contain', 'Applied create_inventory_item')
       .and('contain', 'to ')
     cy.get('[data-testid="shell-assistant-result-link"]')
       .should('contain', 'Open item')
@@ -628,7 +695,7 @@ describe('chats/assistant-workspace', () => {
         .its('body')
         .should((payload) => {
           const serialized = JSON.stringify(payload)
-          expect(serialized).to.include('Applied create_item_stub')
+          expect(serialized).to.include('Applied create_inventory_item')
           expect(serialized).to.include('"mutation_applied":true')
           expect(serialized).to.include('"confirmation":"confirmed"')
         })

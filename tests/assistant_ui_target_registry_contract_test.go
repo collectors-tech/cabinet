@@ -92,3 +92,68 @@ func TestAssistantUITargetTraceabilityIsImplemented(t *testing.T) {
 		}
 	}
 }
+
+func TestAssistantShellCommandBusTraceabilityIsImplemented(t *testing.T) {
+	t.Parallel()
+
+	busPath := filepath.Join("..", "ui.web", "src", "lib", "shell-command-bus.ts")
+	busRaw, err := os.ReadFile(busPath)
+	if err != nil {
+		t.Fatalf("read shell command bus: %v", err)
+	}
+	bus := string(busRaw)
+	for _, fragment := range []string{
+		"'navigate.open_surface'",
+		"'ui.highlight_target'",
+		"'ui.clear_guidance'",
+		"'walkthrough.cancel'",
+		"ShellCommandEvent",
+		"allowedRoutes",
+		"requestUiGuidance",
+		"clearUiGuidance",
+		"Route is not in the Cabinet app-control allowlist",
+		"UI target is not registered for guided walkthroughs",
+	} {
+		if !strings.Contains(bus, fragment) {
+			t.Fatalf("expected shell command bus to include %q", fragment)
+		}
+	}
+
+	panelPath := filepath.Join("..", "ui.web", "src", "components", "layout", "assistant-workspace-panel.tsx")
+	panelRaw, err := os.ReadFile(panelPath)
+	if err != nil {
+		t.Fatalf("read assistant workspace panel: %v", err)
+	}
+	panel := string(panelRaw)
+	for _, fragment := range []string{
+		"dispatchShellCommand",
+		"data-testid='shell-assistant-command-timeline'",
+		"data-testid='shell-assistant-command-event'",
+		"data-command-type={event.type}",
+		"data-command-status={event.status}",
+		"setActiveWorkspace('assistant')",
+	} {
+		if !strings.Contains(panel, fragment) {
+			t.Fatalf("expected assistant workspace panel to include %q", fragment)
+		}
+	}
+
+	tracePath := filepath.Join("..", "openspec", "traceability.md")
+	traceRaw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+	trace := string(traceRaw)
+	for _, fragment := range []string{
+		"`ASSISTANT-EXECUTION-013`",
+		"`ASSISTANT-WORKSPACE-008`",
+		"#1512/#1514",
+		"`ui.web/src/lib/shell-command-bus.ts`",
+		"TestAssistantShellCommandBusTraceabilityIsImplemented",
+		"| implemented |",
+	} {
+		if !strings.Contains(trace, fragment) {
+			t.Fatalf("expected shell command bus traceability to include %q", fragment)
+		}
+	}
+}

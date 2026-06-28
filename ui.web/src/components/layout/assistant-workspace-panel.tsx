@@ -19,7 +19,10 @@ import {
   X,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
-import { requestUiGuidance } from '@/lib/ui-target-registry'
+import {
+  dispatchShellCommand,
+  type ShellCommandEvent,
+} from '@/lib/shell-command-bus'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
   AlertDialog,
@@ -259,6 +262,7 @@ export function AssistantWorkspacePanel() {
   )
   const [navigationAction, setNavigationAction] =
     useState<NavigationAction | null>(null)
+  const [commandEvents, setCommandEvents] = useState<ShellCommandEvent[]>([])
 
   const routeContext = useMemo(
     () => ({
@@ -663,6 +667,7 @@ export function AssistantWorkspacePanel() {
       setActionPreview(null)
       setApplyResult(null)
       setNavigationAction(null)
+      setCommandEvents([])
       setMessages([])
       setExecutionState('idle')
       await loadMessages(activeProfileId, newThreadId)
@@ -714,6 +719,67 @@ export function AssistantWorkspacePanel() {
     },
     [activeProfileId, model, provider, routeContext, selectionContext, threadId]
   )
+
+  const appendCommandEvent = useCallback((event: ShellCommandEvent) => {
+    setCommandEvents((current) => [...current.slice(-7), event])
+  }, [])
+
+  const runNavigationAction = useCallback(
+    async (action: NavigationAction) => {
+      await dispatchShellCommand(
+        {
+          id: `${action.id}:${action.target}`,
+          type: 'navigate.open_surface',
+          route: action.target,
+        },
+        {
+          navigate: async (route) => {
+            await navigate({ to: route })
+            setActiveWorkspace('assistant')
+          },
+          emit: appendCommandEvent,
+        }
+      )
+    },
+    [appendCommandEvent, navigate, setActiveWorkspace]
+  )
+
+  const runHighlightCommand = useCallback(
+    async (targetId: string) => {
+      await dispatchShellCommand(
+        {
+          id: `highlight:${targetId}`,
+          type: 'ui.highlight_target',
+          targetId,
+          title: 'Inventory workspace',
+          instruction:
+            'Guided walkthroughs use registered target ids before they highlight controls or ask for changes.',
+        },
+        {
+          navigate: async (route) => {
+            await navigate({ to: route })
+          },
+          emit: appendCommandEvent,
+        }
+      )
+    },
+    [appendCommandEvent, navigate]
+  )
+
+  const cancelGuidance = useCallback(async () => {
+    await dispatchShellCommand(
+      {
+        id: 'walkthrough:cancel',
+        type: 'walkthrough.cancel',
+      },
+      {
+        navigate: async (route) => {
+          await navigate({ to: route })
+        },
+        emit: appendCommandEvent,
+      }
+    )
+  }, [appendCommandEvent, navigate])
 
   const handleAssistantUiNewMessage = useCallback(
     async (message: AppendMessage) => {
@@ -1076,9 +1142,7 @@ export function AssistantWorkspacePanel() {
                           className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
                           data-testid='shell-assistant-navigation-action-open'
                           onClick={() =>
-                            void navigate({
-                              to: displayedNavigationAction.target,
-                            })
+                            void runNavigationAction(displayedNavigationAction)
                           }
                         >
                           <ExternalLink className='h-3.5 w-3.5' />
@@ -1094,12 +1158,7 @@ export function AssistantWorkspacePanel() {
                             className='mt-2 ml-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
                             data-testid='shell-assistant-navigation-action-highlight'
                             onClick={() =>
-                              requestUiGuidance({
-                                targetId: 'inventory.surface',
-                                title: 'Inventory workspace',
-                                instruction:
-                                  'Guided walkthroughs use registered target ids before they highlight controls or ask for changes.',
-                              })
+                              void runHighlightCommand('inventory.surface')
                             }
                           >
                             <Sparkles className='h-3.5 w-3.5' />
@@ -1271,10 +1330,43 @@ export function AssistantWorkspacePanel() {
                     <summary className='cursor-pointer list-none font-medium'>
                       Action Timeline
                     </summary>
-                    <p className='mt-2 text-slate-400'>
-                      Previewed and applied actions appear here after the user
-                      confirms a governed operation.
-                    </p>
+                    <div
+                      className='mt-2 space-y-2 text-slate-400'
+                      data-testid='shell-assistant-command-timeline'
+                    >
+                      {commandEvents.length === 0 ? (
+                        <p>
+                          Previewed and applied actions appear here after the
+                          user confirms a governed operation.
+                        </p>
+                      ) : null}
+                      {commandEvents.map((event, index) => (
+                        <div
+                          key={`${event.id}-${event.status}-${index}`}
+                          className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                          data-testid='shell-assistant-command-event'
+                          data-command-type={event.type}
+                          data-command-status={event.status}
+                        >
+                          <span className='font-medium text-slate-200'>
+                            {event.status}
+                          </span>{' '}
+                          {event.type}: {event.message}
+                        </div>
+                      ))}
+                    </div>
+                    {commandEvents.length > 0 ? (
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                        data-testid='shell-assistant-command-cancel'
+                        onClick={() => void cancelGuidance()}
+                      >
+                        Cancel guidance
+                      </Button>
+                    ) : null}
                   </details>
                 </div>
               </ScrollArea>

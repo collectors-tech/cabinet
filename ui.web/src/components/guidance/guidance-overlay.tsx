@@ -3,6 +3,7 @@ import { useLocation } from '@tanstack/react-router'
 import { ChevronLeft, ChevronRight, Pause, X } from 'lucide-react'
 import {
   findUiTarget,
+  uiGuidanceClearEventName,
   uiGuidanceEventName,
   type UiGuidanceRequest,
   type UiTarget,
@@ -94,10 +95,15 @@ export function GuidanceOverlay() {
         setActiveGuidance(null)
       }
     }
+    function handleClearGuidance() {
+      setActiveGuidance(null)
+    }
 
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener(uiGuidanceClearEventName, handleClearGuidance)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener(uiGuidanceClearEventName, handleClearGuidance)
     }
   }, [])
 
