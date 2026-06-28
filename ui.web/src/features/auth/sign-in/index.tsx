@@ -53,6 +53,9 @@ type SetupFormState = {
 
 type SetupEntryMode = 'welcome' | 'form' | 'import'
 
+const BUILT_IN_CLERK_PUBLISHABLE_KEY =
+  'pk_test_Y2FyZWZ1bC1vd2wtNTYuY2xlcmsuYWNjb3VudHMuZGV2JA'
+
 export function SignIn() {
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
   const [setupLoading, setSetupLoading] = useState(true)
@@ -164,9 +167,7 @@ export function SignIn() {
     if (setupForm.authMode === 'local') {
       return 'Ready: Local auth'
     }
-    return setupForm.clerkPublishableKey.trim() === ''
-      ? 'Missing Clerk key'
-      : 'Configured'
+    return 'Built-in Clerk key configured and not editable'
   }
 
   async function goToNextStep() {
@@ -220,13 +221,11 @@ export function SignIn() {
       }
     }
     if (setupStep === 3) {
-      if (
-        setupForm.authMode === 'clerk' &&
-        setupForm.clerkPublishableKey.trim() === ''
-      ) {
-        setSetupError('Clerk publishable key is required.')
-        return
-      }
+      setSetupForm((previous) => ({
+        ...previous,
+        clerkPublishableKey:
+          previous.authMode === 'clerk' ? BUILT_IN_CLERK_PUBLISHABLE_KEY : '',
+      }))
     }
     setSetupError(null)
     setSetupStep((previous) => Math.min(previous + 1, totalSteps - 1))
@@ -281,14 +280,6 @@ export function SignIn() {
   }
 
   async function completeSetup() {
-    if (
-      setupForm.authMode === 'clerk' &&
-      setupForm.clerkPublishableKey.trim() === ''
-    ) {
-      setSetupError('Clerk publishable key is required.')
-      return
-    }
-
     await submitSetupComplete({
       instance_name: setupForm.instanceName.trim(),
       profile_key: setupForm.profileKey.trim(),
@@ -301,7 +292,7 @@ export function SignIn() {
       auth_mode: setupForm.authMode,
       clerk_publishable_key:
         setupForm.authMode === 'clerk'
-          ? setupForm.clerkPublishableKey.trim()
+          ? BUILT_IN_CLERK_PUBLISHABLE_KEY
           : '',
       feature_chat: setupForm.featureChat,
       feature_providers: setupForm.featureProviders,
@@ -830,7 +821,7 @@ export function SignIn() {
                           event.target.value === 'clerk' ? 'clerk' : 'local',
                         clerkPublishableKey:
                           event.target.value === 'clerk'
-                            ? previous.clerkPublishableKey
+                            ? BUILT_IN_CLERK_PUBLISHABLE_KEY
                             : '',
                       }))
                     }
@@ -847,20 +838,13 @@ export function SignIn() {
                   {authReadinessLabel()}
                 </p>
                 {setupForm.authMode === 'clerk' ? (
-                  <label className='grid gap-1 text-sm'>
-                    <span>Clerk Publishable Key</span>
-                    <input
-                      className='h-9 rounded-md border bg-background px-3'
-                      value={setupForm.clerkPublishableKey}
-                      onChange={(event) =>
-                        setSetupForm((previous) => ({
-                          ...previous,
-                          clerkPublishableKey: event.target.value,
-                        }))
-                      }
-                      data-testid='setup-clerk-publishable-key'
-                    />
-                  </label>
+                  <p
+                    className='rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground'
+                    data-testid='setup-clerk-built-in-key'
+                  >
+                    Cabinet uses the built-in Clerk publishable key for this
+                    local setup. The key is not editable in the setup wizard.
+                  </p>
                 ) : null}
               </div>
             ) : null}
