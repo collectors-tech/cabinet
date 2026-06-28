@@ -172,6 +172,39 @@ func planChatMessageAppControl(content string, envelope map[string]any) (chatApp
 	return chatAppControlIntent{}, false
 }
 
+func chatMessageRequiresAssistantHandoff(content string) bool {
+	normalized := normalizePlannerText(content)
+	if normalized == "" {
+		return false
+	}
+	handoffPhrases := []string{
+		"follow up",
+		"handoff",
+		"queue",
+		"background",
+		"review this",
+		"remind me",
+		"notify me",
+		"when ready",
+	}
+	for _, phrase := range handoffPhrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func directAssistantChatResponse(content string) string {
+	normalized := normalizePlannerText(content)
+	switch {
+	case normalized == "hello" || normalized == "hi" || strings.Contains(normalized, "hello cabinet"):
+		return "I can help with Cabinet inventory, media, integrations, purchases, settings, and guided actions from this chat."
+	default:
+		return "I can help with Cabinet inventory, media, integrations, purchases, settings, and guided actions from this chat. Ask me to open a surface, prepare a safe preview, or queue a handoff when background follow-up is needed."
+	}
+}
+
 func normalizePlannerText(content string) string {
 	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(content))), " ")
 }

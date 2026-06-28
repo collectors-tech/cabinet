@@ -51,8 +51,11 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if !strings.Contains(msgResp.Body.String(), `"pathname":"/inventory"`) {
 		t.Fatalf("expected message response to include route context, body=%s", msgResp.Body.String())
 	}
-	if !strings.Contains(msgResp.Body.String(), `"assistant_handoff"`) {
-		t.Fatalf("expected response to include assistant handoff payload, body=%s", msgResp.Body.String())
+	if strings.Contains(msgResp.Body.String(), `"assistant_handoff"`) {
+		t.Fatalf("normal hello must not create assistant handoff payload, body=%s", msgResp.Body.String())
+	}
+	if !strings.Contains(msgResp.Body.String(), `"assistant_response"`) || !strings.Contains(msgResp.Body.String(), `"mode":"direct"`) {
+		t.Fatalf("expected direct assistant response payload for normal hello, body=%s", msgResp.Body.String())
 	}
 
 	msgList := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
@@ -62,16 +65,19 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if !strings.Contains(msgList.Body.String(), `"active_workspace_collection":"All Items"`) {
 		t.Fatalf("expected listed messages to retain selection context, body=%s", msgList.Body.String())
 	}
-	if !strings.Contains(msgList.Body.String(), `Assistant handoff queued in Inbox.`) {
-		t.Fatalf("expected assistant thread to surface queued handoff state, body=%s", msgList.Body.String())
+	if strings.Contains(msgList.Body.String(), `Assistant handoff queued in Inbox.`) {
+		t.Fatalf("normal hello must not surface queued handoff state, body=%s", msgList.Body.String())
+	}
+	if !strings.Contains(msgList.Body.String(), `I can help with Cabinet inventory, media, integrations, purchases, settings, and guided actions from this chat.`) {
+		t.Fatalf("expected assistant thread to surface direct normal-text response, body=%s", msgList.Body.String())
 	}
 
 	inboxList := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)
 	if inboxList.Code != http.StatusOK {
 		t.Fatalf("list inbox status=%d body=%s", inboxList.Code, inboxList.Body.String())
 	}
-	if !strings.Contains(inboxList.Body.String(), `"status":"queued"`) || !strings.Contains(inboxList.Body.String(), `"thread_id":"`+thread.ID+`"`) {
-		t.Fatalf("expected inbox item with queued assistant linkage, body=%s", inboxList.Body.String())
+	if strings.Contains(inboxList.Body.String(), `"source":"assistant_handoff"`) || strings.Contains(inboxList.Body.String(), `"thread_id":"`+thread.ID+`"`) {
+		t.Fatalf("normal hello must not create default assistant Inbox linkage, body=%s", inboxList.Body.String())
 	}
 
 	// Must reject attachment calls that do not include explicit multipart file input.

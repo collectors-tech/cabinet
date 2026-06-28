@@ -96,3 +96,19 @@ Chats workspace MUST expose deterministic app-control outcomes from normal chat 
 - **AND** activating the card MUST navigate to `/media`
 - **WHEN** user sends a provider-backed request that cannot run without provider readiness
 - **THEN** the workspace MUST show visible setup-needed guidance instead of pretending success
+
+### Requirement CHATS-WORKSPACE-011: Chat messages SHALL answer normal text without default Inbox handoff noise
+Chats workspace and shell Assistant messages MUST produce a direct assistant response for ordinary non-action text and MUST reserve durable Inbox handoffs for background, review-required, queued, or failure work.
+
+#### Scenario: Respond to greeting without durable Inbox item
+- **GIVEN** user sends `hello` with profile, thread, route, and assistant context
+- **WHEN** `/api/chat/messages` accepts the message
+- **THEN** the response MUST include a direct `assistant_response` thread message
+- **AND** the assistant thread MUST show the direct response instead of `Assistant handoff queued in Inbox.`
+- **AND** `/api/chat/inbox` MUST NOT receive an `assistant_handoff` item for that normal message
+
+#### Scenario: Preserve explicit handoff durability
+- **GIVEN** user sends a message that asks Cabinet to follow up, queue, review, notify, or run background work
+- **WHEN** `/api/chat/messages` accepts the message
+- **THEN** Cabinet MAY create an `assistant_handoff` Inbox item with thread metadata
+- **AND** Inbox triage status lifecycle MUST remain durable for that queued handoff
