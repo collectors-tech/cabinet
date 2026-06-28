@@ -825,6 +825,35 @@ export function Scanner() {
     setHandoffStatus(`inventory_handoff_ok_${firstCandidate.id}`)
   }
 
+  const handoffFirstCandidateToPurchase = async (querySetID: string) => {
+    const candidates = candidatesByQuerySet[querySetID] ?? []
+    const firstCandidate = candidates.find(
+      (candidate) => (candidate.id ?? '').trim() !== ''
+    )
+    if (!firstCandidate || !firstCandidate.id) {
+      setHandoffStatus('purchase_handoff_no_candidate')
+      return
+    }
+    const response = await fetch('/api/discovery/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_id: firstCandidate.id,
+        type: 'mark_purchased',
+        payload: {
+          source: 'market_watch',
+          query_set_id: querySetID,
+          quantity: 1,
+        },
+      }),
+    })
+    if (!response.ok) {
+      setHandoffStatus(`purchase_handoff_failed_${response.status}`)
+      return
+    }
+    setHandoffStatus(`purchase_handoff_ok_${firstCandidate.id}`)
+  }
+
   const runNow = async (querySet: QuerySet) => {
     setRunMetaByQuerySet((current) => ({
       ...current,
@@ -2684,6 +2713,17 @@ export function Scanner() {
                 }
               >
                 Add First Result to Inventory
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-handoff-purchase-${selectedOutputQuerySetID}`}
+                onClick={() =>
+                  void handoffFirstCandidateToPurchase(selectedOutputQuerySetID)
+                }
+              >
+                Mark First Result Purchased
               </Button>
               <Button
                 type='button'
