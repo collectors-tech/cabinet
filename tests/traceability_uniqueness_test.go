@@ -62,12 +62,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestGuidedWalkthroughModesGovernCommandPermissions",
 			"ASSISTANT-EXECUTION-010 preserves confirm-before-apply across walkthrough modes",
 		},
-		"ASSISTANT-EXECUTION-012": {
-			"| planned |",
-			"#1511/#1514",
-			"TestGuidedTargetRegistryReturnsStableInventoryTargets",
-			"ASSISTANT-EXECUTION-012 resolves and highlights inventory editor targets",
-		},
 		"ASSISTANT-EXECUTION-013": {
 			"| planned |",
 			"#1512/#1514",

@@ -7,6 +7,7 @@ import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
 import { ShellWorkspaceProvider } from '@/context/shell-workspace-provider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { GuidanceOverlay } from '@/components/guidance/guidance-overlay'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SkipToMain } from '@/components/skip-to-main'
 
@@ -45,6 +46,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
             >
               {children ?? <Outlet />}
             </SidebarInset>
+            <GuidanceOverlay />
           </SidebarProvider>
         </ShellWorkspaceProvider>
       </LayoutProvider>

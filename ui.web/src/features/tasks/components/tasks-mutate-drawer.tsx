@@ -682,7 +682,10 @@ export function TasksMutateDrawer({
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
-      <SheetContent className='flex flex-col'>
+      <SheetContent
+        className='flex flex-col'
+        data-testid='inventory-edit-panel'
+      >
         <SheetHeader className='text-start'>
           <SheetTitle>{isUpdate ? 'Update' : 'Create'} Task</SheetTitle>
           <SheetDescription>
@@ -705,7 +708,11 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder='Enter a title' />
+                    <Input
+                      {...field}
+                      data-testid='inventory-edit-title'
+                      placeholder='Enter a title'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -718,6 +725,7 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Status</FormLabel>
                   <SelectDropdown
+                    data-testid='inventory-edit-status'
                     defaultValue={field.value}
                     onValueChange={field.onChange}
                     placeholder='Select dropdown'
@@ -740,7 +748,11 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Label</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder='Enter a label' />
+                    <Input
+                      {...field}
+                      data-testid='inventory-edit-category'
+                      placeholder='Enter a label'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -753,6 +765,7 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Priority</FormLabel>
                   <SelectDropdown
+                    data-testid='inventory-edit-priority'
                     defaultValue={field.value}
                     onValueChange={field.onChange}
                     placeholder='Select priority'
@@ -769,9 +782,15 @@ export function TasksMutateDrawer({
         </Form>
         <SheetFooter className='gap-2'>
           <SheetClose asChild>
-            <Button variant='outline'>Close</Button>
+            <Button variant='outline' data-testid='inventory-edit-cancel'>
+              Close
+            </Button>
           </SheetClose>
-          <Button form='tasks-form' type='submit'>
+          <Button
+            form='tasks-form'
+            type='submit'
+            data-testid='inventory-edit-save'
+          >
             Save changes
           </Button>
         </SheetFooter>
