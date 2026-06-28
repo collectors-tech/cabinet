@@ -1,25 +1,33 @@
 package app
 
 type assistantCapability struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	Description      string   `json:"description"`
-	Group            string   `json:"group"`
-	Mode             string   `json:"mode"`
-	PermissionState  string   `json:"permission_state"`
-	Requires         []string `json:"requires"`
-	ProviderRequires []string `json:"provider_requires,omitempty"`
-	InputSchema      string   `json:"input_schema"`
-	PreviewShape     string   `json:"preview_shape"`
-	ApplyBehavior    string   `json:"apply_behavior"`
-	AuditBehavior    string   `json:"audit_behavior"`
-	ResultLink       string   `json:"result_link"`
-	Unavailable      bool     `json:"unavailable"`
+	ID               string                      `json:"id"`
+	Name             string                      `json:"name"`
+	Description      string                      `json:"description"`
+	Group            string                      `json:"group"`
+	Mode             string                      `json:"mode"`
+	PermissionState  string                      `json:"permission_state"`
+	Requires         []string                    `json:"requires"`
+	ProviderRequires []string                    `json:"provider_requires,omitempty"`
+	InputSchema      string                      `json:"input_schema"`
+	PreviewShape     string                      `json:"preview_shape"`
+	ApplyBehavior    string                      `json:"apply_behavior"`
+	AuditBehavior    string                      `json:"audit_behavior"`
+	ResultLink       string                      `json:"result_link"`
+	Targets          []assistantCapabilityTarget `json:"targets,omitempty"`
+	Unavailable      bool                        `json:"unavailable"`
+}
+
+type assistantCapabilityTarget struct {
+	ID      string   `json:"id"`
+	Label   string   `json:"label"`
+	Route   string   `json:"route"`
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 func assistantCapabilityRegistry() []assistantCapability {
 	return []assistantCapability{
-		{ID: "navigate.open_surface", Name: "Open Cabinet surface", Description: "Navigate the active Cabinet workspace to a known safe surface such as Media without mutating records.", Group: "app-control", Mode: "preview-only", PermissionState: "available", Requires: []string{"profile", "workspace", "thread", "known_surface"}, InputSchema: "agent.navigate.open_surface.v1", PreviewShape: "route_navigation_preview", ApplyBehavior: "client_route_open_no_mutation", AuditBehavior: "thread_message", ResultLink: "/media"},
+		{ID: "navigate.open_surface", Name: "Open Cabinet surface", Description: "Navigate the active Cabinet workspace to a known safe surface such as Media without mutating records.", Group: "app-control", Mode: "preview-only", PermissionState: "available", Requires: []string{"profile", "workspace", "thread", "known_surface"}, InputSchema: "agent.navigate.open_surface.v1", PreviewShape: "route_navigation_preview", ApplyBehavior: "client_route_open_no_mutation", AuditBehavior: "workflow_run_and_thread_message", ResultLink: "/media", Targets: assistantOpenSurfaceTargets()},
 		{ID: "update_open_item_title", Name: "Update open item title", Description: "Preview a title edit for the currently open inventory item before applying the confirmed mutation.", Group: "app-control", Mode: "confirm-required", PermissionState: "available", Requires: []string{"profile", "workspace", "thread", "open_item"}, InputSchema: "agent.update_open_item_title.v1", PreviewShape: "chat_action_preview", ApplyBehavior: "requires_explicit_confirmation", AuditBehavior: "thread_message_and_inbox_handoff", ResultLink: "/inventory"},
 		{ID: "inventory.item.create", Name: "Create inventory item", Description: "Draft a new catalog item from chat context, attachments, or structured user input.", Group: "inventory", Mode: "confirm-required", PermissionState: "available", Requires: []string{"profile", "workspace", "thread"}, InputSchema: "inventory.item.create.v1", PreviewShape: "chat_action_preview", ApplyBehavior: "requires_explicit_confirmation", AuditBehavior: "thread_message_and_inbox_handoff", ResultLink: "/inventory"},
 		{ID: "inventory.item.update", Name: "Update inventory item", Description: "Preview edits to an existing item before applying user-confirmed changes.", Group: "inventory", Mode: "confirm-required", PermissionState: "available", Requires: []string{"profile", "workspace", "thread", "selected_item"}, InputSchema: "inventory.item.update.v1", PreviewShape: "chat_action_preview", ApplyBehavior: "requires_explicit_confirmation", AuditBehavior: "thread_message_and_inbox_handoff", ResultLink: "/inventory"},
