@@ -224,17 +224,18 @@ Auth step MUST provide explicit mode selection and readiness state so users can 
 - **THEN** mode control MUST update deterministically
 - **AND** mode-specific controls MUST appear/disappear without stale values leaking into inactive mode UI
 
-#### Scenario: Clerk readiness missing state
-- **GIVEN** auth mode is set to `clerk` and Clerk key is blank
+#### Scenario: Clerk readiness uses built-in publishable key
+- **GIVEN** auth mode is set to `clerk`
 - **WHEN** auth step is evaluated
-- **THEN** readiness status MUST render as missing
-- **AND** `Next` transition MUST be blocked with actionable inline validation
+- **THEN** readiness status MUST report the built-in Clerk publishable key is configured
+- **AND** setup wizard MUST NOT expose an editable Clerk publishable-key field
+- **AND** `Next` transition MUST proceed without manual key entry
 
 #### Scenario: Clerk readiness configured state
-- **GIVEN** auth mode is set to `clerk` and publishable key is provided
+- **GIVEN** auth mode is set to `clerk`
 - **WHEN** user continues to review and completes setup
 - **THEN** readiness status MUST render as configured
-- **AND** config payload MUST persist `auth.mode=clerk`, `auth.clerk.enabled=true`, and configured key value
+- **AND** config payload MUST persist `auth.mode=clerk`, `auth.clerk.enabled=true`, and the built-in key value
 
 ### Requirement SETUP-WIZ-016: Integrations baseline step MUST capture optional connector toggles with editable-later guidance
 Integrations baseline step MUST allow users to toggle scanner/chat/provider features during setup and clearly communicate settings can be changed later.
@@ -381,8 +382,8 @@ When setup completes in local auth mode, the completion screen MUST show the ini
 | UC-SW-21 | Runtime fixed port validation | Runtime fixed mode validates required/valid port before next | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-21 setup-wizard-runtime-fixed-port-validation blocks invalid fixed port` |
 | UC-SW-22 | Runtime persistence | Runtime port strategy and resolved URL persist in setup config payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-22 setup-wizard-runtime-selection persists fixed port and resolved URL`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFixedPortRuntime` |
 | UC-SW-23 | Auth mode switch | Auth step toggles Local/Clerk mode and mode-specific controls deterministically | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-23 setup-wizard-auth-mode-switch toggles clerk controls and readiness state` |
-| UC-SW-24 | Clerk readiness missing | Clerk mode without publishable key shows missing readiness and blocks next | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-24 setup-wizard-auth-readiness-missing blocks next with actionable message` |
-| UC-SW-25 | Clerk readiness configured persistence | Clerk mode with publishable key shows configured readiness and persists clerk auth payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsClerkAuthConfiguration` |
+| UC-SW-24 | Clerk built-in readiness | Clerk mode uses a built-in publishable key, exposes no editable key field, and allows progression without manual entry | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-24 setup-wizard-auth-readiness-built-in allows next without manual key entry`; `SETUP-WIZ-015 + #1412 uses built-in Clerk publishable key without editable setup field` |
+| UC-SW-25 | Clerk readiness configured persistence | Clerk mode shows built-in configured readiness and persists the built-in clerk auth payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsClerkAuthConfiguration` |
 | UC-SW-26 | Integrations defaults | Integrations step defaults scanner/chat/providers to enabled and shows editable-later guidance | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-26 setup-wizard-integrations-defaults shows enabled toggles and guidance` |
 | UC-SW-27 | Integrations toggle persistence | Integrations toggles persist into setup config `features` payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-27 setup-wizard-integrations-persistence writes feature toggles`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFeatureToggles` |
 | UC-SW-28 | Integrations optional progression | Integrations step allows Next without required-field validation | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-28 setup-wizard-integrations-optional-step-allows-next` |

@@ -264,15 +264,18 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: Local auth');
 
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').should('be.visible');
-    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Missing Clerk key');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('be.visible');
+    cy.get('[data-testid="setup-auth-readiness"]')
+      .should('contain.text', 'Built-in Clerk key configured')
+      .and('contain.text', 'not editable');
 
     cy.get('[data-testid="setup-auth-mode"]').select('local');
     cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
     cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: Local auth');
   });
 
-  it('UC-SW-24 setup-wizard-auth-readiness-missing blocks next with actionable message', () => {
+  it('UC-SW-24 setup-wizard-auth-readiness-built-in allows next without manual key entry', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
@@ -281,22 +284,22 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
     cy.get('[data-testid="setup-next"]').click();
 
-    cy.get('[data-testid="setup-wizard-error"]')
-      .should('be.visible')
-      .and('contain.text', 'Clerk publishable key is required.');
-    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 4 OF 6');
+    cy.get('[data-testid="setup-wizard-error"]').should('not.exist');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 5 OF 6');
   });
 
-  it('UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config', () => {
+  it('SETUP-WIZ-015 + #1412 uses built-in Clerk publishable key without editable setup field', () => {
     enterSetupFormMode();
-    cy.get('[data-testid="setup-instance-name"]').clear().type('Clerk Persist');
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Built In Clerk');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
 
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').clear().type('pk_test_wave25');
-    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Configured');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-auth-readiness"]')
+      .should('contain.text', 'Built-in Clerk key configured')
+      .and('contain.text', 'not editable');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-complete"]').click();
@@ -307,7 +310,37 @@ describe('SETUP-WIZ', () => {
       .then((payload) => {
         expect(payload.auth.mode).to.eq('clerk');
         expect(payload.auth.clerk.enabled).to.eq(true);
-        expect(payload.auth.clerk.publishableKey).to.eq('pk_test_wave25');
+        expect(payload.auth.clerk.publishableKey).to.eq(
+          'pk_test_Y2FyZWZ1bC1vd2wtNTYuY2xlcmsuYWNjb3VudHMuZGV2JA'
+        );
+      });
+  });
+
+  it('UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Clerk Persist');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-auth-readiness"]')
+      .should('contain.text', 'Built-in Clerk key configured')
+      .and('contain.text', 'not editable');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+    cy.contains('Config complete').should('be.visible');
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.auth.mode).to.eq('clerk');
+        expect(payload.auth.clerk.enabled).to.eq(true);
+        expect(payload.auth.clerk.publishableKey).to.eq(
+          'pk_test_Y2FyZWZ1bC1vd2wtNTYuY2xlcmsuYWNjb3VudHMuZGV2JA'
+        );
       });
   });
 
@@ -373,7 +406,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-runtime-fixed-port"]').type('{selectall}18888');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').type('pk_test_review');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('be.visible');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-feature-chat"]').uncheck({ force: true });
     cy.get('[data-testid="setup-next"]').click();
@@ -530,7 +563,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
 
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').type('pk_test_wave3');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('be.visible');
     cy.get('[data-testid="setup-prev"]').click();
     cy.get('[data-testid="setup-prev"]').click();
     cy.get('[data-testid="setup-prev"]').click();
@@ -548,10 +581,8 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').should(
-      'have.value',
-      'pk_test_wave3'
-    );
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('be.visible');
   });
 
   it('UC-SW-07 setup-wizard-complete-to-launch transitions to config complete with start action', () => {
@@ -623,32 +654,26 @@ describe('SETUP-WIZ', () => {
       });
   });
 
-  it('UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing', () => {
+  it('UC-SW-09 setup-wizard-clerk-built-in-key completes without manual key entry', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
     cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-wizard-error"]')
-      .should('be.visible')
-      .and('contain.text', 'Clerk publishable key is required');
-
-    cy.request({
-      method: 'GET',
-      url: '/api/test/runtime/setup-config',
-      failOnStatusCode: false,
-    }).then((response) => {
-      expect(response.status).to.eq(404);
-    });
-
-    cy.get('[data-testid="setup-clerk-publishable-key"]')
-      .clear()
-      .type('pk_test_123');
-    cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.auth.mode).to.eq('clerk');
+        expect(payload.auth.clerk.enabled).to.eq(true);
+        expect(payload.auth.clerk.publishableKey).to.eq(
+          'pk_test_Y2FyZWZ1bC1vd2wtNTYuY2xlcmsuYWNjb3VudHMuZGV2JA'
+        );
+      });
   });
 
   it('UC-SW-05 setup-wizard-not-in-home-shell keeps starter setup controls out of authenticated home', () => {
