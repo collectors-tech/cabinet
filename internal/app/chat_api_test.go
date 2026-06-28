@@ -369,6 +369,11 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 			ResultLink       string   `json:"result_link"`
 			Unavailable      bool     `json:"unavailable"`
 		} `json:"capabilities"`
+		GuidedWorkflows []struct {
+			ID              string   `json:"id"`
+			RequiredContext []string `json:"required_context"`
+			UITargets       []string `json:"ui_targets"`
+		} `json:"guided_workflows"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode capabilities: %v", err)
@@ -431,6 +436,19 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	listing := seen["listing_draft_generate"]
 	if listing.mode != "unavailable" || listing.permission != "setup-needed" || !listing.unavailable || listing.previewShape != "listing_draft_preview_with_sources" || listing.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(listing.providerRequires, "provider_test_passed") {
 		t.Fatalf("listing_draft_generate must expose confirmation-gated setup-needed OpenAI contract, got %+v", listing)
+	}
+	var inventoryWorkflow, wishlistWorkflow bool
+	for _, workflow := range payload.GuidedWorkflows {
+		switch workflow.ID {
+		case "inventory.item.update":
+			inventoryWorkflow = slices.Contains(workflow.RequiredContext, "target_inventory_item") &&
+				slices.Contains(workflow.UITargets, "inventory.item.editor.title")
+		case "wishlist.entry.create":
+			wishlistWorkflow = true
+		}
+	}
+	if !inventoryWorkflow || !wishlistWorkflow {
+		t.Fatalf("expected capabilities payload to list inventory and non-inventory guided workflows, got %+v", payload.GuidedWorkflows)
 	}
 
 	missingProfile := doRequest(t, a, http.MethodGet, "/api/chat/capabilities", nil, nil)

@@ -5045,11 +5045,12 @@ func New(cfg config.Config) (*App, error) {
 			route = "/"
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"profile_id":    profileID,
-			"route":         route,
-			"capabilities":  assistantCapabilityRegistry(),
-			"policy":        "preview-before-apply",
-			"confirm_apply": true,
+			"profile_id":       profileID,
+			"route":            route,
+			"capabilities":     assistantCapabilityRegistry(),
+			"guided_workflows": chat.GuidedWorkflowRegistry(),
+			"policy":           "preview-before-apply",
+			"confirm_apply":    true,
 		})
 	})
 	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
