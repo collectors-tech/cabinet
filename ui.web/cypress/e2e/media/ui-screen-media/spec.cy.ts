@@ -200,6 +200,59 @@ describe('ui-screen-media', () => {
       .and('contain', 'slot-car-front-media-sl.jpg')
   })
 
+  it('UI-SCREEN-MEDIA-019 opens row detail panel and preserves checkbox/action boundaries', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
+      .should('be.visible')
+      .click()
+      .should('have.attr', 'data-state', 'selected')
+    cy.get('[data-testid="media-detail-panel"]')
+      .should('be.visible')
+      .and('contain', 'AFX Mustang front view')
+      .and('contain', 'slot-car-front.jpg')
+      .and('contain', 'Initial intake note')
+    cy.get('[data-testid="media-detail-previous"]').should('be.disabled')
+    cy.get('[data-testid="media-detail-next"]').should('be.enabled').click()
+    cy.get('[data-testid="media-detail-panel"]')
+      .should('contain', 'Porsche 917 box side')
+      .and('contain', 'Inventory linked')
+    cy.get('[data-testid="media-row-media-porsche-box"]').should(
+      'have.attr',
+      'data-state',
+      'selected'
+    )
+    cy.get('body').type('{esc}')
+    cy.get('[data-testid="media-detail-panel"]').should('not.exist')
+
+    cy.get('[data-testid="media-row-media-slot-car-front"]').focus().type('{enter}')
+    cy.get('[data-testid="media-detail-panel"]').should(
+      'contain',
+      'AFX Mustang front view'
+    )
+    cy.get('body').type('{esc}')
+    cy.get('[data-testid="media-detail-panel"]').should('not.exist')
+
+    cy.get('[data-testid="media-row-select-media-slot-car-front"]').click()
+    cy.get('[data-testid="media-detail-panel"]').should('not.exist')
+    cy.get('[data-testid="media-download-selected-action"]').should(
+      'be.enabled'
+    )
+
+    cy.get('[data-testid="media-row-open-media-slot-car-front"]').click()
+    cy.get('[data-testid="media-detail-panel"]').should('not.exist')
+    cy.get('[data-testid="media-edit-dialog"]')
+      .should('be.visible')
+      .and('contain', 'Edit AFX Mustang front view')
+  })
+
   it('UI-SCREEN-MEDIA-003 wires Media quick actions to analysis and assignment UI', () => {
     cy.intercept('GET', '/api/media/assets', {
       statusCode: 200,

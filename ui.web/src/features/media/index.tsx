@@ -56,6 +56,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import {
   Table,
   TableBody,
   TableCell,
@@ -438,6 +446,7 @@ export function Media() {
   const [editNotes, setEditNotes] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+  const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
   const [isPageDragOver, setIsPageDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -808,6 +817,33 @@ export function Media() {
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
   })
+
+  const detailRows = table.getSortedRowModel().rows
+  const detailAsset = detailAssetId
+    ? (assets.find((asset) => asset.id === detailAssetId) ?? null)
+    : null
+  const detailIndex = detailAsset
+    ? detailRows.findIndex((row) => row.original.id === detailAsset.id)
+    : -1
+  const canNavigateDetailPrevious = detailIndex > 0
+  const canNavigateDetailNext =
+    detailIndex >= 0 && detailIndex < detailRows.length - 1
+
+  const openDetailPanel = useCallback((asset: MediaAsset) => {
+    setDetailAssetId(asset.id)
+    setAssignmentSuccess(null)
+  }, [])
+
+  const navigateDetailPanel = (offset: number) => {
+    if (detailIndex < 0) return
+    const nextRow = detailRows[detailIndex + offset]
+    if (!nextRow) return
+    setDetailAssetId(nextRow.original.id)
+    const pageSize = table.getState().pagination.pageSize
+    if (pageSize > 0) {
+      table.setPageIndex(Math.floor((detailIndex + offset) / pageSize))
+    }
+  }
 
   const previewAssignment = async () => {
     if (!assignmentAsset) return
@@ -1343,10 +1379,23 @@ export function Media() {
                         table.getRowModel().rows.map((row) => (
                           <TableRow
                             key={row.id}
+                            className='cursor-pointer'
+                            data-state={
+                              row.original.id === detailAssetId
+                                ? 'selected'
+                                : undefined
+                            }
                             data-testid={`media-row-${row.original.id}`}
+                            onClick={() => openDetailPanel(row.original)}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter') return
+                              event.preventDefault()
+                              openDetailPanel(row.original)
+                            }}
                             onDoubleClick={() =>
                               openMetadataEditor(row.original)
                             }
+                            tabIndex={0}
                           >
                             {row.getVisibleCells().map((cell) => (
                               <TableCell
@@ -1357,6 +1406,18 @@ export function Media() {
                                     : cell.column.id === 'actions'
                                       ? 'w-36'
                                       : 'max-w-0 truncate'
+                                }
+                                onClick={
+                                  cell.column.id === 'select' ||
+                                  cell.column.id === 'actions'
+                                    ? (event) => event.stopPropagation()
+                                    : undefined
+                                }
+                                onDoubleClick={
+                                  cell.column.id === 'select' ||
+                                  cell.column.id === 'actions'
+                                    ? (event) => event.stopPropagation()
+                                    : undefined
                                 }
                               >
                                 {flexRender(
@@ -1387,6 +1448,160 @@ export function Media() {
             </div>
           </div>
         ) : null}
+
+        <Sheet
+          open={detailAsset !== null}
+          onOpenChange={(open) => {
+            if (!open) setDetailAssetId(null)
+          }}
+        >
+          <SheetContent
+            className='gap-0 sm:max-w-md'
+            data-testid='media-detail-panel'
+            data-side='right'
+            side='right'
+          >
+            <SheetHeader className='shrink-0 border-b pe-12'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Badge
+                  variant={
+                    detailAsset?.linkage_state === 'unlinked'
+                      ? 'default'
+                      : 'secondary'
+                  }
+                >
+                  {detailAsset ? linkageLabel(detailAsset.linkage_state) : ''}
+                </Badge>
+                <Badge variant='outline'>
+                  {detailAsset
+                    ? analysisLabel(detailAsset.analysis_status)
+                    : ''}
+                </Badge>
+              </div>
+              <SheetTitle>{detailAsset?.title ?? 'Media details'}</SheetTitle>
+              <SheetDescription>
+                {detailAsset?.filename ?? 'Selected media asset'}
+              </SheetDescription>
+            </SheetHeader>
+            {detailAsset ? (
+              <div className='min-h-0 flex-1 space-y-4 overflow-auto p-4'>
+                <div
+                  className='flex aspect-video items-center justify-center overflow-hidden rounded-md border bg-muted'
+                  data-testid='media-detail-preview'
+                >
+                  {detailAsset.thumbnail_url ? (
+                    <img
+                      src={detailAsset.thumbnail_url}
+                      alt=''
+                      className='h-full w-full object-cover'
+                    />
+                  ) : (
+                    <FileImage className='h-10 w-10 text-muted-foreground' />
+                  )}
+                </div>
+                <dl className='grid gap-3 text-sm'>
+                  <div className='grid gap-1'>
+                    <dt className='text-xs text-muted-foreground uppercase'>
+                      Source
+                    </dt>
+                    <dd data-testid='media-detail-source'>
+                      {detailAsset.source}
+                    </dd>
+                  </div>
+                  <div className='grid gap-1'>
+                    <dt className='text-xs text-muted-foreground uppercase'>
+                      Uploaded
+                    </dt>
+                    <dd>{detailAsset.uploaded_at || 'Unknown'}</dd>
+                  </div>
+                  <div className='grid gap-1'>
+                    <dt className='text-xs text-muted-foreground uppercase'>
+                      Download filename
+                    </dt>
+                    <dd className='break-all'>
+                      {detailAsset.download_filename}
+                    </dd>
+                  </div>
+                  <div className='grid gap-1'>
+                    <dt className='text-xs text-muted-foreground uppercase'>
+                      Linkage
+                    </dt>
+                    <dd>{linkageLabel(detailAsset.linkage_state)}</dd>
+                  </div>
+                  <div className='grid gap-1'>
+                    <dt className='text-xs text-muted-foreground uppercase'>
+                      Notes
+                    </dt>
+                    <dd data-testid='media-detail-notes'>
+                      {detailAsset.notes?.trim() || 'No notes recorded.'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ) : null}
+            <SheetFooter className='shrink-0 border-t'>
+              <div className='grid grid-cols-2 gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='media-detail-previous'
+                  disabled={!canNavigateDetailPrevious}
+                  onClick={() => navigateDetailPanel(-1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='media-detail-next'
+                  disabled={!canNavigateDetailNext}
+                  onClick={() => navigateDetailPanel(1)}
+                >
+                  Next
+                </Button>
+              </div>
+              <div className='grid grid-cols-3 gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='media-detail-edit'
+                  disabled={!detailAsset}
+                  onClick={() => {
+                    if (detailAsset) openMetadataEditor(detailAsset)
+                  }}
+                >
+                  Open
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='media-detail-analyze'
+                  disabled={
+                    !detailAsset || detailAsset.analysis_status === 'ready'
+                  }
+                  onClick={() => {
+                    if (detailAsset) void openAnalysis(detailAsset)
+                  }}
+                >
+                  Analyze
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='media-detail-assign'
+                  disabled={
+                    !detailAsset || detailAsset.linkage_state !== 'unlinked'
+                  }
+                  onClick={() => {
+                    if (detailAsset) openAssignment(detailAsset)
+                  }}
+                >
+                  Assign
+                </Button>
+              </div>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
 
         <Dialog
           open={editAsset !== null}
