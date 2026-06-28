@@ -168,6 +168,38 @@ type CreateQueryValidation = {
   keywords?: string
 }
 
+const MARKET_WATCH_CADENCE_OPTIONS = [
+  { label: 'Manual only', value: 'manual', cron: '' },
+  { label: 'Every hour', value: 'hourly', cron: '0 * * * *' },
+  { label: 'Every 6 hours', value: 'every_6_hours', cron: '0 */6 * * *' },
+  { label: 'Daily', value: 'daily', cron: '0 9 * * *' },
+  { label: 'Weekly', value: 'weekly', cron: '0 9 * * 1' },
+  { label: 'Custom', value: 'custom', cron: '' },
+] as const
+
+type MarketWatchCadenceValue =
+  (typeof MARKET_WATCH_CADENCE_OPTIONS)[number]['value']
+
+function cadenceValueForCron(scheduleCron?: string): MarketWatchCadenceValue {
+  const normalized = scheduleCron?.trim() ?? ''
+  if (!normalized) {
+    return 'manual'
+  }
+  return (
+    MARKET_WATCH_CADENCE_OPTIONS.find(
+      (option) => option.cron === normalized && option.value !== 'manual'
+    )?.value ?? 'custom'
+  )
+}
+
+function cadenceLabelForCron(scheduleCron?: string): string {
+  const cadence = cadenceValueForCron(scheduleCron)
+  return (
+    MARKET_WATCH_CADENCE_OPTIONS.find((option) => option.value === cadence)
+      ?.label ?? 'Custom'
+  )
+}
+
 function parseActionErrorPayload(
   payload: unknown,
   fallback: string
@@ -332,6 +364,8 @@ export function Scanner() {
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
   const [newScheduleCron, setNewScheduleCron] = useState('0 */6 * * *')
+  const [newCadence, setNewCadence] =
+    useState<MarketWatchCadenceValue>('every_6_hours')
   const [createValidation, setCreateValidation] =
     useState<CreateQueryValidation>({})
   const [providerMode, setProviderMode] = useState<ProviderMode>('single')
@@ -360,6 +394,9 @@ export function Scanner() {
   const [editingName, setEditingName] = useState('')
   const [editingKeywords, setEditingKeywords] = useState('')
   const [editingScheduleCron, setEditingScheduleCron] = useState('')
+  const [editingCadence, setEditingCadence] =
+    useState<MarketWatchCadenceValue>('manual')
+  const [editingEnabled, setEditingEnabled] = useState(true)
   const [handoffStatus, setHandoffStatus] = useState<string | null>(null)
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
   const [manualEntryTitle, setManualEntryTitle] = useState('')
@@ -544,6 +581,7 @@ export function Scanner() {
     setNewName('')
     setNewKeywords('')
     setNewScheduleCron('0 */6 * * *')
+    setNewCadence('every_6_hours')
   }
 
   const startEditQuerySet = (querySet: QuerySet) => {
@@ -551,6 +589,8 @@ export function Scanner() {
     setEditingName(querySet.name)
     setEditingKeywords((querySet.keywords ?? []).join(', '))
     setEditingScheduleCron(querySet.schedule_cron ?? '')
+    setEditingCadence(cadenceValueForCron(querySet.schedule_cron))
+    setEditingEnabled(querySet.enabled !== false)
   }
 
   const cancelEditQuerySet = () => {
@@ -558,6 +598,8 @@ export function Scanner() {
     setEditingName('')
     setEditingKeywords('')
     setEditingScheduleCron('')
+    setEditingCadence('manual')
+    setEditingEnabled(true)
   }
 
   const saveQuerySet = async (querySet: QuerySet) => {
@@ -572,6 +614,7 @@ export function Scanner() {
         .map((value) => value.trim())
         .filter(Boolean),
       schedule_cron: editingScheduleCron.trim(),
+      enabled: editingEnabled,
     }
     const response = await fetch(
       `/api/scanner/query-sets/${encodeURIComponent(querySet.id)}`,
@@ -1454,12 +1497,35 @@ export function Scanner() {
               </p>
             ) : null}
           </div>
-          <Input
-            value={newScheduleCron}
-            onChange={(event) => setNewScheduleCron(event.target.value)}
-            placeholder='Schedule cron (e.g. 0 */6 * * *)'
-            data-testid='scanner-new-query-schedule'
-          />
+          <select
+            className='h-9 rounded-md border bg-background px-3 text-sm'
+            value={newCadence}
+            onChange={(event) => {
+              const cadence = event.target.value as MarketWatchCadenceValue
+              setNewCadence(cadence)
+              const option = MARKET_WATCH_CADENCE_OPTIONS.find(
+                (item) => item.value === cadence
+              )
+              if (cadence !== 'custom') {
+                setNewScheduleCron(option?.cron ?? '')
+              }
+            }}
+            data-testid='scanner-new-watch-cadence'
+          >
+            {MARKET_WATCH_CADENCE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {newCadence === 'custom' ? (
+            <Input
+              value={newScheduleCron}
+              onChange={(event) => setNewScheduleCron(event.target.value)}
+              placeholder='Advanced schedule cron'
+              data-testid='scanner-new-query-schedule'
+            />
+          ) : null}
           <select
             className='h-9 rounded-md border bg-background px-3 text-sm'
             value={providerMode}
@@ -2137,13 +2203,48 @@ export function Scanner() {
                           }
                           data-testid={`scanner-edit-keywords-${querySet.id}`}
                         />
-                        <Input
-                          value={editingScheduleCron}
-                          onChange={(event) =>
-                            setEditingScheduleCron(event.target.value)
-                          }
-                          data-testid={`scanner-edit-schedule-${querySet.id}`}
-                        />
+                        <label className='inline-flex items-center gap-2 text-xs text-muted-foreground'>
+                          <input
+                            type='checkbox'
+                            checked={editingEnabled}
+                            onChange={(event) =>
+                              setEditingEnabled(event.target.checked)
+                            }
+                            data-testid={`scanner-edit-enabled-${querySet.id}`}
+                          />
+                          Enabled
+                        </label>
+                        <select
+                          className='h-9 rounded-md border bg-background px-3 text-sm'
+                          value={editingCadence}
+                          onChange={(event) => {
+                            const cadence =
+                              event.target.value as MarketWatchCadenceValue
+                            setEditingCadence(cadence)
+                            const option = MARKET_WATCH_CADENCE_OPTIONS.find(
+                              (item) => item.value === cadence
+                            )
+                            if (cadence !== 'custom') {
+                              setEditingScheduleCron(option?.cron ?? '')
+                            }
+                          }}
+                          data-testid={`scanner-edit-cadence-${querySet.id}`}
+                        >
+                          {MARKET_WATCH_CADENCE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        {editingCadence === 'custom' ? (
+                          <Input
+                            value={editingScheduleCron}
+                            onChange={(event) =>
+                              setEditingScheduleCron(event.target.value)
+                            }
+                            data-testid={`scanner-edit-schedule-${querySet.id}`}
+                          />
+                        ) : null}
                       </div>
                     ) : (
                       <>
@@ -2163,7 +2264,10 @@ export function Scanner() {
                       className='text-xs text-muted-foreground'
                       data-testid={`scanner-query-schedule-${querySet.id}`}
                     >
-                      Schedule: {querySet.schedule_cron || 'none'}
+                      Schedule:{' '}
+                      {querySet.enabled === false
+                        ? `Paused - ${cadenceLabelForCron(querySet.schedule_cron)}${querySet.schedule_cron ? ` (${querySet.schedule_cron})` : ''}`
+                        : querySet.schedule_cron || 'none'}
                     </p>
                   </div>
                   <div className='flex flex-wrap gap-2'>

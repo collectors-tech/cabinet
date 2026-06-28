@@ -17,6 +17,14 @@ Market Watch SHALL require selecting at least one provider before creating a que
 - **AND WHEN** user deletes the saved query set
 - **THEN** the query set MUST be removed from the visible Market Watch list
 
+#### Scenario: Friendly saved-watch cadence controls
+- **GIVEN** user creates or edits a saved Market Watch query
+- **WHEN** user chooses a friendly cadence such as manual, hourly, every 6 hours, daily, or weekly
+- **THEN** Market Watch MUST persist the corresponding schedule metadata without requiring raw cron syntax in the default flow
+- **AND WHEN** user pauses the watch while editing
+- **THEN** the saved watch MUST persist as disabled and show the paused cadence state in the visible list
+- **AND** custom cron entry MAY remain available as an advanced compatibility path
+
 ### Requirement UI-SCREEN-MARKET-WATCH-002: Market Watch SHALL execute runs scoped to selected provider(s)
 `Run Now` MUST execute only against query set provider scope.
 
@@ -202,7 +210,7 @@ Market Watch SHALL store saved-watch executions as durable run records and SHALL
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-MW-01 | Create query set with provider scope | Query set persists with provider metadata from either the form submit action or toolbar `+` create action | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 creates provider-scoped query sets from selector controls` |
+| UC-MW-01 | Create query set with provider scope | Query set persists with provider metadata from either the form submit action or toolbar `+` create action | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 creates provider-scoped query sets from selector controls`; `UI-SCREEN-MARKET-WATCH-001 + #1542 manages saved-watch create edit cadence pause and delete lifecycle` |
 | UC-MW-02 | Run scoped query | Runtime payload and results are provider-scoped | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-002 sends provider scope in run payload and shows provider-attributed results`; `UI-SCREEN-MARKET-WATCH-002 runs eBay-only saved searches through the provider route` |
 | UC-MW-03 | Handle run failure | Human-readable error + retry shown, then durable failure/query-set state reloads after recovery | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-003 surfaces run failure guidance and retry action` |
 | UC-MW-04 | Deterministic workspace states | Loading, empty, provider/auth attention, API load failure retry, and no-output detail states are explicit and testable | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-004 shows deterministic workspace states`; `UI-SCREEN-MARKET-WATCH-004 shows load failure with retry recovery`; `UI-SCREEN-MARKET-WATCH-004 keeps no-output detail state explicit` |
