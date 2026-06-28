@@ -92,3 +92,71 @@ Registry entries SHALL declare API family mapping so Integrations UI can display
   - `setup_instructions` (string)
   - `has_token` (boolean presence signal only)
 - **AND** registry response MUST NOT expose clear credential/token values
+
+### Requirement INTEGRATION-027: Provider registry MUST publish provider manifests and config schemas
+Cabinet SHALL treat each integration provider as a manifest-backed registry entry with a schema-driven setup contract.
+
+#### Scenario: Registry manifest and setup schema load
+- **GIVEN** a provider is listed by `GET /api/providers/registry`
+- **WHEN** Cabinet builds the registry payload for the active profile
+- **THEN** each entry MUST expose manifest metadata for:
+  - stable provider ID
+  - display name
+  - provider category/type
+  - integration mode
+  - API family/support profile
+  - capability flags
+  - setup instructions
+  - default health and required-action state
+- **AND** configurable providers MUST expose a setup schema that identifies each non-secret field, field type, label, validation rule, default value, and persistence key
+- **AND** secret fields MUST expose only write-only field metadata and credential-presence state, never the stored secret value
+
+#### Scenario: Schema-driven Add Integration setup
+- **GIVEN** the user opens Add Integration and selects a provider from the registry-driven catalog
+- **WHEN** the provider setup form renders
+- **THEN** editable fields MUST be generated from the provider setup schema rather than hardcoded provider-specific field lists
+- **AND** the form MUST preserve visible or programmatic labels, validation feedback, and write-only handling for secret fields
+- **AND** saving setup MUST persist non-secret values through active-profile settings and secret values through the profile secrets path
+
+### Requirement INTEGRATION-028: Provider registry MUST expose workflow/action metadata
+Cabinet SHALL expose provider workflow and action metadata so UI surfaces can present only supported operations with clear safety state.
+
+#### Scenario: Provider actions are discoverable from registry metadata
+- **GIVEN** a registry entry supports scanner, Market Watch, import/export, media, assistant, notification, seller, or setup workflows
+- **WHEN** `GET /api/providers/registry` is requested
+- **THEN** the entry MUST expose workflow/action metadata including stable action ID, label, capability category, execution mode, read/write classification, confirmation requirement, availability state, and required next action when unavailable
+- **AND** registry metadata MUST distinguish local-only actions, read-only remote actions, and remote writes that require explicit confirmation
+- **AND** UI controls MUST be disabled or routed to the correct workflow when action metadata marks an action unavailable, blocked, or handled outside the provider dialog
+
+### Requirement INTEGRATION-029: Integration instances MUST persist separately from provider definitions
+Cabinet SHALL persist per-profile integration instances and status independently from immutable provider manifests.
+
+#### Scenario: Profile-scoped instance persistence
+- **GIVEN** an active profile configures a registry provider
+- **WHEN** setup is saved, validated, disabled, or updated
+- **THEN** Cabinet MUST persist a profile-scoped integration instance containing provider ID, enabled state, non-secret configuration, credential-presence signals, validation status, health state, last-run summary, and required-action state
+- **AND** the stored instance MUST reference the provider manifest instead of duplicating mutable manifest fields
+- **AND** listing integrations MUST merge provider manifest data with the active profile instance state deterministically
+
+#### Scenario: Required-action state is preserved
+- **GIVEN** provider health, validation, or workflow execution detects a missing credential, schema validation failure, provider outage, retry backoff, or manual review requirement
+- **WHEN** the registry or integration list is reloaded
+- **THEN** the integration instance MUST preserve a required-action code, operator-safe message, affected workflow, and retry/repair guidance until a later validation clears it
+
+### Requirement INTEGRATION-030: Integration failures MUST create inbox-visible events
+Cabinet SHALL surface integration failures and required user actions through durable inbox events as well as provider status fields.
+
+#### Scenario: Failure and required-action events are promoted to Inbox
+- **GIVEN** a registry-backed provider validation, scheduled run, Market Watch run, scanner run, import/export workflow, assistant workflow, or notification workflow fails or needs user action
+- **WHEN** Cabinet records provider status for the active profile
+- **THEN** Cabinet MUST create or update a Notification Inbox event with provider ID, provider display name, workflow/action ID, severity, required-action code, status message, target route, and timestamp
+- **AND** repeated failures for the same provider/action/root cause SHOULD coalesce into an updated event rather than flooding duplicate notifications
+- **AND** resolving the provider issue MUST allow the inbox event to be marked resolved/read without deleting the durable provider-status history
+
+## Validation Coverage Required By Issue #1469
+- Provider registry entries and manifest fields: Go registry/OpenAPI contract tests.
+- Provider setup schemas and Add Integration form rendering: Go template contract tests plus targeted Cypress for registry-driven field rendering.
+- Workflow/action metadata: Go registry contract tests and targeted UI action availability checks.
+- Profile-scoped integration instance persistence: Go API/service tests for settings/secrets/status merge behavior.
+- Secret redaction and storage: Go API/service tests proving secrets are write-only and never returned in registry payloads.
+- Health, status, required-action, and Inbox failure events: Go status/inbox API tests plus targeted Cypress where UI state is rendered.

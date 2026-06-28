@@ -47,6 +47,59 @@ func TestProviderSpecsExistAndRegistryLinksThem(t *testing.T) {
 	}
 }
 
+func TestIntegrationRegistryOpenSpecCoversIssue1469Contracts(t *testing.T) {
+	t.Parallel()
+
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
+	if err != nil {
+		t.Fatalf("read provider registry spec: %v", err)
+	}
+	registry := string(registryBytes)
+
+	requiredSpecTokens := []string{
+		"INTEGRATION-027",
+		"provider manifests",
+		"setup schema",
+		"Schema-driven Add Integration setup",
+		"write-only field metadata",
+		"INTEGRATION-028",
+		"workflow/action metadata",
+		"remote writes that require explicit confirmation",
+		"INTEGRATION-029",
+		"profile-scoped integration instance",
+		"required-action code",
+		"INTEGRATION-030",
+		"Notification Inbox event",
+		"Provider setup schemas and Add Integration form rendering",
+	}
+	for _, token := range requiredSpecTokens {
+		if !strings.Contains(registry, token) {
+			t.Fatalf("provider registry spec missing #1469 coverage token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+
+	requiredTraceabilityTokens := []string{
+		"`INTEGRATION-027`",
+		"`INTEGRATION-028`",
+		"`INTEGRATION-029`",
+		"`INTEGRATION-030`",
+		"#1469",
+		"targeted Cypress Add Integration provider-selection/setup-schema rendering",
+		"Go status/inbox API tests",
+	}
+	for _, token := range requiredTraceabilityTokens {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1469 coverage token: %s", token)
+		}
+	}
+}
+
 func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing.T) {
 	t.Parallel()
 
