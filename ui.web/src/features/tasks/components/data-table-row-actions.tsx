@@ -98,7 +98,7 @@ export function DataTableRowActions<TData>({
             handleDeleteRow()
           }}
         >
-          Delete
+          {isWishlistRoute && task.deleted ? 'Delete permanently' : 'Delete'}
           <DropdownMenuShortcut>
             <Trash2 size={16} />
           </DropdownMenuShortcut>

@@ -188,16 +188,25 @@ export function TasksDialogs({
             cancelTestId='task-delete-cancel'
             confirmTestId='task-delete-confirm'
             title={
-              isWishlistRoute
-                ? `Delete this wishlist entry: ${currentRow.title} ?`
-                : `Delete this task: ${currentRow.id} ?`
+              isWishlistRoute && currentRow.deleted
+                ? `Permanently delete wishlist entry`
+                : isWishlistRoute
+                  ? `Hide this wishlist entry`
+                  : `Delete this task: ${currentRow.id} ?`
             }
             desc={
-              isWishlistRoute ? (
+              isWishlistRoute && currentRow.deleted ? (
                 <>
-                  You are about to delete the wishlist entry for{' '}
-                  <strong>{currentRow.title}</strong>. <br />
-                  This action cannot be undone.
+                  Permanently delete <strong>{currentRow.title}</strong> from
+                  the deleted wishlist view. This removes the wishlist row and
+                  linked wishlist metadata/history. Inventory records already
+                  created from this wishlist item will not be deleted.
+                </>
+              ) : isWishlistRoute ? (
+                <>
+                  Hide <strong>{currentRow.title}</strong> from the active
+                  Wishlist list. You can review and restore it from the Deleted
+                  view.
                 </>
               ) : (
                 <>
@@ -207,7 +216,13 @@ export function TasksDialogs({
                 </>
               )
             }
-            confirmText='Delete'
+            confirmText={
+              isWishlistRoute && currentRow.deleted
+                ? 'Permanently delete'
+                : isWishlistRoute
+                  ? 'Hide'
+                  : 'Delete'
+            }
           />
         </>
       )}

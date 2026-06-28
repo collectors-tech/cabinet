@@ -25,6 +25,7 @@ type Entry struct {
 	PurchaseCondition string  `json:"purchase_condition"`
 	Quantity          int     `json:"quantity"`
 	NeededQuantity    int     `json:"needed_quantity"`
+	Deleted           bool    `json:"deleted"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
 }
@@ -160,14 +161,68 @@ func (s *Service) ConvertToOwnedForProfile(ctx context.Context, profileID, id st
 func (s *Service) DeleteForProfile(ctx context.Context, profileID, id string) error {
 	trimmedProfileID := strings.TrimSpace(profileID)
 	itemID, _ := s.itemIDForEntry(ctx, trimmedProfileID, id)
-	_, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)`, id, trimmedProfileID, trimmedProfileID)
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE wishlist_entries
+		SET deleted = 1, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, strings.TrimSpace(id), trimmedProfileID, trimmedProfileID)
 	if err != nil {
 		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("wishlist entry not found")
 	}
 	if strings.TrimSpace(itemID) == "" {
 		return nil
 	}
 	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "active", "")
+}
+
+func (s *Service) PermanentDeleteForProfile(ctx context.Context, profileID, id string) error {
+	trimmedProfileID := strings.TrimSpace(profileID)
+	itemID, _ := s.itemIDForEntry(ctx, trimmedProfileID, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)`, strings.TrimSpace(id), trimmedProfileID, trimmedProfileID)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("wishlist entry not found")
+	}
+	if strings.TrimSpace(itemID) == "" {
+		return nil
+	}
+	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "active", "")
+}
+
+func (s *Service) RestoreForProfile(ctx context.Context, profileID, id string) error {
+	trimmedProfileID := strings.TrimSpace(profileID)
+	itemID, err := s.itemIDForEntry(ctx, trimmedProfileID, id)
+	if err != nil {
+		return err
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE wishlist_entries
+		SET deleted = 0, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, strings.TrimSpace(id), trimmedProfileID, trimmedProfileID)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("wishlist entry not found")
+	}
+	var priority string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT priority
+		FROM wishlist_entries
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, strings.TrimSpace(id), trimmedProfileID, trimmedProfileID).Scan(&priority); err != nil {
+		return err
+	}
+	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "wishlist", priority)
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (Entry, error) {
@@ -180,10 +235,11 @@ func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (
 	var belowTargetNow int
 	var owned int
 	var delivered int
+	var deleted int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, delivered, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity, created_at, updated_at
+		SELECT id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, delivered, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity, deleted, created_at, updated_at
 		FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &belowTargetNow, &owned, &delivered, &e.PricePaid, &e.PurchaseURL, &e.PurchaseDate, &e.PurchaseCondition, &e.Quantity, &e.NeededQuantity, &e.CreatedAt, &e.UpdatedAt)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &belowTargetNow, &owned, &delivered, &e.PricePaid, &e.PurchaseURL, &e.PurchaseDate, &e.PurchaseCondition, &e.Quantity, &e.NeededQuantity, &deleted, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Entry{}, fmt.Errorf("wishlist entry not found")
@@ -194,6 +250,7 @@ func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (
 	e.BelowTargetNow = belowTargetNow == 1 || s.isBelowTarget(ctx, e.ItemID, e.TargetPrice)
 	e.Owned = owned == 1
 	e.Delivered = delivered == 1
+	e.Deleted = deleted == 1
 	return e, nil
 }
 
@@ -202,7 +259,20 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 }
 
 func (s *Service) ListByProfile(ctx context.Context, profileID string) ([]Entry, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM wishlist_entries WHERE (? = '' OR profile_id = ?) ORDER BY created_at ASC`, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+	return s.ListByProfileDeleted(ctx, profileID, false)
+}
+
+func (s *Service) ListByProfileDeleted(ctx context.Context, profileID string, deleted bool) ([]Entry, error) {
+	deletedValue := 0
+	if deleted {
+		deletedValue = 1
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id
+		FROM wishlist_entries
+		WHERE (? = '' OR profile_id = ?) AND deleted = ?
+		ORDER BY created_at ASC
+	`, strings.TrimSpace(profileID), strings.TrimSpace(profileID), deletedValue)
 	if err != nil {
 		return nil, err
 	}

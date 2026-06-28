@@ -62,6 +62,7 @@ type DataTableProps = {
   onBarcodeRow?: (task: Task) => void
   onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
+  onRestoreRow?: (task: Task) => void
   onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
   onWishlistBulkPriorityChange?: (
     tasks: Task[],
@@ -270,6 +271,7 @@ export function TasksTable({
   onBarcodeRow,
   onAssignCollectionRow,
   onDeleteRow,
+  onRestoreRow,
   onWishlistBulkStatusChange,
   onWishlistBulkPriorityChange,
   onWishlistBulkDelete,
@@ -306,6 +308,7 @@ export function TasksTable({
         onBarcodeRow,
         onAssignCollectionRow,
         onDeleteRow,
+        onRestoreRow,
         onWishlistInlineUpdate,
         onWishlistPurchaseRow: openPurchaseDialog,
       }),
@@ -316,6 +319,7 @@ export function TasksTable({
       onBarcodeRow,
       onAssignCollectionRow,
       onDeleteRow,
+      onRestoreRow,
       onWishlistInlineUpdate,
       openPurchaseDialog,
     ]
@@ -436,12 +440,15 @@ export function TasksTable({
         }
       }
       const rawStatus = (routeSearch as Record<string, unknown>).status
-      return Array.isArray(rawStatus)
+      const routeStatuses = Array.isArray(rawStatus)
         ? rawStatus.filter(
             (value): value is string =>
               typeof value === 'string' && value.trim() !== ''
           )
         : []
+      return routeStatuses.length > 0
+        ? routeStatuses
+        : ['wishlist', 'discovered']
     }
   )
 
@@ -488,10 +495,14 @@ export function TasksTable({
   }, [isWishlistRoute, wishlistStatusFilters])
 
   const filteredData = useMemo(() => {
-    if (!isWishlistRoute || wishlistStatusFilters.length === 0) {
+    if (!isWishlistRoute) {
       return data
     }
-    return data.filter((task) => wishlistStatusFilters.includes(task.status))
+    const activeFilters =
+      wishlistStatusFilters.length > 0
+        ? wishlistStatusFilters
+        : ['wishlist', 'discovered']
+    return data.filter((task) => activeFilters.includes(task.status))
   }, [data, isWishlistRoute, wishlistStatusFilters])
 
   const table = useReactTable({
@@ -827,6 +838,7 @@ export function TasksTable({
       ? [
           { label: 'Watching', value: 'wishlist' },
           { label: 'Below target', value: 'discovered' },
+          { label: 'Deleted', value: 'deleted' },
         ]
       : statuses
   const categoryFilterOptions = isInventoryRoute

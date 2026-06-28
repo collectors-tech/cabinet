@@ -5,6 +5,7 @@ import {
   ImageIcon,
   MinusIcon,
   PlusIcon,
+  RotateCcwIcon,
   TagsIcon,
 } from 'lucide-react'
 import { Line, LineChart, XAxis, YAxis } from 'recharts'
@@ -42,6 +43,7 @@ type TasksColumnsOptions = {
   onBarcodeRow?: (task: Task) => void
   onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
+  onRestoreRow?: (task: Task) => void
   onWishlistInlineUpdate?: (
     task: Task,
     changes: WishlistInlineChanges
@@ -692,6 +694,7 @@ export function getTasksColumns({
   onBarcodeRow,
   onAssignCollectionRow,
   onDeleteRow,
+  onRestoreRow,
   onWishlistInlineUpdate,
   onWishlistPurchaseRow,
 }: TasksColumnsOptions): ColumnDef<Task>[] {
@@ -1186,6 +1189,22 @@ export function getTasksColumns({
                 <ImageIcon className='h-4 w-4' />
               </Button>
             </>
+          ) : null}
+          {isWishlistRoute && row.original.deleted ? (
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='h-8 px-2'
+              aria-label={`Restore ${row.original.title}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onRestoreRow?.(row.original)
+              }}
+            >
+              <RotateCcwIcon className='mr-1 h-4 w-4' />
+              Restore
+            </Button>
           ) : null}
           <DataTableRowActions
             row={row}
