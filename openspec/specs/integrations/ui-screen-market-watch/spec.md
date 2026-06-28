@@ -107,6 +107,13 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 - **AND** output detail view MUST include provider attribution and run timestamp
 - **AND** Wishlist handoff from the output detail MUST persist enough state for the Wishlist route to render the handed-off result after reload
 
+#### Scenario: Activate saved-watch rows and table actions
+- **GIVEN** saved Market Watch query rows are visible in table view
+- **WHEN** user double-clicks a row or focuses the row and presses Enter
+- **THEN** Market Watch MUST open the saved watch output/detail panel for that row
+- **AND WHEN** user activates table row actions for run now, pause/resume, edit, inspect output, or delete
+- **THEN** each action MUST use the same saved-query contracts as the card view without requiring raw field editing
+
 #### Scenario: No query sets yet
 - **GIVEN** no query sets exist
 - **WHEN** screen loads
