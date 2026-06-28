@@ -401,6 +401,7 @@ export function Scanner() {
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
   const [manualEntryTitle, setManualEntryTitle] = useState('')
   const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
+  const [showCapturePanel, setShowCapturePanel] = useState(false)
   const [pendingApplyScanID, setPendingApplyScanID] = useState<string | null>(
     null
   )
@@ -1642,35 +1643,11 @@ export function Scanner() {
           <Button
             type='button'
             size='sm'
-            data-testid='card-scanner-quick-scan'
-            onClick={launchQuickScan}
-          >
-            Quick Scan
-          </Button>
-          <input
-            ref={quickScanFileInputRef}
-            type='file'
-            accept='image/*'
-            capture='environment'
-            className='hidden'
-            data-testid='card-scanner-quick-file-input'
-            onChange={queueQuickScanFile}
-          />
-          <Input
-            className='h-9 w-56 text-sm'
-            placeholder='Manual card title'
-            value={manualEntryTitle}
-            data-testid='card-scanner-manual-entry-title'
-            onChange={(event) => setManualEntryTitle(event.target.value)}
-          />
-          <Button
-            type='button'
-            size='sm'
             variant='outline'
-            data-testid='card-scanner-manual-entry-queue'
-            onClick={queueManualEntry}
+            data-testid='market-watch-capture-reveal'
+            onClick={() => setShowCapturePanel((current) => !current)}
           >
-            Queue Manual Entry
+            Add listing manually
           </Button>
           <Button
             type='button'
@@ -1690,20 +1667,62 @@ export function Scanner() {
           >
             Table
           </Button>
-          {quickScanStatus ? (
-            <span
-              className='text-xs text-muted-foreground'
-              data-testid='card-scanner-quick-scan-status'
-            >
-              {quickScanStatus}
-            </span>
-          ) : (
-            <span className='text-xs text-muted-foreground'>
-              Quick Scan supports one-tap mobile capture and desktop upload
-              fallback.
-            </span>
-          )}
         </section>
+        {showCapturePanel ? (
+          <section
+            className='rounded-md border p-3'
+            data-testid='market-watch-capture-panel'
+          >
+            <div className='flex flex-wrap items-center gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                data-testid='card-scanner-quick-scan'
+                onClick={launchQuickScan}
+              >
+                Quick Scan
+              </Button>
+              <input
+                ref={quickScanFileInputRef}
+                type='file'
+                accept='image/*'
+                capture='environment'
+                className='hidden'
+                data-testid='card-scanner-quick-file-input'
+                onChange={queueQuickScanFile}
+              />
+              <Input
+                className='h-9 w-56 text-sm'
+                placeholder='Manual card title'
+                value={manualEntryTitle}
+                data-testid='card-scanner-manual-entry-title'
+                onChange={(event) => setManualEntryTitle(event.target.value)}
+              />
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid='card-scanner-manual-entry-queue'
+                onClick={queueManualEntry}
+              >
+                Queue Manual Entry
+              </Button>
+              {quickScanStatus ? (
+                <span
+                  className='text-xs text-muted-foreground'
+                  data-testid='card-scanner-quick-scan-status'
+                >
+                  {quickScanStatus}
+                </span>
+              ) : (
+                <span className='text-xs text-muted-foreground'>
+                  Quick Scan supports one-tap mobile capture and desktop upload
+                  fallback.
+                </span>
+              )}
+            </div>
+          </section>
+        ) : null}
         {querySets.length > 0 ? (
           <section
             className='rounded-md border p-3 text-sm'
@@ -1833,253 +1852,272 @@ export function Scanner() {
             </ul>
           </section>
         ) : null}
-        <section
-          className='rounded-md border p-2 text-xs'
-          data-testid='card-scanner-queue'
-        >
-          {quickScanQueue.length === 0 ? (
-            <p className='text-muted-foreground'>No quick-scan items queued.</p>
-          ) : (
-            <ul className='space-y-1'>
-              {quickScanQueue.map((item) => (
-                <li
-                  key={item.id}
-                  className='flex flex-wrap items-center justify-between gap-2'
-                >
-                  <span>{item.fileName}</span>
-                  <span className='text-muted-foreground'>{item.status}</span>
-                  {quickApplyResultByScanID[item.id]?.item ? (
-                    <span
-                      className='basis-full text-[11px] text-muted-foreground'
-                      data-testid={`card-scanner-apply-result-${item.id}`}
-                    >
-                      Created {quickApplyResultByScanID[item.id].target} item:{' '}
-                      {quickApplyResultByScanID[item.id].item?.title}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section
-          className='rounded-md border p-3'
-          data-testid='card-scanner-quick-category'
-        >
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <p className='text-sm font-medium'>Recent Unlinked Scans</p>
-            <div className='flex items-center gap-2'>
-              <Button
-                type='button'
-                size='sm'
-                variant={quickCategoryView === 'cards' ? 'default' : 'outline'}
-                data-testid='card-scanner-quick-category-view-cards'
-                onClick={() => setQuickCategoryView('cards')}
-              >
-                Cards
-              </Button>
-              <Button
-                type='button'
-                size='sm'
-                variant={quickCategoryView === 'table' ? 'default' : 'outline'}
-                data-testid='card-scanner-quick-category-view-table'
-                onClick={() => setQuickCategoryView('table')}
-              >
-                Table
-              </Button>
-            </div>
-          </div>
-          {recentUnlinkedQuickScans.length === 0 ? (
-            <p className='mt-2 text-xs text-muted-foreground'>
-              No recent unlinked scans. Add quick-scan items to review here.
-            </p>
-          ) : null}
-          {recentUnlinkedQuickScans.length > 0 &&
-          quickCategoryView === 'cards' ? (
-            <ul
-              className='mt-3 space-y-2'
-              data-testid='card-scanner-unlinked-cards-list'
+        {showCapturePanel ? (
+          <>
+            <section
+              className='rounded-md border p-2 text-xs'
+              data-testid='card-scanner-queue'
             >
-              {recentUnlinkedQuickScans.map((item) => (
-                <li
-                  key={item.id}
-                  className='rounded-md border p-2'
-                  data-testid={`card-scanner-unlinked-item-${item.id}`}
-                >
-                  <div className='flex flex-wrap items-center justify-between gap-2'>
-                    <div>
-                      <p className='text-xs font-medium'>{item.fileName}</p>
-                      <p
-                        className='text-[11px] text-muted-foreground'
-                        data-testid={`card-scanner-confidence-${item.id}`}
-                      >
-                        Confidence: {item.confidencePct}%
-                      </p>
-                      <p
-                        className='text-[11px] text-muted-foreground'
-                        data-testid={`card-scanner-grading-${item.id}`}
-                      >
-                        Grading: {item.itemType} / {item.conditionEstimate} /{' '}
-                        {item.gradingStatus}
-                      </p>
-                      <p
-                        className='text-[11px] text-muted-foreground'
-                        data-testid={`card-scanner-suggestion-${item.id}`}
-                      >
-                        Suggestion: {item.selectedSuggestion}
-                      </p>
-                      {quickReviewByScanID[item.id] ? (
-                        <p
-                          className='text-[11px] text-muted-foreground'
-                          data-testid={`card-scanner-review-summary-${item.id}`}
-                        >
-                          Review:{' '}
-                          {quickReviewByScanID[item.id].confidence_label}{' '}
-                          confidence, target{' '}
-                          {quickReviewByScanID[item.id].target},{' '}
-                          {quickReviewByScanID[item.id].confirm_before_create
-                            ? 'confirm-before-create required'
-                            : 'confirmation not required'}
-                        </p>
-                      ) : null}
+              {quickScanQueue.length === 0 ? (
+                <p className='text-muted-foreground'>
+                  No quick-scan items queued.
+                </p>
+              ) : (
+                <ul className='space-y-1'>
+                  {quickScanQueue.map((item) => (
+                    <li
+                      key={item.id}
+                      className='flex flex-wrap items-center justify-between gap-2'
+                    >
+                      <span>{item.fileName}</span>
+                      <span className='text-muted-foreground'>
+                        {item.status}
+                      </span>
                       {quickApplyResultByScanID[item.id]?.item ? (
-                        <p
-                          className='text-[11px] text-muted-foreground'
+                        <span
+                          className='basis-full text-[11px] text-muted-foreground'
                           data-testid={`card-scanner-apply-result-${item.id}`}
                         >
                           Created {quickApplyResultByScanID[item.id].target}{' '}
                           item: {quickApplyResultByScanID[item.id].item?.title}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+            <section
+              className='rounded-md border p-3'
+              data-testid='card-scanner-quick-category'
+            >
+              <div className='flex flex-wrap items-center justify-between gap-2'>
+                <p className='text-sm font-medium'>Recent Unlinked Scans</p>
+                <div className='flex items-center gap-2'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={
+                      quickCategoryView === 'cards' ? 'default' : 'outline'
+                    }
+                    data-testid='card-scanner-quick-category-view-cards'
+                    onClick={() => setQuickCategoryView('cards')}
+                  >
+                    Cards
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={
+                      quickCategoryView === 'table' ? 'default' : 'outline'
+                    }
+                    data-testid='card-scanner-quick-category-view-table'
+                    onClick={() => setQuickCategoryView('table')}
+                  >
+                    Table
+                  </Button>
+                </div>
+              </div>
+              {recentUnlinkedQuickScans.length === 0 ? (
+                <p className='mt-2 text-xs text-muted-foreground'>
+                  No recent unlinked scans. Add quick-scan items to review here.
+                </p>
+              ) : null}
+              {recentUnlinkedQuickScans.length > 0 &&
+              quickCategoryView === 'cards' ? (
+                <ul
+                  className='mt-3 space-y-2'
+                  data-testid='card-scanner-unlinked-cards-list'
+                >
+                  {recentUnlinkedQuickScans.map((item) => (
+                    <li
+                      key={item.id}
+                      className='rounded-md border p-2'
+                      data-testid={`card-scanner-unlinked-item-${item.id}`}
+                    >
+                      <div className='flex flex-wrap items-center justify-between gap-2'>
+                        <div>
+                          <p className='text-xs font-medium'>{item.fileName}</p>
+                          <p
+                            className='text-[11px] text-muted-foreground'
+                            data-testid={`card-scanner-confidence-${item.id}`}
+                          >
+                            Confidence: {item.confidencePct}%
+                          </p>
+                          <p
+                            className='text-[11px] text-muted-foreground'
+                            data-testid={`card-scanner-grading-${item.id}`}
+                          >
+                            Grading: {item.itemType} / {item.conditionEstimate}{' '}
+                            / {item.gradingStatus}
+                          </p>
+                          <p
+                            className='text-[11px] text-muted-foreground'
+                            data-testid={`card-scanner-suggestion-${item.id}`}
+                          >
+                            Suggestion: {item.selectedSuggestion}
+                          </p>
+                          {quickReviewByScanID[item.id] ? (
+                            <p
+                              className='text-[11px] text-muted-foreground'
+                              data-testid={`card-scanner-review-summary-${item.id}`}
+                            >
+                              Review:{' '}
+                              {quickReviewByScanID[item.id].confidence_label}{' '}
+                              confidence, target{' '}
+                              {quickReviewByScanID[item.id].target},{' '}
+                              {quickReviewByScanID[item.id]
+                                .confirm_before_create
+                                ? 'confirm-before-create required'
+                                : 'confirmation not required'}
+                            </p>
+                          ) : null}
+                          {quickApplyResultByScanID[item.id]?.item ? (
+                            <p
+                              className='text-[11px] text-muted-foreground'
+                              data-testid={`card-scanner-apply-result-${item.id}`}
+                            >
+                              Created {quickApplyResultByScanID[item.id].target}{' '}
+                              item:{' '}
+                              {quickApplyResultByScanID[item.id].item?.title}
+                            </p>
+                          ) : null}
+                          <p className='text-[11px] text-muted-foreground'>
+                            Queued:{' '}
+                            {new Date(item.queuedAtISO).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className='flex flex-wrap items-center gap-2'>
+                          <select
+                            className='h-8 rounded-md border bg-background px-2 text-xs'
+                            value={
+                              quickApplyTargetByScanID[item.id] ?? 'inventory'
+                            }
+                            data-testid={`card-scanner-apply-target-${item.id}`}
+                            onChange={(event) =>
+                              setQuickApplyTargetByScanID((current) => ({
+                                ...current,
+                                [item.id]: event.target.value as
+                                  | 'inventory'
+                                  | 'wishlist',
+                              }))
+                            }
+                          >
+                            <option value='inventory'>Inventory</option>
+                            <option value='wishlist'>Wishlist</option>
+                          </select>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`card-scanner-mark-linked-${item.fileName}`}
+                            onClick={() => markQuickScanLinked(item.id)}
+                          >
+                            Mark Linked
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`card-scanner-override-${item.id}`}
+                            onClick={() => selectQuickScanAlternative(item.id)}
+                          >
+                            Use Alternative
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`card-scanner-review-apply-${item.id}`}
+                            onClick={() => void reviewQuickScanApply(item.id)}
+                          >
+                            Review Apply
+                          </Button>
+                        </div>
+                      </div>
+                      {item.overrideUsed ? (
+                        <p
+                          className='mt-2 text-[11px] text-amber-500'
+                          data-testid={`card-scanner-override-flag-${item.id}`}
+                        >
+                          Manual override active
                         </p>
                       ) : null}
-                      <p className='text-[11px] text-muted-foreground'>
-                        Queued: {new Date(item.queuedAtISO).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <select
-                        className='h-8 rounded-md border bg-background px-2 text-xs'
-                        value={quickApplyTargetByScanID[item.id] ?? 'inventory'}
-                        data-testid={`card-scanner-apply-target-${item.id}`}
-                        onChange={(event) =>
-                          setQuickApplyTargetByScanID((current) => ({
-                            ...current,
-                            [item.id]: event.target.value as
-                              | 'inventory'
-                              | 'wishlist',
-                          }))
-                        }
-                      >
-                        <option value='inventory'>Inventory</option>
-                        <option value='wishlist'>Wishlist</option>
-                      </select>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`card-scanner-mark-linked-${item.fileName}`}
-                        onClick={() => markQuickScanLinked(item.id)}
-                      >
-                        Mark Linked
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`card-scanner-override-${item.id}`}
-                        onClick={() => selectQuickScanAlternative(item.id)}
-                      >
-                        Use Alternative
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`card-scanner-review-apply-${item.id}`}
-                        onClick={() => void reviewQuickScanApply(item.id)}
-                      >
-                        Review Apply
-                      </Button>
-                    </div>
-                  </div>
-                  {item.overrideUsed ? (
-                    <p
-                      className='mt-2 text-[11px] text-amber-500'
-                      data-testid={`card-scanner-override-flag-${item.id}`}
-                    >
-                      Manual override active
-                    </p>
-                  ) : null}
-                  {pendingApplyScanID === item.id ? (
-                    <div
-                      className='mt-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-[11px]'
-                      data-testid={`card-scanner-apply-confirmation-${item.id}`}
-                    >
-                      <p className='mb-2'>
-                        Confirm apply to link this scan to inventory using
-                        selected suggestion.
-                      </p>
-                      <div className='flex flex-wrap gap-2'>
-                        <Button
-                          type='button'
-                          size='sm'
-                          data-testid={`card-scanner-confirm-apply-${item.id}`}
-                          onClick={() => void confirmQuickScanApply()}
+                      {pendingApplyScanID === item.id ? (
+                        <div
+                          className='mt-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-[11px]'
+                          data-testid={`card-scanner-apply-confirmation-${item.id}`}
                         >
-                          Confirm Apply
-                        </Button>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          data-testid={`card-scanner-cancel-apply-${item.id}`}
-                          onClick={cancelQuickScanApply}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {recentUnlinkedQuickScans.length > 0 &&
-          quickCategoryView === 'table' ? (
-            <div className='mt-3 overflow-x-auto'>
-              <table
-                className='w-full text-xs'
-                data-testid='card-scanner-unlinked-table'
-              >
-                <thead className='text-left'>
-                  <tr>
-                    <th className='px-2 py-1'>File</th>
-                    <th className='px-2 py-1'>Confidence</th>
-                    <th className='px-2 py-1'>Grading</th>
-                    <th className='px-2 py-1'>Suggestion</th>
-                    <th className='px-2 py-1'>Queued At</th>
-                    <th className='px-2 py-1'>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentUnlinkedQuickScans.map((item) => (
-                    <tr key={item.id} className='border-t'>
-                      <td className='px-2 py-1'>{item.fileName}</td>
-                      <td className='px-2 py-1'>{item.confidencePct}%</td>
-                      <td className='px-2 py-1'>
-                        {item.conditionEstimate} / {item.gradingStatus}
-                      </td>
-                      <td className='px-2 py-1'>{item.selectedSuggestion}</td>
-                      <td className='px-2 py-1'>
-                        {new Date(item.queuedAtISO).toLocaleString()}
-                      </td>
-                      <td className='px-2 py-1'>{item.status}</td>
-                    </tr>
+                          <p className='mb-2'>
+                            Confirm apply to link this scan to inventory using
+                            selected suggestion.
+                          </p>
+                          <div className='flex flex-wrap gap-2'>
+                            <Button
+                              type='button'
+                              size='sm'
+                              data-testid={`card-scanner-confirm-apply-${item.id}`}
+                              onClick={() => void confirmQuickScanApply()}
+                            >
+                              Confirm Apply
+                            </Button>
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='outline'
+                              data-testid={`card-scanner-cancel-apply-${item.id}`}
+                              onClick={cancelQuickScanApply}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </li>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </section>
+                </ul>
+              ) : null}
+              {recentUnlinkedQuickScans.length > 0 &&
+              quickCategoryView === 'table' ? (
+                <div className='mt-3 overflow-x-auto'>
+                  <table
+                    className='w-full text-xs'
+                    data-testid='card-scanner-unlinked-table'
+                  >
+                    <thead className='text-left'>
+                      <tr>
+                        <th className='px-2 py-1'>File</th>
+                        <th className='px-2 py-1'>Confidence</th>
+                        <th className='px-2 py-1'>Grading</th>
+                        <th className='px-2 py-1'>Suggestion</th>
+                        <th className='px-2 py-1'>Queued At</th>
+                        <th className='px-2 py-1'>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentUnlinkedQuickScans.map((item) => (
+                        <tr key={item.id} className='border-t'>
+                          <td className='px-2 py-1'>{item.fileName}</td>
+                          <td className='px-2 py-1'>{item.confidencePct}%</td>
+                          <td className='px-2 py-1'>
+                            {item.conditionEstimate} / {item.gradingStatus}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {item.selectedSuggestion}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {new Date(item.queuedAtISO).toLocaleString()}
+                          </td>
+                          <td className='px-2 py-1'>{item.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </section>
+          </>
+        ) : null}
         {providerValidation ? (
           <p
             className='text-sm text-destructive'

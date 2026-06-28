@@ -108,6 +108,43 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-query-providers-qs-mw-1"]').should('contain', 'amazon')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-014 keeps scanner capture behind a secondary action', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
+      'querySets'
+    )
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="card-scanner-quick-scan"]').should('not.exist')
+    cy.get('[data-testid="card-scanner-manual-entry-title"]').should('not.exist')
+    cy.get('[data-testid="card-scanner-quick-category"]').should('not.exist')
+    cy.get('[data-testid="market-watch-capture-reveal"]')
+      .should('be.visible')
+      .and('contain', 'Add listing manually')
+
+    cy.get('[data-testid="market-watch-capture-reveal"]').click()
+    cy.get('[data-testid="market-watch-capture-panel"]').should('be.visible')
+    cy.get('[data-testid="card-scanner-quick-scan"]').should('be.visible')
+    cy.get('[data-testid="card-scanner-manual-entry-title"]').type('Manual AFX capture')
+    cy.get('[data-testid="card-scanner-manual-entry-queue"]').click()
+    cy.get('[data-testid="card-scanner-quick-scan-status"]').should(
+      'contain',
+      'Manual entry queued for review: Manual AFX capture'
+    )
+    cy.get('[data-testid="card-scanner-unlinked-cards-list"]').should(
+      'contain',
+      'Manual AFX capture'
+    )
+  })
+
   it('UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state', () => {
     cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
       'querySets'
