@@ -401,6 +401,15 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-complete-config-path"]').should('be.visible');
     cy.get('[data-testid="setup-complete-runtime-url"]').should('contain.text', 'http://');
     cy.get('[data-testid="setup-complete-runtime-port"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-local-credentials"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-local-username"]').should(
+      'contain.text',
+      'admin@cabinet.local'
+    );
+    cy.get('[data-testid="setup-complete-local-password"]').should(
+      'contain.text',
+      'password123'
+    );
   });
 
   it('UC-SW-31 setup-wizard-review-create-action shows in-flight disabled state', () => {
@@ -479,6 +488,37 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-complete-feedback"]')
       .should('be.visible')
       .and('contain.text', 'Config folder');
+  });
+
+  it('UC-SW-38 setup-wizard-local-completion-shows-working-login-credentials', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Local Credentials');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'local');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+
+    cy.get('[data-testid="setup-complete-local-credentials"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-local-username"]').should(
+      'contain.text',
+      'admin@cabinet.local'
+    );
+    cy.get('[data-testid="setup-complete-local-password"]').should(
+      'contain.text',
+      'password123'
+    );
+
+    cy.get('[data-testid="setup-open-cabinet"]').click();
+    cy.get('input[name="email"]').clear().type('admin@cabinet.local');
+    cy.get('input[name="password"]').clear().type('password123');
+    cy.contains('button', 'Sign in').click();
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/dashboard\/?$/
+    );
   });
 
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {

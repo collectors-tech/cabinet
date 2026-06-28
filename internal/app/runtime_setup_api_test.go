@@ -52,6 +52,12 @@ func TestRuntimeSetupStatusAndCompleteContract(t *testing.T) {
 	if completePayload["ok"] != true {
 		t.Fatalf("expected ok=true in setup-complete payload")
 	}
+	if asString(completePayload["local_login_username"]) != "admin@cabinet.local" {
+		t.Fatalf("expected local_login_username admin@cabinet.local, got %v", completePayload["local_login_username"])
+	}
+	if asString(completePayload["local_login_password"]) != "password123" {
+		t.Fatalf("expected local_login_password password123, got %v", completePayload["local_login_password"])
+	}
 	if strings.TrimSpace(asString(completePayload["config_path"])) == "" {
 		t.Fatalf("expected config_path in setup-complete payload")
 	}

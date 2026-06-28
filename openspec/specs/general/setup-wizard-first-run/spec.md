@@ -294,6 +294,21 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 - **WHEN** user activates open-config-folder action
 - **THEN** UI MUST show deterministic success feedback tied to config path context
 
+### Requirement SETUP-WIZ-021: Local auth completion MUST show generated login credentials
+When setup completes in local auth mode, the completion screen MUST show the initial local login credentials before the user is expected to sign in.
+
+#### Scenario: Local completion credentials
+- **GIVEN** setup wizard auth mode is `local`
+- **WHEN** setup completion succeeds
+- **THEN** completion UI MUST show generated local username and password values
+- **AND** completion UI MUST clearly tell the user to write the credentials down before continuing
+- **AND** the displayed credentials MUST work for the first local sign-in flow
+
+#### Scenario: Clerk completion omits local credentials
+- **GIVEN** setup wizard auth mode is `clerk`
+- **WHEN** setup completion succeeds
+- **THEN** completion UI MUST NOT show local login credential values
+
 #### Initial `cabinet.json` schema (v1)
 ```json
 {
@@ -380,6 +395,7 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 | UC-SW-35 | Setup bypass helper for route specs | Test harness seeds setup-complete state before route assertions | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-35 setup-helper-bypass-seeds-config before route assertions` |
 | UC-SW-36 | Setup completion helper path | Test harness can complete setup deterministically before route assertions continue | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-36 setup-helper-completion-path clears setup gate deterministically` |
 | UC-SW-37 | Use defaults wizard path | Welcome action applies safe defaults, writes deterministic config, and enters completion state with defaults-applied feedback | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-37 setup-wizard-use-defaults writes deterministic config and shows defaults-applied completion feedback` |
+| UC-SW-38 | Local setup credentials | Local-auth completion shows generated credentials and they work for first login | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-38 setup-wizard-local-completion-shows-working-login-credentials`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupStatusAndCompleteContract` |
 
 ### Requirement SETUP-WIZ-019: Test automation SHALL support deterministic setup bypass or completion helper
 UI test harness MUST provide deterministic setup handling so route tests are not invalidated by setup gating.

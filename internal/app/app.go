@@ -383,10 +383,22 @@ func New(cfg config.Config) (*App, error) {
 			"profile_key":    payload.Instance.Profile,
 			"config_path":    runtimeSetupConfigPath(cfg),
 			"auth_mode":      payload.Auth.Mode,
-			"data_dir":       payload.Storage.DataDir,
-			"media_dir":      payload.Storage.MediaDir,
-			"runtime_url":    payload.Runtime.ResolvedURL,
-			"runtime_port":   portFromResolvedURL(payload.Runtime.ResolvedURL),
+			"local_login_username": func() string {
+				if payload.Auth.Mode != "local" {
+					return ""
+				}
+				return "admin@cabinet.local"
+			}(),
+			"local_login_password": func() string {
+				if payload.Auth.Mode != "local" {
+					return ""
+				}
+				return "password123"
+			}(),
+			"data_dir":     payload.Storage.DataDir,
+			"media_dir":    payload.Storage.MediaDir,
+			"runtime_url":  payload.Runtime.ResolvedURL,
+			"runtime_port": portFromResolvedURL(payload.Runtime.ResolvedURL),
 		})
 	})
 	mux.HandleFunc("/api/runtime/setup-import", func(w http.ResponseWriter, r *http.Request) {
