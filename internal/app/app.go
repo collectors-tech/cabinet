@@ -5160,7 +5160,7 @@ func New(cfg config.Config) (*App, error) {
 				if assistantContext, ok := req.Context["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
 					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, req.Context, message.ID); handled {
 						response["app_control"] = appControl
-					} else {
+					} else if chatMessageRequiresAssistantHandoff(req.Content) {
 						inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
 							ProfileID: req.ProfileID,
 							ThreadID:  req.ThreadID,
@@ -5184,6 +5184,17 @@ func New(cfg config.Config) (*App, error) {
 							if assistantErr == nil {
 								response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
 							}
+						}
+					} else {
+						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", directAssistantChatResponse(req.Content), map[string]any{
+							"assistant_response": map[string]any{
+								"mode":          "direct",
+								"source":        "deterministic_chat_fallback",
+								"source_msg_id": message.ID,
+							},
+						})
+						if assistantErr == nil {
+							response["assistant_response"] = map[string]any{"mode": "direct", "thread_message": assistantMessage}
 						}
 					}
 				}
