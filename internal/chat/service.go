@@ -814,7 +814,14 @@ func (s *Service) PreviewAction(ctx context.Context, in PreviewActionInput) (Act
 	`, id, in.ProfileID, in.ThreadID, capability.Action, string(rawPayload)); err != nil {
 		return ActionPreview{}, fmt.Errorf("create preview: %w", err)
 	}
-	return s.getPreview(ctx, in.ProfileID, id)
+	preview, err := s.getPreview(ctx, in.ProfileID, id)
+	if err != nil {
+		return ActionPreview{}, err
+	}
+	if _, err := s.recordActionPreviewWorkflowRun(ctx, preview, capability.ID, payloadForWorkflow(in.Payload)); err != nil {
+		return ActionPreview{}, err
+	}
+	return preview, nil
 }
 
 func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyActionResult, error) {
@@ -880,6 +887,11 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	if err != nil {
 		return ApplyActionResult{}, fmt.Errorf("mark action applied: %w", err)
 	}
+	_, _ = s.updateActionWorkflowRun(ctx, in.ProfileID, in.ThreadID, preview.ID, UpdateWorkflowRunInput{
+		Status:            "completed",
+		Result:            actionResultWorkflowPayload(result),
+		ConfirmationState: "confirmed",
+	})
 	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", applyActionMessage(result), map[string]any{
 		"action_result": map[string]any{
 			"preview_id":       result.PreviewID,
@@ -927,6 +939,11 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 	if result.Action == "" {
 		result.Action = preview.Action
 	}
+	_, _ = s.updateActionWorkflowRun(ctx, in.ProfileID, in.ThreadID, preview.ID, UpdateWorkflowRunInput{
+		Status:            "cancelled",
+		Result:            actionResultWorkflowPayload(result),
+		ConfirmationState: "cancelled",
+	})
 	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", cancelActionMessage(result), map[string]any{
 		"action_result": map[string]any{
 			"preview_id":       result.PreviewID,
@@ -940,6 +957,77 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 		},
 	})
 	return result, nil
+}
+
+func (s *Service) recordActionPreviewWorkflowRun(ctx context.Context, preview ActionPreview, capabilityID string, payload map[string]any) (WorkflowRun, error) {
+	run, err := s.CreateWorkflowRun(ctx, CreateWorkflowRunInput{
+		ProfileID:         preview.ProfileID,
+		WorkflowID:        "chat.action.preview_apply",
+		CapabilityID:      capabilityID,
+		SourceChannel:     "in_app_chat",
+		SourceThreadID:    preview.ThreadID,
+		Input:             payload,
+		ProviderTrace:     map[string]any{"mode": "governed_preview_before_apply", "live_provider": false},
+		ConfirmationState: "pending",
+	})
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	return s.UpdateWorkflowRun(ctx, UpdateWorkflowRunInput{
+		ProfileID:         preview.ProfileID,
+		RunID:             run.ID,
+		Status:            "needs_input",
+		ProviderTrace:     map[string]any{"mode": "governed_preview_before_apply", "live_provider": false},
+		Result:            map[string]any{"preview_id": preview.ID, "action": preview.Action, "confirmation_required": true},
+		ConfirmationState: "pending",
+	})
+}
+
+func payloadForWorkflow(payload map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range payload {
+		out[key] = value
+	}
+	return out
+}
+
+func actionResultWorkflowPayload(result ApplyActionResult) map[string]any {
+	return map[string]any{
+		"preview_id":       result.PreviewID,
+		"action":           result.Action,
+		"item_id":          result.ItemID,
+		"wishlist_id":      result.WishlistID,
+		"collection_name":  result.CollectionName,
+		"part_number":      result.PartNumber,
+		"title":            result.Title,
+		"mutation_applied": result.Applied,
+	}
+}
+
+func (s *Service) updateActionWorkflowRun(ctx context.Context, profileID, threadID, previewID string, update UpdateWorkflowRunInput) (WorkflowRun, error) {
+	run, err := s.findActionWorkflowRunByPreview(ctx, profileID, threadID, previewID)
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	update.ProfileID = profileID
+	update.RunID = run.ID
+	update.ProviderTrace = map[string]any{"mode": "governed_preview_before_apply", "live_provider": false}
+	return s.UpdateWorkflowRun(ctx, update)
+}
+
+func (s *Service) findActionWorkflowRunByPreview(ctx context.Context, profileID, threadID, previewID string) (WorkflowRun, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+			status, input_json, provider_trace_json, result_json, error_json, confirmation_state, bulk_items_json,
+			created_at, updated_at, COALESCE(started_at, ''), COALESCE(completed_at, '')
+		FROM assistant_workflow_runs
+		WHERE profile_id = ?
+		  AND source_thread_id = ?
+		  AND json_extract(result_json, '$.preview_id') = ?
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT 1
+	`, profileID, threadID, previewID)
+	return scanWorkflowRun(row)
 }
 
 func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID, previewID string) (ActionPreview, map[string]any, error) {
