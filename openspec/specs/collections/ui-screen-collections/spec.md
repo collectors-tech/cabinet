@@ -394,6 +394,33 @@ Collections and collection-members tables SHALL expose deterministic column sort
 - **AND** the active collection context MUST remain unchanged
 - **AND** no profile-settings save MUST be sent by member sorting alone
 
+### Requirement UI-SCREEN-COLLECTIONS-032: Collection delete SHALL soft-delete and reconcile assigned items
+Collections SHALL hide deleted collection rows from active views by default, retain deleted metadata for review, and make assigned-item outcomes explicit before saving.
+
+#### Scenario: Soft-delete and review deleted collection
+- **GIVEN** an authenticated user opens `/collections` with a non-protected collection row visible
+- **WHEN** the user confirms deletion
+- **THEN** the collection MUST be marked deleted rather than removed from persisted collection state
+- **AND** active collection tables and selectors MUST hide the deleted collection by default
+- **AND** the deleted filter MUST show the deleted row with an explicit deleted state
+
+#### Scenario: Delete populated collection with reassignment choice
+- **GIVEN** a non-protected collection has assigned inventory items
+- **WHEN** the user opens the delete confirmation
+- **THEN** the dialog MUST show the assigned item count
+- **AND** the dialog MUST explain that choosing no destination removes only collection membership
+- **WHEN** the user chooses another active collection and confirms deletion
+- **THEN** the original collection MUST be marked deleted
+- **AND** assigned items MUST move to the chosen destination collection
+- **WHEN** the user confirms deletion with no destination selected
+- **THEN** assigned items MUST remain in Cabinet with no collection assignment and remain visible under `All Items`
+
+#### Scenario: Edit collection metadata
+- **GIVEN** a non-protected collection row exists
+- **WHEN** the user opens the edit side panel
+- **THEN** the panel MUST expose persisted collection metadata fields for name, scope, status, and description
+- **AND** saving valid metadata MUST persist and render the updated row metadata
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -437,3 +464,4 @@ Collections and collection-members tables SHALL expose deterministic column sort
 | UC-COL-29 | Paginate collection members | Later-page member rows render for the selected collection without passive settings writes; selected context survives refresh and member filtering remains non-mutating | `ui.web/cypress/e2e/collections/collections-members-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-029 preserves paginated collection members without passive settings writes` |
 | UC-COL-30 | Protect All Items | Rename and delete attempts do not write profile settings, create replacement rows, or leave the active `All Items` context | `ui.web/cypress/e2e/collections/collections-protected-all-items/spec.cy.ts` `UI-SCREEN-COLLECTIONS-030 keeps All Items protected from row rename and delete actions` |
 | UC-COL-31 | Sort collections and members | Collection and member rows sort deterministically without saving settings or changing the active collection context | `ui.web/cypress/e2e/collections/collections-sorting-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-031 sorts collections and members without passive settings writes` |
+| UC-COL-32 | Soft-delete and reconcile collection items | Deleted rows are hidden by default, visible in the deleted filter, assigned items move to a chosen destination or become unassigned, and metadata edits persist | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-032 soft-deletes with deleted filter, reassignment choices, and editable metadata` |
