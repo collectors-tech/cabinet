@@ -42,6 +42,10 @@ Cabinet SHALL treat wishlist `owned`/Purchased state as purchase intent evidence
 - **THEN** Cabinet MUST persist the wishlist entry as Purchased
 - **AND** Cabinet MUST create or update one `purchase` commerce lifecycle entry with `source=wishlist`, `external_ref` equal to the wishlist entry id, purchase amount, quantity, and notes
 - **AND** Cabinet MUST create or update the linked expected-arrival record for that purchase lifecycle entry
+- **AND** Cabinet MUST create or update one wishlist-linked inventory instance for the canonical item
+- **AND** if an inventory instance for that canonical item already exists, Cabinet MUST link and increment that instance instead of creating a duplicate
+- **AND** repeating the same Purchased save MUST update the existing wishlist-linked inventory instance without double-counting quantity
+- **AND** the canonical item category MUST remain unchanged for downstream Inventory visibility
 
 #### Scenario: Delivered wishlist entry creates inventory receipt evidence
 - **GIVEN** an authenticated user has an active profile with a wishlist entry for a canonical item
