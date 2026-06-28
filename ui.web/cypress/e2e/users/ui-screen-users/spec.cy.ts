@@ -19,6 +19,19 @@ describe('ui-screen-users', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/users\/?$/)
   }
 
+  function setInputValue(selector: string, value: string) {
+    cy.get(selector).then(($input) => {
+      const input = $input[0] as HTMLInputElement
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value'
+      )?.set
+      setter?.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+
   beforeEach(() => {
     cy.viewport(2048, 900)
     cy.clearCookies()
@@ -97,8 +110,8 @@ describe('ui-screen-users', () => {
     cy.get('input[placeholder="+123456789"]').type('+61000000000')
     cy.get('[role="dialog"] button[role="combobox"]').first().click()
     cy.contains('[role="option"], [data-radix-collection-item]', 'Admin').click()
-    cy.get('input[placeholder="e.g., S3cur3P@ssw0rd"]').first().type('password123')
-    cy.get('input[placeholder="e.g., S3cur3P@ssw0rd"]').eq(1).type('password123')
+    setInputValue('input[name="password"]', 'password123')
+    setInputValue('input[name="confirmPassword"]', 'password123')
     cy.contains('[role="dialog"] button', 'Save changes').click()
     cy.wait('@createUser').its('response.statusCode').should('eq', 201)
     cy.get('input[placeholder="Filter users..."]').clear().type(username)
@@ -116,7 +129,42 @@ describe('ui-screen-users', () => {
   })
 
   it('UI-SCREEN-USERS-003 persists delete actions through Cabinet API row context', () => {
-    cy.intercept('DELETE', '/api/users/*').as('deleteUser')
+    let users = [
+      {
+        id: 'delete-user-001',
+        firstName: 'Delete',
+        lastName: 'Candidate',
+        username: 'delete_candidate',
+        email: 'delete.candidate@example.com',
+        phoneNumber: '+61000000004',
+        status: 'active',
+        role: 'view',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'delete-owner-001',
+        firstName: 'Delete',
+        lastName: 'Admin',
+        username: 'delete_admin',
+        email: 'delete.admin@example.com',
+        phoneNumber: '+61000000005',
+        status: 'active',
+        role: 'admin',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ]
+
+    cy.intercept('GET', '/api/users*', (req) => {
+      req.reply({ statusCode: 200, body: { users } })
+    }).as('deleteUsersList')
+    cy.intercept('DELETE', '/api/users/*', (req) => {
+      req.reply({ statusCode: 204 })
+    }).as('deleteUser')
+
+    cy.reload()
+    cy.wait('@deleteUsersList')
 
     cy.get('tbody tr').first().find('td').eq(1).invoke('text').then(() => {
       cy.contains('span', 'Open menu').first().parents('button').first().click()
@@ -134,6 +182,7 @@ describe('ui-screen-users', () => {
             .find('input[placeholder="Enter username to confirm deletion."]')
             .clear()
             .type(confirmUsername)
+          users = users.filter((user) => user.username !== confirmUsername)
           cy.get('@deleteDialog').contains('button', 'Delete').click()
           cy.wait('@deleteUser').its('response.statusCode').should('eq', 204)
           cy.contains(confirmUsername).should('not.exist')
@@ -142,6 +191,39 @@ describe('ui-screen-users', () => {
   })
 
   it('UI-SCREEN-USERS-003 selects rows and opens details from View user and row double-click', () => {
+    cy.intercept('GET', '/api/users*', {
+      statusCode: 200,
+      body: {
+        users: [
+          {
+            id: 'details-user-001',
+            firstName: 'Details',
+            lastName: 'Alpha',
+            username: 'details_alpha',
+            email: 'details.alpha@example.com',
+            phoneNumber: '+61000000011',
+            status: 'active',
+            role: 'admin',
+            createdAt: '2026-01-01T00:00:00Z',
+            updatedAt: '2026-01-01T00:00:00Z',
+          },
+          {
+            id: 'details-user-002',
+            firstName: 'Details',
+            lastName: 'Beta',
+            username: 'details_beta',
+            email: 'details.beta@example.com',
+            phoneNumber: '+61000000012',
+            status: 'inactive',
+            role: 'view',
+            createdAt: '2026-01-02T00:00:00Z',
+            updatedAt: '2026-01-02T00:00:00Z',
+          },
+        ],
+      },
+    }).as('detailsSelectionUsersList')
+    cy.reload()
+    cy.wait('@detailsSelectionUsersList')
     cy.get('tbody tr').should('have.length.greaterThan', 1)
 
     cy.get('tbody tr')
@@ -155,13 +237,14 @@ describe('ui-screen-users', () => {
         cy.get('tbody tr').eq(0).click()
         cy.get('tbody tr').eq(0).should('have.attr', 'data-state', 'selected')
         cy.get('[data-testid="users-view-selected-action"]').should('be.enabled').click()
-        cy.contains('[data-testid="users-row-details-modal"]', firstUsername)
+        cy.contains('[data-testid="users-details-sheet"]', firstUsername)
           .should('be.visible')
-        cy.get('[data-testid="users-row-details-modal"]')
-          .find('button')
-          .last()
-          .click()
-        cy.get('[data-testid="users-row-details-modal"]').should('not.exist')
+        cy.get('[data-testid="users-details-sheet"]')
+          .should('contain', 'Email')
+          .and('contain', 'Invitation state')
+          .and('contain', 'Last updated')
+        cy.get('body').type('{esc}')
+        cy.get('[data-testid="users-details-sheet"]').should('not.exist')
       })
 
     cy.get('tbody tr')
@@ -173,10 +256,100 @@ describe('ui-screen-users', () => {
         const secondUsername = visibleCellText(secondUsernameRaw)
 
         cy.get('tbody tr').eq(1).dblclick()
-        cy.contains('[data-testid="users-row-details-modal"]', secondUsername)
+        cy.contains('[data-testid="users-details-sheet"]', secondUsername)
           .should('be.visible')
         cy.get('tbody tr').eq(1).should('have.attr', 'data-state', 'selected')
       })
+  })
+
+  it('UI-SCREEN-USERS-003 renders protected details actions and persists sidebar actions', () => {
+    let users = [
+      {
+        id: 'owner-user-001',
+        firstName: 'Local',
+        lastName: 'Admin',
+        username: 'owner_local',
+        email: 'owner+local@cabinet.local',
+        phoneNumber: '',
+        status: 'active',
+        role: 'admin',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'invited-user-001',
+        firstName: 'Invited',
+        lastName: 'User',
+        username: 'invited_user',
+        email: 'invited.user@example.com',
+        phoneNumber: '',
+        status: 'invited',
+        role: 'view',
+        createdAt: '2026-01-02T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+      },
+    ]
+
+    cy.intercept('GET', '/api/users*', (req) => {
+      req.reply({ statusCode: 200, body: { users } })
+    }).as('detailsUsersList')
+    cy.intercept('POST', '/api/users/invite', (req) => {
+      expect(req.body).to.include({
+        email: 'invited.user@example.com',
+        role: 'view',
+      })
+      users = users.map((user) =>
+        user.id === 'invited-user-001'
+          ? { ...user, updatedAt: '2026-01-03T00:00:00Z' }
+          : user
+      )
+      req.reply({
+        statusCode: 201,
+        body: users.find((user) => user.id === 'invited-user-001'),
+      })
+    }).as('resendInvitation')
+    cy.intercept('PUT', '/api/users/invited-user-001', (req) => {
+      expect(req.body).to.include({ status: 'active' })
+      users = users.map((user) =>
+        user.id === 'invited-user-001' ? { ...user, status: 'active' } : user
+      )
+      req.reply({
+        statusCode: 200,
+        body: users.find((user) => user.id === 'invited-user-001'),
+      })
+    }).as('activateInvitedUser')
+
+    cy.reload()
+    cy.wait('@detailsUsersList')
+    cy.contains('owner_local').parents('tr').dblclick()
+    cy.get('[data-testid="users-details-sheet"]').within(() => {
+      cy.contains('Protected local owner').should('be.visible')
+      cy.get('[data-testid="users-protection-message"]').should('be.visible')
+      cy.get('[data-testid="users-details-delete-action"]').should(
+        'be.disabled'
+      )
+      cy.get('[data-testid="users-details-status-action"]').should(
+        'be.disabled'
+      )
+    })
+    cy.get('body').type('{esc}')
+    cy.get('[data-testid="users-details-sheet"]').should('not.exist')
+
+    cy.contains('invited_user').parents('tr').dblclick()
+    cy.get('[data-testid="users-details-sheet"]').within(() => {
+      cy.contains('Invitation pending').should('be.visible')
+      cy.get('[data-testid="users-details-resend-action"]').should(
+        'be.enabled'
+      )
+      cy.get('[data-testid="users-details-resend-action"]').click()
+    })
+    cy.wait('@resendInvitation').its('response.statusCode').should('eq', 201)
+    cy.wait('@detailsUsersList')
+    cy.contains('invited_user').parents('tr').dblclick()
+    cy.get('[data-testid="users-details-status-action"]').click()
+    cy.wait('@activateInvitedUser').its('response.statusCode').should('eq', 200)
+    cy.wait('@detailsUsersList')
+    cy.contains('invited_user').parents('tr').contains('active').should('be.visible')
   })
 
   it('UI-SCREEN-USERS-003 persists edit saves through Cabinet API and refreshes the edited row', () => {
