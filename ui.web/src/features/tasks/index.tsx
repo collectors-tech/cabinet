@@ -140,6 +140,7 @@ type WishlistEntryPayload = {
   purchase_condition?: string
   quantity?: number
   needed_quantity?: number
+  deleted?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -700,36 +701,62 @@ export function Tasks({
     }
   }, [isWishlistRoute])
   const loadWishlistData = useCallback(async () => {
-    const [wishlistResponse, itemsResponse] = await Promise.all([
+    const [
+      wishlistResponse,
+      deletedWishlistResponse,
+      wishlistItemsResponse,
+      activeItemsResponse,
+    ] = await Promise.all([
       fetch('/api/wishlist'),
+      fetch('/api/wishlist?deleted=true'),
       fetch('/api/items?status=wishlist'),
+      fetch('/api/items?status=active'),
     ])
-    if (!wishlistResponse.ok || !itemsResponse.ok) {
+    if (
+      !wishlistResponse.ok ||
+      !deletedWishlistResponse.ok ||
+      !wishlistItemsResponse.ok ||
+      !activeItemsResponse.ok
+    ) {
       throw new Error('wishlist_bootstrap_failed')
     }
     const wishlistPayload = (await wishlistResponse.json()) as {
       items?: WishlistEntryPayload[]
     }
-    const itemsPayload = (await itemsResponse.json()) as {
+    const deletedWishlistPayload = (await deletedWishlistResponse.json()) as {
+      items?: WishlistEntryPayload[]
+    }
+    const wishlistItemsPayload = (await wishlistItemsResponse.json()) as {
       items?: WishlistItemPayload[]
     }
-    const wishlistByItemID = new Map<string, WishlistEntryPayload>()
-    ;(wishlistPayload.items ?? []).forEach((entry) => {
-      const itemID = entry.item_id?.trim()
-      if (!itemID) {
-        return
+    const activeItemsPayload = (await activeItemsResponse.json()) as {
+      items?: WishlistItemPayload[]
+    }
+    const itemByID = new Map<string, WishlistItemPayload>()
+    ;[
+      ...(wishlistItemsPayload.items ?? []),
+      ...(activeItemsPayload.items ?? []),
+    ].forEach((item) => {
+      const itemID = item.id?.trim()
+      if (itemID) {
+        itemByID.set(itemID, item)
       }
-      wishlistByItemID.set(itemID, entry)
     })
+    const wishlistEntries = [
+      ...(wishlistPayload.items ?? []),
+      ...(deletedWishlistPayload.items ?? []),
+    ]
     return Promise.all(
-      (itemsPayload.items ?? []).map(async (item, index) => {
-        const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
-        const wishlistEntry = wishlistByItemID.get(itemID)
+      wishlistEntries.map(async (wishlistEntry, index) => {
+        const itemID =
+          wishlistEntry.item_id?.trim() || `wishlist-item-${index + 1}`
+        const item: WishlistItemPayload = itemByID.get(itemID) ?? {}
         const pricingSummary = await loadWishlistPricingSummary(itemID)
+        const isDeleted = Boolean(wishlistEntry.deleted)
         return {
           id: itemID,
           itemID: itemID,
-          wishlistEntryID: wishlistEntry?.id?.trim(),
+          wishlistEntryID: wishlistEntry.id?.trim(),
           title:
             item.title?.trim() ||
             item.part_number?.trim() ||
@@ -739,7 +766,11 @@ export function Tasks({
           itemType: item.item_type?.trim(),
           packagingGradeType: item.packaging_grade_type?.trim(),
           condition: item.condition?.trim(),
-          status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
+          status: isDeleted
+            ? 'deleted'
+            : wishlistEntry.below_target_now
+              ? 'discovered'
+              : 'wishlist',
           label: item.category?.trim() || 'collection',
           priority:
             wishlistEntry?.priority?.trim() ||
@@ -780,6 +811,7 @@ export function Tasks({
             typeof wishlistEntry?.needed_quantity === 'number'
               ? wishlistEntry.needed_quantity
               : 1,
+          deleted: isDeleted,
         } satisfies Task
       })
     )
@@ -1220,15 +1252,18 @@ export function Tasks({
 
       setIsWishlistMutating(true)
       try {
+        const permanentParam = task.deleted ? '&permanent=true' : ''
         const response = await fetch(
-          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}`,
+          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}${permanentParam}`,
           { method: 'DELETE' }
         )
         if (!response.ok) {
           throw new Error('wishlist_delete_failed')
         }
         await refreshWishlistTable()
-        const message = `${task.title} removed from wishlist.`
+        const message = task.deleted
+          ? `${task.title} permanently deleted from wishlist.`
+          : `${task.title} hidden from active wishlist.`
         toast.success(
           message,
           wishlistToastHistory(
@@ -1247,6 +1282,57 @@ export function Tasks({
           )
         )
         throw new Error('wishlist_delete_failed')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable]
+  )
+
+  const handleWishlistRestore = useCallback(
+    async (task: Task) => {
+      const wishlistEntryID = task.wishlistEntryID?.trim()
+      if (!wishlistEntryID) {
+        toast.error(
+          'Wishlist entry is missing restore metadata.',
+          wishlistToastHistory(
+            'wishlist-restore-missing-metadata',
+            'Wishlist entry is missing restore metadata.',
+            'Wishlist restore validation feedback was preserved in Inbox history.'
+          )
+        )
+        return
+      }
+
+      setIsWishlistMutating(true)
+      try {
+        const response = await fetch(
+          `/api/wishlist/${encodeURIComponent(wishlistEntryID)}/restore`,
+          { method: 'POST' }
+        )
+        if (!response.ok) {
+          throw new Error('wishlist_restore_failed')
+        }
+        await refreshWishlistTable()
+        const message = `${task.title} restored to active wishlist.`
+        toast.success(
+          message,
+          wishlistToastHistory(
+            'wishlist-restore-success',
+            message,
+            'Wishlist restore feedback was preserved in Inbox history.'
+          )
+        )
+      } catch {
+        toast.error(
+          'Wishlist restore failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-restore-failed',
+            'Wishlist restore failed. Try again.',
+            'Wishlist restore failure feedback was preserved in Inbox history.'
+          )
+        )
+        throw new Error('wishlist_restore_failed')
       } finally {
         setIsWishlistMutating(false)
       }
@@ -2252,6 +2338,13 @@ export function Tasks({
               setCurrentDialogRow(task)
               setDialogOpen('delete')
             }}
+            onRestoreRow={
+              isWishlistRoute
+                ? (task) => {
+                    void handleWishlistRestore(task)
+                  }
+                : undefined
+            }
             onWishlistBulkStatusChange={
               isWishlistRoute ? handleWishlistBulkStatusChange : undefined
             }

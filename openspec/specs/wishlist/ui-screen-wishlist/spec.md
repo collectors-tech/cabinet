@@ -212,6 +212,24 @@ selected wishlist entry.
 - **AND** the highlighted wishlist row MUST move to the entry currently shown in the side panel
 - **AND** existing close and save behavior MUST remain available
 
+### Requirement UI-SCREEN-WISHLIST-023: Wishlist deletion SHALL soft-delete active rows before permanent removal
+
+Wishlist default deletion SHALL hide active wishlist rows without immediately
+hard-deleting the data, expose a Deleted filter/view for review and restore,
+and require an explicit permanent-delete confirmation from the Deleted view.
+
+#### Scenario: Soft delete, review, restore, and permanently delete wishlist rows
+
+- **GIVEN** wishlist rows view is visible with an active wishlist entry
+- **WHEN** user deletes the active row from the normal Wishlist view
+- **THEN** Cabinet MUST soft-delete the wishlist entry and hide it from the default active list
+- **AND** the deleted row MUST remain available from a `Deleted` filter or view
+- **AND** the Deleted view MUST expose a restore/undo action for the soft-deleted row
+- **AND** deleting the same row from the Deleted view MUST open a permanent-delete confirmation modal
+- **AND** the modal MUST explain that the wishlist row and linked wishlist metadata/history will be removed
+- **AND** the modal MUST explain that inventory records already created from the wishlist item will not be deleted
+- **AND** Cabinet MUST NOT permanently delete the row until the user confirms the modal
+
 ## Use-Case IDs and E2E Mapping
 
 | UC ID     | Flow                             | Expected Result                                                                                                        | E2E Mapping                                                                                                                                            |

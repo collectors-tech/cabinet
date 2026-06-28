@@ -318,6 +318,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			purchase_condition TEXT NOT NULL DEFAULT '',
 			quantity INTEGER NOT NULL DEFAULT 0,
 			needed_quantity INTEGER NOT NULL DEFAULT 1,
+			deleted INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
@@ -725,6 +726,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "needed_quantity", "INTEGER NOT NULL DEFAULT 1"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.needed_quantity: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "deleted", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.deleted: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
 		conn.Close()

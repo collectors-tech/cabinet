@@ -73,4 +73,57 @@ func TestWishlistCRUDAndBelowTarget(t *testing.T) {
 	if len(empty) != 0 {
 		t.Fatalf("expected empty wishlist, got %d", len(empty))
 	}
+	deleted, err := svc.ListByProfileDeleted(context.Background(), "", true)
+	if err != nil {
+		t.Fatalf("ListByProfileDeleted() after delete error = %v", err)
+	}
+	if len(deleted) != 1 || deleted[0].ID != created.ID || !deleted[0].Deleted {
+		t.Fatalf("expected soft-deleted wishlist row, got %+v", deleted)
+	}
+	var itemStatus string
+	if err := conn.QueryRow(`SELECT status FROM canonical_items WHERE id = 'i1'`).Scan(&itemStatus); err != nil {
+		t.Fatalf("load item status after soft delete: %v", err)
+	}
+	if itemStatus != "active" {
+		t.Fatalf("expected soft delete to restore item status active, got %q", itemStatus)
+	}
+	if err := svc.RestoreForProfile(context.Background(), "", created.ID); err != nil {
+		t.Fatalf("RestoreForProfile() error = %v", err)
+	}
+	restored, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() after restore error = %v", err)
+	}
+	if len(restored) != 1 || restored[0].ID != created.ID || restored[0].Deleted {
+		t.Fatalf("expected restored wishlist row, got %+v", restored)
+	}
+	if err := conn.QueryRow(`SELECT status FROM canonical_items WHERE id = 'i1'`).Scan(&itemStatus); err != nil {
+		t.Fatalf("load item status after restore: %v", err)
+	}
+	if itemStatus != "wishlist" {
+		t.Fatalf("expected restore to set item status wishlist, got %q", itemStatus)
+	}
+	if _, err := conn.Exec(`INSERT INTO instances(id, item_id, condition, status, quantity, notes) VALUES ('inst1','i1','loose','loose',1,'keep inventory')`); err != nil {
+		t.Fatalf("seed inventory instance: %v", err)
+	}
+	if err := svc.Delete(context.Background(), created.ID); err != nil {
+		t.Fatalf("Delete() before permanent delete error = %v", err)
+	}
+	if err := svc.PermanentDeleteForProfile(context.Background(), "", created.ID); err != nil {
+		t.Fatalf("PermanentDeleteForProfile() error = %v", err)
+	}
+	deletedAfterPermanent, err := svc.ListByProfileDeleted(context.Background(), "", true)
+	if err != nil {
+		t.Fatalf("ListByProfileDeleted() after permanent delete error = %v", err)
+	}
+	if len(deletedAfterPermanent) != 0 {
+		t.Fatalf("expected permanent delete to remove deleted row, got %+v", deletedAfterPermanent)
+	}
+	var instanceCount int
+	if err := conn.QueryRow(`SELECT COUNT(1) FROM instances WHERE item_id = 'i1'`).Scan(&instanceCount); err != nil {
+		t.Fatalf("count inventory instance after permanent delete: %v", err)
+	}
+	if instanceCount != 1 {
+		t.Fatalf("expected permanent wishlist delete to preserve inventory instances, got %d", instanceCount)
+	}
 }

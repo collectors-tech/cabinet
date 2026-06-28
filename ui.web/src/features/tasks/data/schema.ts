@@ -39,6 +39,7 @@ export const taskSchema = z.object({
   purchaseCondition: z.string().optional(),
   quantity: z.number().optional(),
   neededQuantity: z.number().optional(),
+  deleted: z.boolean().optional(),
 })
 
 export type Task = z.infer<typeof taskSchema>

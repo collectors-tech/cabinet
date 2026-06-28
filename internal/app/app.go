@@ -3594,7 +3594,8 @@ func New(cfg config.Config) (*App, error) {
 		profileID := strings.TrimSpace(active.ID)
 		switch r.Method {
 		case http.MethodGet:
-			items, err := wishlistSvc.ListByProfile(r.Context(), profileID)
+			showDeleted := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("deleted")), "true")
+			items, err := wishlistSvc.ListByProfileDeleted(r.Context(), profileID, showDeleted)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_list_wishlist"}`, http.StatusInternalServerError)
 				return
@@ -3687,7 +3688,13 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"missing_id"}`, http.StatusBadRequest)
 				return
 			}
-			if err := wishlistSvc.DeleteForProfile(r.Context(), profileID, id); err != nil {
+			var err error
+			if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("permanent")), "true") {
+				err = wishlistSvc.PermanentDeleteForProfile(r.Context(), profileID, id)
+			} else {
+				err = wishlistSvc.DeleteForProfile(r.Context(), profileID, id)
+			}
+			if err != nil {
 				http.Error(w, `{"error":"failed_to_delete_wishlist"}`, http.StatusBadRequest)
 				return
 			}
@@ -3695,6 +3702,27 @@ func New(cfg config.Config) (*App, error) {
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
+	})
+	mux.HandleFunc("/api/wishlist/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, _ := profiles.GetActiveProfile(r.Context())
+		profileID := strings.TrimSpace(active.ID)
+		path := strings.TrimPrefix(r.URL.Path, "/api/wishlist/")
+		if !strings.HasSuffix(path, "/restore") || r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		id := strings.TrimSpace(strings.TrimSuffix(path, "/restore"))
+		id = strings.Trim(id, "/")
+		if id == "" {
+			http.Error(w, `{"error":"missing_id"}`, http.StatusBadRequest)
+			return
+		}
+		if err := wishlistSvc.RestoreForProfile(r.Context(), profileID, id); err != nil {
+			http.Error(w, `{"error":"failed_to_restore_wishlist"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 	mux.HandleFunc("/api/wishlist/hits", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
