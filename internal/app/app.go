@@ -5308,7 +5308,8 @@ func New(cfg config.Config) (*App, error) {
 		}
 		preview, err := chatSvc.PreviewAction(r.Context(), req)
 		if err != nil {
-			http.Error(w, `{"error":"failed_to_preview_chat_action"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed_to_preview_chat_action", "detail": err.Error()})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(preview)

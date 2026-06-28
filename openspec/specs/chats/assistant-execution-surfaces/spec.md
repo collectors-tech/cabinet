@@ -45,6 +45,14 @@ Cabinet MUST expose a deterministic assistant capability registry for the active
 - **AND** mutating capabilities MUST be marked confirm-required or preview-only rather than directly executable from chat
 - **AND** unavailable provider-backed capabilities MUST be returned with setup-needed state instead of being omitted or hallucinated
 
+#### Scenario: Preview and apply actions use capability metadata
+- **GIVEN** the capability registry exposes executable Inventory, Wishlist, Collections, and app-control capabilities
+- **WHEN** Chat requests an action preview with a supported `capability_id`
+- **THEN** Cabinet MUST resolve the capability to the canonical preview/apply handler declared by registry metadata
+- **AND** legacy action aliases MUST normalize to the same canonical capability/action mapping instead of bypassing capability policy
+- **AND** unsupported, read-only, preview-only, or unavailable capability ids MUST fail with deterministic setup or permission guidance
+- **AND** confirmed apply MUST execute only the canonical handler for the previewed capability and preserve profile/thread confirmation boundaries
+
 ### Requirement ASSISTANT-EXECUTION-006: OpenAI-backed assistant capabilities SHALL expose truthful setup and readiness states
 Cabinet MUST treat OpenAI/API-key/Browser Auth readiness as provider evidence that gates capabilities, not as copy or navigation state.
 
