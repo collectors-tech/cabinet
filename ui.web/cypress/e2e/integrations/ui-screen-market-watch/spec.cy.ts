@@ -1604,6 +1604,155 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'https://bonzaslotcars.example/products/afx-mustang')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-015 persists output-detail Purchase handoff provenance', () => {
+    let purchaseOrders: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-purchase-1',
+            name: 'Bonza Purchase Provenance',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', {
+      statusCode: 200,
+      body: {
+        query_set_id: 'qs-mw-purchase-1',
+        candidates: [
+          {
+            id: 'cand-mw-purchase-1',
+            query_set_id: 'qs-mw-purchase-1',
+            listing_id: 'bonza-afx-corvette',
+            title: 'AFX Corvette Purchased',
+            source: 'bonzaslotcars',
+            price: 81.25,
+            shipping: 7.75,
+            currency: 'AUD',
+            url: 'https://bonzaslotcars.example/products/afx-corvette',
+            stock_status: 'in_stock',
+            handoff_state: 'purchase_ready',
+          },
+        ],
+        run_summary: {
+          page_count: 1,
+          observed_page_size: 1,
+          candidates_total: 1,
+        },
+      },
+    }).as('runBonzaQuery')
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body.candidate_id).to.equal('cand-mw-purchase-1')
+      expect(req.body.type).to.equal('mark_purchased')
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-mw-purchase-1',
+        quantity: 1,
+      })
+      purchaseOrders = [
+        {
+          order_id: 'bonza-afx-corvette',
+          source: 'market_watch',
+          seller: 'bonzaslotcars',
+          tracking: 'Pending',
+          status: 'active',
+          total_amount: 81.25,
+          currency: 'AUD',
+          line_item_count: 1,
+          received_count: 0,
+          unreceived_count: 1,
+          created_at: '2026-06-29T08:20:00Z',
+          line_items: [
+            {
+              item_id: 'item-mw-purchase-1',
+              title: 'AFX Corvette Purchased',
+              quantity: 1,
+              amount: 81.25,
+              status: 'expected',
+              lifecycle_entry_id: 'life-mw-purchase-1',
+              expected_arrival_id: 'arrival-mw-purchase-1',
+            },
+          ],
+        },
+      ]
+      req.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+          action: 'mark_purchased',
+          candidate_id: 'cand-mw-purchase-1',
+        },
+      })
+    }).as('purchaseHandoff')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          page: 1,
+          page_size: 10,
+          total: purchaseOrders.length,
+          total_pages: purchaseOrders.length > 0 ? 1 : 0,
+          orders: purchaseOrders,
+        },
+      })
+    }).as('purchaseOrders')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-purchase-1"]').click()
+    cy.wait('@runBonzaQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-purchase-1"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'AFX Corvette Purchased').should('be.visible')
+      cy.contains('td', '81.25 AUD').should('be.visible')
+      cy.contains('td', '7.75 AUD').should('be.visible')
+      cy.contains('td', 'purchase_ready').should('be.visible')
+    })
+    cy.get('[data-testid="scanner-handoff-purchase-qs-mw-purchase-1"]').click()
+    cy.wait('@purchaseHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'purchase_handoff_ok_cand-mw-purchase-1'
+    )
+
+    cy.visit('/purchases/')
+    cy.wait('@purchaseOrders')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('contain', 'bonza-afx-corvette')
+      .and('contain', 'market_watch / bonzaslotcars')
+      .and('contain', 'AUD 81.25')
+      .and('contain', '1 line item')
+    cy.get('[data-testid="purchases-line-item-row"]')
+      .should('contain', 'AFX Corvette Purchased')
+      .and('contain', 'Lifecycle life-mw-purchase-1')
+      .and('contain', 'Arrival arrival-mw-purchase-1')
+    cy.get('[data-testid="purchases-order-select"]').click()
+    cy.get('[data-testid="purchases-order-detail"]')
+      .should('contain', 'bonza-afx-corvette')
+      .and('contain', 'AFX Corvette Purchased')
+      .and('contain', 'AUD 81.25')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,

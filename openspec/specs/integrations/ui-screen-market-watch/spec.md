@@ -171,6 +171,18 @@ Market Watch output-detail Inventory handoff SHALL persist the selected result t
 - **AND WHEN** user opens or reloads `/inventory`
 - **THEN** the Inventory route MUST render the handed-off result and its Market Watch/provider/query/source provenance
 
+### Requirement UI-SCREEN-MARKET-WATCH-015: Market Watch SHALL persist output-detail Purchase handoff provenance
+Market Watch output-detail purchase handoff SHALL persist the selected result as a purchase lifecycle entry with Market Watch, provider, query, source URL, price, currency, and scope provenance.
+
+#### Scenario: Persist Purchase handoff from output details
+- **GIVEN** a Market Watch output detail has at least one result row
+- **WHEN** user activates `Mark First Result Purchased`
+- **THEN** UI MUST post the selected candidate through the durable discovery action with Market Watch query provenance
+- **AND** backend MUST create or update a profile-scoped purchase lifecycle entry and expected-arrival record for the matched or newly created item
+- **AND** the selected result status MUST persist as `purchase_candidate` so Market Watch and Discoveries stop treating it as an unresolved new result unless filtered
+- **AND WHEN** user opens or reloads `/purchases`
+- **THEN** the Purchases route MUST render the handed-off purchase with provider/listing/query provenance available to the row or detail view
+
 ### Requirement UI-SCREEN-MARKET-WATCH-011: Market Watch SHALL bootstrap saved-query creation from route handoff state
 Market Watch SHALL translate route handoff context into editable saved-query fields before persistence so handoffs from barcode/search surfaces remain deterministic.
 
@@ -245,3 +257,4 @@ Market Watch SHALL focus its primary dashboard on saved provider searches while 
 | UC-MW-15 | Discoveries handoff from output detail | Output detail Discoveries handoff queries Discoveries with the saved watch keyword and reports returned item count | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword` |
 | UC-MW-16 | Persist saved-watch run/result records | Manual and scheduled runs create durable run records; scheduled partial failures preserve unrelated watch state; results dedupe by profile/watch/provider/listing or source URL while preserving decision state; saved-query reloads expose durable latest-run and next scheduled run state | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsDurableRunRecordAndDedupesResults`; `TestRunNowPreservesDownstreamDecisionStatuses`; `TestRunNowDedupeIsScopedByProfileAndWatch`; `TestQuerySetRunSnapshotUsesDurableRunRecordsAndComputesNextRun`; `TestRunScheduledRecordsPartialFailureWithoutBlockingOtherWatches` |
 | UC-MW-17 | Reveal manual listing capture | Quick Scan/manual entry/Recent Unlinked Scans stay out of the primary Market Watch dashboard until the secondary manual-listing action is opened | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-014 keeps scanner capture behind a secondary action` |
+| UC-MW-18 | Purchase handoff from output detail | Output detail Purchase handoff posts selected candidate, persists purchase lifecycle and expected-arrival records, and keeps Market Watch/Discoveries status synchronized | implemented: `internal/discovery/service_test.go` `TestApplyActionMarkPurchasedCreatesCommerceHandoff`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-015 persists output-detail Purchase handoff provenance`; `ui.web/src/features/scanner/index.tsx` `scanner-handoff-purchase-*` |

@@ -62,12 +62,13 @@ type Item struct {
 type ActionType string
 
 const (
-	ActionIgnore      ActionType = "ignore"
-	ActionAddWishlist ActionType = "add_to_wishlist"
-	ActionTrackPrice  ActionType = "track_price"
-	ActionCreateItem  ActionType = "create_item"
-	ActionReview      ActionType = "review"
-	ActionArchive     ActionType = "archive"
+	ActionIgnore        ActionType = "ignore"
+	ActionAddWishlist   ActionType = "add_to_wishlist"
+	ActionTrackPrice    ActionType = "track_price"
+	ActionCreateItem    ActionType = "create_item"
+	ActionMarkPurchased ActionType = "mark_purchased"
+	ActionReview        ActionType = "review"
+	ActionArchive       ActionType = "archive"
 )
 
 type Action struct {
@@ -343,6 +344,13 @@ func (s *Service) ApplyActionWithResult(ctx context.Context, a Action) (ActionRe
 		if err := s.db.QueryRowContext(ctx, `SELECT item_id FROM scanner_matches WHERE candidate_id = ?`, a.CandidateID).Scan(&itemID); err == nil && strings.TrimSpace(itemID) != "" {
 			_, _ = s.db.ExecContext(ctx, `INSERT INTO tracked_items(item_id, created_at) VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(item_id) DO NOTHING`, itemID)
 		}
+	case ActionMarkPurchased:
+		if err := s.updateCandidateTriage(ctx, a.CandidateID, "purchase_candidate", reviewerNotes); err != nil {
+			return ActionResult{}, err
+		}
+		if err := s.applyPurchaseHandoff(ctx, a.CandidateID, a.Payload); err != nil {
+			return ActionResult{}, err
+		}
 	case ActionAddWishlist:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "wishlisted", reviewerNotes); err != nil {
 			return ActionResult{}, err
@@ -424,6 +432,161 @@ func (s *Service) ApplyActionWithResult(ctx context.Context, a Action) (ActionRe
 		}
 	}
 	return result, nil
+}
+
+type candidateHandoffContext struct {
+	CandidateID       string
+	ItemID            string
+	ProfileID         string
+	Title             string
+	PartNumber        string
+	ListingID         string
+	ListingURL        string
+	Seller            string
+	StockSignal       string
+	ObservedPrice     float64
+	ObservedCurrency  string
+	SourceProvider    string
+	QuerySetID        string
+	QueryName         string
+	ProviderScopeJSON string
+}
+
+func (s *Service) loadCandidateHandoffContext(ctx context.Context, candidateID string) (candidateHandoffContext, error) {
+	var out candidateHandoffContext
+	out.CandidateID = strings.TrimSpace(candidateID)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(m.item_id, ''), c.profile_id, c.title, COALESCE(m.extracted_part_number, ''),
+			c.listing_id, COALESCE(NULLIF(c.source_result_url, ''), c.url), c.seller, c.stock_state,
+			c.price, c.observed_currency, c.source, c.query_set_id, COALESCE(q.name, ''), COALESCE(q.provider_scope_json, '[]')
+		FROM scanner_candidates c
+		LEFT JOIN scanner_matches m ON m.candidate_id = c.id
+		LEFT JOIN scanner_query_sets q ON q.id = c.query_set_id
+		WHERE c.id = ?
+	`, out.CandidateID).Scan(
+		&out.ItemID, &out.ProfileID, &out.Title, &out.PartNumber,
+		&out.ListingID, &out.ListingURL, &out.Seller, &out.StockSignal,
+		&out.ObservedPrice, &out.ObservedCurrency, &out.SourceProvider, &out.QuerySetID,
+		&out.QueryName, &out.ProviderScopeJSON,
+	)
+	if err != nil {
+		return candidateHandoffContext{}, fmt.Errorf("load candidate handoff context: %w", err)
+	}
+	out.ProfileID = strings.TrimSpace(out.ProfileID)
+	out.ItemID = strings.TrimSpace(out.ItemID)
+	if out.ProfileID == "" && out.ItemID != "" {
+		_ = s.db.QueryRowContext(ctx, `SELECT profile_id FROM canonical_items WHERE id = ?`, out.ItemID).Scan(&out.ProfileID)
+		out.ProfileID = strings.TrimSpace(out.ProfileID)
+	}
+	return out, nil
+}
+
+func (s *Service) ensureCandidateItem(ctx context.Context, data candidateHandoffContext) (string, error) {
+	if strings.TrimSpace(data.ItemID) != "" {
+		return strings.TrimSpace(data.ItemID), nil
+	}
+	partNumber := strings.TrimSpace(data.PartNumber)
+	if partNumber == "" {
+		partNumber = strings.TrimSpace(data.ListingID)
+	}
+	if partNumber == "" {
+		partNumber = "AUTO-" + strings.ToUpper(uuid.NewString()[:8])
+	}
+	metadata := buildDiscoveryMetadataNote(data.ListingURL, data.Seller, data.StockSignal, data.ObservedPrice, data.ObservedCurrency, data.SourceProvider, data.QuerySetID, data.QueryName, decodeStringArray(data.ProviderScopeJSON))
+	sourceURLs, _ := json.Marshal([]string{strings.TrimSpace(data.ListingURL)})
+	itemID := uuid.NewString()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, notes, source_urls_json, created_by, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, 'discovery.service', 'discovery.service')
+	`, itemID, strings.TrimSpace(data.ProfileID), "Unknown", "Unknown", partNumber, strings.TrimSpace(data.Title), metadata, string(sourceURLs))
+	if err != nil {
+		return "", fmt.Errorf("create purchase handoff item: %w", err)
+	}
+	return itemID, nil
+}
+
+func (s *Service) applyPurchaseHandoff(ctx context.Context, candidateID string, payload map[string]any) error {
+	data, err := s.loadCandidateHandoffContext(ctx, candidateID)
+	if err != nil {
+		return err
+	}
+	itemID, err := s.ensureCandidateItem(ctx, data)
+	if err != nil {
+		return err
+	}
+	quantity := payloadInt(payload, "quantity")
+	if quantity <= 0 {
+		quantity = 1
+	}
+	currency := strings.ToUpper(strings.TrimSpace(data.ObservedCurrency))
+	if currency == "" {
+		currency = "AUD"
+	}
+	externalRef := strings.TrimSpace(data.ListingID)
+	if externalRef == "" {
+		externalRef = strings.TrimSpace(candidateID)
+	}
+	metadata := buildDiscoveryMetadataNote(data.ListingURL, data.Seller, data.StockSignal, data.ObservedPrice, data.ObservedCurrency, data.SourceProvider, data.QuerySetID, data.QueryName, decodeStringArray(data.ProviderScopeJSON))
+	notes := mergeDiscoveryMetadataNotes(payloadString(payload, "notes"), metadata)
+
+	var lifecycleID string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM commerce_lifecycle_entries
+		WHERE profile_id = ? AND item_id = ? AND state = 'purchase' AND source = 'market_watch' AND external_ref = ?
+		LIMIT 1
+	`, strings.TrimSpace(data.ProfileID), itemID, externalRef).Scan(&lifecycleID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("load purchase handoff lifecycle: %w", err)
+	}
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE commerce_lifecycle_entries
+			SET quantity = ?, amount = ?, currency = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, quantity, data.ObservedPrice, currency, notes, lifecycleID)
+		if err != nil {
+			return fmt.Errorf("update purchase handoff lifecycle: %w", err)
+		}
+	} else {
+		lifecycleID = uuid.NewString()
+		_, err = s.db.ExecContext(ctx, `
+			INSERT INTO commerce_lifecycle_entries(id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes)
+			VALUES (?, ?, ?, 'purchase', 'market_watch', ?, ?, ?, ?, ?)
+		`, lifecycleID, strings.TrimSpace(data.ProfileID), itemID, externalRef, quantity, data.ObservedPrice, currency, notes)
+		if err != nil {
+			return fmt.Errorf("create purchase handoff lifecycle: %w", err)
+		}
+	}
+	var arrivalID string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM expected_arrivals
+		WHERE profile_id = ? AND item_id = ? AND lifecycle_entry_id = ?
+		LIMIT 1
+	`, strings.TrimSpace(data.ProfileID), itemID, lifecycleID).Scan(&arrivalID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("load purchase handoff expected arrival: %w", err)
+	}
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE expected_arrivals
+			SET source = 'market_watch', external_ref = ?, quantity = ?, amount = ?, currency = ?, status = 'expected', notes = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, externalRef, quantity, data.ObservedPrice, currency, notes, arrivalID)
+		if err != nil {
+			return fmt.Errorf("update purchase handoff expected arrival: %w", err)
+		}
+	} else {
+		_, err = s.db.ExecContext(ctx, `
+			INSERT INTO expected_arrivals(id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, notes)
+			VALUES (?, ?, ?, ?, 'market_watch', ?, ?, ?, ?, 'expected', ?)
+		`, uuid.NewString(), strings.TrimSpace(data.ProfileID), itemID, lifecycleID, externalRef, quantity, data.ObservedPrice, currency, notes)
+		if err != nil {
+			return fmt.Errorf("create purchase handoff expected arrival: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) enrichDiscoveryActionPayload(ctx context.Context, candidateID string, payload map[string]any) map[string]any {
@@ -558,6 +721,25 @@ func payloadString(payload map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func payloadInt(payload map[string]any, key string) int {
+	if payload == nil {
+		return 0
+	}
+	switch value := payload[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case json.Number:
+		parsed, _ := value.Int64()
+		return int(parsed)
+	default:
+		return 0
+	}
 }
 
 func payloadConfirmsOwnedOrPurchased(payload map[string]any) bool {

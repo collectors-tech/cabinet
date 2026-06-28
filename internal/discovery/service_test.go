@@ -570,6 +570,108 @@ func TestApplyActionPersistsDestinationStatusesAndWishlistDoesNotClaimOwnership(
 	}
 }
 
+func TestApplyActionMarkPurchasedCreatesCommerceHandoff(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status) VALUES ('i-purchase','profile-a','AFX','Cars','BUY-1551','Purchase Target','active')`); err != nil {
+		t.Fatalf("seed purchase target: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('q-purchase','profile-a','AFX purchase watch','["afx"]','[]','["ebay","bonzaslotcars"]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO scanner_candidates(
+			id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller,
+			first_seen, last_seen, status, source, observed_currency, stock_state, stock_count
+		) VALUES (
+			'c-purchase','profile-a','q-purchase','BUY-LISTING-1551','AFX Buy Result',64.95,9.50,'https://market.test/buy-1551','','seller-1551',
+			'2026-06-27T00:00:00Z','2026-06-28T00:00:00Z','new','ebay','AUD','in_stock',1
+		)
+	`); err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES ('c-purchase','i-purchase','not_in_collection',0.91,0,'BUY-1551',CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed match: %v", err)
+	}
+
+	svc := NewService(conn)
+	if err := svc.ApplyAction(context.Background(), Action{
+		CandidateID: "c-purchase",
+		Type:        ActionMarkPurchased,
+		Payload: map[string]any{
+			"decision": "purchased from Market Watch",
+			"quantity": 2,
+		},
+	}); err != nil {
+		t.Fatalf("ApplyAction(mark_purchased) error = %v", err)
+	}
+	if err := svc.ApplyAction(context.Background(), Action{
+		CandidateID: "c-purchase",
+		Type:        ActionMarkPurchased,
+		Payload: map[string]any{
+			"decision": "purchased from Market Watch",
+			"quantity": 2,
+		},
+	}); err != nil {
+		t.Fatalf("ApplyAction(mark_purchased repeat) error = %v", err)
+	}
+
+	var candidateStatus string
+	if err := conn.QueryRow(`SELECT status FROM scanner_candidates WHERE id = 'c-purchase'`).Scan(&candidateStatus); err != nil {
+		t.Fatalf("load candidate status: %v", err)
+	}
+	if candidateStatus != "purchase_candidate" {
+		t.Fatalf("expected candidate purchase status, got %q", candidateStatus)
+	}
+
+	var lifecycleID, source, externalRef, notes string
+	var quantity int
+	var amount float64
+	if err := conn.QueryRow(`
+		SELECT id, source, external_ref, quantity, amount, notes
+		FROM commerce_lifecycle_entries
+		WHERE profile_id = 'profile-a' AND item_id = 'i-purchase' AND state = 'purchase'
+	`).Scan(&lifecycleID, &source, &externalRef, &quantity, &amount, &notes); err != nil {
+		t.Fatalf("load purchase lifecycle entry: %v", err)
+	}
+	if source != "market_watch" || externalRef != "BUY-LISTING-1551" || quantity != 2 || amount != 64.95 {
+		t.Fatalf("unexpected purchase lifecycle entry source=%q externalRef=%q quantity=%d amount=%v", source, externalRef, quantity, amount)
+	}
+	for _, want := range []string{`"listing_url":"https://market.test/buy-1551"`, `"source_provider":"ebay"`, `"query_set_id":"q-purchase"`, `"query_name":"AFX purchase watch"`} {
+		if !strings.Contains(notes, want) {
+			t.Fatalf("expected purchase notes to contain %s, got %q", want, notes)
+		}
+	}
+
+	var lifecycleCount, arrivalCount int
+	if err := conn.QueryRow(`
+		SELECT COUNT(1)
+		FROM commerce_lifecycle_entries
+		WHERE profile_id = 'profile-a' AND item_id = 'i-purchase' AND state = 'purchase'
+	`).Scan(&lifecycleCount); err != nil {
+		t.Fatalf("load purchase lifecycle count: %v", err)
+	}
+	if lifecycleCount != 1 {
+		t.Fatalf("expected repeated purchase handoff to update one lifecycle entry, got %d", lifecycleCount)
+	}
+	if err := conn.QueryRow(`
+		SELECT COUNT(1)
+		FROM expected_arrivals
+		WHERE profile_id = 'profile-a' AND item_id = 'i-purchase' AND lifecycle_entry_id = ? AND status = 'expected'
+	`, lifecycleID).Scan(&arrivalCount); err != nil {
+		t.Fatalf("load expected arrival count: %v", err)
+	}
+	if arrivalCount != 1 {
+		t.Fatalf("expected one expected arrival for purchase handoff, got %d", arrivalCount)
+	}
+}
+
 func TestReviewActionRestoresIgnoredCandidateForDefaultQueue(t *testing.T) {
 	t.Parallel()
 
