@@ -19,6 +19,11 @@ type DataTableRowActionsProps = {
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useUsers()
+  const protectedOwner =
+    row.original.username.toLowerCase().startsWith('owner_') &&
+    row.original.email.toLowerCase().endsWith('@cabinet.local') &&
+    row.original.role === 'admin'
+
   return (
     <>
       <DropdownMenu modal={false}>
@@ -46,20 +51,24 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               <UserPen size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={(event) => {
-              event.stopPropagation()
-              setCurrentRow(row.original)
-              setOpen('delete')
-            }}
-            className='text-red-500!'
-          >
-            Delete
-            <DropdownMenuShortcut>
-              <Trash2 size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
+          {!protectedOwner ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setCurrentRow(row.original)
+                  setOpen('delete')
+                }}
+                className='text-red-500!'
+              >
+                Delete
+                <DropdownMenuShortcut>
+                  <Trash2 size={16} />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </>

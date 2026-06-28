@@ -104,3 +104,73 @@ func TestUsersAPIListWithoutActiveProfileFallsBackToDefaultScope(t *testing.T) {
 		t.Fatal("expected default scoped owner user when active profile is missing")
 	}
 }
+
+func TestUsersAPIProtectsLastLocalOwnerAdmin(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	list := doRequest(t, a, http.MethodGet, "/api/users", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list users status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Users []runtimeUser `json:"users"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode users payload: %v", err)
+	}
+	if len(payload.Users) != 1 {
+		t.Fatalf("expected default owner only, got %d users", len(payload.Users))
+	}
+	owner := payload.Users[0]
+
+	downgrade := doRequest(t, a, http.MethodPut, "/api/users/"+owner.ID, strings.NewReader(`{"role":"view"}`), map[string]string{"Content-Type": "application/json"})
+	if downgrade.Code != http.StatusBadRequest {
+		t.Fatalf("downgrade owner status=%d body=%s", downgrade.Code, downgrade.Body.String())
+	}
+	if !strings.Contains(downgrade.Body.String(), "protected_admin_required") {
+		t.Fatalf("expected protected_admin_required downgrade error, got %s", downgrade.Body.String())
+	}
+
+	deactivate := doRequest(t, a, http.MethodPut, "/api/users/"+owner.ID, strings.NewReader(`{"status":"inactive"}`), map[string]string{"Content-Type": "application/json"})
+	if deactivate.Code != http.StatusBadRequest {
+		t.Fatalf("deactivate owner status=%d body=%s", deactivate.Code, deactivate.Body.String())
+	}
+
+	remove := doRequest(t, a, http.MethodDelete, "/api/users/"+owner.ID, nil, nil)
+	if remove.Code != http.StatusBadRequest {
+		t.Fatalf("delete owner status=%d body=%s", remove.Code, remove.Body.String())
+	}
+	if !strings.Contains(remove.Body.String(), "protected_admin_required") {
+		t.Fatalf("expected protected_admin_required delete error, got %s", remove.Body.String())
+	}
+}
+
+func TestUsersAPIAllowsInvitedUserResend(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	first := doRequest(t, a, http.MethodPost, "/api/users/invite", strings.NewReader(`{"email":"resend_user@example.com","role":"view"}`), map[string]string{"Content-Type": "application/json"})
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first invite status=%d body=%s", first.Code, first.Body.String())
+	}
+	var invited runtimeUser
+	if err := json.NewDecoder(first.Body).Decode(&invited); err != nil {
+		t.Fatalf("decode invited user: %v", err)
+	}
+
+	resend := doRequest(t, a, http.MethodPost, "/api/users/invite", strings.NewReader(`{"email":"resend_user@example.com","role":"admin"}`), map[string]string{"Content-Type": "application/json"})
+	if resend.Code != http.StatusCreated {
+		t.Fatalf("resend invite status=%d body=%s", resend.Code, resend.Body.String())
+	}
+	var resent runtimeUser
+	if err := json.NewDecoder(resend.Body).Decode(&resent); err != nil {
+		t.Fatalf("decode resent user: %v", err)
+	}
+	if resent.ID != invited.ID {
+		t.Fatalf("resend should update existing invited user id=%s got %s", invited.ID, resent.ID)
+	}
+	if resent.Role != "admin" || resent.Status != "invited" {
+		t.Fatalf("expected resent invited admin user got role=%s status=%s", resent.Role, resent.Status)
+	}
+}

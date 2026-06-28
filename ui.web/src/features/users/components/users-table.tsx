@@ -15,13 +15,6 @@ import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   Table,
   TableBody,
   TableCell,
@@ -34,6 +27,7 @@ import { roles } from '../data/data'
 import { type User } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { usersColumns as columns } from './users-columns'
+import { UsersDetailsSheet } from './users-details-sheet'
 
 type DataTableProps = {
   data: User[]
@@ -271,29 +265,13 @@ export function UsersTable({
       </div>
       <DataTablePagination table={table} className='mt-auto' />
       <DataTableBulkActions table={table} onMutated={onMutated} />
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent data-testid='users-row-details-modal'>
-          <DialogHeader>
-            <DialogTitle>User Details</DialogTitle>
-            <DialogDescription>
-              Review selected user record context.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUser ? (
-            <div className='space-y-1 text-sm'>
-              <p>
-                <strong>Username:</strong> {selectedUser.username}
-              </p>
-              <p>
-                <strong>Email:</strong> {selectedUser.email}
-              </p>
-              <p>
-                <strong>Status:</strong> {selectedUser.status}
-              </p>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <UsersDetailsSheet
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        user={selectedUser}
+        users={data}
+        onMutated={onMutated}
+      />
     </div>
   )
 }
