@@ -325,6 +325,18 @@ Cabinet SHALL render `/media` as a compact table-first workspace where persisten
 - **THEN** Cabinet MUST keep using the `/api/media/assets?filter=unlinked` contract and update visible table or card results to unlinked media only.
 - **AND** Cards and Rows controls MUST stay adjacent to the table `View` control and share the same search, linkage filter, and pagination state.
 
+### Requirement UI-SCREEN-MEDIA-019: Media rows SHALL use the shared table detail-panel navigation pattern
+Cabinet SHALL make Media table rows follow the shared primary table detail-panel pattern so row activation opens a right-side details panel, keeps the active row highlighted, and reserves checkboxes plus row action buttons for their own commands.
+
+#### Scenario: Open and navigate Media details from rows
+- **GIVEN** the Media workspace renders profile-scoped assets in Rows mode
+- **WHEN** user clicks a non-interactive row surface or presses Enter on the focused row
+- **THEN** Cabinet MUST open a right-side details panel for that exact media asset with thumbnail/preview, filename, source, linkage state, analysis status, uploaded date, notes, and relevant actions.
+- **AND** the active row MUST stay highlighted while the details panel is open.
+- **WHEN** user activates Previous or Next in the panel
+- **THEN** Cabinet MUST move the details panel and active row highlight through the current filtered and sorted table order.
+- **AND** checkbox selection and row action buttons MUST NOT accidentally open or change the details panel.
+
 ### Requirement UI-SCREEN-MEDIA-014: Media workspace SHALL support page-wide image drop and add-media metadata dialog
 Cabinet SHALL let authenticated users add unlinked media assets from the Media workspace by dragging supported image files anywhere over the page or by opening an explicit add-media dialog from a `+` action.
 
