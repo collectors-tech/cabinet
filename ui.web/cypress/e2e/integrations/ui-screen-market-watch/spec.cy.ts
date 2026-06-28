@@ -155,7 +155,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-query-providers-qs-mw-barcode"]').should('contain', 'ebay')
   })
 
-  it('UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle', () => {
+  it('UI-SCREEN-MARKET-WATCH-001 + #1542 manages saved-watch create edit cadence pause and delete lifecycle', () => {
     let querySets: Array<{
       id: string
       name: string
@@ -179,6 +179,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.intercept('POST', '/api/scanner/query-sets', (req) => {
       expect(req.body.provider_scope).to.deep.equal(['bonzaslotcars'])
       expect(req.body.schedule_cron).to.equal('0 */6 * * *')
+      expect(req.body.enabled).to.equal(true)
       querySets = [
         {
           id: 'qs-mw-lifecycle',
@@ -195,7 +196,8 @@ describe('integrations/ui-screen-market-watch', () => {
       expect(req.body.name).to.equal('Bonza AFX Edited')
       expect(req.body.keywords).to.deep.equal(['AFX', 'Mega G+'])
       expect(req.body.provider_scope).to.deep.equal(['bonzaslotcars'])
-      expect(req.body.schedule_cron).to.equal('15 */4 * * *')
+      expect(req.body.schedule_cron).to.equal('0 9 * * *')
+      expect(req.body.enabled).to.equal(false)
       querySets = [
         {
           id: 'qs-mw-lifecycle',
@@ -219,6 +221,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-provider-single"]').select('bonzaslotcars')
     cy.get('[data-testid="scanner-new-query-name"]').type('Bonza AFX')
     cy.get('[data-testid="scanner-new-query-keywords"]').type('AFX')
+    cy.get('[data-testid="scanner-new-watch-cadence"]').select('Every 6 hours')
     cy.get('[data-testid="scanner-create-query"]').click()
     cy.wait('@createQuerySet')
     cy.get('[data-testid="scanner-query-providers-qs-mw-lifecycle"]').should(
@@ -233,7 +236,8 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-edit-qs-mw-lifecycle"]').click()
     cy.get('[data-testid="scanner-edit-name-qs-mw-lifecycle"]').clear().type('Bonza AFX Edited')
     cy.get('[data-testid="scanner-edit-keywords-qs-mw-lifecycle"]').clear().type('AFX, Mega G+')
-    cy.get('[data-testid="scanner-edit-schedule-qs-mw-lifecycle"]').clear().type('15 */4 * * *')
+    cy.get('[data-testid="scanner-edit-enabled-qs-mw-lifecycle"]').click()
+    cy.get('[data-testid="scanner-edit-cadence-qs-mw-lifecycle"]').select('Daily')
     cy.get('[data-testid="scanner-save-qs-mw-lifecycle"]').click()
     cy.wait('@updateQuerySet')
     cy.contains('Bonza AFX Edited').should('be.visible')
@@ -244,7 +248,7 @@ describe('integrations/ui-screen-market-watch', () => {
     )
     cy.get('[data-testid="scanner-query-schedule-qs-mw-lifecycle"]').should(
       'contain',
-      '15 */4 * * *'
+      'Paused - Daily'
     )
 
     cy.get('[data-testid="scanner-delete-qs-mw-lifecycle"]').click()
@@ -319,6 +323,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-provider-single"]').select('ebay')
     cy.get('[data-testid="scanner-new-query-name"]').type('eBay Slot Cars')
     cy.get('[data-testid="scanner-new-query-keywords"]').type('AFX, Mega G+')
+    cy.get('[data-testid="scanner-new-watch-cadence"]').select('Custom')
     cy.get('[data-testid="scanner-new-query-schedule"]').clear().type('0 */6 * * *')
     cy.get('[data-testid="scanner-create-query"]').click()
     cy.wait('@createEbayQuerySet')
@@ -338,6 +343,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-edit-keywords-qs-mw-ebay-lifecycle"]')
       .clear()
       .type('AFX, Mega G+, Tomy')
+    cy.get('[data-testid="scanner-edit-cadence-qs-mw-ebay-lifecycle"]').select('Custom')
     cy.get('[data-testid="scanner-edit-schedule-qs-mw-ebay-lifecycle"]')
       .clear()
       .type('30 */8 * * *')
