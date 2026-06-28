@@ -415,8 +415,8 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	if got := seen["inventory.item.create"]; got.mode != "confirm-required" || got.permission != "available" || got.unavailable {
 		t.Fatalf("inventory create must be available but confirm-required, got %+v", got)
 	}
-	if got := seen["collections.item.assign"]; got.mode != "preview-only" || got.permission != "preview-only" || got.unavailable {
-		t.Fatalf("collections assignment must expose preview-only boundary, got %+v", got)
+	if got := seen["collections.item.assign"]; got.mode != "confirm-required" || got.permission != "available" || got.unavailable {
+		t.Fatalf("collections assignment must expose confirm-required assignment boundary, got %+v", got)
 	}
 	if got := seen["integrations.provider.run"]; got.mode != "unavailable" || got.permission != "setup-needed" || !got.unavailable {
 		t.Fatalf("provider runs must be setup-needed/unavailable until connected, got %+v", got)
@@ -454,6 +454,49 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	missingProfile := doRequest(t, a, http.MethodGet, "/api/chat/capabilities", nil, nil)
 	if missingProfile.Code != http.StatusBadRequest {
 		t.Fatalf("missing profile status=%d body=%s", missingProfile.Code, missingProfile.Body.String())
+	}
+}
+
+func TestChatActionPreviewEndpointUsesCapabilityRegistry(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Capability Preview API"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Capability Preview Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","capability_id":"wishlist.entry.create","payload":{"part_number":"CAP-WISH-001","title":"Capability Wishlist","priority":"high"}}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("capability preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"capability_id":"wishlist.entry.create"`) || !strings.Contains(preview.Body.String(), `"action":"create_wishlist_entry"`) {
+		t.Fatalf("expected capability-backed wishlist action preview, body=%s", preview.Body.String())
+	}
+
+	unavailable := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","capability_id":"integrations.provider.run","payload":{"provider":"openai"}}`), map[string]string{"Content-Type": "application/json"})
+	if unavailable.Code != http.StatusBadRequest {
+		t.Fatalf("unavailable capability status=%d body=%s", unavailable.Code, unavailable.Body.String())
+	}
+	if !strings.Contains(unavailable.Body.String(), "integrations.provider.run") || !strings.Contains(unavailable.Body.String(), "setup needed") {
+		t.Fatalf("expected deterministic unavailable capability guidance, body=%s", unavailable.Body.String())
 	}
 }
 

@@ -76,21 +76,23 @@ type NotificationHistoryInput struct {
 }
 
 type PreviewActionInput struct {
-	ProfileID string         `json:"profile_id"`
-	ThreadID  string         `json:"thread_id"`
-	Action    string         `json:"action"`
-	Payload   map[string]any `json:"payload"`
+	ProfileID    string         `json:"profile_id"`
+	ThreadID     string         `json:"thread_id"`
+	CapabilityID string         `json:"capability_id,omitempty"`
+	Action       string         `json:"action,omitempty"`
+	Payload      map[string]any `json:"payload"`
 }
 
 type ActionPreview struct {
-	ID        string         `json:"id"`
-	ProfileID string         `json:"profile_id"`
-	ThreadID  string         `json:"thread_id"`
-	Action    string         `json:"action"`
-	Payload   map[string]any `json:"payload,omitempty"`
-	Status    string         `json:"status"`
-	CreatedAt string         `json:"created_at"`
-	AppliedAt string         `json:"applied_at,omitempty"`
+	ID           string         `json:"id"`
+	ProfileID    string         `json:"profile_id"`
+	ThreadID     string         `json:"thread_id"`
+	CapabilityID string         `json:"capability_id,omitempty"`
+	Action       string         `json:"action"`
+	Payload      map[string]any `json:"payload,omitempty"`
+	Status       string         `json:"status"`
+	CreatedAt    string         `json:"created_at"`
+	AppliedAt    string         `json:"applied_at,omitempty"`
 }
 
 type ApplyActionInput struct {
@@ -786,14 +788,19 @@ func (s *Service) getAttachment(ctx context.Context, profileID, attachmentID str
 func (s *Service) PreviewAction(ctx context.Context, in PreviewActionInput) (ActionPreview, error) {
 	in.ProfileID = strings.TrimSpace(in.ProfileID)
 	in.ThreadID = strings.TrimSpace(in.ThreadID)
+	in.CapabilityID = strings.TrimSpace(in.CapabilityID)
 	in.Action = strings.TrimSpace(in.Action)
-	if in.ProfileID == "" || in.ThreadID == "" || in.Action == "" {
-		return ActionPreview{}, fmt.Errorf("profile_id, thread_id and action are required")
+	if in.ProfileID == "" || in.ThreadID == "" {
+		return ActionPreview{}, fmt.Errorf("profile_id and thread_id are required")
 	}
 	if _, err := s.GetThread(ctx, in.ProfileID, in.ThreadID); err != nil {
 		return ActionPreview{}, err
 	}
-	if err := validateActionPayload(in.Action, in.Payload); err != nil {
+	capability, err := resolveActionCapability(in.CapabilityID, in.Action)
+	if err != nil {
+		return ActionPreview{}, err
+	}
+	if err := validateActionPayload(capability.Action, in.Payload); err != nil {
 		return ActionPreview{}, err
 	}
 	rawPayload, err := json.Marshal(in.Payload)
@@ -804,7 +811,7 @@ func (s *Service) PreviewAction(ctx context.Context, in PreviewActionInput) (Act
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO chat_action_previews(id, profile_id, thread_id, action, payload_json, status)
 		VALUES (?, ?, ?, ?, ?, 'previewed')
-	`, id, in.ProfileID, in.ThreadID, in.Action, string(rawPayload)); err != nil {
+	`, id, in.ProfileID, in.ThreadID, capability.Action, string(rawPayload)); err != nil {
 		return ActionPreview{}, fmt.Errorf("create preview: %w", err)
 	}
 	return s.getPreview(ctx, in.ProfileID, id)
@@ -824,9 +831,13 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	if err != nil {
 		return ApplyActionResult{}, err
 	}
-	result := ApplyActionResult{Applied: true, Action: preview.Action, PreviewID: preview.ID}
-	switch preview.Action {
-	case "create_item_stub", "create_inventory_item":
+	capability, err := resolveActionCapability("", preview.Action)
+	if err != nil {
+		return ApplyActionResult{}, err
+	}
+	result := ApplyActionResult{Applied: true, Action: capability.Action, PreviewID: preview.ID}
+	switch capability.Action {
+	case "create_inventory_item":
 		itemID, err := s.applyCreateItemStub(ctx, in.ProfileID, payload)
 		if err != nil {
 			return ApplyActionResult{}, err
@@ -859,7 +870,7 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 		result.ItemID = itemID
 		result.CollectionName = collectionName
 	default:
-		return ApplyActionResult{}, fmt.Errorf("unsupported action: %s", preview.Action)
+		return ApplyActionResult{}, fmt.Errorf("unsupported action: %s", capability.Action)
 	}
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE chat_action_previews
@@ -906,12 +917,15 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 	}
 	result := ApplyActionResult{
 		Applied:        false,
-		Action:         preview.Action,
+		Action:         capabilityForAction(preview.Action).Action,
 		PreviewID:      preview.ID,
 		ItemID:         trimPayloadString(payload, "item_id"),
 		CollectionName: trimPayloadString(payload, "collection_name"),
 		PartNumber:     trimPayloadString(payload, "part_number"),
 		Title:          trimPayloadString(payload, "title"),
+	}
+	if result.Action == "" {
+		result.Action = preview.Action
 	}
 	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", cancelActionMessage(result), map[string]any{
 		"action_result": map[string]any{
@@ -951,6 +965,7 @@ func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID,
 	if err := json.Unmarshal([]byte(payloadRaw), &payload); err != nil {
 		return ActionPreview{}, nil, fmt.Errorf("decode payload: %w", err)
 	}
+	preview.CapabilityID = capabilityForAction(preview.Action).ID
 	return preview, payload, nil
 }
 
@@ -980,6 +995,7 @@ func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (
 			preview.Payload = payload
 		}
 	}
+	preview.CapabilityID = capabilityForAction(preview.Action).ID
 	return preview, nil
 }
 

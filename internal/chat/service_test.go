@@ -253,6 +253,90 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	}
 }
 
+func TestServicePreviewActionUsesCapabilityRegistry(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "profile-capability-registry"
+	if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, "Capability Registry"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	thread, err := svc.CreateThread(ctx, profileID, "Capability Registry Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID:    profileID,
+		ThreadID:     thread.ID,
+		CapabilityID: "inventory.item.create",
+		Payload: map[string]any{
+			"part_number": "CAP-001",
+			"title":       "Capability Created Item",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(capability inventory.item.create) error = %v", err)
+	}
+	if preview.Action != "create_inventory_item" || preview.CapabilityID != "inventory.item.create" {
+		t.Fatalf("expected registry to resolve inventory.item.create to create_inventory_item, got %+v", preview)
+	}
+
+	applied, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	})
+	if err != nil {
+		t.Fatalf("ApplyAction(capability inventory.item.create) error = %v", err)
+	}
+	if applied.Action != "create_inventory_item" || applied.ItemID == "" || applied.PartNumber != "CAP-001" {
+		t.Fatalf("expected capability-backed create result, got %+v", applied)
+	}
+
+	aliasPreview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "create_item_stub",
+		Payload: map[string]any{
+			"part_number": "CAP-ALIAS-001",
+			"title":       "Alias Created Item",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(create_item_stub alias) error = %v", err)
+	}
+	if aliasPreview.Action != "create_inventory_item" || aliasPreview.CapabilityID != "inventory.item.create" {
+		t.Fatalf("expected legacy action alias to normalize through capability registry, got %+v", aliasPreview)
+	}
+
+	if _, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID:    profileID,
+		ThreadID:     thread.ID,
+		CapabilityID: "integrations.provider.run",
+		Payload:      map[string]any{"provider": "openai"},
+	}); err == nil || !strings.Contains(err.Error(), "setup needed") || !strings.Contains(err.Error(), "integrations.provider.run") {
+		t.Fatalf("expected unavailable capability setup guidance, got %v", err)
+	}
+	if _, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID:    profileID,
+		ThreadID:     thread.ID,
+		CapabilityID: "cabinet.unknown",
+		Payload:      map[string]any{},
+	}); err == nil || !strings.Contains(err.Error(), "unsupported capability") {
+		t.Fatalf("expected unsupported capability guidance, got %v", err)
+	}
+}
+
 func TestServiceActionPreviewRejectsCrossProfileApply(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
