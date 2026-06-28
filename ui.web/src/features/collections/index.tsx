@@ -39,6 +39,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Table,
   TableBody,
@@ -177,6 +178,14 @@ function buildCollectionColumns({
           <div className='truncate text-xs text-muted-foreground'>
             {row.original.description}
           </div>
+          {row.original.deletedAt ? (
+            <div
+              className='text-xs font-medium text-destructive'
+              data-testid={`collections-row-deleted-${row.original.key}`}
+            >
+              Deleted collection
+            </div>
+          ) : null}
         </div>
       ),
     },
@@ -317,10 +326,11 @@ export function Collections() {
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
     addCollection,
-    renameCollection,
+    updateCollectionDetails,
     removeCollection,
     collectionItems,
     collectionSummaries,
+    deletedCollectionSummaries,
   } = useWorkspaceCollections()
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -337,11 +347,16 @@ export function Collections() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [showDeletedCollections, setShowDeletedCollections] = useState(false)
   const [createValue, setCreateValue] = useState('')
   const [createError, setCreateError] = useState('')
   const [createSubmitting, setCreateSubmitting] = useState(false)
   const createInputRef = useRef<HTMLInputElement>(null)
   const [editValue, setEditValue] = useState('')
+  const [editScopeValue, setEditScopeValue] = useState('')
+  const [editStatusValue, setEditStatusValue] = useState('')
+  const [editDescriptionValue, setEditDescriptionValue] = useState('')
+  const [deleteDestination, setDeleteDestination] = useState('')
   const [inventoryMembers, setInventoryMembers] = useState<
     CollectionMemberRow[]
   >([])
@@ -393,7 +408,7 @@ export function Collections() {
     }))
   }, [collectionAssignmentByID, collectionItems, inventoryMembers])
 
-  const rows = useMemo(
+  const activeRows = useMemo(
     () =>
       collectionSummaries.map((summary) => ({
         ...summary,
@@ -405,6 +420,15 @@ export function Collections() {
       })),
     [collectionSummaries, memberRows]
   )
+  const deletedRows = useMemo(
+    () =>
+      deletedCollectionSummaries.map((summary) => ({
+        ...summary,
+        itemCount: 0,
+      })),
+    [deletedCollectionSummaries]
+  )
+  const rows = showDeletedCollections ? deletedRows : activeRows
 
   const selectedRow = useMemo(
     () =>
@@ -416,6 +440,24 @@ export function Collections() {
   )
 
   const selectedCollectionName = selectedRow?.name ?? 'All Items'
+  const selectedCollectionAssignedCount = useMemo(
+    () =>
+      selectedRow && selectedRow.name !== 'All Items'
+        ? memberRows.filter((item) => item.collectionName === selectedRow.name)
+            .length
+        : 0,
+    [memberRows, selectedRow]
+  )
+  const deleteDestinationOptions = useMemo(
+    () =>
+      activeRows.filter(
+        (row) =>
+          row.name !== 'All Items' &&
+          row.key !== selectedRow?.key &&
+          !row.deletedAt
+      ),
+    [activeRows, selectedRow]
+  )
 
   const selectedCollectionItems = useMemo(
     () =>
@@ -430,6 +472,9 @@ export function Collections() {
   const handleSelectCollection = useCallback(
     async (row: CollectionRow) => {
       setSelectedCollectionID(row.key)
+      if (row.deletedAt) {
+        return
+      }
       await setActiveWorkspaceCollection(row.name)
     },
     [setActiveWorkspaceCollection]
@@ -446,6 +491,9 @@ export function Collections() {
   const openEditPanel = useCallback((row: CollectionRow) => {
     setSelectedCollectionID(row.key)
     setEditValue(row.name)
+    setEditScopeValue(row.scopeLabel)
+    setEditStatusValue(row.deletedAt ? 'Deleted' : row.statusLabel)
+    setEditDescriptionValue(row.description)
     setEditOpen(true)
   }, [])
 
@@ -458,6 +506,7 @@ export function Collections() {
         onEdit: openEditPanel,
         onDelete: (row) => {
           setSelectedCollectionID(row.key)
+          setDeleteDestination('')
           setDeleteOpen(true)
         },
       }),
@@ -604,6 +653,9 @@ export function Collections() {
     }
     setSelectedCollectionID(nextRow.key)
     setEditValue(nextRow.name)
+    setEditScopeValue(nextRow.scopeLabel)
+    setEditStatusValue(nextRow.deletedAt ? 'Deleted' : nextRow.statusLabel)
+    setEditDescriptionValue(nextRow.description)
   }
 
   async function handleCreateCollection() {
@@ -637,7 +689,13 @@ export function Collections() {
     if (!selectedRow) {
       return
     }
-    const renamed = await renameCollection(selectedRow.name, editValue)
+    const originalName = selectedRow.name
+    const renamed = await updateCollectionDetails(originalName, editValue, {
+      scopeLabel: editScopeValue,
+      statusLabel: editStatusValue,
+      description: editDescriptionValue,
+      updatedLabel: 'Updated just now',
+    })
     if (!renamed) {
       const message = 'Rename failed. Use a unique non-empty collection name.'
       toast.error(message)
@@ -650,7 +708,10 @@ export function Collections() {
     }
     setSelectedCollectionID(collectionKey(renamed))
     setEditOpen(false)
-    const message = `${selectedRow.name} renamed to ${renamed}.`
+    const message =
+      originalName === renamed
+        ? `${renamed} metadata updated.`
+        : `${originalName} renamed to ${renamed}.`
     toast.success(message)
     recordCollectionsStatusHistory({
       id: 'collections-rename-success',
@@ -663,7 +724,7 @@ export function Collections() {
       return
     }
     const removedName = selectedRow.name
-    const removed = await removeCollection(removedName)
+    const removed = await removeCollection(removedName, deleteDestination)
     if (!removed) {
       const message = 'Collection removal failed.'
       toast.error(message)
@@ -676,7 +737,8 @@ export function Collections() {
     }
     setSelectedCollectionID(collectionKey('All Items'))
     setDeleteOpen(false)
-    const message = `${removedName} removed from workspace collections.`
+    setDeleteDestination('')
+    const message = `${removedName} hidden from active workspace collections.`
     toast.success(message)
     recordCollectionsStatusHistory({
       id: 'collections-remove-success',
@@ -757,6 +819,18 @@ export function Collections() {
                   <span data-testid='collections-active-context'>
                     {selectedCollectionName}
                   </span>
+                  <Button
+                    type='button'
+                    variant={showDeletedCollections ? 'default' : 'outline'}
+                    size='sm'
+                    data-testid='collections-deleted-filter-toggle'
+                    onClick={() => {
+                      setShowDeletedCollections((current) => !current)
+                      setSelectedCollectionID(null)
+                    }}
+                  >
+                    {showDeletedCollections ? 'Showing deleted' : 'Show deleted'}
+                  </Button>
                 </div>
               </div>
 
@@ -1025,7 +1099,7 @@ export function Collections() {
           <SheetHeader className='text-start'>
             <SheetTitle>Edit collection</SheetTitle>
             <SheetDescription>
-              Rename the selected collection through the row workflow.
+              Edit the selected collection metadata through the row workflow.
             </SheetDescription>
             <div className='flex flex-wrap items-center gap-2 pt-2'>
               <Button
@@ -1050,7 +1124,7 @@ export function Collections() {
               </Button>
             </div>
           </SheetHeader>
-          <div className='flex-1 px-4'>
+          <div className='flex-1 space-y-4 overflow-auto px-4'>
             <label className='space-y-2 text-sm font-medium'>
               <span>Collection name</span>
               <Input
@@ -1058,6 +1132,33 @@ export function Collections() {
                 onChange={(event) => setEditValue(event.target.value)}
                 placeholder='New collection name'
                 data-testid='collections-edit-input'
+              />
+            </label>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Scope</span>
+              <Input
+                value={editScopeValue}
+                onChange={(event) => setEditScopeValue(event.target.value)}
+                placeholder='Collection scope'
+                data-testid='collections-edit-scope-input'
+              />
+            </label>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Status</span>
+              <Input
+                value={editStatusValue}
+                onChange={(event) => setEditStatusValue(event.target.value)}
+                placeholder='Collection status'
+                data-testid='collections-edit-status-input'
+              />
+            </label>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Description</span>
+              <Textarea
+                value={editDescriptionValue}
+                onChange={(event) => setEditDescriptionValue(event.target.value)}
+                placeholder='Collection description'
+                data-testid='collections-edit-description-input'
               />
             </label>
           </div>
@@ -1076,7 +1177,7 @@ export function Collections() {
               }}
               data-testid='collections-edit-submit'
             >
-              Save rename
+              Save collection
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -1086,15 +1187,41 @@ export function Collections() {
         <DialogContent data-testid='collections-delete-dialog'>
           <DialogHeader>
             <DialogTitle>Delete collection</DialogTitle>
-            <DialogDescription>
-              Remove the selected collection row from the shared table surface.
+          <DialogDescription>
+              Hide the selected collection from active collection views.
             </DialogDescription>
           </DialogHeader>
-          <p className='text-sm text-muted-foreground'>
-            {selectedRow
-              ? `Delete ${selectedRow.name}? Assigned items will remain in Cabinet and become unassigned.`
-              : 'No collection is selected.'}
-          </p>
+          <div className='space-y-3 text-sm text-muted-foreground'>
+            <p data-testid='collections-delete-message'>
+              {selectedRow
+                ? selectedRow.name === 'All Items'
+                  ? 'All Items is protected and cannot be deleted.'
+                  : selectedCollectionAssignedCount > 0
+                    ? `${selectedRow.name} has ${selectedCollectionAssignedCount} assigned item${selectedCollectionAssignedCount === 1 ? '' : 's'}. Choose a destination collection to move them, or leave the destination blank to remove only the collection membership.`
+                    : `${selectedRow.name} will be hidden from active collections and can be reviewed in the deleted filter.`
+                : 'No collection is selected.'}
+            </p>
+            {selectedRow &&
+            selectedRow.name !== 'All Items' &&
+            selectedCollectionAssignedCount > 0 ? (
+              <label className='block space-y-2 font-medium text-foreground'>
+                <span>Move assigned items to</span>
+                <select
+                  value={deleteDestination}
+                  onChange={(event) => setDeleteDestination(event.target.value)}
+                  className='h-9 w-full rounded-md border border-input bg-background px-3 text-sm'
+                  data-testid='collections-delete-destination-select'
+                >
+                  <option value=''>No destination, remove membership only</option>
+                  {deleteDestinationOptions.map((row) => (
+                    <option key={row.key} value={row.name}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
           <DialogFooter>
             <Button
               type='button'
@@ -1111,7 +1238,7 @@ export function Collections() {
               }}
               data-testid='collections-delete-submit'
             >
-              Delete collection
+              Hide collection
             </Button>
           </DialogFooter>
         </DialogContent>

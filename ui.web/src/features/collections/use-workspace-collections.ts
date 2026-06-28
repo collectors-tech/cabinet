@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useProfileSettings } from '@/features/settings/use-profile-settings'
 
 export type WorkspaceCollectionSummary = {
@@ -9,6 +9,7 @@ export type WorkspaceCollectionSummary = {
   statusLabel: string
   updatedLabel: string
   description: string
+  deletedAt: string | null
 }
 
 export type WorkspaceCollectionItem = {
@@ -24,6 +25,15 @@ type PersistedWorkspaceCollectionsState = {
   collections?: string[]
   activeCollection?: string
   items?: WorkspaceCollectionItem[]
+  collectionMetadata?: Record<string, WorkspaceCollectionMetadata>
+}
+
+export type WorkspaceCollectionMetadata = {
+  scopeLabel?: string
+  statusLabel?: string
+  updatedLabel?: string
+  description?: string
+  deletedAt?: string | null
 }
 
 const collectionsSettingsKey = 'collections.workspace.v1'
@@ -36,6 +46,7 @@ const DEFAULT_COLLECTIONS: CollectionSeed[] = [
     statusLabel: 'Broadest scope',
     updatedLabel: 'Updated 5m ago',
     description: 'Everything currently tracked in Cabinet.',
+    deletedAt: null,
   },
   {
     name: 'Watch List',
@@ -44,6 +55,7 @@ const DEFAULT_COLLECTIONS: CollectionSeed[] = [
     statusLabel: 'Needs review',
     updatedLabel: 'Updated 12m ago',
     description: 'Fast-moving cards and sets needing quick review.',
+    deletedAt: null,
   },
   {
     name: 'Warehouse 1',
@@ -52,6 +64,7 @@ const DEFAULT_COLLECTIONS: CollectionSeed[] = [
     statusLabel: 'Stable',
     updatedLabel: 'Updated 32m ago',
     description: 'Shelved long-box inventory in the main warehouse.',
+    deletedAt: null,
   },
   {
     name: 'Store 1',
@@ -60,6 +73,7 @@ const DEFAULT_COLLECTIONS: CollectionSeed[] = [
     statusLabel: 'Ready to sell',
     updatedLabel: 'Updated 48m ago',
     description: 'Shopfront display stock prepared for live selling.',
+    deletedAt: null,
   },
   {
     name: 'Store 2',
@@ -68,6 +82,7 @@ const DEFAULT_COLLECTIONS: CollectionSeed[] = [
     statusLabel: 'Ready to sell',
     updatedLabel: 'Updated 1h ago',
     description: 'Overflow retail stock staged for the second store.',
+    deletedAt: null,
   },
   {
     name: 'Overflow',
@@ -76,6 +91,7 @@ const DEFAULT_COLLECTIONS: CollectionSeed[] = [
     statusLabel: 'Needs sorting',
     updatedLabel: 'Updated 2h ago',
     description: 'Backlog boxes waiting for proper collection placement.',
+    deletedAt: null,
   },
 ]
 
@@ -123,12 +139,17 @@ export function collectionKey(value: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-function buildDefaultSummary(name: string): WorkspaceCollectionSummary {
+function buildDefaultSummary(
+  name: string,
+  metadata?: WorkspaceCollectionMetadata
+): WorkspaceCollectionSummary {
   const seed = DEFAULT_COLLECTIONS.find((entry) => entry.name === name)
   if (seed) {
     return {
       ...seed,
       key: collectionKey(seed.name),
+      ...metadata,
+      deletedAt: metadata?.deletedAt ?? null,
     }
   }
 
@@ -142,6 +163,8 @@ function buildDefaultSummary(name: string): WorkspaceCollectionSummary {
     updatedLabel: 'Updated just now',
     description:
       'Custom workspace collection created from the management surface.',
+    ...metadata,
+    deletedAt: metadata?.deletedAt ?? null,
   }
 }
 
@@ -171,6 +194,7 @@ function defaultWorkspaceCollectionsState(): Required<PersistedWorkspaceCollecti
     collections: DEFAULT_COLLECTIONS.map((entry) => entry.name),
     activeCollection: 'All Items',
     items: DEFAULT_ITEMS.map(normalizeWorkspaceCollectionItem),
+    collectionMetadata: {},
   }
 }
 
@@ -179,7 +203,31 @@ function loadingWorkspaceCollectionsState(): Required<PersistedWorkspaceCollecti
     collections: ['All Items'],
     activeCollection: 'All Items',
     items: [],
+    collectionMetadata: {},
   }
+}
+
+function normalizeCollectionMetadata(
+  value?: Record<string, WorkspaceCollectionMetadata>
+): Record<string, WorkspaceCollectionMetadata> {
+  const normalized: Record<string, WorkspaceCollectionMetadata> = {}
+  Object.entries(value ?? {}).forEach(([rawKey, metadata]) => {
+    const key = collectionKey(rawKey)
+    if (!key || !metadata) {
+      return
+    }
+    normalized[key] = {
+      scopeLabel: normalizeCollectionName(metadata.scopeLabel ?? ''),
+      statusLabel: normalizeCollectionName(metadata.statusLabel ?? ''),
+      updatedLabel: normalizeCollectionName(metadata.updatedLabel ?? ''),
+      description: normalizeCollectionName(metadata.description ?? ''),
+      deletedAt:
+        typeof metadata.deletedAt === 'string' && metadata.deletedAt.trim()
+          ? metadata.deletedAt.trim()
+          : null,
+    }
+  })
+  return normalized
 }
 
 function parseWorkspaceCollectionsState(
@@ -201,14 +249,20 @@ function parseWorkspaceCollectionsState(
     const normalizedActive = normalizeCollectionName(
       parsed.activeCollection ?? 'All Items'
     )
-    const activeCollection = normalizedCollections.includes(normalizedActive)
-      ? normalizedActive
-      : 'All Items'
+    const collectionMetadata = normalizeCollectionMetadata(
+      parsed.collectionMetadata
+    )
+    const activeCollection =
+      normalizedCollections.includes(normalizedActive) &&
+      !collectionMetadata[collectionKey(normalizedActive)]?.deletedAt
+        ? normalizedActive
+        : 'All Items'
 
     return {
       collections: normalizedCollections,
       activeCollection,
       items: normalizedItems,
+      collectionMetadata,
     }
   } catch {
     return defaultWorkspaceCollectionsState()
@@ -218,20 +272,26 @@ function parseWorkspaceCollectionsState(
 function serializeWorkspaceCollectionsState(
   collections: string[],
   activeCollection: string,
-  items: WorkspaceCollectionItem[]
+  items: WorkspaceCollectionItem[],
+  collectionMetadata: Record<string, WorkspaceCollectionMetadata>
 ): string {
   const normalizedCollections = normalizeCollectionsList(collections)
   const normalizedItems = items
     .map(normalizeWorkspaceCollectionItem)
     .filter((item) => item.id && item.name)
   const normalizedActive = normalizeCollectionName(activeCollection)
+  const normalizedMetadata = normalizeCollectionMetadata(collectionMetadata)
+  const activeMetadata = normalizedMetadata[collectionKey(normalizedActive)]
 
   return JSON.stringify({
     collections: normalizedCollections,
-    activeCollection: normalizedCollections.includes(normalizedActive)
+    activeCollection:
+      normalizedCollections.includes(normalizedActive) &&
+      !activeMetadata?.deletedAt
       ? normalizedActive
       : 'All Items',
     items: normalizedItems,
+    collectionMetadata: normalizedMetadata,
   })
 }
 
@@ -249,6 +309,14 @@ export function useWorkspaceCollections() {
   const workspaceCollections = persistedState.collections
   const activeWorkspaceCollection = persistedState.activeCollection
   const workspaceItems = persistedState.items
+  const collectionMetadata = persistedState.collectionMetadata
+  const activeWorkspaceCollections = useMemo(
+    () =>
+      workspaceCollections.filter(
+        (collection) => !collectionMetadata[collectionKey(collection)]?.deletedAt
+      ),
+    [collectionMetadata, workspaceCollections]
+  )
 
   const persistWorkspaceCollectionsState = async (
     nextState: Required<PersistedWorkspaceCollectionsState>
@@ -262,32 +330,55 @@ export function useWorkspaceCollections() {
       [collectionsSettingsKey]: serializeWorkspaceCollectionsState(
         nextState.collections,
         nextState.activeCollection,
-        nextState.items
+        nextState.items,
+        nextState.collectionMetadata
       ),
     })
   }
 
-  const collectionSummaries = useMemo(() => {
-    return workspaceCollections.map((name) => {
-      const base = buildDefaultSummary(name)
-      const assignedCount =
-        name === 'All Items'
-          ? workspaceItems.length
-          : workspaceItems.filter((item) => item.collectionName === name).length
-
-      return {
-        ...base,
-        itemCount:
+  const buildSummaries = useCallback(
+    (collections: string[]) =>
+      collections.map((name) => {
+        const base = buildDefaultSummary(
+          name,
+          collectionMetadata[collectionKey(name)]
+        )
+        const assignedCount =
           name === 'All Items'
-            ? Math.max(base.itemCount, assignedCount)
-            : assignedCount,
-        updatedLabel:
-          assignedCount > 0 && name !== 'All Items'
-            ? 'Updated just now'
-            : base.updatedLabel,
-      }
-    })
-  }, [workspaceCollections, workspaceItems])
+            ? workspaceItems.length
+            : workspaceItems.filter((item) => item.collectionName === name)
+                .length
+
+        return {
+          ...base,
+          itemCount:
+            name === 'All Items'
+              ? Math.max(base.itemCount, assignedCount)
+              : assignedCount,
+          updatedLabel: base.deletedAt
+            ? 'Deleted'
+            : assignedCount > 0 && name !== 'All Items'
+              ? 'Updated just now'
+              : base.updatedLabel,
+        }
+      }),
+    [collectionMetadata, workspaceItems]
+  )
+
+  const collectionSummaries = useMemo(
+    () => buildSummaries(activeWorkspaceCollections),
+    [activeWorkspaceCollections, buildSummaries]
+  )
+  const deletedCollectionSummaries = useMemo(
+    () =>
+      buildSummaries(
+        workspaceCollections.filter(
+          (collection) =>
+            !!collectionMetadata[collectionKey(collection)]?.deletedAt
+        )
+      ),
+    [buildSummaries, collectionMetadata, workspaceCollections]
+  )
 
   const addCollection = async (value: string): Promise<string | null> => {
     const normalized = normalizeCollectionName(value)
@@ -305,6 +396,7 @@ export function useWorkspaceCollections() {
       collections: [...workspaceCollections, normalized],
       activeCollection: normalized,
       items: workspaceItems,
+      collectionMetadata,
     })
 
     return normalized
@@ -334,6 +426,9 @@ export function useWorkspaceCollections() {
       return null
     }
 
+    const { [currentKey]: currentMetadata, ...remainingMetadata } =
+      collectionMetadata
+
     await persistWorkspaceCollectionsState({
       collections: workspaceCollections.map((collection) =>
         collectionKey(collection) === currentKey ? normalizedNext : collection
@@ -347,12 +442,98 @@ export function useWorkspaceCollections() {
           ? { ...item, collectionName: normalizedNext }
           : item
       ),
+      collectionMetadata: {
+        ...remainingMetadata,
+        [nextKey]: currentMetadata ?? {},
+      },
     })
 
     return normalizedNext
   }
 
-  const removeCollection = async (name: string): Promise<boolean> => {
+  const updateCollectionMetadata = async (
+    currentName: string,
+    metadata: WorkspaceCollectionMetadata
+  ): Promise<boolean> => {
+    const normalizedCurrent = normalizeCollectionName(currentName)
+    const currentKey = collectionKey(normalizedCurrent)
+    if (!normalizedCurrent || normalizedCurrent === 'All Items') {
+      return false
+    }
+    if (!workspaceCollections.some((collection) => collectionKey(collection) === currentKey)) {
+      return false
+    }
+
+    await persistWorkspaceCollectionsState({
+      collections: workspaceCollections,
+      activeCollection: activeWorkspaceCollection,
+      items: workspaceItems,
+      collectionMetadata: {
+        ...collectionMetadata,
+        [currentKey]: {
+          ...(collectionMetadata[currentKey] ?? {}),
+          ...metadata,
+        },
+      },
+    })
+    return true
+  }
+
+  const updateCollectionDetails = async (
+    currentName: string,
+    nextName: string,
+    metadata: WorkspaceCollectionMetadata
+  ): Promise<string | null> => {
+    const normalizedCurrent = normalizeCollectionName(currentName)
+    const normalizedNext = normalizeCollectionName(nextName)
+    const currentKey = collectionKey(normalizedCurrent)
+    const nextKey = collectionKey(normalizedNext)
+    if (
+      !normalizedCurrent ||
+      !normalizedNext ||
+      normalizedCurrent === 'All Items'
+    ) {
+      return null
+    }
+    const exists = workspaceCollections.some(
+      (collection) =>
+        collectionKey(collection) === nextKey &&
+        collectionKey(collection) !== currentKey
+    )
+    if (exists) {
+      return null
+    }
+
+    const { [currentKey]: currentMetadata, ...remainingMetadata } =
+      collectionMetadata
+    await persistWorkspaceCollectionsState({
+      collections: workspaceCollections.map((collection) =>
+        collectionKey(collection) === currentKey ? normalizedNext : collection
+      ),
+      activeCollection:
+        collectionKey(activeWorkspaceCollection) === currentKey
+          ? normalizedNext
+          : activeWorkspaceCollection,
+      items: workspaceItems.map((item) =>
+        item.collectionName && collectionKey(item.collectionName) === currentKey
+          ? { ...item, collectionName: normalizedNext }
+          : item
+      ),
+      collectionMetadata: {
+        ...remainingMetadata,
+        [nextKey]: {
+          ...(currentMetadata ?? {}),
+          ...metadata,
+        },
+      },
+    })
+    return normalizedNext
+  }
+
+  const removeCollection = async (
+    name: string,
+    destinationName?: string | null
+  ): Promise<boolean> => {
     const normalized = normalizeCollectionName(name)
     const normalizedKey = collectionKey(normalized)
     if (!normalized || normalized === 'All Items') {
@@ -364,11 +545,19 @@ export function useWorkspaceCollections() {
     if (!exists) {
       return false
     }
+    const normalizedDestination = normalizeCollectionName(destinationName ?? '')
+    const validDestination =
+      normalizedDestination &&
+      normalizedDestination !== 'All Items' &&
+      collectionKey(normalizedDestination) !== normalizedKey &&
+      activeWorkspaceCollections.some(
+        (collection) => collectionKey(collection) === collectionKey(normalizedDestination)
+      )
+        ? normalizedDestination
+        : null
 
     await persistWorkspaceCollectionsState({
-      collections: workspaceCollections.filter(
-        (collection) => collectionKey(collection) !== normalizedKey
-      ),
+      collections: workspaceCollections,
       activeCollection:
         collectionKey(activeWorkspaceCollection) === normalizedKey
           ? 'All Items'
@@ -376,9 +565,17 @@ export function useWorkspaceCollections() {
       items: workspaceItems.map((item) =>
         item.collectionName &&
         collectionKey(item.collectionName) === normalizedKey
-          ? { ...item, collectionName: null }
+          ? { ...item, collectionName: validDestination }
           : item
       ),
+      collectionMetadata: {
+        ...collectionMetadata,
+        [normalizedKey]: {
+          ...(collectionMetadata[normalizedKey] ?? {}),
+          deletedAt: new Date().toISOString(),
+          statusLabel: 'Deleted',
+        },
+      },
     })
 
     return true
@@ -397,7 +594,7 @@ export function useWorkspaceCollections() {
       return Promise.resolve(null)
     }
     if (
-      !workspaceCollections.some(
+      !activeWorkspaceCollections.some(
         (collection) => collection === normalizedCollection
       )
     ) {
@@ -416,10 +613,11 @@ export function useWorkspaceCollections() {
     }
 
     return persistWorkspaceCollectionsState({
-      collections: workspaceCollections,
-      activeCollection: activeWorkspaceCollection,
-      items: updatedItems,
-    }).then(() => updatedItem)
+        collections: workspaceCollections,
+        activeCollection: activeWorkspaceCollection,
+        items: updatedItems,
+        collectionMetadata,
+      }).then(() => updatedItem)
   }
 
   const assignWorkspaceItemToCollection = (
@@ -435,7 +633,7 @@ export function useWorkspaceCollections() {
       return Promise.resolve(null)
     }
     if (
-      !workspaceCollections.some(
+      !activeWorkspaceCollections.some(
         (collection) => collection === normalizedCollection
       )
     ) {
@@ -461,6 +659,7 @@ export function useWorkspaceCollections() {
       collections: workspaceCollections,
       activeCollection: activeWorkspaceCollection,
       items: updatedItems,
+      collectionMetadata,
     }).then(() => normalizedItem)
   }
 
@@ -478,7 +677,7 @@ export function useWorkspaceCollections() {
     }
 
     const existingCollection =
-      workspaceCollections.find(
+      activeWorkspaceCollections.find(
         (collection) =>
           collection.toLowerCase() === normalizedCollection.toLowerCase()
       ) ?? null
@@ -505,6 +704,7 @@ export function useWorkspaceCollections() {
       collections: nextCollections,
       activeCollection: targetCollection,
       items: updatedItems,
+      collectionMetadata,
     }).then(() => normalizedItem)
   }
 
@@ -528,32 +728,38 @@ export function useWorkspaceCollections() {
       collections: workspaceCollections,
       activeCollection: activeWorkspaceCollection,
       items: updatedItems,
+      collectionMetadata,
     }).then(() => updatedItem)
   }
 
   const collectionItems = useMemo(() => workspaceItems, [workspaceItems])
 
   return {
-    workspaceCollections,
+    workspaceCollections: activeWorkspaceCollections,
+    allWorkspaceCollections: workspaceCollections,
     activeWorkspaceCollection,
     setActiveWorkspaceCollection: async (nextCollection: string) => {
       const normalizedCollection = normalizeCollectionName(nextCollection)
       if (!normalizedCollection) {
         return
       }
-      const safeCollection = workspaceCollections.includes(normalizedCollection)
+      const safeCollection = activeWorkspaceCollections.includes(normalizedCollection)
         ? normalizedCollection
         : 'All Items'
       await persistWorkspaceCollectionsState({
         collections: workspaceCollections,
         activeCollection: safeCollection,
         items: workspaceItems,
+        collectionMetadata,
       })
     },
     addCollection,
     renameCollection,
+    updateCollectionMetadata,
+    updateCollectionDetails,
     removeCollection,
     collectionSummaries,
+    deletedCollectionSummaries,
     collectionItems,
     assignItemToCollection,
     assignWorkspaceItemToCollection,
