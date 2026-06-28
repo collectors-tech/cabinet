@@ -214,6 +214,17 @@ Market Watch SHALL store saved-watch executions as durable run records and SHALL
 - **AND** preserved decisions MUST remain available to downstream Discoveries, Wishlist, Purchases, and Inventory views through stable candidate status and provenance fields after reload or rerun
 - **AND** the same provider listing may be tracked independently by another profile or another saved watch without corrupting the original watch state
 
+### Requirement UI-SCREEN-MARKET-WATCH-014: Market Watch SHALL keep scanner capture secondary to saved searches
+Market Watch SHALL focus its primary dashboard on saved provider searches while keeping scanner/manual listing capture available behind a secondary action.
+
+#### Scenario: Reveal manual listing capture as a secondary action
+- **GIVEN** user is on `/market-watch`
+- **WHEN** Market Watch first renders
+- **THEN** Quick Scan, manual card entry, and Recent Unlinked Scans controls MUST NOT occupy the main dashboard body
+- **AND** the page MUST expose a secondary `Add listing manually` action
+- **AND WHEN** user activates the secondary action
+- **THEN** Market Watch MUST reveal Quick Scan, manual entry queueing, and Recent Unlinked Scans review controls without disrupting saved-query creation
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -233,3 +244,4 @@ Market Watch SHALL store saved-watch executions as durable run records and SHALL
 | UC-MW-14 | Route handoff bootstrap | Barcode handoff route pre-fills saved-query fields and persists the selected provider scope when created | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state` |
 | UC-MW-15 | Discoveries handoff from output detail | Output detail Discoveries handoff queries Discoveries with the saved watch keyword and reports returned item count | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword` |
 | UC-MW-16 | Persist saved-watch run/result records | Manual and scheduled runs create durable run records; scheduled partial failures preserve unrelated watch state; results dedupe by profile/watch/provider/listing or source URL while preserving decision state; saved-query reloads expose durable latest-run and next scheduled run state | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsDurableRunRecordAndDedupesResults`; `TestRunNowPreservesDownstreamDecisionStatuses`; `TestRunNowDedupeIsScopedByProfileAndWatch`; `TestQuerySetRunSnapshotUsesDurableRunRecordsAndComputesNextRun`; `TestRunScheduledRecordsPartialFailureWithoutBlockingOtherWatches` |
+| UC-MW-17 | Reveal manual listing capture | Quick Scan/manual entry/Recent Unlinked Scans stay out of the primary Market Watch dashboard until the secondary manual-listing action is opened | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-014 keeps scanner capture behind a secondary action` |
