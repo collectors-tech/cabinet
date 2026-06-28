@@ -126,6 +126,9 @@ describe("ui-screen-wishlist", () => {
   }
 
   function openWishlistRowActions(rowText: string) {
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("right", {
+      ensureScrollable: false,
+    });
     cy.contains("tr", rowText, { timeout: 15000 })
       .find('[data-testid="task-row-actions-trigger"]')
       .should("be.visible")
@@ -136,6 +139,7 @@ describe("ui-screen-wishlist", () => {
           { timeout: 15000 }
         )
           .should("be.visible")
+          .trigger("pointerdown", { force: true })
           .click({ force: true });
         cy.get(
           `[data-testid="task-row-actions-menu"][data-row-id="${rowId}"]`,
@@ -1067,5 +1071,120 @@ describe("ui-screen-wishlist", () => {
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
     cy.contains("AFX Mega-G+ Camaro Updated").should("not.exist");
+  });
+
+  it("UI-SCREEN-WISHLIST-023 soft deletes, restores, and gates permanent deletion", () => {
+    let showDeleted = false;
+    let wishlistEntries = [
+      {
+        id: "wish-soft-delete-1",
+        item_id: "item-soft-delete-1",
+        priority: "medium",
+        below_target_now: false,
+        notes: "Preserve purchase history",
+        target_price: 44,
+        deleted: false,
+      },
+    ];
+    const wishlistItems = [
+      {
+        id: "item-soft-delete-1",
+        title: "Soft Delete Wishlist Guard",
+        part_number: "SD-1531",
+        status: "wishlist",
+        category: "Slot Cars",
+        priority: "medium",
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist*", (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          items: wishlistEntries.filter((entry) =>
+            showDeleted ? entry.deleted : !entry.deleted
+          ),
+        },
+      });
+    }).as("wishlistItems");
+    cy.intercept("GET", /\/api\/items\?status=wishlist.*/, (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          items: wishlistItems.filter((item) =>
+            wishlistEntries.some(
+              (entry) =>
+                entry.item_id === item.id &&
+                (showDeleted ? entry.deleted : !entry.deleted)
+            )
+          ),
+        },
+      });
+    }).as("catalogItems");
+    cy.intercept("PUT", "/api/wishlist", (req) => {
+      expect(req.body).to.include({
+        id: "wish-soft-delete-1",
+        deleted: true,
+      });
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === "wish-soft-delete-1" ? { ...entry, deleted: true } : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("softDeleteWishlistEntry");
+    cy.intercept("POST", "/api/wishlist/wish-soft-delete-1/restore", (req) => {
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === "wish-soft-delete-1" ? { ...entry, deleted: false } : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("restoreWishlistEntry");
+    cy.intercept("DELETE", "/api/wishlist?id=wish-soft-delete-1&permanent=true", {
+      statusCode: 204,
+      body: "",
+    }).as("permanentlyDeleteWishlistEntry");
+
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("Soft Delete Wishlist Guard").should("be.visible");
+
+    openWishlistRowActions("Soft Delete Wishlist Guard");
+    cy.contains('[role="menuitem"]', /^Delete$/).click({ force: true });
+    cy.contains("Hide this wishlist entry").should("be.visible");
+    cy.contains("button", /^Hide$/).click();
+
+    cy.wait("@softDeleteWishlistEntry");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("Soft Delete Wishlist Guard").should("not.exist");
+
+    showDeleted = true;
+    cy.contains("button", /^Deleted$/).click();
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("Soft Delete Wishlist Guard").should("be.visible");
+    cy.contains("button", /^Restore$/).click();
+    cy.wait("@restoreWishlistEntry");
+
+    showDeleted = false;
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("Soft Delete Wishlist Guard").should("be.visible");
+
+    showDeleted = true;
+    cy.contains("button", /^Deleted$/).click();
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    openWishlistRowActions("Soft Delete Wishlist Guard");
+    cy.contains('[role="menuitem"]', /^Delete permanently$/).click({
+      force: true,
+    });
+    cy.contains("Permanently delete wishlist entry").should("be.visible");
+    cy.contains("wishlist row and linked wishlist metadata/history").should(
+      "be.visible"
+    );
+    cy.contains(
+      "Inventory records already created from this wishlist item will not be deleted"
+    ).should("be.visible");
+    cy.contains("button", /^Permanently delete$/).click();
+    cy.wait("@permanentlyDeleteWishlistEntry");
   });
 });
