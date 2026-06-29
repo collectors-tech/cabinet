@@ -656,7 +656,7 @@ func TestOpenAPIDocumentsEbayProviderHealthContract(t *testing.T) {
 		"required: [provider, status, state]",
 		"provider: { type: string, example: ebay }",
 		"status:",
-		"enum: [ok, ready, error, degraded, unknown, auth_required, partial_failure]",
+		"enum: [ok, ready, error, degraded, unknown, auth_missing, reauthentication_required, rate_limited, provider_unavailable, partial_failure]",
 		"state:",
 		"enum: [ready, degraded, disabled]",
 		"category:",

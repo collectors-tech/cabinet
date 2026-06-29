@@ -224,6 +224,14 @@ Market Watch SHALL show provider health with an explanation and next action, and
 - **THEN** the screen MUST show provider, trigger type, status, finished time, total result count, new result count, and failure or retry guidance for each recent run
 - **AND** failed runs MUST keep provider-specific recovery guidance visible without marking unrelated provider runs as failed
 
+#### Scenario: Provider health transitions persist after run outcomes
+- **GIVEN** an eBay Market Watch run fails due to missing setup, invalid credentials, rate limiting, or provider outage
+- **WHEN** the scanner records provider health for the run
+- **THEN** the persisted provider health status MUST distinguish setup-required, reauthentication, rate-limited, and provider-unavailable outcomes
+- **AND** retry timing MUST remain available for rate-limited responses
+- **AND WHEN** a later run succeeds
+- **THEN** provider health MUST return to healthy state and clear stale failure guidance
+
 ### Requirement UI-SCREEN-MARKET-WATCH-011: Market Watch SHALL bootstrap saved-query creation from route handoff state
 Market Watch SHALL translate route handoff context into editable saved-query fields before persistence so handoffs from barcode/search surfaces remain deterministic.
 
@@ -300,3 +308,4 @@ Market Watch SHALL focus its primary dashboard on saved provider searches while 
 | UC-MW-17 | Reveal manual listing capture | Quick Scan/manual entry/Recent Unlinked Scans stay out of the primary Market Watch dashboard until the secondary manual-listing action is opened | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-014 keeps scanner capture behind a secondary action` |
 | UC-MW-18 | Purchase handoff from output detail | Output detail Purchase handoff posts selected candidate, persists purchase lifecycle and expected-arrival records, and keeps Market Watch/Discoveries status synchronized | implemented: `internal/discovery/service_test.go` `TestApplyActionMarkPurchasedCreatesCommerceHandoff`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-015 persists output-detail Purchase handoff provenance`; `ui.web/src/features/scanner/index.tsx` `scanner-handoff-purchase-*` |
 | UC-MW-19 | Result inbox lifecycle review | Output detail result inbox shows status/provider/match/wishlist filters, match rationale, seen timestamps, total price, and lifecycle status without losing dismissed or downstream-handoff results; candidate API supports status/provider pagination and profile-scoped lifecycle status persistence | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-016 + #1548 renders result inbox lifecycle filters and match provenance`; `internal/scanner/service_test.go` `TestCandidateResultInboxFiltersPaginationAndLifecycleUpdate`; `internal/app/scanner_api_test.go` `TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbaySavedSearchHandoffContract`; `ui.web/src/features/scanner/index.tsx` `market-watch-results-inbox-*` |
+| UC-MW-20 | Provider health and run history | Unknown provider health stays actionable, provider health taxonomy includes label/guidance/retry timing, health transitions persist after run outcomes, and persisted run history lists provider outcomes after reload | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsClassifiedProviderHealthTransitions`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbayProviderHealthContract`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history`; `UI-SCREEN-MARKET-WATCH-017 shows provider health taxonomy labels guidance and retry timing` |

@@ -3482,7 +3482,7 @@ components:
         provider: { type: string, example: ebay }
         status:
           type: string
-          enum: [ok, ready, error, degraded, unknown, auth_required, partial_failure]
+          enum: [ok, ready, error, degraded, unknown, auth_missing, reauthentication_required, rate_limited, provider_unavailable, partial_failure]
         state:
           type: string
           enum: [ready, degraded, disabled]
