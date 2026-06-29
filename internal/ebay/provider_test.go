@@ -658,6 +658,43 @@ func TestProviderSearchSkipsNonPositiveShippingCost(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsBlankShippingCurrency(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|shipping-currency|0","title":"Shipping Currency Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/shipping-currency","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"7.25","currency":"  "}},{"shippingCost":{"value":"9.50","currency":"AUD"}}]},{"itemId":"v1|shipping-currency-zero|0","title":"No Shipping Currency Slot Car","price":{"value":"23.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/shipping-currency-zero","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"4.25","currency":""}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected both candidates to survive shipping currency normalization, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|shipping-currency|0":
+			if item.Shipping != 9.50 {
+				t.Fatalf("expected blank-currency shipping option to fall through to 9.50, got %+v", item)
+			}
+		case "v1|shipping-currency-zero|0":
+			if item.Shipping != 0 {
+				t.Fatalf("expected blank-currency shipping-only option to fall back to zero, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
 func TestProviderSearchUsesFirstMeaningfulAvailability(t *testing.T) {
 	t.Parallel()
 
