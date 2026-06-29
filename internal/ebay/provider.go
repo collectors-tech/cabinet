@@ -201,7 +201,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if _, seen := seenListingIDs[listingID]; seen {
 			continue
 		}
-		price, err := strconv.ParseFloat(strings.TrimSpace(it.Price.Value), 64)
+		price, err := parseBrowseAmount(it.Price.Value)
 		if err != nil || price <= 0 {
 			continue
 		}
@@ -270,13 +270,42 @@ func normalizeShippingCost(options []struct {
 		if shippingCurrency == "" || shippingCurrency != priceCurrency {
 			continue
 		}
-		value, err := strconv.ParseFloat(raw, 64)
+		value, err := parseBrowseAmount(raw)
 		if err != nil || value <= 0 {
 			continue
 		}
 		return value
 	}
 	return 0
+}
+
+func parseBrowseAmount(raw string) (float64, error) {
+	value := strings.TrimSpace(raw)
+	if !hasValidCommaGrouping(value) {
+		return 0, fmt.Errorf("invalid comma-grouped amount")
+	}
+	return strconv.ParseFloat(strings.ReplaceAll(value, ",", ""), 64)
+}
+
+func hasValidCommaGrouping(value string) bool {
+	if !strings.Contains(value, ",") {
+		return true
+	}
+	integerPart := value
+	if decimalIndex := strings.IndexByte(value, '.'); decimalIndex >= 0 {
+		integerPart = value[:decimalIndex]
+	}
+	integerPart = strings.TrimPrefix(strings.TrimPrefix(integerPart, "+"), "-")
+	groups := strings.Split(integerPart, ",")
+	if len(groups[0]) == 0 || len(groups[0]) > 3 {
+		return false
+	}
+	for _, group := range groups[1:] {
+		if len(group) != 3 {
+			return false
+		}
+	}
+	return true
 }
 
 func browseErrorMessage(resp *http.Response) string {
