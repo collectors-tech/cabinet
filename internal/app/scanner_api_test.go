@@ -107,6 +107,60 @@ func TestProviderHealthEndpointExposesMarketWatchTaxonomy(t *testing.T) {
 	}
 }
 
+func TestProviderHealthEndpointKeepsUnrelatedProvidersIsolated(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('bonzaslotcars', 'error', 'temporary provider failure', 0, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed non-ebay provider health: %v", err)
+	}
+
+	bonza := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=bonzaslotcars", nil, nil)
+	if bonza.Code != http.StatusOK {
+		t.Fatalf("bonza provider health status=%d body=%s", bonza.Code, bonza.Body.String())
+	}
+	var bonzaPayload map[string]any
+	if err := json.NewDecoder(bonza.Body).Decode(&bonzaPayload); err != nil {
+		t.Fatalf("decode bonza provider health payload: %v", err)
+	}
+	for key, expected := range map[string]any{
+		"provider":    "bonzaslotcars",
+		"status":      "error",
+		"state":       "degraded",
+		"category":    "failed",
+		"label":       "Failed",
+		"last_error":  "temporary provider failure",
+		"next_action": "review_provider_status",
+	} {
+		if got := bonzaPayload[key]; got != expected {
+			t.Fatalf("bonza provider health %s=%v, want %v in %+v", key, got, expected, bonzaPayload)
+		}
+	}
+
+	ebay := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=ebay", nil, nil)
+	if ebay.Code != http.StatusOK {
+		t.Fatalf("ebay provider health status=%d body=%s", ebay.Code, ebay.Body.String())
+	}
+	var ebayPayload map[string]any
+	if err := json.NewDecoder(ebay.Body).Decode(&ebayPayload); err != nil {
+		t.Fatalf("decode ebay provider health payload: %v", err)
+	}
+	for key, expected := range map[string]any{
+		"provider": "ebay",
+		"status":   "unknown",
+		"state":    "disabled",
+		"category": "not_checked",
+		"label":    "Not checked yet",
+	} {
+		if got := ebayPayload[key]; got != expected {
+			t.Fatalf("ebay provider health %s=%v, want %v in %+v", key, got, expected, ebayPayload)
+		}
+	}
+	if got := ebayPayload["last_error"]; got != nil {
+		t.Fatalf("unrelated non-ebay failure must not poison ebay last_error, got %+v", ebayPayload)
+	}
+}
+
 func TestScannerRetryFailuresEndpoint(t *testing.T) {
 	t.Parallel()
 
