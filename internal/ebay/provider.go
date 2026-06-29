@@ -265,6 +265,9 @@ func normalizeShippingCost(options []struct {
 		if raw == "" {
 			continue
 		}
+		if strings.TrimSpace(option.ShippingCost.Currency) == "" {
+			continue
+		}
 		value, err := strconv.ParseFloat(raw, 64)
 		if err != nil || value <= 0 {
 			continue
