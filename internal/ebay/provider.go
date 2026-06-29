@@ -210,7 +210,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			continue
 		}
 		seenListingIDs[listingID] = struct{}{}
-		shipping := normalizeShippingCost(it.ShippingOptions)
+		shipping := normalizeShippingCost(it.ShippingOptions, currency)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
 			ListingID:  listingID,
@@ -259,13 +259,15 @@ func normalizeShippingCost(options []struct {
 		Value    string `json:"value"`
 		Currency string `json:"currency"`
 	} `json:"shippingCost"`
-}) float64 {
+}, priceCurrency string) float64 {
+	priceCurrency = strings.ToUpper(strings.TrimSpace(priceCurrency))
 	for _, option := range options {
 		raw := strings.TrimSpace(option.ShippingCost.Value)
 		if raw == "" {
 			continue
 		}
-		if strings.TrimSpace(option.ShippingCost.Currency) == "" {
+		shippingCurrency := strings.ToUpper(strings.TrimSpace(option.ShippingCost.Currency))
+		if shippingCurrency == "" || shippingCurrency != priceCurrency {
 			continue
 		}
 		value, err := strconv.ParseFloat(raw, 64)
