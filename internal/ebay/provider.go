@@ -190,11 +190,15 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	}
 
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
+	seenListingIDs := map[string]struct{}{}
 	for _, it := range payload.ItemSummaries {
 		listingID := strings.TrimSpace(it.ItemID)
 		title := strings.TrimSpace(it.Title)
 		itemURL := strings.TrimSpace(it.ItemWebURL)
 		if listingID == "" || title == "" || itemURL == "" || !isWebURL(itemURL) {
+			continue
+		}
+		if _, seen := seenListingIDs[listingID]; seen {
 			continue
 		}
 		price, err := strconv.ParseFloat(strings.TrimSpace(it.Price.Value), 64)
@@ -205,6 +209,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if currency == "" {
 			continue
 		}
+		seenListingIDs[listingID] = struct{}{}
 		shipping := normalizeShippingCost(it.ShippingOptions)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
