@@ -1328,6 +1328,33 @@ paths:
                 $ref: "#/components/schemas/ScheduledScannerRunResponse"
         "400":
           $ref: "#/components/responses/Error"
+  /api/scanner/runs:
+    get:
+      tags: [Scanner]
+      summary: List persisted Market Watch run history
+      description: Lists recent persisted scanner/Market Watch run records for the active profile, optionally filtered to one query set.
+      parameters:
+        - in: query
+          name: query_set_id
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Recent run history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerRunsResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
   /api/scanner/failures:
     get:
       tags: [Scanner]
@@ -3829,6 +3856,32 @@ components:
       properties:
         retry_started: { type: boolean }
         query_set_id: { type: string }
+    ScannerRunsResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScannerRunHistoryRecord"
+    ScannerRunHistoryRecord:
+      type: object
+      required: [id, query_set_id, provider, trigger_type, started_at, finished_at, status, result_count, new_result_count]
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        query_set_id: { type: string }
+        provider: { type: string, example: ebay }
+        trigger_type: { type: string, example: manual }
+        started_at: { type: string }
+        finished_at: { type: string }
+        status: { type: string, enum: [never, running, succeeded, failed] }
+        result_count: { type: integer }
+        new_result_count: { type: integer }
+        error_category: { type: string }
+        error_message: { type: string }
+        retry_guidance: { type: string }
+        next_action: { type: string, example: check_provider_health_and_credentials }
     ScannerFailuresResponse:
       type: object
       required: [failures]

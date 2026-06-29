@@ -35,6 +35,23 @@ type QuerySet struct {
 	LastCandidateCount int      `json:"last_candidate_count,omitempty"`
 }
 
+type RunHistoryRecord struct {
+	ID             string `json:"id"`
+	ProfileID      string `json:"profile_id,omitempty"`
+	QuerySetID     string `json:"query_set_id"`
+	Provider       string `json:"provider"`
+	TriggerType    string `json:"trigger_type"`
+	StartedAt      string `json:"started_at"`
+	FinishedAt     string `json:"finished_at"`
+	Status         string `json:"status"`
+	ResultCount    int    `json:"result_count"`
+	NewResultCount int    `json:"new_result_count"`
+	ErrorCategory  string `json:"error_category,omitempty"`
+	ErrorMessage   string `json:"error_message,omitempty"`
+	RetryGuidance  string `json:"retry_guidance,omitempty"`
+	NextAction     string `json:"next_action,omitempty"`
+}
+
 type retryAfterProviderError interface {
 	RetryAfter() int
 }
@@ -1123,6 +1140,67 @@ func normalizeCandidateStatusForUpdate(status string) string {
 	default:
 		return ""
 	}
+}
+
+func (s *Service) ListRunHistoryByProfile(ctx context.Context, profileID, querySetID string, limit int) ([]RunHistoryRecord, error) {
+	profileID = strings.TrimSpace(profileID)
+	querySetID = strings.TrimSpace(querySetID)
+	if limit <= 0 {
+		limit = 25
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, query_set_id, provider, trigger_type, started_at, finished_at, status,
+			result_count, new_result_count, error_category, error_message, retry_guidance
+		FROM scanner_runs
+		WHERE (? = '' OR profile_id = ?) AND (? = '' OR query_set_id = ?)
+		ORDER BY finished_at DESC, started_at DESC
+		LIMIT ?
+	`, profileID, profileID, querySetID, querySetID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list scanner run history: %w", err)
+	}
+	defer rows.Close()
+	var out []RunHistoryRecord
+	for rows.Next() {
+		var record RunHistoryRecord
+		var profile, errorCategory, errorMessage, retryGuidance sql.NullString
+		if err := rows.Scan(
+			&record.ID,
+			&profile,
+			&record.QuerySetID,
+			&record.Provider,
+			&record.TriggerType,
+			&record.StartedAt,
+			&record.FinishedAt,
+			&record.Status,
+			&record.ResultCount,
+			&record.NewResultCount,
+			&errorCategory,
+			&errorMessage,
+			&retryGuidance,
+		); err != nil {
+			return nil, fmt.Errorf("scan scanner run history: %w", err)
+		}
+		record.ProfileID = strings.TrimSpace(profile.String)
+		record.Status = normalizeRunStatus(record.Status)
+		record.ErrorCategory = strings.TrimSpace(errorCategory.String)
+		record.ErrorMessage = strings.TrimSpace(errorMessage.String)
+		record.RetryGuidance = strings.TrimSpace(retryGuidance.String)
+		if record.RetryGuidance == "" && record.Status == "failed" {
+			record.RetryGuidance = retryGuidanceForProviderFailure(record.Provider)
+		}
+		if record.Status == "failed" {
+			record.NextAction = nextActionForProviderFailure(record.Provider)
+		}
+		out = append(out, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate scanner run history: %w", err)
+	}
+	return out, nil
 }
 
 func (s *Service) ListFailures(ctx context.Context) ([]map[string]string, error) {
