@@ -261,8 +261,8 @@ func TestAUWebshopThrottlingConformanceOPS001_RegionAU(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider health: %v", err)
 	}
-	if health["status"] != "error" {
-		t.Fatalf("expected degraded/error provider state after repeated throttling failures, got %+v", health)
+	if health["status"] != "rate_limited" {
+		t.Fatalf("expected rate_limited provider state after repeated throttling failures, got %+v", health)
 	}
 	if strings.TrimSpace(health["message"]) == "" {
 		t.Fatalf("expected provider health message populated after throttling failures, got %+v", health)
