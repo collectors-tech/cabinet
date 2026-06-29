@@ -161,6 +161,31 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 	}
 }
 
+func TestProviderSearchCanonicalizesConfiguredMarketplace(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-EBAY-C-MARKETPLACE-ID"); got != "EBAY_AU" {
+			t.Errorf("expected canonical marketplace header EBAY_AU, got %q", got)
+		}
+		wantFilter := "price:[..75.00],priceCurrency:AUD"
+		if got := r.URL.Query().Get("filter"); got != wantFilter {
+			t.Errorf("expected Browse filters %q, got %q", wantFilter, got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: " ebay_au "})
+	if _, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords: []string{"slot", "car"},
+		MaxPrice: 75,
+	}); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+}
+
 func TestProviderSearchTrimsBlankCriteriaBeforeBrowseRequest(t *testing.T) {
 	t.Parallel()
 

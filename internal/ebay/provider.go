@@ -79,6 +79,7 @@ func NewProvider(cfg ProviderConfig) *Provider {
 	if market == "" {
 		market = "EBAY_US"
 	}
+	market = strings.ToUpper(market)
 	return &Provider{
 		baseURL:     strings.TrimRight(base, "/"),
 		bearerToken: strings.TrimSpace(cfg.BearerToken),
