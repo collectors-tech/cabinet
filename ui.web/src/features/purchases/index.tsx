@@ -710,6 +710,8 @@ export function Purchases() {
   const [manualPurchaseResult, setManualPurchaseResult] = useState<
     string | null
   >(null)
+  const [manualPurchaseOrderContext, setManualPurchaseOrderContext] =
+    useState<PurchaseOrder | null>(null)
   const [purchaseSearch, setPurchaseSearch] = useState('')
   const [purchaseStatusFilter, setPurchaseStatusFilter] =
     useState<PurchaseTableStatusFilter>('active')
@@ -743,8 +745,7 @@ export function Purchases() {
   const [bulkReviewComment, setBulkReviewComment] = useState('')
   const [purchaseDetailAction, setPurchaseDetailAction] =
     useState<PurchaseDetailAction | null>(null)
-  const [purchaseDetailActionNotes, setPurchaseDetailActionNotes] =
-    useState('')
+  const [purchaseDetailActionNotes, setPurchaseDetailActionNotes] = useState('')
   const [purchaseDetailActionResult, setPurchaseDetailActionResult] = useState<
     string | null
   >(null)
@@ -1478,6 +1479,21 @@ export function Purchases() {
     setManualPurchaseResult(null)
   }
 
+  const openAddPurchaseDialog = (order?: PurchaseOrder | null) => {
+    setManualPurchaseOrderContext(order ?? null)
+    setAddDialogTab('new')
+    setManualPurchaseError(null)
+    setPurchaseImportError(null)
+    if (order) {
+      setManualPurchaseForm({
+        ...defaultManualPurchaseForm,
+        source: order.source || 'manual',
+        tracking: order.tracking || '',
+      })
+    }
+    setAddDialogOpen(true)
+  }
+
   const persistPurchaseDraft = async (draft: {
     key: string
     title: string
@@ -1486,6 +1502,7 @@ export function Purchases() {
     currency?: string
     tracking?: string
     provenance?: string
+    orderID?: string
   }) => {
     const itemResponse = await fetch('/api/items', {
       method: 'POST',
@@ -1516,7 +1533,7 @@ export function Purchases() {
         item_id: item.id,
         state: 'purchase',
         source: draft.provenance || draft.source || 'manual',
-        external_ref: draft.tracking || draft.key,
+        external_ref: draft.orderID || draft.tracking || draft.key,
         quantity: 1,
         amount: parsePurchaseAmount(draft.price),
         currency: draft.currency || 'AUD',
@@ -1620,6 +1637,7 @@ export function Purchases() {
     const source = manualPurchaseForm.source.trim() || 'manual'
     const price = manualPurchaseForm.price.trim()
     const tracking = manualPurchaseForm.tracking.trim()
+    const contextOrder = manualPurchaseOrderContext
 
     if (!title) {
       setManualPurchaseError('Purchase title is required.')
@@ -1645,6 +1663,7 @@ export function Purchases() {
         source,
         price,
         tracking,
+        orderID: contextOrder?.order_id,
       })
     } catch (err) {
       setManualPurchaseError(
@@ -1654,11 +1673,22 @@ export function Purchases() {
       return
     }
     setManualPurchaseDrafts((current) => [draft, ...current])
+    if (contextOrder) {
+      await loadPurchaseOrders()
+      setSelectedPurchase({
+        type: 'order',
+        orderKey: purchaseOrderRowKey(contextOrder),
+      })
+    }
     setManualPurchaseForm(defaultManualPurchaseForm)
+    setManualPurchaseOrderContext(null)
     setManualPurchaseError(null)
     setManualPurchaseResult(
-      'Persisted manual purchase draft for ' +
+      'Persisted manual ' +
+        (contextOrder ? 'line item' : 'purchase draft') +
+        ' for ' +
         title +
+        (contextOrder ? ' inside order ' + contextOrder.order_id : '') +
         ' through the commerce lifecycle API.'
     )
     setPurchaseStatusFilter('all')
@@ -2049,7 +2079,7 @@ export function Purchases() {
                 <Button
                   size='icon'
                   data-testid='purchases-add-button'
-                  onClick={() => setAddDialogOpen(true)}
+                  onClick={() => openAddPurchaseDialog()}
                   aria-label='Add purchase'
                   title='Add purchase'
                 >
@@ -2270,7 +2300,9 @@ export function Purchases() {
                       <TableHead className='w-[11rem]'>Rating</TableHead>
                       <TableHead className='w-[11rem]'>Quality</TableHead>
                       <TableHead className='w-[11rem]'>Timeliness</TableHead>
-                      <TableHead className='w-[14rem]'>Review comment</TableHead>
+                      <TableHead className='w-[14rem]'>
+                        Review comment
+                      </TableHead>
                     </>
                   ) : null}
                   <TableHead className='w-[10rem] text-right'>
@@ -2298,9 +2330,10 @@ export function Purchases() {
                         className={
                           selectedPurchase?.type === 'order' &&
                           selectedPurchase.orderKey === row.key
-                            ? 'bg-muted/50'
-                            : undefined
+                            ? 'border-l-4 border-l-primary bg-primary/10 ring-1 ring-primary/30'
+                            : 'hover:bg-muted/50'
                         }
+                        tabIndex={order ? 0 : undefined}
                         data-testid='purchases-table-row'
                         data-selected={
                           selectedPurchase?.type === 'order' &&
@@ -2308,6 +2341,26 @@ export function Purchases() {
                             ? 'true'
                             : 'false'
                         }
+                        onClick={() => {
+                          if (order) {
+                            setSelectedPurchase({
+                              type: 'order',
+                              orderKey: row.key,
+                            })
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (
+                            order &&
+                            (event.key === 'Enter' || event.key === ' ')
+                          ) {
+                            event.preventDefault()
+                            setSelectedPurchase({
+                              type: 'order',
+                              orderKey: row.key,
+                            })
+                          }
+                        }}
                       >
                         <TableCell className='truncate font-medium'>
                           <div className='min-w-0'>
@@ -2318,12 +2371,13 @@ export function Purchases() {
                                 variant='link'
                                 className='h-auto p-0 text-xs'
                                 data-testid='purchases-order-select'
-                                onClick={() =>
+                                onClick={(event) => {
+                                  event.stopPropagation()
                                   setSelectedPurchase({
                                     type: 'order',
                                     orderKey: row.key,
                                   })
-                                }
+                                }}
                               >
                                 View order detail
                               </Button>
@@ -2514,9 +2568,10 @@ export function Purchases() {
                             selectedPurchase?.type === 'line' &&
                             selectedPurchase.orderKey === row.key &&
                             selectedPurchase.lineItemId === item.item_id
-                              ? 'bg-muted/60'
-                              : 'bg-muted/20'
+                              ? 'border-l-4 border-l-primary bg-primary/10 ring-1 ring-primary/30'
+                              : 'bg-muted/20 hover:bg-muted/40'
                           }
+                          tabIndex={0}
                           data-testid='purchases-line-item-row'
                           data-selected={
                             selectedPurchase?.type === 'line' &&
@@ -2525,6 +2580,23 @@ export function Purchases() {
                               ? 'true'
                               : 'false'
                           }
+                          onClick={() =>
+                            setSelectedPurchase({
+                              type: 'line',
+                              orderKey: row.key,
+                              lineItemId: item.item_id,
+                            })
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedPurchase({
+                                type: 'line',
+                                orderKey: row.key,
+                                lineItemId: item.item_id,
+                              })
+                            }
+                          }}
                         >
                           <TableCell className='pl-8'>
                             <div className='min-w-0'>
@@ -2536,13 +2608,14 @@ export function Purchases() {
                                 variant='link'
                                 className='h-auto p-0 text-xs'
                                 data-testid='purchases-line-item-select'
-                                onClick={() =>
+                                onClick={(event) => {
+                                  event.stopPropagation()
                                   setSelectedPurchase({
                                     type: 'line',
                                     orderKey: row.key,
                                     lineItemId: item.item_id,
                                   })
-                                }
+                                }}
                               >
                                 View item detail
                               </Button>
@@ -2917,6 +2990,18 @@ export function Purchases() {
                         type='button'
                         size='sm'
                         variant='outline'
+                        data-testid='purchases-order-add-item-action'
+                        onClick={() =>
+                          openAddPurchaseDialog(selectedPurchaseOrder)
+                        }
+                      >
+                        <PackagePlus className='mr-1 h-3.5 w-3.5' />
+                        Add item
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
                         data-testid='purchases-order-receive-action'
                         onClick={() => openPurchaseDetailAction('receive')}
                       >
@@ -2975,9 +3060,7 @@ export function Purchases() {
                       </span>
                     </div>
                     <div className='grid gap-2'>
-                      <Label htmlFor='purchases-review-comment'>
-                        Comment
-                      </Label>
+                      <Label htmlFor='purchases-review-comment'>Comment</Label>
                       <Textarea
                         id='purchases-review-comment'
                         data-testid='purchases-review-comment'
@@ -4386,14 +4469,22 @@ export function Purchases() {
           setAddDialogOpen(open)
           if (open) {
             setPurchaseImportError(null)
+          } else {
+            setManualPurchaseOrderContext(null)
           }
         }}
       >
         <DialogContent data-testid='purchases-add-dialog'>
           <DialogHeader>
-            <DialogTitle>New purchase</DialogTitle>
+            <DialogTitle>
+              {manualPurchaseOrderContext
+                ? 'Add item to purchase order'
+                : 'New purchase'}
+            </DialogTitle>
             <DialogDescription>
-              Create or import a purchase draft before confirming persistence.
+              {manualPurchaseOrderContext
+                ? 'Create a line item inside the selected purchase order.'
+                : 'Create or import a purchase draft before confirming persistence.'}
             </DialogDescription>
           </DialogHeader>
           <Tabs
@@ -4415,6 +4506,24 @@ export function Purchases() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value='new' className='space-y-3 pt-4'>
+              {manualPurchaseOrderContext ? (
+                <div
+                  className='rounded-md border bg-muted/30 p-3 text-sm'
+                  data-testid='purchases-add-existing-order-context'
+                >
+                  <p className='text-xs font-medium text-muted-foreground uppercase'>
+                    Existing order
+                  </p>
+                  <p className='mt-1 font-medium break-all'>
+                    {manualPurchaseOrderContext.order_id}
+                  </p>
+                  <p className='text-muted-foreground'>
+                    {manualPurchaseOrderContext.source} /{' '}
+                    {manualPurchaseOrderContext.seller || 'seller pending'} ·{' '}
+                    {manualPurchaseOrderContext.tracking || 'tracking pending'}
+                  </p>
+                </div>
+              ) : null}
               <div className='grid gap-1.5'>
                 <Label htmlFor='purchase-manual-title'>Purchase title</Label>
                 <Input

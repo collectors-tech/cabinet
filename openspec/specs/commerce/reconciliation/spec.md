@@ -175,3 +175,13 @@ Cabinet SHALL open clear modal-backed action workflows from the Purchase & Feedb
 - **THEN** Cabinet MUST open a modal workflow that names the selected order, explains the action purpose, accepts notes or evidence, supports cancellation, and returns a visible queued outcome after confirmation.
 - **WHEN** the user activates Receive, Reconcile, or Review from a selected line-item detail pane
 - **THEN** Cabinet MUST open a modal workflow that names the selected line item, preserves the parent order context, accepts notes or evidence, supports cancellation, and returns a visible queued outcome after confirmation.
+
+### Requirement COMMERCE-RECONCILIATION-016: Purchases SHALL add line items to existing orders
+Cabinet SHALL let users add a new line item to the currently selected purchase order without forcing creation of a separate order.
+
+#### Scenario: Add a line item to the selected purchase order
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders and an order is selected
+- **WHEN** the user activates the selected order add-item action
+- **THEN** Cabinet MUST open the manual purchase flow in existing-order mode, name the selected order context, and prefill source/order evidence from the selected order.
+- **WHEN** the user saves the new line item
+- **THEN** Cabinet MUST persist the line item through the commerce lifecycle API using the selected order as the purchase order reference, refresh the grouped purchase-order list, keep the selected order context, and expose the added item as a child line row.
