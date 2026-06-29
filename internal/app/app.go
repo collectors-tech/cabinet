@@ -2063,12 +2063,43 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		active, _ := profiles.GetActiveProfile(r.Context())
-		items, err := scannerSvc.ListCandidatesByProfile(r.Context(), strings.TrimSpace(active.ID), querySetID)
+		list, err := scannerSvc.ListCandidatesByProfileFiltered(r.Context(), strings.TrimSpace(active.ID), querySetID, scanner.CandidateListFilter{
+			Status:   r.URL.Query().Get("status"),
+			Provider: r.URL.Query().Get("provider"),
+			Page:     parsePositiveInt(r.URL.Query().Get("page"), 1),
+			PageSize: parsePositiveInt(r.URL.Query().Get("page_size"), 50),
+		})
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_candidates"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"candidates": items})
+		_ = json.NewEncoder(w).Encode(list)
+	})
+	mux.HandleFunc("/api/scanner/candidates/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPatch {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		candidateID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/scanner/candidates/"), "/")
+		if candidateID == "" {
+			http.Error(w, `{"error":"missing_candidate_id"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		active, _ := profiles.GetActiveProfile(r.Context())
+		item, err := scannerSvc.UpdateCandidateStatusForProfile(r.Context(), strings.TrimSpace(active.ID), candidateID, req.Status)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_update_candidate_status"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(item)
 	})
 	mux.HandleFunc("/api/scanner/recognition-review/apply", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
