@@ -1166,7 +1166,7 @@ func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 		t.Fatalf("openapi missing /api/scanner/candidates path in %s", specPath)
 	}
 	for _, token := range []string{
-		"Lists saved-search candidates for output inspection and handoff, including provider/query provenance, lifecycle status/provider filters, and pagination metadata used by Market Watch result inbox actions.",
+		"Lists saved-search candidates for output inspection and handoff, including provider/query provenance, lifecycle status/provider filters, decision history, and pagination metadata used by Market Watch result inbox actions.",
 		"name: query_set_id",
 		"name: status",
 		"name: provider",
@@ -1240,6 +1240,8 @@ func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 		"stock_state: { type: string",
 		"stock_count: { type: integer",
 		"source: { type: string, description: Source provider id such as ebay. }",
+		"decision_history:",
+		"$ref: \"#/components/schemas/CandidateDecisionHistoryRecord\"",
 	} {
 		if !strings.Contains(candidateSchema, token) {
 			t.Fatalf("openapi Candidate schema missing %q:\n%s", token, candidateSchema)

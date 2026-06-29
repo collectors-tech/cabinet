@@ -605,7 +605,7 @@ paths:
     get:
       tags: [Scanner]
       summary: List scanner candidates for query set
-      description: Lists saved-search candidates for output inspection and handoff, including provider/query provenance, lifecycle status/provider filters, and pagination metadata used by Market Watch result inbox actions.
+      description: Lists saved-search candidates for output inspection and handoff, including provider/query provenance, lifecycle status/provider filters, decision history, and pagination metadata used by Market Watch result inbox actions.
       parameters:
         - in: query
           name: query_set_id
@@ -662,7 +662,7 @@ paths:
     patch:
       tags: [Scanner]
       summary: Update scanner candidate lifecycle status
-      description: Persists a profile-scoped Market Watch result inbox lifecycle decision for a saved-search candidate and returns the updated candidate.
+      description: Persists a profile-scoped Market Watch result inbox lifecycle decision for a saved-search candidate, records decision history, and returns the updated candidate.
       parameters:
         - in: path
           name: candidate_id
@@ -3940,6 +3940,20 @@ components:
         stock_state: { type: string, description: Normalized provider stock state such as in_stock, low_stock, out_of_stock, or unknown. }
         stock_count: { type: integer, description: Normalized provider stock quantity when available; -1 indicates unknown. }
         source: { type: string, description: Source provider id such as ebay. }
+        decision_history:
+          type: array
+          description: Most recent Market Watch result lifecycle transitions for the details side panel.
+          items:
+            $ref: "#/components/schemas/CandidateDecisionHistoryRecord"
+    CandidateDecisionHistoryRecord:
+      type: object
+      properties:
+        id: { type: string }
+        candidate_id: { type: string }
+        from_status: { type: string }
+        to_status: { type: string }
+        reason: { type: string }
+        created_at: { type: string }
     MatchResult:
       type: object
       properties:

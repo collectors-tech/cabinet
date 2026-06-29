@@ -248,6 +248,17 @@ func TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI(t *testing
 	if got, _ := updated["status"].(string); got != "dismissed" {
 		t.Fatalf("expected dismissed updated candidate, got %+v", updated)
 	}
+	patchHistory, ok := updated["decision_history"].([]any)
+	if !ok || len(patchHistory) != 1 {
+		t.Fatalf("expected patch response to include one decision history record, got %+v", updated["decision_history"])
+	}
+	firstHistory, ok := patchHistory[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected decision history object, got %+v", patchHistory[0])
+	}
+	if firstHistory["from_status"] != "new" || firstHistory["to_status"] != "dismissed" {
+		t.Fatalf("expected decision history new -> dismissed, got %+v", firstHistory)
+	}
 
 	filtered := doRequest(t, a, http.MethodGet, "/api/scanner/candidates?query_set_id=result-inbox-api-q&status=dismissed&provider=ebay", nil, nil)
 	if filtered.Code != http.StatusOK {
@@ -264,6 +275,10 @@ func TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI(t *testing
 	}
 	if payload.Total != 1 || len(payload.Candidates) != 1 || payload.Candidates[0]["id"] != "result-inbox-api-c1" {
 		t.Fatalf("expected dismissed provider-filtered candidate after patch, got %+v", payload)
+	}
+	listHistory, ok := payload.Candidates[0]["decision_history"].([]any)
+	if !ok || len(listHistory) != 1 {
+		t.Fatalf("expected list response to include decision history, got %+v", payload.Candidates[0])
 	}
 }
 

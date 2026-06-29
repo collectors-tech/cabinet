@@ -1150,6 +1150,16 @@ describe('integrations/ui-screen-market-watch', () => {
               decision_status: 'dismissed',
               handoff_state: 'dismissed',
               wishlist_match: false,
+              decision_history: [
+                {
+                  id: 'decision-dismissed-gap-1',
+                  candidate_id: 'cand-dismissed-gap',
+                  from_status: 'new',
+                  to_status: 'dismissed',
+                  reason: 'market_watch_result_lifecycle_update',
+                  created_at: '2026-06-28T12:10:00Z',
+                },
+              ],
             },
           ],
           run: {
@@ -1180,12 +1190,16 @@ describe('integrations/ui-screen-market-watch', () => {
         cy.contains('th', 'First Seen').should('be.visible')
         cy.contains('th', 'Last Seen').should('be.visible')
         cy.contains('th', 'Status').should('be.visible')
+        cy.contains('th', 'Decision History').should('be.visible')
         cy.contains('td', 'Wishlist Gap Watch').should('be.visible')
         cy.contains('td', 'wishlist').should('be.visible')
         cy.contains('td', 'Matched wishlist keyword AFX Mega G+').should('be.visible')
         cy.contains('td', '50.00 AUD').should('be.visible')
         cy.contains('td', 'New').should('be.visible')
         cy.contains('td', 'Dismissed').should('be.visible')
+        cy.get('[data-testid="market-watch-result-decision-history-cand-dismissed-gap"]')
+          .should('contain', 'new to dismissed')
+          .and('contain', '6/28/2026')
       })
 
       cy.get('[data-testid="market-watch-result-status-filter"]').select('dismissed')

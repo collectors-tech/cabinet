@@ -76,22 +76,32 @@ type CandidateInput struct {
 }
 
 type Candidate struct {
-	ID         string  `json:"id"`
-	QuerySetID string  `json:"query_set_id"`
-	ListingID  string  `json:"listing_id"`
-	Title      string  `json:"title"`
-	Price      float64 `json:"price"`
-	Currency   string  `json:"observed_currency"`
-	Shipping   float64 `json:"shipping"`
-	URL        string  `json:"url"`
-	Image      string  `json:"image"`
-	Seller     string  `json:"seller"`
-	FirstSeen  string  `json:"first_seen"`
-	LastSeen   string  `json:"last_seen"`
-	Status     string  `json:"status"`
-	Source     string  `json:"source"`
-	StockState string  `json:"stock_state"`
-	StockCount int     `json:"stock_count"`
+	ID              string                    `json:"id"`
+	QuerySetID      string                    `json:"query_set_id"`
+	ListingID       string                    `json:"listing_id"`
+	Title           string                    `json:"title"`
+	Price           float64                   `json:"price"`
+	Currency        string                    `json:"observed_currency"`
+	Shipping        float64                   `json:"shipping"`
+	URL             string                    `json:"url"`
+	Image           string                    `json:"image"`
+	Seller          string                    `json:"seller"`
+	FirstSeen       string                    `json:"first_seen"`
+	LastSeen        string                    `json:"last_seen"`
+	Status          string                    `json:"status"`
+	Source          string                    `json:"source"`
+	StockState      string                    `json:"stock_state"`
+	StockCount      int                       `json:"stock_count"`
+	DecisionHistory []CandidateDecisionRecord `json:"decision_history,omitempty"`
+}
+
+type CandidateDecisionRecord struct {
+	ID          string `json:"id"`
+	CandidateID string `json:"candidate_id"`
+	FromStatus  string `json:"from_status"`
+	ToStatus    string `json:"to_status"`
+	Reason      string `json:"reason,omitempty"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type CandidateListFilter struct {
@@ -1068,6 +1078,9 @@ func (s *Service) ListCandidatesByProfileFiltered(ctx context.Context, profileID
 		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
 			return CandidateList{}, fmt.Errorf("scan candidate: %w", err)
 		}
+		if err := s.loadCandidateDecisionHistory(ctx, &c); err != nil {
+			return CandidateList{}, err
+		}
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
@@ -1085,6 +1098,17 @@ func (s *Service) UpdateCandidateStatusForProfile(ctx context.Context, profileID
 	if nextStatus == "" {
 		return Candidate{}, fmt.Errorf("unsupported candidate status")
 	}
+	var previousStatus string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT status
+		FROM scanner_candidates
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, candidateID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&previousStatus); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Candidate{}, fmt.Errorf("candidate not found")
+		}
+		return Candidate{}, fmt.Errorf("load candidate status: %w", err)
+	}
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE scanner_candidates
 		SET status = ?, last_seen = last_seen
@@ -1097,6 +1121,14 @@ func (s *Service) UpdateCandidateStatusForProfile(ctx context.Context, profileID
 	if affected == 0 {
 		return Candidate{}, fmt.Errorf("candidate not found")
 	}
+	if strings.TrimSpace(previousStatus) != nextStatus {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO scanner_candidate_decision_history(id, candidate_id, from_status, to_status, reason, created_at)
+			VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, uuid.NewString(), candidateID, strings.TrimSpace(previousStatus), nextStatus, "market_watch_result_lifecycle_update"); err != nil {
+			return Candidate{}, fmt.Errorf("record candidate decision history: %w", err)
+		}
+	}
 	var c Candidate
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
@@ -1105,7 +1137,38 @@ func (s *Service) UpdateCandidateStatusForProfile(ctx context.Context, profileID
 	`, candidateID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
 		return Candidate{}, fmt.Errorf("load candidate: %w", err)
 	}
+	if err := s.loadCandidateDecisionHistory(ctx, &c); err != nil {
+		return Candidate{}, err
+	}
 	return c, nil
+}
+
+func (s *Service) loadCandidateDecisionHistory(ctx context.Context, candidate *Candidate) error {
+	if strings.TrimSpace(candidate.ID) == "" {
+		return nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, candidate_id, from_status, to_status, reason, created_at
+		FROM scanner_candidate_decision_history
+		WHERE candidate_id = ?
+		ORDER BY created_at DESC, id DESC
+		LIMIT 25
+	`, strings.TrimSpace(candidate.ID))
+	if err != nil {
+		return fmt.Errorf("list candidate decision history: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record CandidateDecisionRecord
+		if err := rows.Scan(&record.ID, &record.CandidateID, &record.FromStatus, &record.ToStatus, &record.Reason, &record.CreatedAt); err != nil {
+			return fmt.Errorf("scan candidate decision history: %w", err)
+		}
+		candidate.DecisionHistory = append(candidate.DecisionHistory, record)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate candidate decision history: %w", err)
+	}
+	return nil
 }
 
 func normalizeCandidateStatusFilter(status string) (string, string) {
