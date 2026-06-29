@@ -300,6 +300,32 @@ func TestProviderSearchTrimsBrowsePriceValue(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|bad-price|0","title":"Bad Price Slot Car","price":{"value":"not-a-price","currency":"AUD"},"itemWebUrl":"https://ebay/item/bad-price","seller":{"username":"seller-price"}},{"itemId":"v1|good-price|0","title":"Good Price Slot Car","price":{"value":"37.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/good-price","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the parseable-price item, got %+v", items)
+	}
+	if items[0].ListingID != "v1|good-price|0" || items[0].Price != 37.50 {
+		t.Fatalf("expected good-price candidate to survive normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	t.Parallel()
 
