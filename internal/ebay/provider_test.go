@@ -186,6 +186,28 @@ func TestProviderSearchTrimsBlankCriteriaBeforeBrowseRequest(t *testing.T) {
 	}
 }
 
+func TestProviderSearchCapsBrowseLimit(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("limit"); got != "200" {
+			t.Errorf("expected direct provider Browse limit to be capped at 200, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords:     []string{"slot", "car"},
+		ItemsPerPage: 500,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+}
+
 func TestProviderSearchRejectsOnlyBlankKeywords(t *testing.T) {
 	t.Parallel()
 

@@ -34,6 +34,8 @@ type ProviderError struct {
 	RetryAfterSeconds int
 }
 
+const browseMaxLimit = 200
+
 func (e *ProviderError) Error() string {
 	if e == nil {
 		return ""
@@ -120,8 +122,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	if len(exclusions) > 0 {
 		v.Set("exclude", strings.Join(exclusions, ","))
 	}
-	if q.ItemsPerPage > 0 {
-		v.Set("limit", strconv.Itoa(q.ItemsPerPage))
+	if limit := browseLimit(q.ItemsPerPage); limit > 0 {
+		v.Set("limit", strconv.Itoa(limit))
 	}
 	v.Set("fieldgroups", "EXTENDED")
 	u := p.baseURL + "/buy/browse/v1/item_summary/search?" + v.Encode()
@@ -372,6 +374,16 @@ func browseCurrency(region, marketplace string) string {
 		}
 	}
 	return "USD"
+}
+
+func browseLimit(itemsPerPage int) int {
+	if itemsPerPage <= 0 {
+		return 0
+	}
+	if itemsPerPage > browseMaxLimit {
+		return browseMaxLimit
+	}
+	return itemsPerPage
 }
 
 func currencyForCountry(country string) string {
