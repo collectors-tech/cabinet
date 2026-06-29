@@ -33,8 +33,9 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 		if got := r.URL.Query().Get("q"); got != "AFX P-1" {
 			t.Errorf("expected joined search keywords, got %q", got)
 		}
-		if got := r.URL.Query().Get("filter"); got != "price:[..100.00]" {
-			t.Errorf("expected max-price filter, got %q", got)
+		wantFilter := "price:[..100.00],priceCurrency:USD,itemLocationCountry:US,conditions:{USED}"
+		if got := r.URL.Query().Get("filter"); got != wantFilter {
+			t.Errorf("expected Browse filters %q, got %q", wantFilter, got)
 		}
 		if got := r.URL.Query().Get("exclude"); got != "broken" {
 			t.Errorf("expected exclusion query, got %q", got)
@@ -84,6 +85,79 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 	}
 	if items[0].StockState != "low_stock" || items[0].StockCount != 2 {
 		t.Fatalf("expected low_stock/2, got %+v", items[0])
+	}
+}
+
+func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		marketplace string
+		query       scanner.QuerySet
+		wantFilter  string
+	}{
+		{
+			name:        "marketplace drives currency while region drives location and condition",
+			marketplace: "EBAY_AU",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				MaxPrice:  75,
+				Region:    " au ",
+				Condition: "sealed",
+			},
+			wantFilter: "price:[..75.00],priceCurrency:AUD,itemLocationCountry:AU,conditions:{NEW}",
+		},
+		{
+			name:        "marketplace supplies price currency when region is blank",
+			marketplace: "EBAY_GB",
+			query: scanner.QuerySet{
+				Keywords: []string{"slot car"},
+				MaxPrice: 75,
+			},
+			wantFilter: "price:[..75.00],priceCurrency:GBP",
+		},
+		{
+			name:        "marketplace currency wins when location country differs",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords: []string{"slot car"},
+				MaxPrice: 75,
+				Region:   "AU",
+			},
+			wantFilter: "price:[..75.00],priceCurrency:USD,itemLocationCountry:AU",
+		},
+		{
+			name:        "unmapped condition is ignored instead of sending unsupported value",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				Region:    "US",
+				Condition: "collector grade",
+			},
+			wantFilter: "itemLocationCountry:US",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.URL.Query().Get("filter"); got != tt.wantFilter {
+					t.Errorf("expected Browse filters %q, got %q", tt.wantFilter, got)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+			}))
+			defer srv.Close()
+
+			p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: tt.marketplace})
+			if _, err := p.Search(context.Background(), tt.query); err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+		})
 	}
 }
 
