@@ -467,6 +467,43 @@ func TestProviderSearchDropsNonWebBrowseImageURLs(t *testing.T) {
 	}
 }
 
+func TestProviderSearchFallsBackBlankBrowseSeller(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|blank-seller|0","title":"Blank Seller Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/blank-seller","seller":{"username":"   "}},{"itemId":"v1|named-seller|0","title":"Named Seller Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/named-seller","seller":{"username":" seller-name "}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected both otherwise valid candidates to survive seller fallback, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|blank-seller|0":
+			if item.Seller != "ebay" {
+				t.Fatalf("expected blank seller to fall back to ebay, got %+v", item)
+			}
+		case "v1|named-seller|0":
+			if item.Seller != "seller-name" {
+				t.Fatalf("expected seller username to be trimmed, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
 func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	t.Parallel()
 
