@@ -465,6 +465,125 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="purchases-detail-action-cancel"]').click()
   })
 
+  it('COMMERCE-RECONCILIATION-016 adds a line item to an existing purchase order', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+
+    let persistedExistingOrderLine = false
+    const orderWithAddedLine = () => ({
+      ...groupedPurchaseOrderFixture(),
+      line_item_count: 3,
+      total_amount: 20.44,
+      unreceived_count: 3,
+      line_items: [
+        ...groupedPurchaseOrderFixture().line_items,
+        {
+          item_id: 'created-po-line-5',
+          title: 'Replacement controller board',
+          quantity: 1,
+          amount: 12.34,
+          status: 'expected',
+          lifecycle_entry_id: 'life-po-created',
+          expected_arrival_id: 'arrival-po-created',
+        },
+      ],
+    })
+
+    cy.intercept('GET', '/api/commerce/purchase-orders*', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          page: 1,
+          page_size: 10,
+          total: 1,
+          total_pages: 1,
+          orders: [
+            persistedExistingOrderLine
+              ? orderWithAddedLine()
+              : groupedPurchaseOrderFixture(),
+          ],
+        },
+      })
+    }).as('listPurchaseOrdersForAddItem')
+    cy.intercept('POST', '/api/items', (req) => {
+      expect(req.body.title).to.eq('Replacement controller board')
+      req.reply({
+        statusCode: 201,
+        body: { id: 'created-po-line-5' },
+      })
+    }).as('createPurchaseLineItem')
+    cy.intercept('POST', '/api/commerce/lifecycle', (req) => {
+      expect(req.body.item_id).to.eq('created-po-line-5')
+      expect(req.body.state).to.eq('purchase')
+      expect(req.body.source).to.eq('ebay')
+      expect(req.body.external_ref).to.eq('EBAY-ORDER-100')
+      expect(req.body.amount).to.eq(12.34)
+      persistedExistingOrderLine = true
+      req.reply({
+        statusCode: 201,
+        body: {
+          entry: {
+            id: 'life-po-created',
+            expected_arrival_id: 'arrival-po-created',
+          },
+          expected_arrival: { id: 'arrival-po-created' },
+        },
+      })
+    }).as('createPurchaseLifecycleForExistingOrder')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.wait('@listPurchaseOrdersForAddItem')
+
+    cy.get('[data-testid="purchases-table-row"]')
+      .first()
+      .should('have.attr', 'data-selected', 'true')
+    cy.get('[data-testid="purchases-order-add-item-action"]').click()
+    cy.get('[data-testid="purchases-add-dialog"]')
+      .should('be.visible')
+      .and('contain', 'Add item to purchase order')
+    cy.get('[data-testid="purchases-add-existing-order-context"]')
+      .should('contain', 'EBAY-ORDER-100')
+      .and('contain', 'ebay / seller-one')
+      .and('contain', 'TRACK-100')
+    cy.get('[data-testid="purchases-add-new-source"]').should(
+      'have.value',
+      'ebay'
+    )
+    cy.get('[data-testid="purchases-add-new-tracking"]').should(
+      'have.value',
+      'TRACK-100'
+    )
+
+    cy.get('[data-testid="purchases-add-new-title"]').type(
+      'Replacement controller board'
+    )
+    cy.get('[data-testid="purchases-add-new-price"]').type('AUD 12.34')
+    cy.get('[data-testid="purchases-add-new-save"]').click()
+    cy.wait('@createPurchaseLineItem')
+    cy.wait('@createPurchaseLifecycleForExistingOrder')
+    cy.wait('@listPurchaseOrdersForAddItem')
+
+    cy.get('[data-testid="purchases-table-row"]')
+      .first()
+      .should('have.attr', 'data-selected', 'true')
+      .and('contain', '3 line items')
+      .and('contain', 'AUD 20.44')
+    cy.contains(
+      '[data-testid="purchases-line-item-row"]',
+      'Replacement controller board'
+    )
+      .should('be.visible')
+      .and('contain', 'Lifecycle life-po-created')
+      .and('contain', 'Arrival arrival-po-created')
+    cy.get('[data-testid="purchases-detail-pane"]')
+      .should('contain', 'EBAY-ORDER-100')
+      .and('contain', 'Replacement controller board')
+  })
+
   it('EBAY-PURCHASE-CAPTURE-008 drafts review-mode scores comments and bulk actions', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
