@@ -347,12 +347,38 @@ func TestProviderSearchTrimsBrowsePriceValue(t *testing.T) {
 	}
 }
 
+func TestProviderSearchParsesCommaGroupedBrowsePriceValue(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|comma-price|0","title":"Comma Price Slot Car","price":{"value":" 1,237.50 ","currency":"AUD"},"itemWebUrl":"https://ebay/item/comma-price","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].Price != 1237.50 {
+		t.Fatalf("expected comma-grouped Browse price 1237.50, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|bad-price|0","title":"Bad Price Slot Car","price":{"value":"not-a-price","currency":"AUD"},"itemWebUrl":"https://ebay/item/bad-price","seller":{"username":"seller-price"}},{"itemId":"v1|good-price|0","title":"Good Price Slot Car","price":{"value":"37.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/good-price","seller":{"username":"seller-price"}}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|bad-price|0","title":"Bad Price Slot Car","price":{"value":"not-a-price","currency":"AUD"},"itemWebUrl":"https://ebay/item/bad-price","seller":{"username":"seller-price"}},{"itemId":"v1|bad-comma-price|0","title":"Bad Comma Price Slot Car","price":{"value":"12,34.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/bad-comma-price","seller":{"username":"seller-price"}},{"itemId":"v1|good-price|0","title":"Good Price Slot Car","price":{"value":"37.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/good-price","seller":{"username":"seller-price"}}]}`))
 	}))
 	defer srv.Close()
 
@@ -606,12 +632,38 @@ func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	}
 }
 
+func TestProviderSearchParsesCommaGroupedShippingCost(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|comma-shipping|0","title":"Comma Shipping Slot Car","price":{"value":"122.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/comma-shipping","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":" 1,008.75 ","currency":"AUD"}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].Shipping != 1008.75 {
+		t.Fatalf("expected comma-grouped shipping cost 1008.75, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchUsesFirstParseableShippingCost(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|790|0","title":"Fallback Shipping Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/790","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"","currency":"AUD"}},{"shippingCost":{"value":"not-a-price","currency":"AUD"}},{"shippingCost":{"value":"11.25","currency":"AUD"}}]}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|790|0","title":"Fallback Shipping Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/790","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"","currency":"AUD"}},{"shippingCost":{"value":"not-a-price","currency":"AUD"}},{"shippingCost":{"value":"12,34.25","currency":"AUD"}},{"shippingCost":{"value":"11.25","currency":"AUD"}}]}]}`))
 	}))
 	defer srv.Close()
 
