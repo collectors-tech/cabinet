@@ -141,6 +141,7 @@ Cabinet SHALL persist stock/availability observations from eBay listing payloads
   - `stock_state`
   - `stock_count`
   - `last_seen`
+- **AND** provider normalization MUST use the first meaningful availability entry when eBay returns a leading blank or unknown `estimatedAvailabilities` entry before a later stock signal.
 - **AND** scanner candidate read API documentation MUST expose `stock_state` and `stock_count` for saved-search clients that inspect eBay output details or downstream discoveries.
 
 ### Requirement INTEGRATION-025: eBay buyer-interest sync MUST preserve state and provenance

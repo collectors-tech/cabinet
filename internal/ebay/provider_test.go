@@ -582,6 +582,32 @@ func TestProviderSearchSkipsNonPositiveShippingCost(t *testing.T) {
 	}
 }
 
+func TestProviderSearchUsesFirstMeaningfulAvailability(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|stock-fallback|0","title":"Availability Fallback Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/stock-fallback","seller":{"username":"seller-stock"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":" ","estimatedAvailableQuantity":0},{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].StockState != "low_stock" || items[0].StockCount != 2 {
+		t.Fatalf("expected first meaningful availability low_stock/2, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchReturnsActionableAuthError(t *testing.T) {
 	t.Parallel()
 

@@ -466,7 +466,7 @@ func TestScannerRunItemsPerPageSummaryAppliesSafeCap(t *testing.T) {
 			t.Fatalf("unexpected auth header: %q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"I-1","title":"AFX Camaro","price":{"value":"49.95"},"itemWebUrl":"https://example/item/1","image":{"imageUrl":"https://example/image/1.jpg"},"seller":{"username":"seller-a"}}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"I-1","title":"AFX Camaro","price":{"value":"49.95","currency":"AUD"},"itemWebUrl":"https://example/item/1","image":{"imageUrl":"https://example/image/1.jpg"},"seller":{"username":"seller-a"}}]}`))
 	}))
 	defer ebayStub.Close()
 

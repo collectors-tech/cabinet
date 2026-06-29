@@ -103,7 +103,7 @@ func TestDefaultSiteSearchScheduledRefreshPersistsRunSnapshot(t *testing.T) {
 			t.Fatalf("expected GET to ebay stub, got %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{\"itemSummaries\":[{\"itemId\":\"scheduled-1\",\"title\":\"Scheduled AFX Camaro\",\"price\":{\"value\":\"42.50\"},\"itemWebUrl\":\"https://example.test/scheduled-1\",\"seller\":{\"username\":\"seller-a\"}}]}"))
+		_, _ = w.Write([]byte("{\"itemSummaries\":[{\"itemId\":\"scheduled-1\",\"title\":\"Scheduled AFX Camaro\",\"price\":{\"value\":\"42.50\",\"currency\":\"AUD\"},\"itemWebUrl\":\"https://example.test/scheduled-1\",\"seller\":{\"username\":\"seller-a\"}}]}"))
 	}))
 	defer ebayStub.Close()
 

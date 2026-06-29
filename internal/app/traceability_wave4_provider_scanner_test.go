@@ -747,7 +747,7 @@ func TestWave4ScannerScheduledSummaryAndCandidateDedup(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|100|0","title":"AFX Mega G+","price":{"value":"45.00"},"itemWebUrl":"https://ebay/item/100","seller":{"username":"seller1"}}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|100|0","title":"AFX Mega G+","price":{"value":"45.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/100","seller":{"username":"seller1"}}]}`))
 	}))
 	defer server.Close()
 

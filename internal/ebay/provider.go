@@ -398,9 +398,17 @@ func normalizeAvailability(items []struct {
 	if len(items) == 0 {
 		return "", -1
 	}
-	first := items[0]
-	status := strings.ToUpper(strings.TrimSpace(first.Status))
-	count := first.Quantity
+	for _, item := range items {
+		status, count := normalizeAvailabilityEntry(item.Status, item.Quantity)
+		if status != "unknown" || count >= 0 {
+			return status, count
+		}
+	}
+	return "unknown", -1
+}
+
+func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
+	status := strings.ToUpper(strings.TrimSpace(rawStatus))
 	switch status {
 	case "IN_STOCK", "AVAILABLE", "LIMITED_STOCK":
 		if count == 0 {
