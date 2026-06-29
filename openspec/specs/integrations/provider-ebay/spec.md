@@ -28,6 +28,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** Browse item summaries with zero or negative price values MUST be skipped instead of persisted as free or negative-price candidates.
 - **AND** Browse item summaries with blank price currency after trimming MUST be skipped instead of creating candidates with empty observed currency.
 - **AND** Browse item summaries with blank listing id, title, or item URL after trimming MUST be skipped instead of creating candidates that cannot preserve source identity or handoff provenance.
+- **AND** Browse item summaries with non-HTTP(S) item URLs after trimming MUST be skipped instead of creating candidates with unsafe or non-clickable handoff provenance.
 - **AND** when Browse item summaries include `shippingOptions.shippingCost.value`, the adapter MUST preserve the first parseable amount in the shared scanner candidate `shipping` field, ignoring blank or unparseable shipping options before falling back to `0`.
 - **AND** when a saved query includes max price, region, or condition criteria, the adapter MUST translate those criteria into documented Browse field filters before calling eBay: `price` with matching `priceCurrency`, `itemLocationCountry`, and broad `conditions` values where Cabinet can map the saved condition safely.
 - **AND** the adapter MUST omit unsupported saved-query condition values instead of sending an invalid Browse `conditions` filter.

@@ -404,6 +404,32 @@ func TestProviderSearchSkipsIncompleteBrowseItemSummaries(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsNonWebBrowseItemURLs(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|relative-url|0","title":"Relative URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"/itm/relative-url","seller":{"username":"seller-url"}},{"itemId":"v1|javascript-url|0","title":"Script URL Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"javascript:alert(1)","seller":{"username":"seller-url"}},{"itemId":"v1|valid-url|0","title":"Valid URL Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-url","seller":{"username":"seller-url"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only valid web URL item to survive, got %+v", items)
+	}
+	if items[0].ListingID != "v1|valid-url|0" || items[0].URL != "https://www.ebay.com/itm/valid-url" {
+		t.Fatalf("expected valid-url candidate to survive normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	t.Parallel()
 
