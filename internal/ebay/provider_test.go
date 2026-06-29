@@ -326,6 +326,32 @@ func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsIncompleteBrowseItemSummaries(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"","title":"Missing ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/missing-id","seller":{"username":"seller-required"}},{"itemId":"v1|missing-title|0","title":"   ","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/missing-title","seller":{"username":"seller-required"}},{"itemId":"v1|missing-url|0","title":"Missing URL Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":" ","seller":{"username":"seller-required"}},{"itemId":"v1|required-fields|0","title":"Required Fields Slot Car","price":{"value":"14.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/required-fields","seller":{"username":"seller-required"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only complete item summary to survive, got %+v", items)
+	}
+	if items[0].ListingID != "v1|required-fields|0" || items[0].Title != "Required Fields Slot Car" || items[0].URL != "https://ebay/item/required-fields" {
+		t.Fatalf("expected required-fields candidate to survive normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	t.Parallel()
 

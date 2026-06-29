@@ -188,6 +188,12 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
 	for _, it := range payload.ItemSummaries {
+		listingID := strings.TrimSpace(it.ItemID)
+		title := strings.TrimSpace(it.Title)
+		itemURL := strings.TrimSpace(it.ItemWebURL)
+		if listingID == "" || title == "" || itemURL == "" {
+			continue
+		}
 		price, err := strconv.ParseFloat(strings.TrimSpace(it.Price.Value), 64)
 		if err != nil {
 			continue
@@ -195,12 +201,12 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		shipping := normalizeShippingCost(it.ShippingOptions)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
-			ListingID:  strings.TrimSpace(it.ItemID),
-			Title:      strings.TrimSpace(it.Title),
+			ListingID:  listingID,
+			Title:      title,
 			Price:      price,
 			Currency:   strings.ToUpper(strings.TrimSpace(it.Price.Currency)),
 			Shipping:   shipping,
-			URL:        strings.TrimSpace(it.ItemWebURL),
+			URL:        itemURL,
 			Image:      strings.TrimSpace(it.Image.ImageURL),
 			Seller:     strings.TrimSpace(it.Seller.Username),
 			Source:     "ebay",
