@@ -245,6 +245,16 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_scanner_candidates_query_set_id ON scanner_candidates(query_set_id);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_scanner_candidates_result_scope ON scanner_candidates(profile_id, query_set_id, source, listing_id);`,
+		`CREATE TABLE IF NOT EXISTS scanner_candidate_decision_history (
+			id TEXT PRIMARY KEY,
+			candidate_id TEXT NOT NULL,
+			from_status TEXT NOT NULL DEFAULT '',
+			to_status TEXT NOT NULL,
+			reason TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_scanner_candidate_decision_history_candidate_id ON scanner_candidate_decision_history(candidate_id);`,
 		`CREATE TABLE IF NOT EXISTS scanner_runs (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL DEFAULT '',
@@ -790,6 +800,22 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_scanner_candidates_result_scope ON scanner_candidates(profile_id, query_set_id, source, listing_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates scoped result index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS scanner_candidate_decision_history (
+		id TEXT PRIMARY KEY,
+		candidate_id TEXT NOT NULL,
+		from_status TEXT NOT NULL DEFAULT '',
+		to_status TEXT NOT NULL,
+		reason TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+	);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidate_decision_history table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidate_decision_history_candidate_id ON scanner_candidate_decision_history(candidate_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidate_decision_history candidate index: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS scanner_runs (
 		id TEXT PRIMARY KEY,

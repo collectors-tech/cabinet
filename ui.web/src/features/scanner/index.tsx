@@ -104,6 +104,13 @@ type Candidate = {
   wishlist_match?: boolean
   handoff_state?: string
   handoff_status?: string
+  decision_history?: Array<{
+    id: string
+    from_status: string
+    to_status: string
+    reason?: string
+    created_at: string
+  }>
 }
 
 type RunSummary = {
@@ -1356,6 +1363,21 @@ export function Scanner() {
       .split('_')
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ')
+
+  const formatCandidateDecisionHistory = (candidate: Candidate) => {
+    const history = candidate.decision_history ?? []
+    if (history.length === 0) {
+      return 'No decisions recorded'
+    }
+    return history
+      .map((record) => {
+        const fromStatus = record.from_status || 'unset'
+        const toStatus = record.to_status || 'unknown'
+        const timestamp = formatCandidateSeenAt(record.created_at)
+        return `${fromStatus} to ${toStatus} at ${timestamp}`
+      })
+      .join(' | ')
+  }
 
   const candidateProvider = (candidate: Candidate) =>
     candidate.provider?.trim() || candidate.source?.trim() || 'unknown'
@@ -3107,6 +3129,9 @@ export function Scanner() {
                         <th className='px-2 py-1 font-medium'>Last Seen</th>
                         <th className='px-2 py-1 font-medium'>Stock</th>
                         <th className='px-2 py-1 font-medium'>Status</th>
+                        <th className='px-2 py-1 font-medium'>
+                          Decision History
+                        </th>
                         <th className='px-2 py-1 font-medium'>Handoff</th>
                       </tr>
                     </thead>
@@ -3158,6 +3183,12 @@ export function Scanner() {
                           </td>
                           <td className='px-2 py-1'>
                             {formatResultStatus(candidate)}
+                          </td>
+                          <td
+                            className='px-2 py-1'
+                            data-testid={`market-watch-result-decision-history-${candidate.id || candidate.listing_id}`}
+                          >
+                            {formatCandidateDecisionHistory(candidate)}
                           </td>
                           <td className='px-2 py-1'>
                             {formatCandidateHandoff(candidate)}
