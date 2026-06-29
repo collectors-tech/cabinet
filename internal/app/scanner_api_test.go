@@ -684,6 +684,9 @@ func TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance(t *testing.T) 
 	if err := json.NewDecoder(health.Body).Decode(&healthPayload); err != nil {
 		t.Fatalf("decode provider health payload: %v", err)
 	}
+	if healthPayload["status"] != "rate_limited" || healthPayload["category"] != "rate_limited" || healthPayload["label"] != "Rate limited" {
+		t.Fatalf("expected persisted rate-limited provider health taxonomy, got %+v", healthPayload)
+	}
 	if healthPayload["state"] != "degraded" || healthPayload["last_error"] == nil {
 		t.Fatalf("expected degraded provider health with last_error, got %+v", healthPayload)
 	}

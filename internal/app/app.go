@@ -8369,7 +8369,7 @@ func providerHealthResponse(health map[string]string) map[string]any {
 	switch strings.ToLower(status) {
 	case "ok", "ready":
 		state = "ready"
-	case "error", "degraded":
+	case "error", "degraded", "auth_missing", "reauthentication_required", "rate_limited", "provider_unavailable", "partial_failure":
 		state = "degraded"
 	}
 

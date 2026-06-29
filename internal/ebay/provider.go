@@ -54,6 +54,20 @@ func (e *ProviderError) RetryAfter() int {
 	return e.RetryAfterSeconds
 }
 
+func (e *ProviderError) ProviderStatusCode() int {
+	if e == nil {
+		return 0
+	}
+	return e.StatusCode
+}
+
+func (e *ProviderError) ProviderErrorCode() string {
+	if e == nil {
+		return ""
+	}
+	return e.ErrorCode
+}
+
 func NewProvider(cfg ProviderConfig) *Provider {
 	base := strings.TrimSpace(cfg.BaseURL)
 	if base == "" {

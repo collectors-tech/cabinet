@@ -56,6 +56,11 @@ type retryAfterProviderError interface {
 	RetryAfter() int
 }
 
+type classifiedProviderError interface {
+	ProviderStatusCode() int
+	ProviderErrorCode() string
+}
+
 type CandidateInput struct {
 	ListingID  string  `json:"listing_id"`
 	Title      string  `json:"title"`
@@ -762,7 +767,7 @@ func (s *Service) runNowForProfile(ctx context.Context, profileID, querySetID st
 			}
 			return result, persistErr
 		}
-		s.recordProviderHealth(ctx, providerID, "error", lastErr.Error(), retryAfterSecondsFromError(lastErr))
+		s.recordProviderHealth(ctx, providerID, providerHealthStatusFromError(lastErr), lastErr.Error(), retryAfterSecondsFromError(lastErr))
 		s.logFailure(ctx, strings.TrimSpace(profileID), qs.ID, providerID, lastErr.Error())
 		if attempt < maxAttempts {
 			sleep := time.Duration(1000/qs.RateLimitRPS) * time.Millisecond
@@ -1295,6 +1300,40 @@ func retryAfterSecondsFromError(err error) int {
 		return providerErr.RetryAfter()
 	}
 	return 0
+}
+
+func providerHealthStatusFromError(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	var providerErr classifiedProviderError
+	if errors.As(err, &providerErr) {
+		code := strings.TrimSpace(strings.ToUpper(providerErr.ProviderErrorCode()))
+		status := providerErr.ProviderStatusCode()
+		switch {
+		case code == "PROVIDER_AUTH_MISSING":
+			return "auth_missing"
+		case code == "PROVIDER_AUTH_INVALID":
+			return "reauthentication_required"
+		case status == 429:
+			return "rate_limited"
+		case status >= 500:
+			return "provider_unavailable"
+		}
+	}
+	message := strings.TrimSpace(strings.ToLower(err.Error()))
+	switch {
+	case strings.Contains(message, "missing") && (strings.Contains(message, "token") || strings.Contains(message, "credential") || strings.Contains(message, "auth")):
+		return "auth_missing"
+	case strings.Contains(message, "reauth") || strings.Contains(message, "expired") || strings.Contains(message, "invalid credential") || strings.Contains(message, "access token invalid"):
+		return "reauthentication_required"
+	case strings.Contains(message, "rate limit") || strings.Contains(message, "too many requests"):
+		return "rate_limited"
+	case strings.Contains(message, "unavailable") || strings.Contains(message, "timeout") || strings.Contains(message, "upstream"):
+		return "provider_unavailable"
+	default:
+		return "error"
+	}
 }
 
 func (s *Service) logFailure(ctx context.Context, profileID, querySetID, provider, message string) {

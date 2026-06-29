@@ -15,6 +15,7 @@ type testProvider struct {
 	failures   int
 	calls      int
 	items      []CandidateInput
+	err        error
 }
 
 type scheduledMixedProvider struct{}
@@ -48,9 +49,35 @@ func (p *testProvider) ProviderID() string {
 func (p *testProvider) Search(_ context.Context, _ QuerySet) ([]CandidateInput, error) {
 	p.calls++
 	if p.calls <= p.failures {
+		if p.err != nil {
+			return nil, p.err
+		}
 		return nil, errors.New("temporary failure")
 	}
 	return p.items, nil
+}
+
+type fakeClassifiedProviderError struct {
+	statusCode int
+	errorCode  string
+	message    string
+	retryAfter int
+}
+
+func (e fakeClassifiedProviderError) Error() string {
+	return e.message
+}
+
+func (e fakeClassifiedProviderError) RetryAfter() int {
+	return e.retryAfter
+}
+
+func (e fakeClassifiedProviderError) ProviderStatusCode() int {
+	return e.statusCode
+}
+
+func (e fakeClassifiedProviderError) ProviderErrorCode() string {
+	return e.errorCode
 }
 
 func TestQuerySetAndRunNowLifecycle(t *testing.T) {
@@ -803,6 +830,103 @@ func TestRunNowRecordsProviderHealthForExecutingProvider(t *testing.T) {
 		if got := failures[0][key]; got != expected {
 			t.Fatalf("expected scoped failure %s=%q, got %q in %+v", key, expected, got, failures[0])
 		}
+	}
+}
+
+func TestRunNowPersistsClassifiedProviderHealthTransitions(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "eBay transition health",
+		Keywords:      []string{"afx"},
+		ProviderScope: []string{"ebay"},
+		Enabled:       true,
+		MaxRetryCount: 0,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		name       string
+		err        error
+		wantStatus string
+		wantMsg    string
+		wantRetry  string
+	}{
+		{
+			name:       "missing setup",
+			err:        fakeClassifiedProviderError{statusCode: 401, errorCode: "PROVIDER_AUTH_MISSING", message: "missing ebay bearer token"},
+			wantStatus: "auth_missing",
+			wantMsg:    "missing ebay bearer token",
+			wantRetry:  "0",
+		},
+		{
+			name:       "reauthentication",
+			err:        fakeClassifiedProviderError{statusCode: 401, errorCode: "PROVIDER_AUTH_INVALID", message: "Access token invalid"},
+			wantStatus: "reauthentication_required",
+			wantMsg:    "Access token invalid",
+			wantRetry:  "0",
+		},
+		{
+			name:       "rate limit",
+			err:        fakeClassifiedProviderError{statusCode: 429, errorCode: "PROVIDER_SEARCH_FAILED", message: "too many requests", retryAfter: 90},
+			wantStatus: "rate_limited",
+			wantMsg:    "too many requests",
+			wantRetry:  "90",
+		},
+		{
+			name:       "provider unavailable",
+			err:        fakeClassifiedProviderError{statusCode: 503, errorCode: "PROVIDER_SEARCH_FAILED", message: "upstream unavailable"},
+			wantStatus: "provider_unavailable",
+			wantMsg:    "upstream unavailable",
+			wantRetry:  "0",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, &testProvider{
+				providerID: "ebay",
+				failures:   1,
+				err:        tc.err,
+			})
+			if err == nil {
+				t.Fatal("expected classified provider failure")
+			}
+			health, err := svc.ProviderHealth(context.Background(), "ebay")
+			if err != nil {
+				t.Fatalf("ProviderHealth() error = %v", err)
+			}
+			if health["status"] != tc.wantStatus || health["message"] != tc.wantMsg || health["retry_after_seconds"] != tc.wantRetry {
+				t.Fatalf("expected health status=%q message=%q retry=%q, got %+v", tc.wantStatus, tc.wantMsg, tc.wantRetry, health)
+			}
+		})
+	}
+
+	_, err = svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, &testProvider{
+		providerID: "ebay",
+		items: []CandidateInput{{
+			ListingID: "RECOVERED-1",
+			Title:     "Recovered eBay result",
+			URL:       "https://market.test/recovered-1",
+			Source:    "ebay",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("RunNowForProfile() recovery error = %v", err)
+	}
+	health, err := svc.ProviderHealth(context.Background(), "ebay")
+	if err != nil {
+		t.Fatalf("ProviderHealth() recovery error = %v", err)
+	}
+	if health["status"] != "ok" || health["message"] != "" || health["retry_after_seconds"] != "0" {
+		t.Fatalf("expected successful recovery to clear degraded provider health, got %+v", health)
 	}
 }
 
