@@ -24,6 +24,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the adapter MUST request Browse `fieldgroups=EXTENDED` so availability and stock observation payloads are requested before normalization.
 - **AND** the adapter MUST trim and ignore blank keyword or exclusion criteria before building the Browse request, and MUST reject a saved query that has no non-blank keyword criteria without calling eBay.
 - **AND** normalized Browse candidate metadata MUST trim surrounding whitespace from listing id, title, price value, URL, image URL, seller username, and currency before the candidate is returned for persistence.
+- **AND** Browse item summaries with unparseable price values MUST be skipped instead of persisted as zero-price candidates.
 - **AND** when Browse item summaries include `shippingOptions.shippingCost.value`, the adapter MUST preserve the first parseable amount in the shared scanner candidate `shipping` field, ignoring blank or unparseable shipping options before falling back to `0`.
 - **AND** when a saved query includes max price, region, or condition criteria, the adapter MUST translate those criteria into documented Browse field filters before calling eBay: `price` with matching `priceCurrency`, `itemLocationCountry`, and broad `conditions` values where Cabinet can map the saved condition safely.
 - **AND** the adapter MUST omit unsupported saved-query condition values instead of sending an invalid Browse `conditions` filter.
