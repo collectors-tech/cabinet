@@ -44,6 +44,8 @@ func TestScannerQuerySetsAndProviderHealthEndpoints(t *testing.T) {
 		"provider": "ebay",
 		"status":   "unknown",
 		"state":    "disabled",
+		"category": "not_checked",
+		"label":    "Not checked yet",
 	} {
 		if got := healthPayload[key]; got != expected {
 			t.Fatalf("provider health %s=%v, want %v in %+v", key, got, expected, healthPayload)
@@ -54,6 +56,54 @@ func TestScannerQuerySetsAndProviderHealthEndpoints(t *testing.T) {
 	}
 	if _, ok := healthPayload["retry_after_seconds"]; !ok {
 		t.Fatalf("provider health missing retry_after_seconds: %+v", healthPayload)
+	}
+}
+
+func TestProviderHealthEndpointExposesMarketWatchTaxonomy(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		status     string
+		message    string
+		retryAfter int
+		category   string
+		label      string
+	}{
+		{name: "healthy", status: "ok", message: "Provider ready", category: "healthy", label: "Connected / healthy"},
+		{name: "setup", status: "auth_required", message: "missing token", category: "needs_setup", label: "Needs setup"},
+		{name: "reauth", status: "error", message: "Provider credentials expired", category: "needs_reauthentication", label: "Needs re-authentication"},
+		{name: "rate", status: "error", message: "rate limit reached", retryAfter: 120, category: "rate_limited", label: "Rate limited"},
+		{name: "unavailable", status: "error", message: "upstream unavailable", category: "provider_unavailable", label: "Provider unavailable"},
+		{name: "partial", status: "partial_failure", message: "Amazon succeeded; eBay partial failure", category: "partially_failed", label: "Partially failed"},
+		{name: "failed", status: "error", message: "Browse failed", category: "failed", label: "Failed"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := newTestApp(t)
+			if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', ?, ?, ?, CURRENT_TIMESTAMP)`, tc.status, tc.message, tc.retryAfter); err != nil {
+				t.Fatalf("seed provider health: %v", err)
+			}
+
+			resp := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=ebay", nil, nil)
+			if resp.Code != http.StatusOK {
+				t.Fatalf("provider health status=%d body=%s", resp.Code, resp.Body.String())
+			}
+			var payload map[string]any
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode provider health payload: %v", err)
+			}
+			if payload["category"] != tc.category || payload["label"] != tc.label {
+				t.Fatalf("unexpected health taxonomy for %s: got category=%v label=%v payload=%+v", tc.name, payload["category"], payload["label"], payload)
+			}
+			if got, _ := payload["guidance"].(string); strings.TrimSpace(got) == "" {
+				t.Fatalf("expected taxonomy guidance for %s, got %+v", tc.name, payload)
+			}
+		})
 	}
 }
 

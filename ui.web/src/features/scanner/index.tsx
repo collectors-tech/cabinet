@@ -40,6 +40,9 @@ type ProviderHealth = {
   provider?: string
   status?: string
   state?: string
+  category?: string
+  label?: string
+  guidance?: string
   message?: string
   last_error?: string | null
   retry_after_seconds?: number | null
@@ -551,6 +554,9 @@ export function Scanner() {
         provider: healthPayload.provider ?? 'ebay',
         status: healthPayload.status ?? 'unknown',
         state: healthPayload.state ?? 'disabled',
+        category: healthPayload.category,
+        label: healthPayload.label,
+        guidance: healthPayload.guidance,
         message: healthPayload.message ?? '',
         last_error: healthPayload.last_error ?? null,
         retry_after_seconds: healthPayload.retry_after_seconds ?? null,
@@ -1228,12 +1234,14 @@ export function Scanner() {
   const providerHealthStatus = providerHealth.status ?? 'unknown'
   const providerHealthState = providerHealth.state ?? 'disabled'
   const providerHealthSummary =
-    providerHealthStatus === 'unknown'
+    providerHealth.label?.trim() ||
+    (providerHealthStatus === 'unknown'
       ? 'Not checked yet'
       : providerHealthStatus === 'ok'
         ? 'Connected / healthy'
-        : `${providerHealthStatus.replace(/_/g, ' ')} (${providerHealthStatus})`
+        : `${providerHealthStatus.replace(/_/g, ' ')} (${providerHealthStatus})`)
   const providerHealthGuidance =
+    providerHealth.guidance?.trim() ||
     providerHealth.message?.trim() ||
     providerHealth.last_error?.trim() ||
     (providerHealthStatus === 'unknown'
@@ -1769,6 +1777,11 @@ export function Scanner() {
             </div>
             <div className='text-xs text-muted-foreground'>
               <span className='capitalize'>State: {providerHealthState}</span>
+              {providerHealth.category ? (
+                <span className='ms-2'>
+                  Category: {providerHealth.category.replace(/_/g, ' ')}
+                </span>
+              ) : null}
               {providerHealth.retry_after_seconds ? (
                 <span className='ms-2'>
                   Retry after {providerHealth.retry_after_seconds}s

@@ -8363,6 +8363,7 @@ func providerHealthResponse(health map[string]string) map[string]any {
 	if status == "" {
 		status = "unknown"
 	}
+	category, label, guidance := providerHealthTaxonomy(status, message, retryAfterRaw)
 
 	state := "disabled"
 	switch strings.ToLower(status) {
@@ -8403,11 +8404,39 @@ func providerHealthResponse(health map[string]string) map[string]any {
 		"provider":            provider,
 		"status":              status,
 		"state":               state,
+		"category":            category,
+		"label":               label,
+		"guidance":            guidance,
 		"message":             message,
 		"last_error":          lastError,
 		"retry_after_seconds": retryAfter,
 		"next_action":         nextAction,
 		"updated_at":          updated,
+	}
+}
+
+func providerHealthTaxonomy(status, message, retryAfterRaw string) (string, string, string) {
+	normalizedStatus := strings.TrimSpace(strings.ToLower(status))
+	normalizedMessage := strings.TrimSpace(strings.ToLower(message))
+	retryAfter, _ := strconv.Atoi(strings.TrimSpace(retryAfterRaw))
+
+	switch {
+	case normalizedStatus == "" || normalizedStatus == "unknown":
+		return "not_checked", "Not checked yet", "Run or validate a provider search to collect health evidence."
+	case normalizedStatus == "ok" || normalizedStatus == "ready":
+		return "healthy", "Connected / healthy", "Provider health is current and ready for Market Watch runs."
+	case strings.Contains(normalizedStatus, "partial") || strings.Contains(normalizedMessage, "partial"):
+		return "partially_failed", "Partially failed", "Review the failed provider details while keeping successful provider results available."
+	case retryAfter > 0 || strings.Contains(normalizedStatus, "rate") || strings.Contains(normalizedMessage, "rate limit") || strings.Contains(normalizedMessage, "too many requests"):
+		return "rate_limited", "Rate limited", "Wait for the provider retry window, then run the watch again."
+	case strings.Contains(normalizedStatus, "reauth") || strings.Contains(normalizedMessage, "reauth") || strings.Contains(normalizedMessage, "expired") || strings.Contains(normalizedMessage, "invalid credential"):
+		return "needs_reauthentication", "Needs re-authentication", "Reconnect or refresh provider credentials before retrying Market Watch runs."
+	case strings.Contains(normalizedStatus, "setup") || strings.Contains(normalizedStatus, "auth") || strings.Contains(normalizedMessage, "missing credential") || strings.Contains(normalizedMessage, "missing token") || strings.Contains(normalizedMessage, "auth missing"):
+		return "needs_setup", "Needs setup", "Save provider credentials and marketplace setup before running Market Watch."
+	case strings.Contains(normalizedStatus, "unavailable") || strings.Contains(normalizedMessage, "unavailable") || strings.Contains(normalizedMessage, "timeout") || strings.Contains(normalizedMessage, "upstream"):
+		return "provider_unavailable", "Provider unavailable", "Check provider status and retry when the upstream service recovers."
+	default:
+		return "failed", "Failed", "Review provider health, credentials, and retry guidance before running watches."
 	}
 }
 
