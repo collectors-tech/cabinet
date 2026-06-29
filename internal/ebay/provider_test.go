@@ -451,6 +451,35 @@ func TestProviderSearchSkipsIncompleteBrowseItemSummaries(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsDuplicateBrowseListingIDs(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":" v1|duplicate|0 ","title":"First Duplicate Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/duplicate-first","seller":{"username":"seller-duplicate"}},{"itemId":"v1|duplicate|0","title":"Second Duplicate Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/duplicate-second","seller":{"username":"seller-duplicate"}},{"itemId":"v1|unique|0","title":"Unique Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unique","seller":{"username":"seller-unique"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected duplicate listing id to be emitted once, got %+v", items)
+	}
+	if items[0].ListingID != "v1|duplicate|0" || items[0].Title != "First Duplicate Slot Car" || items[0].URL != "https://ebay/item/duplicate-first" {
+		t.Fatalf("expected first normalized duplicate listing to survive, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|unique|0" {
+		t.Fatalf("expected unique listing to survive after duplicate, got %+v", items[1])
+	}
+}
+
 func TestProviderSearchSkipsNonWebBrowseItemURLs(t *testing.T) {
 	t.Parallel()
 
