@@ -975,6 +975,133 @@ describe('integrations/ui-screen-market-watch', () => {
     })
   })
 
+  it('UI-SCREEN-MARKET-WATCH-016 + #1548 renders result inbox lifecycle filters and match provenance', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-results-inbox',
+            name: 'Wishlist Gap Watch',
+            keywords: ['afx mega g+'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-results-inbox')
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_set_id: 'qs-mw-results-inbox',
+          provider: 'ebay',
+          candidates: [
+            {
+              id: 'cand-new-wishlist',
+              query_set_id: 'qs-mw-results-inbox',
+              listing_id: 'ebay-afx-1',
+              title: 'AFX Mega G+ Mustang',
+              provider: 'ebay',
+              source: 'ebay',
+              matched_watch: 'Wishlist Gap Watch',
+              match_target: 'wishlist',
+              match_reason: 'Matched wishlist keyword AFX Mega G+',
+              price: 44,
+              shipping: 6,
+              total_price: 50,
+              observed_currency: 'AUD',
+              source_url: 'https://www.ebay.example/itm/ebay-afx-1',
+              first_seen: '2026-06-28T23:00:00Z',
+              last_seen: '2026-06-28T23:35:00Z',
+              result_status: 'new',
+              handoff_state: 'not_handed_off',
+              wishlist_match: true,
+            },
+            {
+              id: 'cand-dismissed-gap',
+              query_set_id: 'qs-mw-results-inbox',
+              listing_id: 'ebay-afx-2',
+              title: 'AFX Mega G+ parts lot',
+              provider: 'ebay',
+              source: 'ebay',
+              matched_watch: 'Wishlist Gap Watch',
+              match_target: 'collection_gap',
+              match_reason: 'Matched missing collection part',
+              price: 21,
+              shipping: 0,
+              observed_currency: 'AUD',
+              source_url: 'https://www.ebay.example/itm/ebay-afx-2',
+              first_seen_at: '2026-06-28T20:00:00Z',
+              last_seen_at: '2026-06-28T22:00:00Z',
+              decision_status: 'dismissed',
+              handoff_state: 'dismissed',
+              wishlist_match: false,
+            },
+          ],
+          run: {
+            saved: 2,
+            observed_page_size: 2,
+            page_count: 1,
+          },
+        },
+      })
+    }).as('runResultsInbox')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-run-qs-mw-results-inbox"]').click()
+    cy.wait('@runResultsInbox')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-results-inbox"]').click()
+
+    cy.get('[data-testid="market-watch-output-detail"]').within(() => {
+      cy.get('[data-testid="market-watch-results-inbox-filters"]').should('be.visible')
+      cy.get('[data-testid="market-watch-results-inbox-summary"]').should(
+        'contain',
+        'Showing 2 of 2 result inbox items'
+      )
+      cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+        cy.contains('th', 'Matched Watch').should('be.visible')
+        cy.contains('th', 'Match').should('be.visible')
+        cy.contains('th', 'First Seen').should('be.visible')
+        cy.contains('th', 'Last Seen').should('be.visible')
+        cy.contains('th', 'Status').should('be.visible')
+        cy.contains('td', 'Wishlist Gap Watch').should('be.visible')
+        cy.contains('td', 'wishlist').should('be.visible')
+        cy.contains('td', 'Matched wishlist keyword AFX Mega G+').should('be.visible')
+        cy.contains('td', '50.00 AUD').should('be.visible')
+        cy.contains('td', 'New').should('be.visible')
+        cy.contains('td', 'Dismissed').should('be.visible')
+      })
+
+      cy.get('[data-testid="market-watch-result-status-filter"]').select('dismissed')
+      cy.get('[data-testid="market-watch-results-inbox-summary"]').should(
+        'contain',
+        'Showing 1 of 2 result inbox items'
+      )
+      cy.contains('AFX Mega G+ parts lot').should('be.visible')
+      cy.contains('AFX Mega G+ Mustang').should('not.exist')
+
+      cy.get('[data-testid="market-watch-result-filter-reset"]').click()
+      cy.get('[data-testid="market-watch-result-match-filter"]').select('wishlist')
+      cy.get('[data-testid="market-watch-result-wishlist-filter"]').check()
+      cy.get('[data-testid="market-watch-results-inbox-summary"]').should(
+        'contain',
+        'Showing 1 of 2 result inbox items'
+      )
+      cy.contains('AFX Mega G+ Mustang').should('be.visible')
+      cy.contains('AFX Mega G+ parts lot').should('not.exist')
+    })
+  })
+
   it('UI-SCREEN-MARKET-WATCH-006 runs Bonza AFX query and surfaces aggregated run summary', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,

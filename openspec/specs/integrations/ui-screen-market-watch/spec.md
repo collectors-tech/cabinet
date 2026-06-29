@@ -183,6 +183,17 @@ Market Watch output-detail purchase handoff SHALL persist the selected result as
 - **AND WHEN** user opens or reloads `/purchases`
 - **THEN** the Purchases route MUST render the handed-off purchase with provider/listing/query provenance available to the row or detail view
 
+### Requirement UI-SCREEN-MARKET-WATCH-016: Market Watch SHALL expose a filterable result inbox lifecycle surface
+Market Watch output details SHALL render the latest provider results as a result inbox with visible match context, lifecycle status, and filters that keep downstream decisions discoverable instead of hiding old or acted-on results.
+
+#### Scenario: Filter result inbox by lifecycle and match provenance
+- **GIVEN** a Market Watch query has latest output results with provider, matched watch, match target, first/last seen timestamps, lifecycle status, and wishlist-match metadata
+- **WHEN** user opens output details from the query table
+- **THEN** Market Watch MUST show a result inbox summary and table columns for provider, result, matched watch, match target/reason, price, shipping, total price, source, first seen, last seen, stock, status, and handoff state
+- **AND WHEN** user filters by result status, provider, match target, or wishlist matches
+- **THEN** the visible inbox rows MUST narrow without mutating result decision state
+- **AND** dismissed, duplicate, expired, purchased, wishlist, and inventory candidate states MUST remain reachable through filters
+
 ### Requirement UI-SCREEN-MARKET-WATCH-011: Market Watch SHALL bootstrap saved-query creation from route handoff state
 Market Watch SHALL translate route handoff context into editable saved-query fields before persistence so handoffs from barcode/search surfaces remain deterministic.
 
@@ -258,3 +269,4 @@ Market Watch SHALL focus its primary dashboard on saved provider searches while 
 | UC-MW-16 | Persist saved-watch run/result records | Manual and scheduled runs create durable run records; scheduled partial failures preserve unrelated watch state; results dedupe by profile/watch/provider/listing or source URL while preserving decision state; saved-query reloads expose durable latest-run and next scheduled run state | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsDurableRunRecordAndDedupesResults`; `TestRunNowPreservesDownstreamDecisionStatuses`; `TestRunNowDedupeIsScopedByProfileAndWatch`; `TestQuerySetRunSnapshotUsesDurableRunRecordsAndComputesNextRun`; `TestRunScheduledRecordsPartialFailureWithoutBlockingOtherWatches` |
 | UC-MW-17 | Reveal manual listing capture | Quick Scan/manual entry/Recent Unlinked Scans stay out of the primary Market Watch dashboard until the secondary manual-listing action is opened | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-014 keeps scanner capture behind a secondary action` |
 | UC-MW-18 | Purchase handoff from output detail | Output detail Purchase handoff posts selected candidate, persists purchase lifecycle and expected-arrival records, and keeps Market Watch/Discoveries status synchronized | implemented: `internal/discovery/service_test.go` `TestApplyActionMarkPurchasedCreatesCommerceHandoff`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-015 persists output-detail Purchase handoff provenance`; `ui.web/src/features/scanner/index.tsx` `scanner-handoff-purchase-*` |
+| UC-MW-19 | Result inbox lifecycle review | Output detail result inbox shows status/provider/match/wishlist filters, match rationale, seen timestamps, total price, and lifecycle status without losing dismissed or downstream-handoff results | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-016 + #1548 renders result inbox lifecycle filters and match provenance`; `ui.web/src/features/scanner/index.tsx` `market-watch-results-inbox-*` |

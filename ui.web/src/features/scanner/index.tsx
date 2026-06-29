@@ -49,16 +49,29 @@ type Candidate = {
   listing_id: string
   title: string
   source?: string
+  provider?: string
   price?: number | string
   shipping?: number | string
+  total_price?: number | string
   currency?: string
   observed_currency?: string
   url?: string
   source_url?: string
+  matched_watch?: string
+  watch_name?: string
+  match_target?: string
+  match_reason?: string
+  first_seen?: string
+  first_seen_at?: string
+  last_seen?: string
+  last_seen_at?: string
   stock_state?: string
   stock_count?: number
   stock_status?: string
   status?: string
+  decision_status?: string
+  result_status?: string
+  wishlist_match?: boolean
   handoff_state?: string
   handoff_status?: string
 }
@@ -162,6 +175,17 @@ type MarketWatchStatusFilter =
   | 'succeeded'
   | 'failed'
 type MarketWatchScheduleFilter = 'all' | 'scheduled' | 'manual'
+type MarketWatchResultStatusFilter =
+  | 'all'
+  | 'new'
+  | 'watching'
+  | 'dismissed'
+  | 'purchased'
+  | 'added_to_wishlist'
+  | 'added_to_inventory'
+  | 'expired'
+  | 'duplicate'
+  | 'failed_to_refresh'
 
 type CreateQueryValidation = {
   name?: string
@@ -176,6 +200,22 @@ const MARKET_WATCH_CADENCE_OPTIONS = [
   { label: 'Weekly', value: 'weekly', cron: '0 9 * * 1' },
   { label: 'Custom', value: 'custom', cron: '' },
 ] as const
+
+const MARKET_WATCH_RESULT_STATUS_OPTIONS: Array<{
+  value: MarketWatchResultStatusFilter
+  label: string
+}> = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'new', label: 'New' },
+  { value: 'watching', label: 'Watching' },
+  { value: 'dismissed', label: 'Dismissed' },
+  { value: 'purchased', label: 'Purchased' },
+  { value: 'added_to_wishlist', label: 'Added to wishlist' },
+  { value: 'added_to_inventory', label: 'Added to inventory' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'duplicate', label: 'Duplicate' },
+  { value: 'failed_to_refresh', label: 'Failed to refresh' },
+]
 
 type MarketWatchCadenceValue =
   (typeof MARKET_WATCH_CADENCE_OPTIONS)[number]['value']
@@ -388,6 +428,12 @@ export function Scanner() {
   const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<
     string | null
   >(null)
+  const [resultStatusFilter, setResultStatusFilter] =
+    useState<MarketWatchResultStatusFilter>('all')
+  const [resultProviderFilter, setResultProviderFilter] = useState('all')
+  const [resultMatchFilter, setResultMatchFilter] = useState('all')
+  const [resultWishlistMatchesOnly, setResultWishlistMatchesOnly] =
+    useState(false)
   const [editingQuerySetID, setEditingQuerySetID] = useState<string | null>(
     null
   )
@@ -1140,6 +1186,30 @@ export function Scanner() {
     return currency ? `${price} ${currency}` : price
   }
 
+  const formatCandidateTotalPrice = (candidate: Candidate) => {
+    if (candidate.total_price === undefined || candidate.total_price === null) {
+      const price = Number(candidate.price)
+      const shipping = Number(candidate.shipping)
+      if (!Number.isFinite(price) || !Number.isFinite(shipping)) {
+        return 'Not provided'
+      }
+      const currency =
+        candidate.currency?.trim() || candidate.observed_currency?.trim()
+      const total = (price + shipping).toFixed(2)
+      return currency ? `${total} ${currency}` : total
+    }
+    const total =
+      typeof candidate.total_price === 'number'
+        ? candidate.total_price.toFixed(2)
+        : candidate.total_price.trim()
+    if (!total) {
+      return 'Not provided'
+    }
+    const currency =
+      candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency ? `${total} ${currency}` : total
+  }
+
   const formatCandidateSource = (candidate: Candidate) =>
     candidate.url?.trim() ||
     candidate.source_url?.trim() ||
@@ -1180,6 +1250,53 @@ export function Scanner() {
     candidate.handoff_status?.trim() ||
     'Not handed off'
 
+  const normalizeResultStatus = (candidate: Candidate) =>
+    (
+      candidate.result_status?.trim() ||
+      candidate.decision_status?.trim() ||
+      candidate.handoff_state?.trim() ||
+      candidate.handoff_status?.trim() ||
+      candidate.status?.trim() ||
+      'new'
+    )
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_')
+
+  const formatResultStatus = (candidate: Candidate) =>
+    normalizeResultStatus(candidate)
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+
+  const candidateProvider = (candidate: Candidate) =>
+    candidate.provider?.trim() || candidate.source?.trim() || 'unknown'
+
+  const candidateMatchTarget = (candidate: Candidate) =>
+    candidate.match_target?.trim() || 'Unclassified'
+
+  const formatCandidateWatch = (candidate: Candidate) =>
+    candidate.matched_watch?.trim() ||
+    candidate.watch_name?.trim() ||
+    querySets.find((querySet) => querySet.id === candidate.query_set_id)
+      ?.name ||
+    candidate.query_set_id ||
+    'Not provided'
+
+  const formatCandidateMatchReason = (candidate: Candidate) =>
+    candidate.match_reason?.trim() ||
+    `Matched ${candidateMatchTarget(candidate).toLowerCase()} criteria`
+
+  const formatCandidateSeenAt = (value?: string) => {
+    if (!value?.trim()) {
+      return 'Not provided'
+    }
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      return value
+    }
+    return parsed.toLocaleString()
+  }
+
   const querySetHasResults = (querySetID: string) =>
     Number(formatResultCount(querySetID)) > 0
 
@@ -1189,6 +1306,13 @@ export function Scanner() {
     setTableScheduleFilter('all')
     setTableAttentionOnly(false)
     setTableResultsOnly(false)
+  }
+
+  const resetResultFilters = () => {
+    setResultStatusFilter('all')
+    setResultProviderFilter('all')
+    setResultMatchFilter('all')
+    setResultWishlistMatchesOnly(false)
   }
 
   const filteredQuerySets = querySets.filter((querySet) => {
@@ -1244,6 +1368,47 @@ export function Scanner() {
     ranAt: formatRunTime(querySet.id),
     output: formatOutputSummary(querySet.id),
   }))
+
+  const selectedOutputCandidates = selectedOutputQuerySetID
+    ? (candidatesByQuerySet[selectedOutputQuerySetID] ?? [])
+    : []
+  const resultProviderOptions = Array.from(
+    new Set(selectedOutputCandidates.map(candidateProvider))
+  ).filter(Boolean)
+  const resultMatchOptions = Array.from(
+    new Set(selectedOutputCandidates.map(candidateMatchTarget))
+  ).filter(Boolean)
+  const filteredOutputCandidates = selectedOutputCandidates.filter(
+    (candidate) => {
+      if (
+        resultStatusFilter !== 'all' &&
+        normalizeResultStatus(candidate) !== resultStatusFilter
+      ) {
+        return false
+      }
+      if (
+        resultProviderFilter !== 'all' &&
+        candidateProvider(candidate) !== resultProviderFilter
+      ) {
+        return false
+      }
+      if (
+        resultMatchFilter !== 'all' &&
+        candidateMatchTarget(candidate) !== resultMatchFilter
+      ) {
+        return false
+      }
+      if (resultWishlistMatchesOnly && candidate.wishlist_match !== true) {
+        return false
+      }
+      return true
+    }
+  )
+  const hasActiveResultFilters =
+    resultStatusFilter !== 'all' ||
+    resultProviderFilter !== 'all' ||
+    resultMatchFilter !== 'all' ||
+    resultWishlistMatchesOnly
 
   const launchQuickScan = () => {
     const isMobileViewport =
@@ -2597,7 +2762,10 @@ export function Scanner() {
                 type='button'
                 size='sm'
                 variant='ghost'
-                onClick={() => setSelectedOutputQuerySetID(null)}
+                onClick={() => {
+                  setSelectedOutputQuerySetID(null)
+                  resetResultFilters()
+                }}
               >
                 Close
               </Button>
@@ -2625,9 +2793,115 @@ export function Scanner() {
               </div>
             ) : null}
             <div className='mt-3'>
-              <p className='text-xs font-medium'>Latest output items</p>
-              {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).length ===
-              0 ? (
+              <div
+                className='flex flex-wrap items-end gap-2'
+                data-testid='market-watch-results-inbox-filters'
+              >
+                <div>
+                  <label
+                    className='text-xs font-medium'
+                    htmlFor='market-watch-result-status-filter'
+                  >
+                    Result status
+                  </label>
+                  <select
+                    id='market-watch-result-status-filter'
+                    className='mt-1 h-8 rounded-md border bg-background px-2 text-xs'
+                    value={resultStatusFilter}
+                    onChange={(event) =>
+                      setResultStatusFilter(
+                        event.target.value as MarketWatchResultStatusFilter
+                      )
+                    }
+                    data-testid='market-watch-result-status-filter'
+                  >
+                    {MARKET_WATCH_RESULT_STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    className='text-xs font-medium'
+                    htmlFor='market-watch-result-provider-filter'
+                  >
+                    Provider
+                  </label>
+                  <select
+                    id='market-watch-result-provider-filter'
+                    className='mt-1 h-8 rounded-md border bg-background px-2 text-xs'
+                    value={resultProviderFilter}
+                    onChange={(event) =>
+                      setResultProviderFilter(event.target.value)
+                    }
+                    data-testid='market-watch-result-provider-filter'
+                  >
+                    <option value='all'>All providers</option>
+                    {resultProviderOptions.map((provider) => (
+                      <option key={provider} value={provider}>
+                        {provider}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    className='text-xs font-medium'
+                    htmlFor='market-watch-result-match-filter'
+                  >
+                    Match
+                  </label>
+                  <select
+                    id='market-watch-result-match-filter'
+                    className='mt-1 h-8 rounded-md border bg-background px-2 text-xs'
+                    value={resultMatchFilter}
+                    onChange={(event) =>
+                      setResultMatchFilter(event.target.value)
+                    }
+                    data-testid='market-watch-result-match-filter'
+                  >
+                    <option value='all'>All matches</option>
+                    {resultMatchOptions.map((target) => (
+                      <option key={target} value={target}>
+                        {target}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className='flex h-8 items-center gap-2 text-xs font-medium'>
+                  <input
+                    type='checkbox'
+                    checked={resultWishlistMatchesOnly}
+                    onChange={(event) =>
+                      setResultWishlistMatchesOnly(event.target.checked)
+                    }
+                    data-testid='market-watch-result-wishlist-filter'
+                  />
+                  Wishlist matches
+                </label>
+                {hasActiveResultFilters ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    data-testid='market-watch-result-filter-reset'
+                    onClick={resetResultFilters}
+                  >
+                    Reset
+                  </Button>
+                ) : null}
+              </div>
+              <p
+                className='mt-2 text-xs text-muted-foreground'
+                data-testid='market-watch-results-inbox-summary'
+              >
+                Showing {filteredOutputCandidates.length} of{' '}
+                {selectedOutputCandidates.length} result inbox items.
+              </p>
+              <p className='mt-3 text-xs font-medium'>Latest output items</p>
+              {selectedOutputCandidates.length === 0 ? (
                 <p
                   className='text-xs text-muted-foreground'
                   data-testid='market-watch-output-no-results'
@@ -2638,6 +2912,13 @@ export function Scanner() {
                     results.
                   </span>
                 </p>
+              ) : filteredOutputCandidates.length === 0 ? (
+                <div
+                  className='mt-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground'
+                  data-testid='market-watch-result-filter-empty'
+                >
+                  No results match the current inbox filters.
+                </div>
               ) : (
                 <div className='mt-2 overflow-x-auto'>
                   <table
@@ -2648,25 +2929,40 @@ export function Scanner() {
                       <tr>
                         <th className='px-2 py-1 font-medium'>Provider</th>
                         <th className='px-2 py-1 font-medium'>Result</th>
+                        <th className='px-2 py-1 font-medium'>Matched Watch</th>
+                        <th className='px-2 py-1 font-medium'>Match</th>
                         <th className='px-2 py-1 font-medium'>Price</th>
                         <th className='px-2 py-1 font-medium'>Shipping</th>
+                        <th className='px-2 py-1 font-medium'>Total</th>
                         <th className='px-2 py-1 font-medium'>Source</th>
+                        <th className='px-2 py-1 font-medium'>First Seen</th>
+                        <th className='px-2 py-1 font-medium'>Last Seen</th>
                         <th className='px-2 py-1 font-medium'>Stock</th>
+                        <th className='px-2 py-1 font-medium'>Status</th>
                         <th className='px-2 py-1 font-medium'>Handoff</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(
-                        candidatesByQuerySet[selectedOutputQuerySetID] ?? []
-                      ).map((candidate) => (
+                      {filteredOutputCandidates.map((candidate) => (
                         <tr
                           key={candidate.id || candidate.listing_id}
                           className='border-t'
                         >
                           <td className='px-2 py-1'>
-                            {candidate.source ?? 'unknown'}
+                            {candidateProvider(candidate)}
                           </td>
-                          <td className='px-2 py-1'>{candidate.title}</td>
+                          <td className='px-2 py-1'>
+                            <span>{candidate.title}</span>
+                            <span className='block text-muted-foreground'>
+                              {formatCandidateMatchReason(candidate)}
+                            </span>
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateWatch(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {candidateMatchTarget(candidate)}
+                          </td>
                           <td className='px-2 py-1'>
                             {formatCandidatePrice(candidate)}
                           </td>
@@ -2674,10 +2970,26 @@ export function Scanner() {
                             {formatCandidateShipping(candidate)}
                           </td>
                           <td className='px-2 py-1'>
+                            {formatCandidateTotalPrice(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
                             {formatCandidateSource(candidate)}
                           </td>
                           <td className='px-2 py-1'>
+                            {formatCandidateSeenAt(
+                              candidate.first_seen ?? candidate.first_seen_at
+                            )}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateSeenAt(
+                              candidate.last_seen ?? candidate.last_seen_at
+                            )}
+                          </td>
+                          <td className='px-2 py-1'>
                             {formatCandidateStock(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatResultStatus(candidate)}
                           </td>
                           <td className='px-2 py-1'>
                             {formatCandidateHandoff(candidate)}
