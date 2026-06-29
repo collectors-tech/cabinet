@@ -84,6 +84,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 			"/api/providers/ebay/run",
 			"/api/providers/registry",
 			"/api/scanner/query-sets",
+			"fieldgroups=EXTENDED",
 			"trimmed Browse string metadata",
 			"trimmed Browse price value",
 			"first-parseable shipping-cost normalization",
@@ -124,6 +125,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 		"INTEGRATION-007": {
 			"stock_state",
 			"stock_count",
+			"fieldgroups=EXTENDED",
 			"TestProviderSearchNormalizesCandidates",
 			"TestOpenAPIDocumentsEbaySavedSearchHandoffContract",
 			"INTEGRATION-005 + INTEGRATION-007 + #827 surfaces eBay provider run pagination metadata, observed-currency output, and stock state",
@@ -205,6 +207,7 @@ func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 
 	requiredFragments := []string{
 		"Browse request headers/query criteria",
+		"fieldgroups=EXTENDED",
 		"blank keyword/exclusion trimming",
 		"structured auth and non-auth Browse error payload preservation",
 		"positive integer `Retry-After` timing",

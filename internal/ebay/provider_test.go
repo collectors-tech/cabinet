@@ -42,6 +42,9 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 		if got := r.URL.Query().Get("limit"); got != "12" {
 			t.Errorf("expected Browse limit from effective items_per_page, got %q", got)
 		}
+		if got := r.URL.Query().Get("fieldgroups"); got != "EXTENDED" {
+			t.Errorf("expected Browse EXTENDED fieldgroup for availability metadata, got %q", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|123|0","title":"AFX P-1","price":{"value":"45.00","currency":"USD"},"itemWebUrl":"https://ebay/item/123","image":{"imageUrl":"https://img/123.jpg"},"seller":{"username":"seller1"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
 	}))

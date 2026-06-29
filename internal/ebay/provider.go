@@ -110,6 +110,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	if q.ItemsPerPage > 0 {
 		v.Set("limit", strconv.Itoa(q.ItemsPerPage))
 	}
+	v.Set("fieldgroups", "EXTENDED")
 	u := p.baseURL + "/buy/browse/v1/item_summary/search?" + v.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
