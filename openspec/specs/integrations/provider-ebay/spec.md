@@ -25,6 +25,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the adapter MUST trim and ignore blank keyword or exclusion criteria before building the Browse request, and MUST reject a saved query that has no non-blank keyword criteria without calling eBay.
 - **AND** normalized Browse candidate metadata MUST trim surrounding whitespace from listing id, title, price value, URL, image URL, seller username, and currency before the candidate is returned for persistence.
 - **AND** Browse item summaries with unparseable price values MUST be skipped instead of persisted as zero-price candidates.
+- **AND** Browse item summaries with zero or negative price values MUST be skipped instead of persisted as free or negative-price candidates.
 - **AND** Browse item summaries with blank price currency after trimming MUST be skipped instead of creating candidates with empty observed currency.
 - **AND** Browse item summaries with blank listing id, title, or item URL after trimming MUST be skipped instead of creating candidates that cannot preserve source identity or handoff provenance.
 - **AND** when Browse item summaries include `shippingOptions.shippingCost.value`, the adapter MUST preserve the first parseable amount in the shared scanner candidate `shipping` field, ignoring blank or unparseable shipping options before falling back to `0`.

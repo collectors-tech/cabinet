@@ -326,6 +326,32 @@ func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsNonPositiveBrowsePrices(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|zero-price|0","title":"Zero Price Slot Car","price":{"value":"0","currency":"AUD"},"itemWebUrl":"https://ebay/item/zero-price","seller":{"username":"seller-price"}},{"itemId":"v1|negative-price|0","title":"Negative Price Slot Car","price":{"value":"-1.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/negative-price","seller":{"username":"seller-price"}},{"itemId":"v1|positive-price|0","title":"Positive Price Slot Car","price":{"value":"1.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/positive-price","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the positive-price item, got %+v", items)
+	}
+	if items[0].ListingID != "v1|positive-price|0" || items[0].Price != 1.50 {
+		t.Fatalf("expected positive-price candidate to survive normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsBlankBrowsePriceCurrency(t *testing.T) {
 	t.Parallel()
 

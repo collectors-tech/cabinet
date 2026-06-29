@@ -195,7 +195,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			continue
 		}
 		price, err := strconv.ParseFloat(strings.TrimSpace(it.Price.Value), 64)
-		if err != nil {
+		if err != nil || price <= 0 {
 			continue
 		}
 		currency := strings.ToUpper(strings.TrimSpace(it.Price.Currency))
