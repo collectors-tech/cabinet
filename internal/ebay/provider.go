@@ -250,7 +250,7 @@ func normalizeShippingCost(options []struct {
 			continue
 		}
 		value, err := strconv.ParseFloat(raw, 64)
-		if err != nil {
+		if err != nil || value <= 0 {
 			continue
 		}
 		return value
