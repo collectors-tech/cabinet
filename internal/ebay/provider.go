@@ -206,7 +206,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			continue
 		}
 		currency := strings.ToUpper(strings.TrimSpace(it.Price.Currency))
-		if currency == "" {
+		if !isCurrencyCode(currency) {
 			continue
 		}
 		seenListingIDs[listingID] = struct{}{}
@@ -252,6 +252,18 @@ func normalizeSellerUsername(raw string) string {
 		return "ebay"
 	}
 	return seller
+}
+
+func isCurrencyCode(value string) bool {
+	if len(value) != 3 {
+		return false
+	}
+	for _, r := range value {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeShippingCost(options []struct {

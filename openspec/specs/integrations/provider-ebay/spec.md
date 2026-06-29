@@ -30,6 +30,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** Browse item summaries with unparseable price values MUST be skipped instead of persisted as zero-price candidates.
 - **AND** Browse item summaries with zero or negative price values MUST be skipped instead of persisted as free or negative-price candidates.
 - **AND** Browse item summaries with blank price currency after trimming MUST be skipped instead of creating candidates with empty observed currency.
+- **AND** Browse item summaries with malformed price currency after trimming MUST be skipped unless the normalized value is a three-letter currency code.
 - **AND** Browse item summaries with blank listing id, title, or item URL after trimming MUST be skipped instead of creating candidates that cannot preserve source identity or handoff provenance.
 - **AND** duplicate Browse item summaries with the same listing id after trimming MUST be emitted only once per provider result set, preserving the first valid candidate so a single eBay listing cannot create duplicate scanner candidates in one run.
 - **AND** Browse item summaries with non-HTTP(S) item URLs after trimming MUST be skipped instead of creating candidates with unsafe or non-clickable handoff provenance.
