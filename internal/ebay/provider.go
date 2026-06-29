@@ -100,8 +100,21 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	}
 	v := url.Values{}
 	v.Set("q", terms)
+	filters := []string{}
 	if q.MaxPrice > 0 {
-		v.Set("filter", fmt.Sprintf("price:[..%s]", strconv.FormatFloat(q.MaxPrice, 'f', 2, 64)))
+		filters = append(filters,
+			fmt.Sprintf("price:[..%s]", strconv.FormatFloat(q.MaxPrice, 'f', 2, 64)),
+			"priceCurrency:"+browseCurrency(q.Region, p.marketplace),
+		)
+	}
+	if country := browseCountry(q.Region); country != "" {
+		filters = append(filters, "itemLocationCountry:"+country)
+	}
+	if condition := browseCondition(q.Condition); condition != "" {
+		filters = append(filters, "conditions:{"+condition+"}")
+	}
+	if len(filters) > 0 {
+		v.Set("filter", strings.Join(filters, ","))
 	}
 	exclusions := compactSearchTerms(q.Exclusions)
 	if len(exclusions) > 0 {
@@ -285,6 +298,59 @@ func retryAfterSeconds(resp *http.Response) int {
 		return 0
 	}
 	return seconds
+}
+
+func browseCountry(region string) string {
+	region = strings.ToUpper(strings.TrimSpace(region))
+	if len(region) == 2 {
+		return region
+	}
+	return ""
+}
+
+func browseCondition(condition string) string {
+	switch strings.ToLower(strings.TrimSpace(condition)) {
+	case "new", "mint", "sealed":
+		return "NEW"
+	case "used", "loose", "opened":
+		return "USED"
+	case "unspecified":
+		return "UNSPECIFIED"
+	default:
+		return ""
+	}
+}
+
+func browseCurrency(region, marketplace string) string {
+	marketplace = strings.ToUpper(strings.TrimSpace(marketplace))
+	if after, ok := strings.CutPrefix(marketplace, "EBAY_"); ok {
+		if currency := currencyForCountry(after); currency != "" {
+			return currency
+		}
+	}
+	if country := browseCountry(region); country != "" {
+		if currency := currencyForCountry(country); currency != "" {
+			return currency
+		}
+	}
+	return "USD"
+}
+
+func currencyForCountry(country string) string {
+	switch strings.ToUpper(strings.TrimSpace(country)) {
+	case "AU":
+		return "AUD"
+	case "CA":
+		return "CAD"
+	case "GB", "UK":
+		return "GBP"
+	case "DE", "FR", "IT", "ES", "IE", "NL", "AT", "BE":
+		return "EUR"
+	case "US":
+		return "USD"
+	default:
+		return ""
+	}
 }
 
 func normalizeAvailability(items []struct {
