@@ -422,6 +422,9 @@ func normalizeAvailability(items []struct {
 
 func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
 	status := strings.ToUpper(strings.TrimSpace(rawStatus))
+	if count < 0 {
+		count = -1
+	}
 	switch status {
 	case "IN_STOCK", "AVAILABLE", "LIMITED_STOCK":
 		if count == 0 {

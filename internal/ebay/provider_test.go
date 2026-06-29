@@ -655,6 +655,32 @@ func TestProviderSearchUsesFirstMeaningfulAvailability(t *testing.T) {
 	}
 }
 
+func TestProviderSearchIgnoresNegativeAvailabilityQuantity(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|negative-stock|0","title":"Negative Stock Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/negative-stock","seller":{"username":"seller-stock"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"IN_STOCK","estimatedAvailableQuantity":-4}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].StockState != "in_stock" || items[0].StockCount != -1 {
+		t.Fatalf("expected negative availability quantity to be ignored as in_stock/-1, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchReturnsActionableAuthError(t *testing.T) {
 	t.Parallel()
 
