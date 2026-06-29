@@ -191,7 +191,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		listingID := strings.TrimSpace(it.ItemID)
 		title := strings.TrimSpace(it.Title)
 		itemURL := strings.TrimSpace(it.ItemWebURL)
-		if listingID == "" || title == "" || itemURL == "" {
+		if listingID == "" || title == "" || itemURL == "" || !isWebURL(itemURL) {
 			continue
 		}
 		price, err := strconv.ParseFloat(strings.TrimSpace(it.Price.Value), 64)
@@ -219,6 +219,15 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		})
 	}
 	return out, nil
+}
+
+func isWebURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	return parsed.Host != "" && (scheme == "http" || scheme == "https")
 }
 
 func normalizeShippingCost(options []struct {
