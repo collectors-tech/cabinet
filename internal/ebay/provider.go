@@ -211,7 +211,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Currency:   currency,
 			Shipping:   shipping,
 			URL:        itemURL,
-			Image:      strings.TrimSpace(it.Image.ImageURL),
+			Image:      normalizeOptionalWebURL(it.Image.ImageURL),
 			Seller:     strings.TrimSpace(it.Seller.Username),
 			Source:     "ebay",
 			StockState: stockState,
@@ -228,6 +228,14 @@ func isWebURL(raw string) bool {
 	}
 	scheme := strings.ToLower(parsed.Scheme)
 	return parsed.Host != "" && (scheme == "http" || scheme == "https")
+}
+
+func normalizeOptionalWebURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || !isWebURL(value) {
+		return ""
+	}
+	return value
 }
 
 func normalizeShippingCost(options []struct {
