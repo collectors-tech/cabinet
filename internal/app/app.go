@@ -1916,6 +1916,34 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/scanner/runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "method_not_allowed",
+				"error_code":     "method_not_allowed",
+				"message":        "Use GET to list persisted Market Watch run history.",
+				"next_action":    "retry_with_get",
+				"allowed_method": http.MethodGet,
+			})
+			return
+		}
+		active, _ := profiles.GetActiveProfile(r.Context())
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		runs, err := scannerSvc.ListRunHistoryByProfile(
+			r.Context(),
+			strings.TrimSpace(active.ID),
+			strings.TrimSpace(r.URL.Query().Get("query_set_id")),
+			limit,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_scanner_runs"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs})
+	})
 	mux.HandleFunc("/api/scanner/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

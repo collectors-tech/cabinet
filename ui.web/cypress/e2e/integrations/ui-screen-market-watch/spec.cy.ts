@@ -40,6 +40,73 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'Review provider credentials')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-run-history',
+            name: 'AFX watch',
+            keywords: ['afx'],
+            provider_scope: ['ebay'],
+            last_run_status: 'failed',
+            last_run_at: '2026-06-29T00:02:00Z',
+            last_run_message: 'Provider credentials expired',
+            last_candidate_count: 0,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: {
+        provider: 'ebay',
+        status: 'unknown',
+        state: 'disabled',
+        message: '',
+      },
+    }).as('providerHealth')
+    cy.intercept('GET', '/api/scanner/runs?limit=25', {
+      statusCode: 200,
+      body: {
+        runs: [
+          {
+            id: 'run-history-1',
+            query_set_id: 'qs-run-history',
+            provider: 'ebay',
+            trigger_type: 'manual',
+            started_at: '2026-06-29T00:01:00Z',
+            finished_at: '2026-06-29T00:02:00Z',
+            status: 'failed',
+            result_count: 0,
+            new_result_count: 0,
+            error_message: 'Provider credentials expired',
+            retry_guidance: 'Reconnect eBay before retrying.',
+            next_action: 'check_provider_health_and_credentials',
+          },
+        ],
+      },
+    }).as('runs')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth', '@runs'])
+
+    cy.get('[data-testid="scanner-provider-health"]')
+      .should('contain', 'Not checked yet')
+      .and('contain', 'Run or validate a provider search')
+    cy.get('[data-testid="market-watch-persisted-run-history"]')
+      .should('be.visible')
+      .and('contain', 'Persisted run history')
+      .and('contain', 'ebay')
+      .and('contain', 'manual')
+      .and('contain', 'failed')
+      .and('contain', 'Provider credentials expired')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-004 shows load failure with retry recovery', () => {
     let failedOnce = false
 

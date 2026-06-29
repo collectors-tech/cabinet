@@ -36,6 +36,33 @@ type Failure = {
   next_action?: string
 }
 
+type ProviderHealth = {
+  provider?: string
+  status?: string
+  state?: string
+  message?: string
+  last_error?: string | null
+  retry_after_seconds?: number | null
+  next_action?: string | null
+  updated_at?: string | null
+}
+
+type RunHistoryRecord = {
+  id: string
+  query_set_id: string
+  provider: string
+  trigger_type: string
+  started_at: string
+  finished_at: string
+  status: 'never' | 'running' | 'succeeded' | 'failed'
+  result_count: number
+  new_result_count: number
+  error_category?: string
+  error_message?: string
+  retry_guidance?: string
+  next_action?: string
+}
+
 type ActionFeedback = {
   summary: string
   actions: string[]
@@ -394,7 +421,12 @@ export function Scanner() {
   const [runMetaByQuerySet, setRunMetaByQuerySet] = useState<
     Record<string, RunMeta>
   >({})
-  const [providerHealth, setProviderHealth] = useState('unknown')
+  const [providerHealth, setProviderHealth] = useState<ProviderHealth>({
+    provider: 'ebay',
+    status: 'unknown',
+    state: 'disabled',
+  })
+  const [runHistory, setRunHistory] = useState<RunHistoryRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionStatus, setActionStatus] = useState<string | null>(null)
@@ -469,11 +501,14 @@ export function Scanner() {
     setLoading(true)
     setError(null)
     try {
-      const [querySetsRes, failuresRes, healthRes] = await Promise.all([
-        fetch('/api/scanner/query-sets'),
-        fetch('/api/scanner/failures'),
-        fetch('/api/provider/health?provider=ebay'),
-      ])
+      const [querySetsRes, failuresRes, healthRes, runsRes] = await Promise.all(
+        [
+          fetch('/api/scanner/query-sets'),
+          fetch('/api/scanner/failures'),
+          fetch('/api/provider/health?provider=ebay'),
+          fetch('/api/scanner/runs?limit=25'),
+        ]
+      )
       if (!querySetsRes.ok) {
         throw new Error(`query_sets_${querySetsRes.status}`)
       }
@@ -490,7 +525,12 @@ export function Scanner() {
       const failuresPayload = (await failuresRes.json()) as {
         failures?: Failure[]
       }
-      const healthPayload = (await healthRes.json()) as { status?: string }
+      const healthPayload = (await healthRes.json()) as ProviderHealth
+      const runsPayload = runsRes.ok
+        ? ((await runsRes.json()) as {
+            runs?: RunHistoryRecord[]
+          })
+        : { runs: [] }
 
       setQuerySets(querySetPayload.query_sets ?? [])
       setFailures(failuresPayload.failures ?? [])
@@ -507,7 +547,17 @@ export function Scanner() {
           ])
         )
       )
-      setProviderHealth(healthPayload.status ?? 'unknown')
+      setProviderHealth({
+        provider: healthPayload.provider ?? 'ebay',
+        status: healthPayload.status ?? 'unknown',
+        state: healthPayload.state ?? 'disabled',
+        message: healthPayload.message ?? '',
+        last_error: healthPayload.last_error ?? null,
+        retry_after_seconds: healthPayload.retry_after_seconds ?? null,
+        next_action: healthPayload.next_action ?? null,
+        updated_at: healthPayload.updated_at ?? null,
+      })
+      setRunHistory(runsPayload.runs ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'scanner_load_failed')
       setQuerySets([])
@@ -515,7 +565,12 @@ export function Scanner() {
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
       setRunMetaByQuerySet({})
-      setProviderHealth('unknown')
+      setProviderHealth({
+        provider: 'ebay',
+        status: 'unknown',
+        state: 'disabled',
+      })
+      setRunHistory([])
     } finally {
       setLoading(false)
     }
@@ -1170,6 +1225,32 @@ export function Scanner() {
     return 'No output'
   }
 
+  const providerHealthStatus = providerHealth.status ?? 'unknown'
+  const providerHealthState = providerHealth.state ?? 'disabled'
+  const providerHealthSummary =
+    providerHealthStatus === 'unknown'
+      ? 'Not checked yet'
+      : providerHealthStatus === 'ok'
+        ? 'Connected / healthy'
+        : `${providerHealthStatus.replace(/_/g, ' ')} (${providerHealthStatus})`
+  const providerHealthGuidance =
+    providerHealth.message?.trim() ||
+    providerHealth.last_error?.trim() ||
+    (providerHealthStatus === 'unknown'
+      ? 'Run or validate a provider search to collect health evidence.'
+      : 'Review provider credentials, setup health, and retry guidance before running watches.')
+
+  const formatRunHistoryTime = (value?: string) => {
+    if (!value) {
+      return 'Not recorded'
+    }
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      return 'Not recorded'
+    }
+    return parsed.toLocaleString()
+  }
+
   const formatCandidatePrice = (candidate: Candidate) => {
     if (candidate.price === undefined || candidate.price === null) {
       return 'Not provided'
@@ -1358,8 +1439,8 @@ export function Scanner() {
   const hasProviderAttention =
     !loading &&
     !error &&
-    providerHealth !== 'unknown' &&
-    providerHealth !== 'ok'
+    providerHealthStatus !== 'ok' &&
+    providerHealthState !== 'ready'
 
   const latestRunHistory = filteredQuerySets.map((querySet) => ({
     id: querySet.id,
@@ -1674,7 +1755,27 @@ export function Scanner() {
           className='rounded-md border p-3 text-sm'
           data-testid='scanner-provider-health'
         >
-          Provider health (eBay): <strong>{providerHealth}</strong>
+          <div className='flex flex-wrap items-start justify-between gap-3'>
+            <div>
+              <p className='font-medium'>
+                Provider health (eBay): <strong>{providerHealthSummary}</strong>
+              </p>
+              <p
+                className='mt-1 text-xs text-muted-foreground'
+                data-testid='market-watch-provider-health-guidance'
+              >
+                {providerHealthGuidance}
+              </p>
+            </div>
+            <div className='text-xs text-muted-foreground'>
+              <span className='capitalize'>State: {providerHealthState}</span>
+              {providerHealth.retry_after_seconds ? (
+                <span className='ms-2'>
+                  Retry after {providerHealth.retry_after_seconds}s
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         <section className='grid gap-2 md:grid-cols-3'>
@@ -2046,6 +2147,57 @@ export function Scanner() {
             </ul>
           </section>
         ) : null}
+        {runHistory.length > 0 ? (
+          <section
+            className='rounded-md border p-3 text-sm'
+            data-testid='market-watch-persisted-run-history'
+          >
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='font-medium'>Persisted run history</p>
+              <p className='text-xs text-muted-foreground'>
+                Latest saved provider runs
+              </p>
+            </div>
+            <div className='mt-2 overflow-x-auto'>
+              <table className='w-full text-xs'>
+                <thead className='bg-muted/30 text-left'>
+                  <tr>
+                    <th className='px-2 py-1 font-medium'>Provider</th>
+                    <th className='px-2 py-1 font-medium'>Trigger</th>
+                    <th className='px-2 py-1 font-medium'>Status</th>
+                    <th className='px-2 py-1 font-medium'>Finished</th>
+                    <th className='px-2 py-1 font-medium'>Results</th>
+                    <th className='px-2 py-1 font-medium'>Guidance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runHistory.map((run) => (
+                    <tr
+                      key={run.id}
+                      className='border-t'
+                      data-testid={`market-watch-persisted-run-${run.id}`}
+                    >
+                      <td className='px-2 py-1'>{run.provider}</td>
+                      <td className='px-2 py-1'>{run.trigger_type}</td>
+                      <td className='px-2 py-1 capitalize'>{run.status}</td>
+                      <td className='px-2 py-1'>
+                        {formatRunHistoryTime(run.finished_at)}
+                      </td>
+                      <td className='px-2 py-1'>
+                        {run.result_count} total / {run.new_result_count} new
+                      </td>
+                      <td className='px-2 py-1'>
+                        {run.error_message ||
+                          run.retry_guidance ||
+                          'No recovery needed'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
         {showCapturePanel ? (
           <>
             <section
@@ -2357,10 +2509,13 @@ export function Scanner() {
           >
             <p className='font-medium'>Provider needs attention.</p>
             <p className='mt-1'>
-              eBay provider health is <strong>{providerHealth}</strong>.
+              eBay provider health is <strong>{providerHealthSummary}</strong>.
             </p>
             <ul className='mt-2 list-disc ps-4'>
-              <li>Review provider credentials and API access.</li>
+              <li>{providerHealthGuidance}</li>
+              {providerHealth.next_action ? (
+                <li>Next action: {providerHealth.next_action}</li>
+              ) : null}
               <li>
                 Retry failed Market Watch runs after provider health recovers.
               </li>

@@ -201,6 +201,21 @@ Market Watch output details SHALL render the latest provider results as a result
 - **AND WHEN** a user decision updates a result lifecycle status such as dismissed, purchased, added to wishlist, added to inventory, watching, duplicate, expired, or failed to refresh
 - **THEN** the status update MUST be profile-scoped, persisted on the candidate record, and visible through a subsequent filtered API reload
 
+### Requirement UI-SCREEN-MARKET-WATCH-017: Market Watch SHALL expose provider health and persisted run history with recovery guidance
+Market Watch SHALL show provider health with an explanation and next action, and SHALL list persisted provider run records so users can inspect run outcomes after reload.
+
+#### Scenario: Unknown provider health remains actionable
+- **GIVEN** provider health has not been checked for a Market Watch provider
+- **WHEN** Market Watch renders the provider health strip
+- **THEN** the screen MUST show that the provider has not been checked yet
+- **AND** it MUST show a next step for collecting health evidence instead of displaying bare `unknown`
+
+#### Scenario: Persisted provider run history is visible
+- **GIVEN** one or more Market Watch runs have been persisted for the active profile
+- **WHEN** Market Watch loads run history
+- **THEN** the screen MUST show provider, trigger type, status, finished time, total result count, new result count, and failure or retry guidance for each recent run
+- **AND** failed runs MUST keep provider-specific recovery guidance visible without marking unrelated provider runs as failed
+
 ### Requirement UI-SCREEN-MARKET-WATCH-011: Market Watch SHALL bootstrap saved-query creation from route handoff state
 Market Watch SHALL translate route handoff context into editable saved-query fields before persistence so handoffs from barcode/search surfaces remain deterministic.
 

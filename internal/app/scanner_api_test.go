@@ -163,6 +163,62 @@ func TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI(t *testing
 	}
 }
 
+func TestScannerRunsEndpointListsPersistedRunHistory(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Run History API"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	if _, err := a.db.Exec(`INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('run-history-q', ?, 'Run History Watch', '["afx"]', '[]', '["ebay"]')`, p.ID); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO scanner_runs(id, profile_id, query_set_id, provider, trigger_type, started_at, finished_at, status, result_count, new_result_count, error_category, error_message, retry_guidance) VALUES ('run-history-1', ?, 'run-history-q', 'ebay', 'manual', '2026-06-29T00:01:00Z', '2026-06-29T00:02:00Z', 'failed', 0, 0, 'auth', 'Provider credentials expired', 'Reconnect eBay before retrying.')`, p.ID); err != nil {
+		t.Fatalf("seed scanner run: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodGet, "/api/scanner/runs?query_set_id=run-history-q", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("scanner runs status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Runs []map[string]any `json:"runs"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode scanner runs payload: %v", err)
+	}
+	if len(payload.Runs) != 1 {
+		t.Fatalf("expected one run history record, got %+v", payload)
+	}
+	run := payload.Runs[0]
+	for key, expected := range map[string]any{
+		"id":               "run-history-1",
+		"provider":         "ebay",
+		"trigger_type":     "manual",
+		"status":           "failed",
+		"result_count":     float64(0),
+		"new_result_count": float64(0),
+		"error_message":    "Provider credentials expired",
+		"retry_guidance":   "Reconnect eBay before retrying.",
+		"next_action":      "check_provider_health_and_credentials",
+	} {
+		if got := run[key]; got != expected {
+			t.Fatalf("expected run %s=%v, got %v in %+v", key, expected, got, run)
+		}
+	}
+}
+
 func TestScannerFailuresRejectsUnsupportedMethodsWithGuidance(t *testing.T) {
 	t.Parallel()
 
