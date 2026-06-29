@@ -326,6 +326,32 @@ func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsBlankBrowsePriceCurrency(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|missing-currency|0","title":"Missing Currency Slot Car","price":{"value":"11.00","currency":" "},"itemWebUrl":"https://ebay/item/missing-currency","seller":{"username":"seller-currency"}},{"itemId":"v1|required-currency|0","title":"Required Currency Slot Car","price":{"value":"14.00","currency":" aud "},"itemWebUrl":"https://ebay/item/required-currency","seller":{"username":"seller-currency"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only candidate with normalized currency to survive, got %+v", items)
+	}
+	if items[0].ListingID != "v1|required-currency|0" || items[0].Currency != "AUD" {
+		t.Fatalf("expected required-currency candidate to survive with normalized AUD currency, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsIncompleteBrowseItemSummaries(t *testing.T) {
 	t.Parallel()
 

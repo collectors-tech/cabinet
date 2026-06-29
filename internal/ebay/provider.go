@@ -198,13 +198,17 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if err != nil {
 			continue
 		}
+		currency := strings.ToUpper(strings.TrimSpace(it.Price.Currency))
+		if currency == "" {
+			continue
+		}
 		shipping := normalizeShippingCost(it.ShippingOptions)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
 			ListingID:  listingID,
 			Title:      title,
 			Price:      price,
-			Currency:   strings.ToUpper(strings.TrimSpace(it.Price.Currency)),
+			Currency:   currency,
 			Shipping:   shipping,
 			URL:        itemURL,
 			Image:      strings.TrimSpace(it.Image.ImageURL),
