@@ -80,6 +80,89 @@ func TestScannerRetryFailuresEndpoint(t *testing.T) {
 	}
 }
 
+func TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Result Inbox API"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	if _, err := a.db.Exec(`INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('result-inbox-api-q', ?, 'Result Inbox API Watch', '["afx"]', '[]', '["ebay","bonzaslotcars"]')`, p.ID); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	for _, seed := range []struct {
+		id        string
+		listingID string
+		source    string
+		status    string
+	}{
+		{"result-inbox-api-c1", "API-EBAY-1", "ebay", "new"},
+		{"result-inbox-api-c2", "API-EBAY-2", "ebay", "seen"},
+		{"result-inbox-api-c3", "API-BONZA-1", "bonzaslotcars", "new"},
+	} {
+		if _, err := a.db.Exec(`INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count) VALUES (?, ?, 'result-inbox-api-q', ?, ?, 10, 'AUD', 2, ?, '', 'seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'in_stock', 1)`, seed.id, p.ID, seed.listingID, seed.listingID+" title", "https://market.test/"+seed.listingID, seed.status, seed.source); err != nil {
+			t.Fatalf("seed candidate %s: %v", seed.id, err)
+		}
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/scanner/candidates?query_set_id=result-inbox-api-q&provider=ebay&page=1&page_size=1", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list candidates status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Candidates []map[string]any `json:"candidates"`
+		Total      int              `json:"total"`
+		Page       int              `json:"page"`
+		PageSize   int              `json:"page_size"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode candidates payload: %v", err)
+	}
+	if payload.Total != 2 || payload.Page != 1 || payload.PageSize != 1 || len(payload.Candidates) != 1 {
+		t.Fatalf("expected provider-filtered paginated payload, got %+v", payload)
+	}
+
+	patch := doRequest(t, a, http.MethodPatch, "/api/scanner/candidates/result-inbox-api-c1", strings.NewReader(`{"status":"dismissed"}`), map[string]string{"Content-Type": "application/json"})
+	if patch.Code != http.StatusOK {
+		t.Fatalf("patch candidate status=%d body=%s", patch.Code, patch.Body.String())
+	}
+	var updated map[string]any
+	if err := json.NewDecoder(patch.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode updated candidate: %v", err)
+	}
+	if got, _ := updated["status"].(string); got != "dismissed" {
+		t.Fatalf("expected dismissed updated candidate, got %+v", updated)
+	}
+
+	filtered := doRequest(t, a, http.MethodGet, "/api/scanner/candidates?query_set_id=result-inbox-api-q&status=dismissed&provider=ebay", nil, nil)
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("filtered candidates status=%d body=%s", filtered.Code, filtered.Body.String())
+	}
+	payload = struct {
+		Candidates []map[string]any `json:"candidates"`
+		Total      int              `json:"total"`
+		Page       int              `json:"page"`
+		PageSize   int              `json:"page_size"`
+	}{}
+	if err := json.NewDecoder(filtered.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode filtered payload: %v", err)
+	}
+	if payload.Total != 1 || len(payload.Candidates) != 1 || payload.Candidates[0]["id"] != "result-inbox-api-c1" {
+		t.Fatalf("expected dismissed provider-filtered candidate after patch, got %+v", payload)
+	}
+}
+
 func TestScannerFailuresRejectsUnsupportedMethodsWithGuidance(t *testing.T) {
 	t.Parallel()
 

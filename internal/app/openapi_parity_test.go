@@ -1162,12 +1162,30 @@ func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 		t.Fatalf("openapi missing /api/scanner/candidates path in %s", specPath)
 	}
 	for _, token := range []string{
-		"Lists saved-search candidates for output inspection and handoff, including provider/query provenance used by eBay Market Watch handoff actions.",
+		"Lists saved-search candidates for output inspection and handoff, including provider/query provenance, lifecycle status/provider filters, and pagination metadata used by Market Watch result inbox actions.",
 		"name: query_set_id",
+		"name: status",
+		"name: provider",
+		"name: page_size",
+		"total:",
 		"$ref: \"#/components/schemas/Candidate\"",
 	} {
 		if !strings.Contains(candidatesSection, token) {
 			t.Fatalf("openapi /api/scanner/candidates section missing %q:\n%s", token, candidatesSection)
+		}
+	}
+	candidateStatusSection, ok := openAPIPathSection(raw, "/api/scanner/candidates/{candidate_id}")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/candidates/{candidate_id} path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Persists a profile-scoped Market Watch result inbox lifecycle decision",
+		"name: candidate_id",
+		"enum: [new, seen, watching, dismissed, purchased, added_to_wishlist, added_to_inventory, expired, duplicate, failed_to_refresh]",
+		"$ref: \"#/components/schemas/Candidate\"",
+	} {
+		if !strings.Contains(candidateStatusSection, token) {
+			t.Fatalf("openapi /api/scanner/candidates/{candidate_id} section missing %q:\n%s", token, candidateStatusSection)
 		}
 	}
 

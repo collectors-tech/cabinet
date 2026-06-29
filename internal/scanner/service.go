@@ -72,6 +72,20 @@ type Candidate struct {
 	StockCount int     `json:"stock_count"`
 }
 
+type CandidateListFilter struct {
+	Status   string
+	Provider string
+	Page     int
+	PageSize int
+}
+
+type CandidateList struct {
+	Candidates []Candidate `json:"candidates"`
+	Total      int         `json:"total"`
+	Page       int         `json:"page"`
+	PageSize   int         `json:"page_size"`
+}
+
 type RecognitionCandidateInput struct {
 	ID           string   `json:"id"`
 	Title        string   `json:"title"`
@@ -900,7 +914,7 @@ func (s *Service) persistCandidatesForProfile(
 		res, err := s.db.ExecContext(ctx, `
 			UPDATE scanner_candidates
 			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP,
-				status = CASE WHEN status IN ('ignored', 'archived', 'wishlisted', 'purchase_candidate', 'inventory_candidate') THEN status ELSE 'seen' END,
+				status = CASE WHEN status IN ('ignored', 'archived', 'wishlisted', 'purchase_candidate', 'inventory_candidate', 'watching', 'dismissed', 'purchased', 'added_to_wishlist', 'added_to_inventory', 'expired', 'duplicate', 'failed_to_refresh') THEN status ELSE 'seen' END,
 				source = ?, stock_state = ?, stock_count = ?, observed_currency = ?
 			WHERE query_set_id = ? AND source = ? AND listing_id = ? AND (? = '' OR profile_id = ?)
 		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, querySetID, source, listingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
@@ -982,28 +996,133 @@ func (s *Service) ListCandidates(ctx context.Context, querySetID string) ([]Cand
 }
 
 func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, querySetID string) ([]Candidate, error) {
+	list, err := s.ListCandidatesByProfileFiltered(ctx, profileID, querySetID, CandidateListFilter{})
+	if err != nil {
+		return nil, err
+	}
+	return list.Candidates, nil
+}
+
+func (s *Service) ListCandidatesByProfileFiltered(ctx context.Context, profileID, querySetID string, filter CandidateListFilter) (CandidateList, error) {
+	querySetID = strings.TrimSpace(querySetID)
+	if querySetID == "" {
+		return CandidateList{}, fmt.Errorf("query set id is required")
+	}
+	status, statusAlias := normalizeCandidateStatusFilter(filter.Status)
+	provider := strings.ToLower(strings.TrimSpace(filter.Provider))
+	page := filter.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := filter.PageSize
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	var total int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1)
+		FROM scanner_candidates
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?) AND (? = '' OR status = ? OR status = ?) AND (? = '' OR LOWER(source) = ?)
+	`, querySetID, strings.TrimSpace(profileID), strings.TrimSpace(profileID), status, status, statusAlias, provider, provider).Scan(&total); err != nil {
+		return CandidateList{}, fmt.Errorf("count candidates: %w", err)
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
 		FROM scanner_candidates
-		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?) AND (? = '' OR status = ? OR status = ?) AND (? = '' OR LOWER(source) = ?)
 		ORDER BY last_seen DESC
-	`, querySetID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+		LIMIT ? OFFSET ?
+	`, querySetID, strings.TrimSpace(profileID), strings.TrimSpace(profileID), status, status, statusAlias, provider, provider, pageSize, (page-1)*pageSize)
 	if err != nil {
-		return nil, fmt.Errorf("list candidates: %w", err)
+		return CandidateList{}, fmt.Errorf("list candidates: %w", err)
 	}
 	defer rows.Close()
 	var out []Candidate
 	for rows.Next() {
 		var c Candidate
 		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
-			return nil, fmt.Errorf("scan candidate: %w", err)
+			return CandidateList{}, fmt.Errorf("scan candidate: %w", err)
 		}
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate candidates: %w", err)
+		return CandidateList{}, fmt.Errorf("iterate candidates: %w", err)
 	}
-	return out, nil
+	return CandidateList{Candidates: out, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
+func (s *Service) UpdateCandidateStatusForProfile(ctx context.Context, profileID, candidateID, status string) (Candidate, error) {
+	candidateID = strings.TrimSpace(candidateID)
+	nextStatus := normalizeCandidateStatusForUpdate(status)
+	if candidateID == "" {
+		return Candidate{}, fmt.Errorf("candidate id is required")
+	}
+	if nextStatus == "" {
+		return Candidate{}, fmt.Errorf("unsupported candidate status")
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE scanner_candidates
+		SET status = ?, last_seen = last_seen
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, nextStatus, candidateID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+	if err != nil {
+		return Candidate{}, fmt.Errorf("update candidate status: %w", err)
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return Candidate{}, fmt.Errorf("candidate not found")
+	}
+	var c Candidate
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
+		FROM scanner_candidates
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, candidateID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
+		return Candidate{}, fmt.Errorf("load candidate: %w", err)
+	}
+	return c, nil
+}
+
+func normalizeCandidateStatusFilter(status string) (string, string) {
+	normalized := normalizeCandidateStatusForUpdate(status)
+	switch normalized {
+	case "dismissed":
+		return normalized, "ignored"
+	case "expired":
+		return normalized, "archived"
+	case "added_to_wishlist":
+		return normalized, "wishlisted"
+	case "purchased":
+		return normalized, "purchase_candidate"
+	case "added_to_inventory":
+		return normalized, "inventory_candidate"
+	default:
+		return normalized, normalized
+	}
+}
+
+func normalizeCandidateStatusForUpdate(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "":
+		return ""
+	case "new", "seen", "watching", "dismissed", "purchased", "added_to_wishlist", "added_to_inventory", "expired", "duplicate", "failed_to_refresh":
+		return strings.ToLower(strings.TrimSpace(status))
+	case "ignored":
+		return "dismissed"
+	case "archived":
+		return "expired"
+	case "wishlisted":
+		return "added_to_wishlist"
+	case "purchase_candidate":
+		return "purchased"
+	case "inventory_candidate":
+		return "added_to_inventory"
+	default:
+		return ""
+	}
 }
 
 func (s *Service) ListFailures(ctx context.Context) ([]map[string]string, error) {

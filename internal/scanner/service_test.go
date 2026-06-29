@@ -347,6 +347,73 @@ func TestRunNowPreservesDownstreamDecisionStatuses(t *testing.T) {
 	}
 }
 
+func TestCandidateResultInboxFiltersPaginationAndLifecycleUpdate(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Result inbox watch",
+		Keywords:      []string{"afx"},
+		ProviderScope: []string{"ebay", "bonzaslotcars"},
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile() error = %v", err)
+	}
+	provider := &testProvider{
+		providerID: "ebay",
+		items: []CandidateInput{
+			{ListingID: "INBOX-EBAY-1", Title: "eBay inbox result", Price: 40, Currency: "AUD", URL: "https://market.test/ebay-1", Source: "ebay"},
+			{ListingID: "INBOX-EBAY-2", Title: "Second eBay inbox result", Price: 50, Currency: "AUD", URL: "https://market.test/ebay-2", Source: "ebay"},
+		},
+	}
+	if _, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, provider); err != nil {
+		t.Fatalf("RunNowForProfile() ebay pass error = %v", err)
+	}
+	provider.providerID = "bonzaslotcars"
+	provider.items = []CandidateInput{{ListingID: "INBOX-BONZA-1", Title: "Bonza inbox result", Price: 45, Currency: "AUD", URL: "https://market.test/bonza-1", Source: "bonzaslotcars"}}
+	if _, err := svc.RunNowForProfile(context.Background(), "profile-a", qs.ID, provider); err != nil {
+		t.Fatalf("RunNowForProfile() bonza pass error = %v", err)
+	}
+
+	all, err := svc.ListCandidatesByProfileFiltered(context.Background(), "profile-a", qs.ID, CandidateListFilter{Page: 1, PageSize: 2})
+	if err != nil {
+		t.Fatalf("ListCandidatesByProfileFiltered() error = %v", err)
+	}
+	if all.Total != 3 || all.Page != 1 || all.PageSize != 2 || len(all.Candidates) != 2 {
+		t.Fatalf("expected paginated total=3 page_size=2 with two rows, got %+v", all)
+	}
+	updated, err := svc.UpdateCandidateStatusForProfile(context.Background(), "profile-a", all.Candidates[0].ID, "dismissed")
+	if err != nil {
+		t.Fatalf("UpdateCandidateStatusForProfile() error = %v", err)
+	}
+	if updated.Status != "dismissed" {
+		t.Fatalf("expected dismissed status, got %+v", updated)
+	}
+	filtered, err := svc.ListCandidatesByProfileFiltered(context.Background(), "profile-a", qs.ID, CandidateListFilter{Status: "dismissed", Provider: updated.Source, Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("filtered ListCandidatesByProfileFiltered() error = %v", err)
+	}
+	if filtered.Total != 1 || len(filtered.Candidates) != 1 || filtered.Candidates[0].ID != updated.ID {
+		t.Fatalf("expected one filtered dismissed provider result, got %+v", filtered)
+	}
+	if _, err := conn.Exec(`UPDATE scanner_candidates SET status = 'ignored' WHERE id = ?`, updated.ID); err != nil {
+		t.Fatalf("seed legacy ignored status: %v", err)
+	}
+	legacyFiltered, err := svc.ListCandidatesByProfileFiltered(context.Background(), "profile-a", qs.ID, CandidateListFilter{Status: "dismissed", Provider: updated.Source})
+	if err != nil {
+		t.Fatalf("legacy filtered ListCandidatesByProfileFiltered() error = %v", err)
+	}
+	if legacyFiltered.Total != 1 || len(legacyFiltered.Candidates) != 1 || legacyFiltered.Candidates[0].Status != "ignored" {
+		t.Fatalf("expected dismissed filter to retain legacy ignored result, got %+v", legacyFiltered)
+	}
+}
+
 func TestRunNowDedupeIsScopedByProfileAndWatch(t *testing.T) {
 	t.Parallel()
 
