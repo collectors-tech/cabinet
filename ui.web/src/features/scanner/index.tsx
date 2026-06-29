@@ -968,6 +968,45 @@ export function Scanner() {
     setHandoffStatus(`purchase_handoff_ok_${firstCandidate.id}`)
   }
 
+  const updateFirstCandidateLifecycleStatus = async (
+    querySetID: string,
+    status: MarketWatchResultStatusFilter
+  ) => {
+    if (status === 'all') {
+      return
+    }
+    const candidates = candidatesByQuerySet[querySetID] ?? []
+    const firstCandidate = candidates.find(
+      (candidate) => (candidate.id ?? '').trim() !== ''
+    )
+    if (!firstCandidate?.id) {
+      setHandoffStatus(`candidate_lifecycle_${status}_no_candidate`)
+      return
+    }
+    const response = await fetch(
+      `/api/scanner/candidates/${encodeURIComponent(firstCandidate.id)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      }
+    )
+    if (!response.ok) {
+      setHandoffStatus(
+        `candidate_lifecycle_${status}_failed_${response.status}`
+      )
+      return
+    }
+    const updated = (await response.json()) as Candidate
+    setCandidatesByQuerySet((current) => ({
+      ...current,
+      [querySetID]: (current[querySetID] ?? []).map((candidate) =>
+        candidate.id === updated.id ? updated : candidate
+      ),
+    }))
+    setHandoffStatus(`candidate_lifecycle_${status}_ok_${updated.id}`)
+  }
+
   const runNow = async (querySet: QuerySet) => {
     setRunMetaByQuerySet((current) => ({
       ...current,
@@ -1424,6 +1463,31 @@ export function Scanner() {
     setResultProviderFilter('all')
     setResultMatchFilter('all')
     setResultWishlistMatchesOnly(false)
+  }
+
+  const openOutputDetails = async (querySet: QuerySet) => {
+    const querySetID = querySet.id
+    setSelectedOutputQuerySetID(querySetID)
+    if ((candidatesByQuerySet[querySetID] ?? []).length > 0) {
+      return
+    }
+    if ((querySet.last_candidate_count ?? 0) <= 0) {
+      return
+    }
+    const response = await fetch(
+      `/api/scanner/candidates?query_set_id=${encodeURIComponent(querySetID)}`
+    )
+    if (!response.ok) {
+      setHandoffStatus(`candidate_reload_failed_${response.status}`)
+      return
+    }
+    const payload = (await response.json()) as {
+      candidates?: Candidate[]
+    }
+    setCandidatesByQuerySet((current) => ({
+      ...current,
+      [querySetID]: payload.candidates ?? [],
+    }))
   }
 
   const filteredQuerySets = querySets.filter((querySet) => {
@@ -2813,7 +2877,7 @@ export function Scanner() {
                       className='cursor-pointer border-t align-top hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
                       data-testid={`market-watch-query-row-${querySet.id}`}
                       onDoubleClick={() =>
-                        setSelectedOutputQuerySetID(querySet.id)
+                        void openOutputDetails(querySet)
                       }
                       onKeyDown={(event) => {
                         if (
@@ -2823,7 +2887,7 @@ export function Scanner() {
                           return
                         }
                         event.preventDefault()
-                        setSelectedOutputQuerySetID(querySet.id)
+                        void openOutputDetails(querySet)
                       }}
                     >
                       <td className='px-3 py-2'>{querySet.name}</td>
@@ -2885,7 +2949,7 @@ export function Scanner() {
                             variant='outline'
                             data-testid={`market-watch-open-output-${querySet.id}`}
                             onClick={() =>
-                              setSelectedOutputQuerySetID(querySet.id)
+                              void openOutputDetails(querySet)
                             }
                           >
                             Inspect Output
@@ -3201,6 +3265,20 @@ export function Scanner() {
               )}
             </div>
             <div className='mt-3 flex flex-wrap gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-dismiss-first-result-${selectedOutputQuerySetID}`}
+                onClick={() =>
+                  void updateFirstCandidateLifecycleStatus(
+                    selectedOutputQuerySetID,
+                    'dismissed'
+                  )
+                }
+              >
+                Dismiss First Result
+              </Button>
               <Button
                 type='button'
                 size='sm'

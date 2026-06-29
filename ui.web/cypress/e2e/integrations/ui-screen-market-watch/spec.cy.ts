@@ -1222,6 +1222,192 @@ describe('integrations/ui-screen-market-watch', () => {
     })
   })
 
+  it('UI-SCREEN-MARKET-WATCH-016 + #1548 persists result dismissal through reload before downstream handoff', () => {
+    let candidates = [
+      {
+        id: 'cand-mw-e2e-handoff-1',
+        query_set_id: 'qs-mw-e2e-handoff',
+        listing_id: 'ebay-afx-e2e-handoff',
+        title: 'eBay AFX End-to-End Handoff',
+        source: 'ebay',
+        source_provider: 'ebay',
+        price: 112.5,
+        shipping: 8.75,
+        currency: 'AUD',
+        observed_currency: 'AUD',
+        url: 'https://www.ebay.com/itm/ebay-afx-e2e-handoff',
+        stock_status: 'available',
+        handoff_state: 'wishlist_inventory_ready',
+        result_status: 'new',
+        status: 'new',
+        match_target: 'wishlist',
+        matched_watch_name: 'AFX Camaro Watch',
+        matched_watch_keywords: ['AFX Camaro'],
+        match_reason: 'Matched wishlist keyword AFX Camaro',
+        first_seen: '2026-06-29T06:45:00Z',
+        last_seen: '2026-06-29T06:45:00Z',
+        decision_history: [],
+      },
+    ]
+    let purchaseOrders: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-e2e-handoff',
+            name: 'eBay E2E Handoff Watch',
+            keywords: ['AFX Camaro'],
+            provider_scope: ['ebay'],
+            last_run_status: 'succeeded',
+            last_run_at: '2026-06-29T06:45:00Z',
+            last_candidate_count: 1,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('GET', '/api/scanner/candidates?query_set_id=qs-mw-e2e-handoff*', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          candidates,
+          page: 1,
+          page_size: 25,
+          total: candidates.length,
+          total_pages: 1,
+        },
+      })
+    }).as('candidateReload')
+    cy.intercept('PATCH', '/api/scanner/candidates/cand-mw-e2e-handoff-1', (req) => {
+      expect(req.body).to.deep.equal({ status: 'dismissed' })
+      candidates = [
+        {
+          ...candidates[0],
+          result_status: 'dismissed',
+          status: 'dismissed',
+          decision_history: [
+            {
+              from_status: 'new',
+              to_status: 'dismissed',
+              reason: 'manual_result_review',
+              created_at: '2026-06-29T06:48:00Z',
+            },
+          ],
+        },
+      ]
+      req.reply({ statusCode: 200, body: candidates[0] })
+    }).as('dismissCandidate')
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body.candidate_id).to.equal('cand-mw-e2e-handoff-1')
+      expect(req.body.type).to.equal('mark_purchased')
+      purchaseOrders = [
+        {
+          order_id: 'ebay-afx-e2e-handoff',
+          source: 'market_watch',
+          seller: 'ebay',
+          tracking: 'Pending',
+          status: 'active',
+          total_amount: 112.5,
+          currency: 'AUD',
+          line_item_count: 1,
+          received_count: 0,
+          unreceived_count: 1,
+          created_at: '2026-06-29T06:50:00Z',
+          line_items: [
+            {
+              item_id: 'item-mw-e2e-handoff-1',
+              title: 'eBay AFX End-to-End Handoff',
+              quantity: 1,
+              amount: 112.5,
+              status: 'expected',
+              lifecycle_entry_id: 'life-mw-e2e-handoff-1',
+              expected_arrival_id: 'arrival-mw-e2e-handoff-1',
+            },
+          ],
+        },
+      ]
+      req.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+          action: 'mark_purchased',
+          candidate_id: 'cand-mw-e2e-handoff-1',
+        },
+      })
+    }).as('purchaseHandoff')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          page: 1,
+          page_size: 10,
+          total: purchaseOrders.length,
+          total_pages: purchaseOrders.length > 0 ? 1 : 0,
+          orders: purchaseOrders,
+        },
+      })
+    }).as('purchaseOrders')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-e2e-handoff"]').click()
+    cy.wait('@candidateReload')
+    cy.get('[data-testid="market-watch-output-detail"]').within(() => {
+      cy.get('[data-testid="market-watch-results-inbox-summary"]').should(
+        'contain',
+        'Showing 1 of 1 result inbox items'
+      )
+      cy.contains('td', 'New').should('be.visible')
+    })
+
+    cy.get('[data-testid="scanner-dismiss-first-result-qs-mw-e2e-handoff"]').click()
+    cy.wait('@dismissCandidate')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'candidate_lifecycle_dismissed_ok_cand-mw-e2e-handoff-1'
+    )
+
+    cy.reload()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-e2e-handoff"]').click()
+    cy.wait('@candidateReload')
+    cy.get('[data-testid="market-watch-output-detail"]').within(() => {
+      cy.contains('td', 'Dismissed').should('be.visible')
+      cy.get('[data-testid="market-watch-result-decision-history-cand-mw-e2e-handoff-1"]')
+        .should('contain', 'new to dismissed')
+        .and('contain', '6/29/2026')
+    })
+
+    cy.get('[data-testid="scanner-handoff-purchase-qs-mw-e2e-handoff"]').click()
+    cy.wait('@purchaseHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'purchase_handoff_ok_cand-mw-e2e-handoff-1'
+    )
+
+    cy.visit('/purchases/')
+    cy.wait('@purchaseOrders')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('contain', 'ebay-afx-e2e-handoff')
+      .and('contain', 'market_watch / ebay')
+      .and('contain', 'AUD 112.50')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-006 runs Bonza AFX query and surfaces aggregated run summary', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
