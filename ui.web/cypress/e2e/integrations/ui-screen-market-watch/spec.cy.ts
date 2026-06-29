@@ -107,6 +107,45 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'Provider credentials expired')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-017 renders provider health taxonomy states', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: { query_sets: [] },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/scanner/runs?limit=25', { statusCode: 200, body: { runs: [] } }).as(
+      'runs'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: {
+        provider: 'ebay',
+        status: 'error',
+        state: 'degraded',
+        category: 'rate_limited',
+        label: 'Rate limited',
+        guidance: 'Wait for the provider retry window, then run the watch again.',
+        retry_after_seconds: 120,
+        next_action: 'check_provider_health_and_credentials',
+      },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth', '@runs'])
+
+    cy.get('[data-testid="scanner-provider-health"]')
+      .should('contain', 'Provider health (eBay):')
+      .and('contain', 'Rate limited')
+      .and('contain', 'Wait for the provider retry window')
+      .and('contain', 'Category: rate limited')
+      .and('contain', 'Retry after 120s')
+    cy.get('[data-testid="market-watch-provider-attention-state"]')
+      .should('be.visible')
+      .and('contain', 'Next action: check_provider_health_and_credentials')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-004 shows load failure with retry recovery', () => {
     let failedOnce = false
 

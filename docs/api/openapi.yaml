@@ -3482,10 +3482,19 @@ components:
         provider: { type: string, example: ebay }
         status:
           type: string
-          enum: [ok, error, unknown]
+          enum: [ok, ready, error, degraded, unknown, auth_required, partial_failure]
         state:
           type: string
           enum: [ready, degraded, disabled]
+        category:
+          type: string
+          enum: [healthy, not_checked, needs_setup, needs_reauthentication, rate_limited, provider_unavailable, failed, partially_failed]
+        label:
+          type: string
+          example: Rate limited
+        guidance:
+          type: string
+          example: Wait for the provider retry window, then run the watch again.
         message: { type: string }
         last_error:
           type: [string, "null"]

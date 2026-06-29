@@ -210,6 +210,14 @@ Market Watch SHALL show provider health with an explanation and next action, and
 - **THEN** the screen MUST show that the provider has not been checked yet
 - **AND** it MUST show a next step for collecting health evidence instead of displaying bare `unknown`
 
+#### Scenario: Provider health taxonomy is consistent and actionable
+- **GIVEN** provider health reports healthy, not checked, setup-required, reauthentication, rate-limited, provider-unavailable, failed, or partial-failure outcomes
+- **WHEN** Market Watch renders provider health and provider attention states
+- **THEN** the API response MUST include a stable category, user-facing label, and recovery guidance for the outcome
+- **AND** the UI MUST show that label and guidance rather than relying on raw provider status strings alone
+- **AND** rate-limited states MUST preserve retry timing when supplied
+- **AND** partial-failure states MUST explain that successful provider results remain available while failed provider details need review
+
 #### Scenario: Persisted provider run history is visible
 - **GIVEN** one or more Market Watch runs have been persisted for the active profile
 - **WHEN** Market Watch loads run history
