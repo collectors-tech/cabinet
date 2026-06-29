@@ -752,7 +752,7 @@ func TestProviderSearchPreservesStructuredAuthErrorPayload(t *testing.T) {
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("expected ProviderError, got %T %v", err, err)
 	}
-	if providerErr.StatusCode != http.StatusUnauthorized || providerErr.ErrorCode != "PROVIDER_AUTH_INVALID" {
+	if providerErr.StatusCode != http.StatusForbidden || providerErr.ErrorCode != "PROVIDER_AUTH_INVALID" {
 		t.Fatalf("unexpected provider error: %+v", providerErr)
 	}
 	for _, want := range []string{"1100", "ACCESS", "REQUEST", "Access token invalid", "Token scope is missing Browse access"} {

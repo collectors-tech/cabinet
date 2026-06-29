@@ -143,7 +143,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, &ProviderError{
-			StatusCode:        http.StatusUnauthorized,
+			StatusCode:        resp.StatusCode,
 			ErrorCode:         "PROVIDER_AUTH_INVALID",
 			Message:           ebayErrorMessage(resp, fmt.Sprintf("ebay credentials rejected with status %d", resp.StatusCode)),
 			RetryAfterSeconds: retryAfterSeconds(resp),
