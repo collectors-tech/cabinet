@@ -21,6 +21,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - `last_seen`
   - and scanner run APIs MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
 - **AND** the adapter MUST send the Browse request with bearer authorization, `Accept: application/json`, the configured eBay marketplace header, joined search keywords, max-price filter, exclusions, and the effective `items_per_page` limit from the saved query criteria.
+- **AND** configured Browse base URL overrides MUST be trimmed and accepted only when they are HTTP(S) URLs without embedded userinfo or raw or percent-encoded ASCII control bytes; blank, relative, non-web, userinfo-bearing, or control-character override values MUST fall back to the default production eBay API base URL before authenticated requests are built.
 - **AND** the adapter MUST trim and canonicalize the configured marketplace ID before sending the eBay marketplace header or deriving marketplace-specific Browse filters.
 - **AND** malformed marketplace IDs containing unsupported characters, missing the `EBAY_` prefix, or containing non-ASCII characters MUST fall back to the default `EBAY_US` marketplace before the adapter sends headers or derives Browse price-currency filters.
 - **AND** the adapter MUST cap direct Browse `limit` values above `200` before sending the request so provider callers cannot exceed the eBay Browse page-size maximum even when bypassing shared scanner pagination guards.

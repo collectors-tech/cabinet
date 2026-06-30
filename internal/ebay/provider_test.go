@@ -283,6 +283,43 @@ func TestProviderSearchFallsBackFromMalformedMarketplace(t *testing.T) {
 	}
 }
 
+func TestNewProviderFallsBackFromUnsafeBaseURLOverrides(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		baseURL string
+	}{
+		{name: "non-web scheme", baseURL: "javascript:alert(1)"},
+		{name: "relative URL", baseURL: "/buy/browse"},
+		{name: "embedded userinfo", baseURL: "https://token@api.ebay.com"},
+		{name: "raw control byte", baseURL: "https://api.ebay.com" + string(rune(0x7f))},
+		{name: "encoded control byte", baseURL: "https://api.ebay.com/%0A"},
+		{name: "parse failure", baseURL: "http://%zz"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := NewProvider(ProviderConfig{BaseURL: tt.baseURL, BearerToken: "token", Marketplace: "EBAY_AU"})
+			if p.baseURL != "https://api.ebay.com" {
+				t.Fatalf("expected unsafe base URL override to fall back to production eBay API, got %q", p.baseURL)
+			}
+		})
+	}
+}
+
+func TestNewProviderTrimsValidBaseURLOverride(t *testing.T) {
+	t.Parallel()
+
+	p := NewProvider(ProviderConfig{BaseURL: " http://127.0.0.1:4567/custom/// ", BearerToken: "token", Marketplace: "EBAY_AU"})
+	if p.baseURL != "http://127.0.0.1:4567/custom" {
+		t.Fatalf("expected valid controlled base URL override to be trimmed, got %q", p.baseURL)
+	}
+}
+
 func TestProviderSearchTrimsBlankCriteriaBeforeBrowseRequest(t *testing.T) {
 	t.Parallel()
 
