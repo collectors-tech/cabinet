@@ -211,6 +211,9 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if err != nil || price <= 0 {
 			continue
 		}
+		if q.MaxPrice > 0 && price > q.MaxPrice {
+			continue
+		}
 		currency := strings.ToUpper(strings.TrimSpace(it.Price.Currency))
 		if !isCurrencyCode(currency) {
 			continue

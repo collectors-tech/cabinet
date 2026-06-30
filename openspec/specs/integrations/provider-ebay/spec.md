@@ -29,6 +29,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** normalized Browse price amounts MUST parse well-formed comma-grouped numeric strings after trimming so otherwise valid eBay amounts are not dropped solely because they include thousands separators.
 - **AND** normalized Browse price amounts MUST reject exponent notation, leading plus signs, comma characters after the decimal separator, partial decimal values missing digits before or after the decimal separator, and values with more than two fractional currency digits so upstream amount payloads must use plain decimal currency syntax before Cabinet persists a candidate.
 - **AND** Browse item summaries with unparseable price values MUST be skipped instead of persisted as zero-price candidates.
+- **AND** Browse item summaries with parseable price values above the saved-query max-price threshold MUST be skipped locally instead of persisted as out-of-range candidates when upstream Browse filtering returns an over-threshold item.
 - **AND** Browse item summaries with zero or negative price values MUST be skipped instead of persisted as free or negative-price candidates.
 - **AND** Browse item summaries with non-finite numeric price values such as `NaN` or `Infinity` MUST be skipped instead of persisted as invalid scanner candidate amounts.
 - **AND** Browse item summaries with blank price currency after trimming MUST be skipped instead of creating candidates with empty observed currency.

@@ -162,6 +162,41 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsBrowsePricesAboveSavedQueryMax(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wantFilter := "price:[..25.00],priceCurrency:AUD"
+		if got := r.URL.Query().Get("filter"); got != wantFilter {
+			t.Errorf("expected Browse max-price filter %q, got %q", wantFilter, got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|over-max|0","title":"Over Max Slot Car","price":{"value":"25.01","currency":"AUD"},"itemWebUrl":"https://ebay/item/over-max","seller":{"username":"seller-price"}},{"itemId":"v1|at-max|0","title":"At Max Slot Car","price":{"value":"25.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/at-max","seller":{"username":"seller-price"}},{"itemId":"v1|under-max|0","title":"Under Max Slot Car","price":{"value":"24.99","currency":"AUD"},"itemWebUrl":"https://ebay/item/under-max","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords: []string{"slot", "car"},
+		MaxPrice: 25,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected only at/under-max items, got %+v", items)
+	}
+	for _, item := range items {
+		if item.ListingID == "v1|over-max|0" || item.Price > 25 {
+			t.Fatalf("expected over-threshold candidate to be skipped, got %+v", items)
+		}
+	}
+}
+
 func TestProviderSearchCanonicalizesConfiguredMarketplace(t *testing.T) {
 	t.Parallel()
 
