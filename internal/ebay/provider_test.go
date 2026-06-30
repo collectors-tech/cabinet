@@ -330,6 +330,7 @@ func TestNewProviderFallsBackFromUnsafeBaseURLOverrides(t *testing.T) {
 		{name: "raw control byte", baseURL: "https://api.ebay.com" + string(rune(0x7f))},
 		{name: "encoded control byte", baseURL: "https://api.ebay.com/%0A"},
 		{name: "raw whitespace", baseURL: "https://api.ebay.com/custom path"},
+		{name: "unicode whitespace", baseURL: "https://api.ebay.com/custom" + string(rune(0x00a0)) + "path"},
 		{name: "parse failure", baseURL: "http://%zz"},
 	}
 
@@ -1071,6 +1072,29 @@ func TestProviderSearchSkipsBrowseItemURLsWithRawWhitespace(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsBrowseItemURLsWithUnicodeWhitespace(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unicode-space-url|0","title":"Unicode Space URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/raw` + string(rune(0x00a0)) + `space","seller":{"username":"seller-url"}},{"itemId":"v1|valid-url|0","title":"Valid URL Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-url","seller":{"username":"seller-url"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].ListingID != "v1|valid-url|0" {
+		t.Fatalf("expected unicode-whitespace item URL to be skipped, got %+v", items)
+	}
+}
+
 func TestProviderSearchDropsNonWebBrowseImageURLs(t *testing.T) {
 	t.Parallel()
 
@@ -1245,6 +1269,43 @@ func TestProviderSearchDropsBrowseImageURLsWithRawWhitespace(t *testing.T) {
 		case "v1|space-image|0":
 			if item.Image != "" {
 				t.Fatalf("expected raw-whitespace image URL to be dropped, got %+v", item)
+			}
+		case "v1|valid-image|0":
+			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {
+				t.Fatalf("expected valid image URL to be preserved, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
+func TestProviderSearchDropsBrowseImageURLsWithUnicodeWhitespace(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unicode-space-image|0","title":"Unicode Space Image Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/unicode-space-image","image":{"imageUrl":"https://i.ebayimg.com/images/raw` + string(rune(0x00a0)) + `space.jpg"},"seller":{"username":"seller-image"}},{"itemId":"v1|valid-image|0","title":"Valid Image Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-image","image":{"imageUrl":"https://i.ebayimg.com/images/valid.jpg"},"seller":{"username":"seller-image"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected candidates with valid item URLs to survive, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|unicode-space-image|0":
+			if item.Image != "" {
+				t.Fatalf("expected unicode-whitespace image URL to be dropped, got %+v", item)
 			}
 		case "v1|valid-image|0":
 			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {
