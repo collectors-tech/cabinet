@@ -304,6 +304,9 @@ func parseBrowseAmount(raw string) (float64, error) {
 	if !hasPlainDecimalDigits(value) {
 		return 0, fmt.Errorf("amount must include required decimal digits")
 	}
+	if !hasCurrencyScale(value) {
+		return 0, fmt.Errorf("amount must use currency scale")
+	}
 	amount, err := strconv.ParseFloat(strings.ReplaceAll(value, ",", ""), 64)
 	if err != nil {
 		return 0, err
@@ -351,6 +354,14 @@ func hasPlainDecimalDigits(value string) bool {
 				return false
 			}
 		}
+	}
+	return true
+}
+
+func hasCurrencyScale(value string) bool {
+	normalized := strings.ReplaceAll(value, ",", "")
+	if decimalIndex := strings.IndexByte(normalized, '.'); decimalIndex >= 0 {
+		return len(normalized[decimalIndex+1:]) <= 2
 	}
 	return true
 }

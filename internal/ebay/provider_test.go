@@ -504,6 +504,32 @@ func TestProviderSearchSkipsPartialDecimalBrowsePrices(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsOverPrecisionBrowsePrices(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|three-decimal-price|0","title":"Three Decimal Price Slot Car","price":{"value":"12.345","currency":"AUD"},"itemWebUrl":"https://ebay/item/three-decimal-price","seller":{"username":"seller-price"}},{"itemId":"v1|valid-scale-price|0","title":"Valid Scale Price Slot Car","price":{"value":"12.30","currency":"AUD"},"itemWebUrl":"https://ebay/item/valid-scale-price","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the two-decimal price item, got %+v", items)
+	}
+	if items[0].ListingID != "v1|valid-scale-price|0" || items[0].Price != 12.30 {
+		t.Fatalf("expected valid-scale-price candidate to survive normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsBlankBrowsePriceCurrency(t *testing.T) {
 	t.Parallel()
 
@@ -864,6 +890,32 @@ func TestProviderSearchSkipsPartialDecimalShippingCost(t *testing.T) {
 	}
 	if items[0].Shipping != 9.25 {
 		t.Fatalf("expected partial decimal shipping options to fall through to 9.25, got %+v", items[0])
+	}
+}
+
+func TestProviderSearchSkipsOverPrecisionShippingCost(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|scale-shipping|0","title":"Scale Shipping Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/scale-shipping","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"8.755","currency":"AUD"}},{"shippingCost":{"value":"9.25","currency":"AUD"}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].Shipping != 9.25 {
+		t.Fatalf("expected over-precision shipping option to fall through to 9.25, got %+v", items[0])
 	}
 }
 
