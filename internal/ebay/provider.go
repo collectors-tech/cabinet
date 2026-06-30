@@ -295,6 +295,9 @@ func normalizeShippingCost(options []struct {
 
 func parseBrowseAmount(raw string) (float64, error) {
 	value := strings.TrimSpace(raw)
+	if strings.HasPrefix(value, "+") || strings.ContainsAny(value, "eE") {
+		return 0, fmt.Errorf("amount must use plain decimal syntax")
+	}
 	if !hasValidCommaGrouping(value) {
 		return 0, fmt.Errorf("invalid comma-grouped amount")
 	}
@@ -316,7 +319,7 @@ func hasValidCommaGrouping(value string) bool {
 	if decimalIndex := strings.IndexByte(value, '.'); decimalIndex >= 0 {
 		integerPart = value[:decimalIndex]
 	}
-	integerPart = strings.TrimPrefix(strings.TrimPrefix(integerPart, "+"), "-")
+	integerPart = strings.TrimPrefix(integerPart, "-")
 	groups := strings.Split(integerPart, ",")
 	if len(groups[0]) == 0 || len(groups[0]) > 3 {
 		return false
