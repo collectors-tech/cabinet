@@ -1368,6 +1368,34 @@ func TestProviderSearchPreservesPlainTextBrowseErrorPayload(t *testing.T) {
 	}
 }
 
+func TestProviderSearchClassifiesMalformedBrowsePayload(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected malformed Browse payload error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusBadGateway || providerErr.ErrorCode != "PROVIDER_SEARCH_FAILED" {
+		t.Fatalf("unexpected provider error: %+v", providerErr)
+	}
+	for _, want := range []string{"decode ebay Browse response", "unexpected EOF"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected malformed payload message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+}
+
 func TestProviderSearchRequiresBearerToken(t *testing.T) {
 	t.Parallel()
 
