@@ -324,6 +324,9 @@ func hasValidCommaGrouping(value string) bool {
 	integerPart := value
 	if decimalIndex := strings.IndexByte(value, '.'); decimalIndex >= 0 {
 		integerPart = value[:decimalIndex]
+		if strings.Contains(value[decimalIndex+1:], ",") {
+			return false
+		}
 	}
 	integerPart = strings.TrimPrefix(integerPart, "-")
 	groups := strings.Split(integerPart, ",")
