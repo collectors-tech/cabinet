@@ -214,8 +214,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if q.MaxPrice > 0 && price > q.MaxPrice {
 			continue
 		}
-		currency := strings.ToUpper(strings.TrimSpace(it.Price.Currency))
-		if !isCurrencyCode(currency) {
+		currency, ok := normalizeCurrencyCode(it.Price.Currency)
+		if !ok {
 			continue
 		}
 		seenListingIDs[listingID] = struct{}{}
@@ -288,6 +288,14 @@ func normalizeSellerUsername(raw string) string {
 	return seller
 }
 
+func normalizeCurrencyCode(raw string) (string, bool) {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	if !isCurrencyCode(value) {
+		return "", false
+	}
+	return value, true
+}
+
 func isCurrencyCode(value string) bool {
 	if len(value) != 3 {
 		return false
@@ -306,14 +314,17 @@ func normalizeShippingCost(options []struct {
 		Currency string `json:"currency"`
 	} `json:"shippingCost"`
 }, priceCurrency string) float64 {
-	priceCurrency = strings.ToUpper(strings.TrimSpace(priceCurrency))
+	priceCurrency, ok := normalizeCurrencyCode(priceCurrency)
+	if !ok {
+		return 0
+	}
 	for _, option := range options {
 		raw := strings.TrimSpace(option.ShippingCost.Value)
 		if raw == "" {
 			continue
 		}
-		shippingCurrency := strings.ToUpper(strings.TrimSpace(option.ShippingCost.Currency))
-		if shippingCurrency == "" || shippingCurrency != priceCurrency {
+		shippingCurrency, ok := normalizeCurrencyCode(option.ShippingCost.Currency)
+		if !ok || shippingCurrency != priceCurrency {
 			continue
 		}
 		value, err := parseBrowseAmount(raw)
