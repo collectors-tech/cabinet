@@ -295,7 +295,7 @@ func normalizeOptionalWebURL(raw string) string {
 
 func normalizeRequiredText(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || containsRawControlByte(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
 		return ""
 	}
 	return value
