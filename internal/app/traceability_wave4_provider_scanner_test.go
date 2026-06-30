@@ -649,6 +649,30 @@ func TestWave4EbayRunBootstrapErrorsReturnActionableClientEnvelopes(t *testing.T
 		t.Fatalf("expected actionable message in invalid JSON payload, got %+v", invalidPayload)
 	}
 
+	trailingJSON := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"ebay-q-1"}{"query_set_id":"shadow"}`), map[string]string{"Content-Type": "application/json"})
+	if trailingJSON.Code != http.StatusBadRequest {
+		t.Fatalf("eBay run with trailing JSON expected 400, got %d body=%s", trailingJSON.Code, trailingJSON.Body.String())
+	}
+	var trailingPayload map[string]any
+	if err := json.NewDecoder(trailingJSON.Body).Decode(&trailingPayload); err != nil {
+		t.Fatalf("decode trailing JSON payload: %v", err)
+	}
+	if got, _ := trailingPayload["error"].(string); got != "invalid_json" {
+		t.Fatalf("expected invalid_json for trailing JSON, got %+v", trailingPayload)
+	}
+	if got, _ := trailingPayload["error_code"].(string); got != "invalid_json" {
+		t.Fatalf("expected matching error_code invalid_json for trailing JSON, got %+v", trailingPayload)
+	}
+	if got, _ := trailingPayload["provider"].(string); got != "ebay" {
+		t.Fatalf("expected provider ebay in trailing JSON payload, got %+v", trailingPayload)
+	}
+	if got, _ := trailingPayload["query_set_id"].(string); got != "" {
+		t.Fatalf("expected empty query_set_id in trailing JSON payload, got %+v", trailingPayload)
+	}
+	if got, _ := trailingPayload["next_action"].(string); got != "select_existing_ebay_query_set" {
+		t.Fatalf("expected next_action select_existing_ebay_query_set, got %+v", trailingPayload)
+	}
+
 	missingProfile := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"ebay-q-1"}`), map[string]string{"Content-Type": "application/json"})
 	if missingProfile.Code != http.StatusBadRequest {
 		t.Fatalf("eBay run without active profile expected 400, got %d body=%s", missingProfile.Code, missingProfile.Body.String())
