@@ -412,7 +412,14 @@ func retryAfterSeconds(resp *http.Response) int {
 	}
 	seconds, err := strconv.Atoi(raw)
 	if err != nil || seconds <= 0 {
-		return 0
+		retryAt, parseErr := http.ParseTime(raw)
+		if parseErr != nil {
+			return 0
+		}
+		seconds = int(time.Until(retryAt).Seconds())
+		if seconds <= 0 {
+			return 0
+		}
 	}
 	return seconds
 }
