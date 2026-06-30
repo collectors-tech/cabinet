@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -248,6 +249,50 @@ func TestProviderSearchSkipsMaxPriceResultsWithMismatchedCurrency(t *testing.T) 
 	}
 	if items[0].ListingID != "v1|aud-under-max|0" || items[0].Currency != "AUD" {
 		t.Fatalf("expected AUD matching-currency candidate to survive, got %+v", items[0])
+	}
+}
+
+func TestProviderSearchOmitsNonFiniteMaxPriceBrowseFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		maxPrice float64
+	}{
+		{name: "positive infinity", maxPrice: math.Inf(1)},
+		{name: "not a number", maxPrice: math.NaN()},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.URL.Query().Get("filter"); got != "" {
+					t.Errorf("expected non-finite max-price criteria to omit Browse filter, got %q", got)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|finite-guard|0","title":"Finite Guard Slot Car","price":{"value":"18.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/finite-guard","seller":{"username":"seller-price"}}]}`))
+			}))
+			defer srv.Close()
+
+			p := NewProvider(ProviderConfig{
+				BaseURL:     srv.URL,
+				BearerToken: "token",
+				Marketplace: "EBAY_AU",
+			})
+			items, err := p.Search(context.Background(), scanner.QuerySet{
+				Keywords: []string{"slot", "car"},
+				MaxPrice: tt.maxPrice,
+			})
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(items) != 1 || items[0].ListingID != "v1|finite-guard|0" {
+				t.Fatalf("expected valid Browse item to survive without non-finite max-price filter, got %+v", items)
+			}
+		})
 	}
 }
 

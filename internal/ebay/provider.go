@@ -122,7 +122,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	v := url.Values{}
 	v.Set("q", terms)
 	filters := []string{}
-	if q.MaxPrice > 0 {
+	if isPositiveFiniteAmount(q.MaxPrice) {
 		filters = append(filters,
 			fmt.Sprintf("price:[..%s]", strconv.FormatFloat(q.MaxPrice, 'f', 2, 64)),
 			"priceCurrency:"+browseCurrency(q.Region, p.marketplace),
@@ -239,7 +239,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if !ok {
 			continue
 		}
-		if q.MaxPrice > 0 {
+		if isPositiveFiniteAmount(q.MaxPrice) {
 			if price > q.MaxPrice {
 				continue
 			}
@@ -404,6 +404,10 @@ func parseBrowseAmount(raw string) (float64, error) {
 		return 0, fmt.Errorf("amount must be finite")
 	}
 	return amount, nil
+}
+
+func isPositiveFiniteAmount(value float64) bool {
+	return value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func hasValidCommaGrouping(value string) bool {
