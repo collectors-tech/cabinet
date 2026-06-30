@@ -91,7 +91,7 @@ func NewProvider(cfg ProviderConfig) *Provider {
 
 func normalizeProviderBaseURL(raw string) string {
 	value := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsRawURLWhitespace(value) {
 		return "https://api.ebay.com"
 	}
 	parsed, err := url.Parse(value)
@@ -259,7 +259,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 }
 
 func isWebURL(raw string) bool {
-	if containsRawControlByte(raw) || containsEncodedControlByte(raw) {
+	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsRawURLWhitespace(raw) {
 		return false
 	}
 	parsed, err := url.Parse(raw)
@@ -290,6 +290,10 @@ func containsEncodedControlByte(raw string) bool {
 		}
 	}
 	return false
+}
+
+func containsRawURLWhitespace(raw string) bool {
+	return strings.Contains(raw, " ")
 }
 
 func normalizeOptionalWebURL(raw string) string {
