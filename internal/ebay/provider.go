@@ -198,8 +198,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
 	seenListingIDs := map[string]struct{}{}
 	for _, it := range payload.ItemSummaries {
-		listingID := strings.TrimSpace(it.ItemID)
-		title := strings.TrimSpace(it.Title)
+		listingID := normalizeRequiredText(it.ItemID)
+		title := normalizeRequiredText(it.Title)
 		itemURL := strings.TrimSpace(it.ItemWebURL)
 		if listingID == "" || title == "" || itemURL == "" || !isWebURL(itemURL) {
 			continue
@@ -229,7 +229,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Shipping:   shipping,
 			URL:        itemURL,
 			Image:      normalizeOptionalWebURL(it.Image.ImageURL),
-			Seller:     normalizeSellerUsername(it.Seller.Username),
+			Seller:     normalizeOptionalText(it.Seller.Username, "ebay"),
 			Source:     "ebay",
 			StockState: stockState,
 			StockCount: stockCount,
@@ -280,12 +280,20 @@ func normalizeOptionalWebURL(raw string) string {
 	return value
 }
 
-func normalizeSellerUsername(raw string) string {
-	seller := strings.TrimSpace(raw)
-	if seller == "" {
-		return "ebay"
+func normalizeRequiredText(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || containsRawControlByte(value) {
+		return ""
 	}
-	return seller
+	return value
+}
+
+func normalizeOptionalText(raw, fallback string) string {
+	value := normalizeRequiredText(raw)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func normalizeCurrencyCode(raw string) (string, bool) {
