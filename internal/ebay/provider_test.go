@@ -400,6 +400,32 @@ func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsDecimalCommaBrowsePrices(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|decimal-comma-price|0","title":"Decimal Comma Price Slot Car","price":{"value":"123.4,5","currency":"AUD"},"itemWebUrl":"https://ebay/item/decimal-comma-price","seller":{"username":"seller-price"}},{"itemId":"v1|good-price|0","title":"Good Price Slot Car","price":{"value":"123.45","currency":"AUD"},"itemWebUrl":"https://ebay/item/good-price","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the valid price item, got %+v", items)
+	}
+	if items[0].ListingID != "v1|good-price|0" || items[0].Price != 123.45 {
+		t.Fatalf("expected good-price candidate to survive normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsNonPositiveBrowsePrices(t *testing.T) {
 	t.Parallel()
 
@@ -812,6 +838,43 @@ func TestProviderSearchUsesFirstParseableShippingCost(t *testing.T) {
 	}
 	if items[0].Shipping != 11.25 {
 		t.Fatalf("expected first parseable shipping cost 11.25, got %+v", items[0])
+	}
+}
+
+func TestProviderSearchSkipsDecimalCommaShippingCost(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|decimal-comma-shipping|0","title":"Decimal Comma Shipping Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/decimal-comma-shipping","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"12.3,4","currency":"AUD"}},{"shippingCost":{"value":"13.25","currency":"AUD"}}]},{"itemId":"v1|decimal-comma-shipping-zero|0","title":"Decimal Comma Shipping Zero Slot Car","price":{"value":"23.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/decimal-comma-shipping-zero","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"4.2,5","currency":"AUD"}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected both candidates to survive decimal-comma shipping normalization, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|decimal-comma-shipping|0":
+			if item.Shipping != 13.25 {
+				t.Fatalf("expected decimal-comma shipping option to fall through to 13.25, got %+v", item)
+			}
+		case "v1|decimal-comma-shipping-zero|0":
+			if item.Shipping != 0 {
+				t.Fatalf("expected decimal-comma shipping-only option to fall back to zero, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
 	}
 }
 
