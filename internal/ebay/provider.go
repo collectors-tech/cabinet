@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -333,6 +334,10 @@ func browseErrorMessage(resp *http.Response) string {
 }
 
 func ebayErrorMessage(resp *http.Response, statusMessage string) string {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return statusMessage
+	}
 	var payload struct {
 		Errors []struct {
 			ErrorID     int    `json:"errorId"`
@@ -342,8 +347,8 @@ func ebayErrorMessage(resp *http.Response, statusMessage string) string {
 			LongMessage string `json:"longMessage"`
 		} `json:"errors"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil || len(payload.Errors) == 0 {
-		return statusMessage
+	if err := json.Unmarshal(body, &payload); err != nil || len(payload.Errors) == 0 {
+		return appendRawProviderBody(statusMessage, body)
 	}
 	parts := make([]string, 0, len(payload.Errors))
 	for _, ebayErr := range payload.Errors {
@@ -368,9 +373,21 @@ func ebayErrorMessage(resp *http.Response, statusMessage string) string {
 		}
 	}
 	if len(parts) == 0 {
-		return statusMessage
+		return appendRawProviderBody(statusMessage, body)
 	}
 	return statusMessage + ": " + strings.Join(parts, "; ")
+}
+
+func appendRawProviderBody(statusMessage string, body []byte) string {
+	raw := strings.TrimSpace(string(body))
+	if raw == "" {
+		return statusMessage
+	}
+	const maxProviderBodyDetail = 500
+	if len(raw) > maxProviderBodyDetail {
+		raw = raw[:maxProviderBodyDetail] + "..."
+	}
+	return statusMessage + ": " + raw
 }
 
 func compactSearchTerms(values []string) []string {
