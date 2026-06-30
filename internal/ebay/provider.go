@@ -244,7 +244,7 @@ func isWebURL(raw string) bool {
 		return false
 	}
 	scheme := strings.ToLower(parsed.Scheme)
-	return parsed.Host != "" && (scheme == "http" || scheme == "https")
+	return parsed.Host != "" && parsed.User == nil && (scheme == "http" || scheme == "https")
 }
 
 func normalizeOptionalWebURL(raw string) string {
