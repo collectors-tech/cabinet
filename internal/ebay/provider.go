@@ -37,6 +37,7 @@ type ProviderError struct {
 }
 
 const browseMaxLimit = 200
+const maxProviderDiagnosticFieldDetail = 160
 
 func (e *ProviderError) Error() string {
 	if e == nil {
@@ -498,6 +499,9 @@ func normalizeProviderDiagnosticField(raw string) string {
 	value := strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
 	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
 		return ""
+	}
+	if len(value) > maxProviderDiagnosticFieldDetail {
+		value = value[:maxProviderDiagnosticFieldDetail] + "..."
 	}
 	return value
 }

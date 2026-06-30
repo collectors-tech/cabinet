@@ -1715,6 +1715,35 @@ func TestProviderSearchSanitizesStructuredAuthErrorPayload(t *testing.T) {
 	}
 }
 
+func TestProviderSearchBoundsStructuredAuthErrorPayloadFields(t *testing.T) {
+	t.Parallel()
+
+	oversized := strings.Repeat("scope-detail-", 80)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":1100,"domain":"ACCESS","category":"REQUEST","message":"Access token invalid","longMessage":"` + oversized + `"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "bad", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured auth error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	for _, want := range []string{"1100", "ACCESS", "REQUEST", "Access token invalid", "..."} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected bounded provider auth error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	if strings.Contains(providerErr.Message, strings.Repeat("scope-detail-", 20)) {
+		t.Fatalf("expected structured provider auth detail to be bounded, got %q", providerErr.Message)
+	}
+}
+
 func TestProviderSearchPreservesPlainTextAuthErrorPayload(t *testing.T) {
 	t.Parallel()
 
@@ -1810,6 +1839,35 @@ func TestProviderSearchSanitizesStructuredBrowseErrorPayload(t *testing.T) {
 		if strings.Contains(providerErr.Message, unwanted) {
 			t.Fatalf("expected sanitized provider error message to omit %q, got %q", unwanted, providerErr.Message)
 		}
+	}
+}
+
+func TestProviderSearchBoundsStructuredBrowseErrorPayloadFields(t *testing.T) {
+	t.Parallel()
+
+	oversized := strings.Repeat("browse-detail-", 80)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":13000,"domain":"API_BROWSE","category":"APPLICATION","message":"Browse gateway timeout","longMessage":"` + oversized + `"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured Browse error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	for _, want := range []string{"13000", "API_BROWSE", "APPLICATION", "Browse gateway timeout", "..."} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected bounded provider search error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	if strings.Contains(providerErr.Message, strings.Repeat("browse-detail-", 20)) {
+		t.Fatalf("expected structured provider search detail to be bounded, got %q", providerErr.Message)
 	}
 }
 
