@@ -799,6 +799,29 @@ func TestProviderSearchSkipsBrowseItemURLsWithEncodedControlCharacters(t *testin
 	}
 }
 
+func TestProviderSearchSkipsBrowseItemURLsWithRawControlCharacters(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|raw-del-url|0","title":"Raw DEL URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/raw` + string(rune(0x7f)) + `del","seller":{"username":"seller-url"}},{"itemId":"v1|valid-url|0","title":"Valid URL Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-url","seller":{"username":"seller-url"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].ListingID != "v1|valid-url|0" {
+		t.Fatalf("expected raw-control item URL to be skipped, got %+v", items)
+	}
+}
+
 func TestProviderSearchDropsNonWebBrowseImageURLs(t *testing.T) {
 	t.Parallel()
 
@@ -899,6 +922,43 @@ func TestProviderSearchDropsBrowseImageURLsWithEncodedControlCharacters(t *testi
 		case "v1|encoded-newline-image|0", "v1|encoded-nul-image|0":
 			if item.Image != "" {
 				t.Fatalf("expected encoded-control image URL to be dropped, got %+v", item)
+			}
+		case "v1|valid-image|0":
+			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {
+				t.Fatalf("expected valid image URL to be preserved, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
+func TestProviderSearchDropsBrowseImageURLsWithRawControlCharacters(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|raw-del-image|0","title":"Raw DEL Image Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/raw-del-image","image":{"imageUrl":"https://i.ebayimg.com/images/raw` + string(rune(0x7f)) + `del.jpg"},"seller":{"username":"seller-image"}},{"itemId":"v1|valid-image|0","title":"Valid Image Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-image","image":{"imageUrl":"https://i.ebayimg.com/images/valid.jpg"},"seller":{"username":"seller-image"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected candidates with valid item URLs to survive, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|raw-del-image|0":
+			if item.Image != "" {
+				t.Fatalf("expected raw-control image URL to be dropped, got %+v", item)
 			}
 		case "v1|valid-image|0":
 			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {

@@ -239,7 +239,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 }
 
 func isWebURL(raw string) bool {
-	if containsEncodedControlByte(raw) {
+	if containsRawControlByte(raw) || containsEncodedControlByte(raw) {
 		return false
 	}
 	parsed, err := url.Parse(raw)
@@ -248,6 +248,15 @@ func isWebURL(raw string) bool {
 	}
 	scheme := strings.ToLower(parsed.Scheme)
 	return parsed.Host != "" && parsed.User == nil && (scheme == "http" || scheme == "https")
+}
+
+func containsRawControlByte(raw string) bool {
+	for i := 0; i < len(raw); i++ {
+		if raw[i] < 0x20 || raw[i] == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 func containsEncodedControlByte(raw string) bool {
