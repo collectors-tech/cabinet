@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/collectors-tech/cabinet/internal/scanner"
 )
@@ -293,7 +294,12 @@ func containsEncodedControlByte(raw string) bool {
 }
 
 func containsRawURLWhitespace(raw string) bool {
-	return strings.Contains(raw, " ")
+	for _, r := range raw {
+		if unicode.IsSpace(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeOptionalWebURL(raw string) string {
