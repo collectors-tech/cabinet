@@ -73,10 +73,7 @@ func (e *ProviderError) ProviderErrorCode() string {
 }
 
 func NewProvider(cfg ProviderConfig) *Provider {
-	base := strings.TrimSpace(cfg.BaseURL)
-	if base == "" {
-		base = "https://api.ebay.com"
-	}
+	base := normalizeProviderBaseURL(cfg.BaseURL)
 	market := strings.TrimSpace(cfg.Marketplace)
 	if market == "" {
 		market = "EBAY_US"
@@ -88,6 +85,22 @@ func NewProvider(cfg ProviderConfig) *Provider {
 		marketplace: market,
 		client:      &http.Client{Timeout: 20 * time.Second},
 	}
+}
+
+func normalizeProviderBaseURL(raw string) string {
+	value := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
+		return "https://api.ebay.com"
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "https://api.ebay.com"
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if parsed.Host == "" || parsed.User != nil || (scheme != "http" && scheme != "https") {
+		return "https://api.ebay.com"
+	}
+	return value
 }
 
 func (p *Provider) ProviderID() string {
