@@ -557,9 +557,6 @@ func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
 	case "OUT_OF_STOCK", "SOLD_OUT":
 		return "out_of_stock", 0
 	default:
-		if count > 0 {
-			return "in_stock", count
-		}
 		return "unknown", -1
 	}
 }
