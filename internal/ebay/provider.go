@@ -188,7 +188,11 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		} `json:"itemSummaries"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("decode ebay response: %w", err)
+		return nil, &ProviderError{
+			StatusCode: http.StatusBadGateway,
+			ErrorCode:  "PROVIDER_SEARCH_FAILED",
+			Message:    fmt.Sprintf("decode ebay Browse response: %v", err),
+		}
 	}
 
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
