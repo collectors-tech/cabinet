@@ -96,7 +96,7 @@ func TestDiscoveryActionResponseReturnsEbayHandoffProvenance(t *testing.T) {
 	if !payload.OK || payload.Action != "add_to_wishlist" || payload.Candidate != "ebay-handoff-c1" {
 		t.Fatalf("unexpected action envelope: %+v", payload)
 	}
-	for _, field := range []string{"source", "source_provider", "query_set_id", "query_name", "provider_scope", "listing_id", "source_result_url", "observed_currency"} {
+	for _, field := range []string{"source", "source_provider", "query_set_id", "query_name", "provider_scope", "listing_id", "source_result_url", "observed_currency", "stock_state", "stock_count"} {
 		if _, ok := payload.Audit[field]; !ok {
 			t.Fatalf("expected audit field %q in response: %+v", field, payload.Audit)
 		}
@@ -107,6 +107,9 @@ func TestDiscoveryActionResponseReturnsEbayHandoffProvenance(t *testing.T) {
 	providerScope, ok := payload.Audit["provider_scope"].([]any)
 	if !ok || len(providerScope) != 1 || providerScope[0] != "ebay" {
 		t.Fatalf("expected eBay provider scope in response audit, got %+v", payload.Audit["provider_scope"])
+	}
+	if payload.Audit["stock_state"] != "in_stock" || payload.Audit["stock_count"] != float64(3) {
+		t.Fatalf("expected eBay stock attribution in response audit, got %+v", payload.Audit)
 	}
 }
 

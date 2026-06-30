@@ -4000,6 +4000,8 @@ components:
             source_result_url: { type: string }
             observed_price: { type: number }
             observed_currency: { type: string }
+            stock_state: { type: string }
+            stock_count: { type: integer }
             seller: { type: string }
             triage_status: { type: string }
     WishlistEntryInput:

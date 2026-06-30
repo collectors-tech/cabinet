@@ -595,14 +595,14 @@ func (s *Service) enrichDiscoveryActionPayload(ctx context.Context, candidateID 
 		enriched[key] = value
 	}
 	var sourceProvider, querySetID, queryName, providerScopeJSON string
-	var listingID, listingURL, title, observedCurrency, seller, firstSeen, lastSeen, status, reviewerNotes, sourceResultURL string
+	var listingID, listingURL, title, observedCurrency, seller, firstSeen, lastSeen, status, reviewerNotes, sourceResultURL, stockState string
 	var observedPrice, confidence float64
-	var needsReview int
+	var needsReview, stockCount int
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT c.source, c.query_set_id, COALESCE(q.name, ''), COALESCE(q.provider_scope_json, '[]'),
 			c.listing_id, c.url, c.title, c.price, c.observed_currency, c.seller,
 			c.first_seen, c.last_seen, c.status, COALESCE(m.confidence, 0), COALESCE(m.needs_review, 1),
-			c.reviewer_notes, COALESCE(NULLIF(c.source_result_url, ''), c.url)
+			c.reviewer_notes, COALESCE(NULLIF(c.source_result_url, ''), c.url), c.stock_state, c.stock_count
 		FROM scanner_candidates c
 		LEFT JOIN scanner_query_sets q ON q.id = c.query_set_id
 		LEFT JOIN scanner_matches m ON m.candidate_id = c.id
@@ -611,7 +611,7 @@ func (s *Service) enrichDiscoveryActionPayload(ctx context.Context, candidateID 
 		&sourceProvider, &querySetID, &queryName, &providerScopeJSON,
 		&listingID, &listingURL, &title, &observedPrice, &observedCurrency, &seller,
 		&firstSeen, &lastSeen, &status, &confidence, &needsReview,
-		&reviewerNotes, &sourceResultURL,
+		&reviewerNotes, &sourceResultURL, &stockState, &stockCount,
 	); err != nil {
 		return enriched
 	}
@@ -632,6 +632,8 @@ func (s *Service) enrichDiscoveryActionPayload(ctx context.Context, candidateID 
 	enriched["needs_review"] = needsReview != 0
 	enriched["reviewer_notes"] = strings.TrimSpace(reviewerNotes)
 	enriched["source_result_url"] = strings.TrimSpace(sourceResultURL)
+	enriched["stock_state"] = strings.TrimSpace(stockState)
+	enriched["stock_count"] = stockCount
 	return enriched
 }
 

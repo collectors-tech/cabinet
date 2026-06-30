@@ -1222,6 +1222,8 @@ func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 		"provider_scope:",
 		"source_result_url: { type: string }",
 		"observed_currency: { type: string }",
+		"stock_state: { type: string }",
+		"stock_count: { type: integer }",
 	} {
 		if !strings.Contains(actionResponseSchema, token) {
 			t.Fatalf("openapi DiscoveryActionResponse schema missing %q:\n%s", token, actionResponseSchema)
