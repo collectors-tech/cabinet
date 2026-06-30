@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -296,7 +297,14 @@ func parseBrowseAmount(raw string) (float64, error) {
 	if !hasValidCommaGrouping(value) {
 		return 0, fmt.Errorf("invalid comma-grouped amount")
 	}
-	return strconv.ParseFloat(strings.ReplaceAll(value, ",", ""), 64)
+	amount, err := strconv.ParseFloat(strings.ReplaceAll(value, ",", ""), 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return 0, fmt.Errorf("amount must be finite")
+	}
+	return amount, nil
 }
 
 func hasValidCommaGrouping(value string) bool {
