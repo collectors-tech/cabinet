@@ -34,7 +34,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** Browse item summaries with blank price currency after trimming MUST be skipped instead of creating candidates with empty observed currency.
 - **AND** Browse item summaries with malformed price currency after trimming MUST be skipped unless the normalized value is a three-letter currency code.
 - **AND** Browse item summaries with blank listing id, title, or item URL after trimming MUST be skipped instead of creating candidates that cannot preserve source identity or handoff provenance.
-- **AND** duplicate Browse item summaries with the same listing id after trimming MUST be emitted only once per provider result set, preserving the first valid candidate so a single eBay listing cannot create duplicate scanner candidates in one run.
+- **AND** duplicate Browse item summaries with the same listing id after trimming MUST be emitted only once per provider result set, preserving the first valid candidate and allowing earlier invalid duplicates to fall through so a single eBay listing cannot create duplicate scanner candidates in one run or suppress the first valid summary.
 - **AND** Browse item summaries with non-HTTP(S) item URLs after trimming MUST be skipped instead of creating candidates with unsafe or non-clickable handoff provenance.
 - **AND** optional Browse image URLs MUST be trimmed and preserved only when they are HTTP(S) URLs; blank, relative, or non-web image URLs MUST be dropped without rejecting an otherwise valid candidate.
 - **AND** blank seller usernames MUST fall back to `seller="ebay"` after trimming so otherwise valid candidates retain deterministic source attribution instead of persisting an empty seller field.
