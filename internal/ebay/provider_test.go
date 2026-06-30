@@ -966,6 +966,35 @@ func TestProviderSearchPreservesStructuredAuthErrorPayload(t *testing.T) {
 	}
 }
 
+func TestProviderSearchPreservesPlainTextAuthErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("OAuth scope missing for Browse API"))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "expired-token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected plain-text auth error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusForbidden || providerErr.ErrorCode != "PROVIDER_AUTH_INVALID" {
+		t.Fatalf("unexpected provider error: %+v", providerErr)
+	}
+	for _, want := range []string{"ebay credentials rejected with status 403", "OAuth scope missing for Browse API"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected provider auth error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+}
+
 func TestProviderSearchPreservesStructuredBrowseErrorPayload(t *testing.T) {
 	t.Parallel()
 
@@ -993,6 +1022,35 @@ func TestProviderSearchPreservesStructuredBrowseErrorPayload(t *testing.T) {
 		t.Fatalf("expected retry-after seconds to be preserved, got %+v", providerErr)
 	}
 	for _, want := range []string{"12001", "API_BROWSE", "REQUEST", "Rate limit exceeded", "Try again later"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected provider error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+}
+
+func TestProviderSearchPreservesPlainTextBrowseErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("upstream Browse gateway timeout"))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected plain-text Browse error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusBadGateway || providerErr.ErrorCode != "PROVIDER_SEARCH_FAILED" {
+		t.Fatalf("unexpected provider error: %+v", providerErr)
+	}
+	for _, want := range []string{"ebay search status: 502", "upstream Browse gateway timeout"} {
 		if !strings.Contains(providerErr.Message, want) {
 			t.Fatalf("expected provider error message to preserve %q, got %q", want, providerErr.Message)
 		}
