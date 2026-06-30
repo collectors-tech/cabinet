@@ -27,7 +27,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the adapter MUST trim and ignore blank keyword or exclusion criteria before building the Browse request, and MUST reject a saved query that has no non-blank keyword criteria without calling eBay.
 - **AND** normalized Browse candidate metadata MUST trim surrounding whitespace from listing id, title, price value, URL, image URL, seller username, and currency before the candidate is returned for persistence.
 - **AND** normalized Browse price amounts MUST parse well-formed comma-grouped numeric strings after trimming so otherwise valid eBay amounts are not dropped solely because they include thousands separators.
-- **AND** normalized Browse price amounts MUST reject exponent notation and leading plus signs so upstream amount payloads must use plain decimal currency syntax before Cabinet persists a candidate.
+- **AND** normalized Browse price amounts MUST reject exponent notation, leading plus signs, and partial decimal values missing digits before or after the decimal separator so upstream amount payloads must use plain decimal currency syntax before Cabinet persists a candidate.
 - **AND** Browse item summaries with unparseable price values MUST be skipped instead of persisted as zero-price candidates.
 - **AND** Browse item summaries with zero or negative price values MUST be skipped instead of persisted as free or negative-price candidates.
 - **AND** Browse item summaries with non-finite numeric price values such as `NaN` or `Infinity` MUST be skipped instead of persisted as invalid scanner candidate amounts.
@@ -40,7 +40,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** blank seller usernames MUST fall back to `seller="ebay"` after trimming so otherwise valid candidates retain deterministic source attribution instead of persisting an empty seller field.
 - **AND** when Browse item summaries include `shippingOptions.shippingCost.value`, the adapter MUST preserve the first parseable positive amount whose non-blank `shippingCost.currency` matches the normalized candidate price currency in the shared scanner candidate `shipping` field, ignoring mismatched-currency, blank-currency, blank-value, unparseable, zero, or negative shipping options before falling back to `0`.
 - **AND** parseable shipping amounts MUST include well-formed comma-grouped numeric strings after trimming so provider output preserves valid shipping costs with thousands separators.
-- **AND** shipping amounts MUST reject exponent notation and leading plus signs before selecting the first valid same-currency shipping option.
+- **AND** shipping amounts MUST reject exponent notation, leading plus signs, and partial decimal values missing digits before or after the decimal separator before selecting the first valid same-currency shipping option.
 - **AND** non-finite shipping cost values such as `NaN` or `Infinity` MUST be ignored before selecting the first finite positive same-currency shipping amount.
 - **AND** when a saved query includes max price, region, or condition criteria, the adapter MUST translate those criteria into documented Browse field filters before calling eBay: `price` with matching `priceCurrency`, `itemLocationCountry`, and broad `conditions` values where Cabinet can map the saved condition safely.
 - **AND** the adapter MUST omit unsupported saved-query condition values instead of sending an invalid Browse `conditions` filter.

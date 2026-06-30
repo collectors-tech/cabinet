@@ -478,6 +478,32 @@ func TestProviderSearchSkipsNonPlainDecimalBrowsePrices(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsPartialDecimalBrowsePrices(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|leading-dot-price|0","title":"Leading Dot Price Slot Car","price":{"value":".50","currency":"AUD"},"itemWebUrl":"https://ebay/item/leading-dot-price","seller":{"username":"seller-price"}},{"itemId":"v1|trailing-dot-price|0","title":"Trailing Dot Price Slot Car","price":{"value":"12.","currency":"AUD"},"itemWebUrl":"https://ebay/item/trailing-dot-price","seller":{"username":"seller-price"}},{"itemId":"v1|strict-price|0","title":"Strict Price Slot Car","price":{"value":"12.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/strict-price","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the strict decimal price item, got %+v", items)
+	}
+	if items[0].ListingID != "v1|strict-price|0" || items[0].Price != 12.50 {
+		t.Fatalf("expected strict-price candidate to survive normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsBlankBrowsePriceCurrency(t *testing.T) {
 	t.Parallel()
 
@@ -812,6 +838,32 @@ func TestProviderSearchSkipsNonPlainDecimalShippingCost(t *testing.T) {
 	}
 	if items[0].Shipping != 9.25 {
 		t.Fatalf("expected non-plain decimal shipping options to fall through to 9.25, got %+v", items[0])
+	}
+}
+
+func TestProviderSearchSkipsPartialDecimalShippingCost(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|strict-shipping|0","title":"Strict Shipping Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/strict-shipping","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":".75","currency":"AUD"}},{"shippingCost":{"value":"8.","currency":"AUD"}},{"shippingCost":{"value":"9.25","currency":"AUD"}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].Shipping != 9.25 {
+		t.Fatalf("expected partial decimal shipping options to fall through to 9.25, got %+v", items[0])
 	}
 }
 
