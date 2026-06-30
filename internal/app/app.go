@@ -2672,7 +2672,13 @@ func New(cfg config.Config) (*App, error) {
 		var req struct {
 			QuerySetID string `json:"query_set_id"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&req); err != nil {
+			writeClientError(http.StatusBadRequest, "invalid_json", "", "select_existing_ebay_query_set", "The eBay provider run request body must be valid JSON.", nil)
+			return
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
 			writeClientError(http.StatusBadRequest, "invalid_json", "", "select_existing_ebay_query_set", "The eBay provider run request body must be valid JSON.", nil)
 			return
 		}
