@@ -37,6 +37,7 @@ type ProviderError struct {
 }
 
 const browseMaxLimit = 200
+const maxProviderErrorBodyRead = 4096
 const maxProviderDiagnosticFieldDetail = 160
 
 func (e *ProviderError) Error() string {
@@ -439,7 +440,7 @@ func browseErrorMessage(resp *http.Response) string {
 }
 
 func ebayErrorMessage(resp *http.Response, statusMessage string) string {
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxProviderErrorBodyRead))
 	if err != nil {
 		return statusMessage
 	}

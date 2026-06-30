@@ -3,6 +3,7 @@ package ebay
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1776,6 +1777,50 @@ func TestProviderSearchPreservesPlainTextAuthErrorPayload(t *testing.T) {
 			t.Fatalf("expected provider auth error message to compact %q, got %q", unwanted, providerErr.Message)
 		}
 	}
+}
+
+func TestEbayErrorMessageCapsBodyReadBeforeDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	resp := &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body: &errorAfterReader{
+			data: []byte("upstream Browse gateway timeout " + strings.Repeat("detail ", 900)),
+		},
+	}
+	got := ebayErrorMessage(resp, "ebay search status: 502")
+
+	if !strings.Contains(got, "ebay search status: 502") || !strings.Contains(got, "upstream Browse gateway timeout") {
+		t.Fatalf("expected bounded body diagnostic to preserve status and prefix detail, got %q", got)
+	}
+}
+
+type errorAfterReader struct {
+	data   []byte
+	offset int
+}
+
+func (r *errorAfterReader) Read(p []byte) (int, error) {
+	if r.offset >= maxProviderErrorBodyRead {
+		return 0, errors.New("unexpected unbounded follow-up read")
+	}
+	remaining := maxProviderErrorBodyRead - r.offset
+	if remaining > len(r.data)-r.offset {
+		remaining = len(r.data) - r.offset
+	}
+	if remaining > len(p) {
+		remaining = len(p)
+	}
+	n := copy(p, r.data[r.offset:r.offset+remaining])
+	r.offset += n
+	if r.offset >= len(r.data) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func (r *errorAfterReader) Close() error {
+	return nil
 }
 
 func TestProviderSearchPreservesStructuredBrowseErrorPayload(t *testing.T) {
