@@ -218,6 +218,39 @@ func TestProviderSearchSkipsBrowsePricesAboveSavedQueryMax(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsMaxPriceResultsWithMismatchedCurrency(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wantFilter := "price:[..50.00],priceCurrency:AUD"
+		if got := r.URL.Query().Get("filter"); got != wantFilter {
+			t.Errorf("expected Browse max-price filter %q, got %q", wantFilter, got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|usd-under-max|0","title":"USD Under Max Slot Car","price":{"value":"40.00","currency":"USD"},"itemWebUrl":"https://ebay/item/usd-under-max","seller":{"username":"seller-price"}},{"itemId":"v1|aud-under-max|0","title":"AUD Under Max Slot Car","price":{"value":"45.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/aud-under-max","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords: []string{"slot", "car"},
+		MaxPrice: 50,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only matching-currency max-price item, got %+v", items)
+	}
+	if items[0].ListingID != "v1|aud-under-max|0" || items[0].Currency != "AUD" {
+		t.Fatalf("expected AUD matching-currency candidate to survive, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchCanonicalizesConfiguredMarketplace(t *testing.T) {
 	t.Parallel()
 

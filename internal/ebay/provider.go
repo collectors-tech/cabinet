@@ -226,12 +226,17 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if err != nil || price <= 0 {
 			continue
 		}
-		if q.MaxPrice > 0 && price > q.MaxPrice {
-			continue
-		}
 		currency, ok := normalizeCurrencyCode(it.Price.Currency)
 		if !ok {
 			continue
+		}
+		if q.MaxPrice > 0 {
+			if price > q.MaxPrice {
+				continue
+			}
+			if currency != browseCurrency(q.Region, p.marketplace) {
+				continue
+			}
 		}
 		seenListingIDs[listingID] = struct{}{}
 		shipping := normalizeShippingCost(it.ShippingOptions, currency)
