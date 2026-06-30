@@ -972,7 +972,7 @@ func TestProviderSearchPreservesPlainTextAuthErrorPayload(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte("OAuth scope missing for Browse API"))
+		_, _ = w.Write([]byte("OAuth scope\n\nmissing\tfor   Browse API"))
 	}))
 	defer srv.Close()
 
@@ -991,6 +991,11 @@ func TestProviderSearchPreservesPlainTextAuthErrorPayload(t *testing.T) {
 	for _, want := range []string{"ebay credentials rejected with status 403", "OAuth scope missing for Browse API"} {
 		if !strings.Contains(providerErr.Message, want) {
 			t.Fatalf("expected provider auth error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	for _, unwanted := range []string{"\n", "\t", "  "} {
+		if strings.Contains(providerErr.Message, unwanted) {
+			t.Fatalf("expected provider auth error message to compact %q, got %q", unwanted, providerErr.Message)
 		}
 	}
 }
@@ -1034,7 +1039,7 @@ func TestProviderSearchPreservesPlainTextBrowseErrorPayload(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte("upstream Browse gateway timeout"))
+		_, _ = w.Write([]byte("upstream Browse\n  gateway\t timeout"))
 	}))
 	defer srv.Close()
 
@@ -1053,6 +1058,11 @@ func TestProviderSearchPreservesPlainTextBrowseErrorPayload(t *testing.T) {
 	for _, want := range []string{"ebay search status: 502", "upstream Browse gateway timeout"} {
 		if !strings.Contains(providerErr.Message, want) {
 			t.Fatalf("expected provider error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	for _, unwanted := range []string{"\n", "\t", "  "} {
+		if strings.Contains(providerErr.Message, unwanted) {
+			t.Fatalf("expected provider error message to compact %q, got %q", unwanted, providerErr.Message)
 		}
 	}
 }

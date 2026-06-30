@@ -379,7 +379,7 @@ func ebayErrorMessage(resp *http.Response, statusMessage string) string {
 }
 
 func appendRawProviderBody(statusMessage string, body []byte) string {
-	raw := strings.TrimSpace(string(body))
+	raw := strings.Join(strings.Fields(string(body)), " ")
 	if raw == "" {
 		return statusMessage
 	}
