@@ -460,16 +460,16 @@ func ebayErrorMessage(resp *http.Response, statusMessage string) string {
 		if ebayErr.ErrorID != 0 {
 			details = append(details, strconv.Itoa(ebayErr.ErrorID))
 		}
-		if domain := strings.TrimSpace(ebayErr.Domain); domain != "" {
+		if domain := normalizeProviderDiagnosticField(ebayErr.Domain); domain != "" {
 			details = append(details, domain)
 		}
-		if category := strings.TrimSpace(ebayErr.Category); category != "" {
+		if category := normalizeProviderDiagnosticField(ebayErr.Category); category != "" {
 			details = append(details, category)
 		}
-		if message := strings.TrimSpace(ebayErr.Message); message != "" {
+		if message := normalizeProviderDiagnosticField(ebayErr.Message); message != "" {
 			details = append(details, message)
 		}
-		if longMessage := strings.TrimSpace(ebayErr.LongMessage); longMessage != "" {
+		if longMessage := normalizeProviderDiagnosticField(ebayErr.LongMessage); longMessage != "" {
 			details = append(details, longMessage)
 		}
 		if len(details) > 0 {
@@ -483,7 +483,7 @@ func ebayErrorMessage(resp *http.Response, statusMessage string) string {
 }
 
 func appendRawProviderBody(statusMessage string, body []byte) string {
-	raw := strings.Join(strings.Fields(string(body)), " ")
+	raw := normalizeProviderDiagnosticField(string(body))
 	if raw == "" {
 		return statusMessage
 	}
@@ -492,6 +492,14 @@ func appendRawProviderBody(statusMessage string, body []byte) string {
 		raw = raw[:maxProviderBodyDetail] + "..."
 	}
 	return statusMessage + ": " + raw
+}
+
+func normalizeProviderDiagnosticField(raw string) string {
+	value := strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
+		return ""
+	}
+	return value
 }
 
 func compactSearchTerms(values []string) []string {
