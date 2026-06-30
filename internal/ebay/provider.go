@@ -301,6 +301,9 @@ func parseBrowseAmount(raw string) (float64, error) {
 	if !hasValidCommaGrouping(value) {
 		return 0, fmt.Errorf("invalid comma-grouped amount")
 	}
+	if !hasPlainDecimalDigits(value) {
+		return 0, fmt.Errorf("amount must include required decimal digits")
+	}
 	amount, err := strconv.ParseFloat(strings.ReplaceAll(value, ",", ""), 64)
 	if err != nil {
 		return 0, err
@@ -327,6 +330,26 @@ func hasValidCommaGrouping(value string) bool {
 	for _, group := range groups[1:] {
 		if len(group) != 3 {
 			return false
+		}
+	}
+	return true
+}
+
+func hasPlainDecimalDigits(value string) bool {
+	normalized := strings.ReplaceAll(value, ",", "")
+	normalized = strings.TrimPrefix(normalized, "-")
+	if normalized == "" || strings.Count(normalized, ".") > 1 {
+		return false
+	}
+	parts := strings.Split(normalized, ".")
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return false
+			}
 		}
 	}
 	return true
