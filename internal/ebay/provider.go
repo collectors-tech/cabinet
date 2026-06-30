@@ -203,11 +203,19 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			} `json:"estimatedAvailabilities"`
 		} `json:"itemSummaries"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&payload); err != nil {
 		return nil, &ProviderError{
 			StatusCode: http.StatusBadGateway,
 			ErrorCode:  "PROVIDER_SEARCH_FAILED",
 			Message:    fmt.Sprintf("decode ebay Browse response: %v", err),
+		}
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, &ProviderError{
+			StatusCode: http.StatusBadGateway,
+			ErrorCode:  "PROVIDER_SEARCH_FAILED",
+			Message:    "decode ebay Browse response: trailing data after JSON object",
 		}
 	}
 

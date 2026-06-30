@@ -2162,6 +2162,32 @@ func TestProviderSearchClassifiesMalformedBrowsePayload(t *testing.T) {
 	}
 }
 
+func TestProviderSearchRejectsBrowsePayloadWithTrailingData(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|trailing|0","title":"Trailing Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/trailing","seller":{"username":"seller-trailing"}}]}{"itemSummaries":[]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err == nil {
+		t.Fatal("expected trailing Browse payload error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusBadGateway || providerErr.ErrorCode != "PROVIDER_SEARCH_FAILED" {
+		t.Fatalf("unexpected provider error: %+v", providerErr)
+	}
+	if !strings.Contains(providerErr.Message, "trailing data after JSON object") {
+		t.Fatalf("expected trailing data diagnostic, got %q", providerErr.Message)
+	}
+}
+
 func TestProviderSearchRequiresBearerToken(t *testing.T) {
 	t.Parallel()
 
