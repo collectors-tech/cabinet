@@ -239,12 +239,28 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 }
 
 func isWebURL(raw string) bool {
+	if containsEncodedControlByte(raw) {
+		return false
+	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return false
 	}
 	scheme := strings.ToLower(parsed.Scheme)
 	return parsed.Host != "" && parsed.User == nil && (scheme == "http" || scheme == "https")
+}
+
+func containsEncodedControlByte(raw string) bool {
+	for i := 0; i+2 < len(raw); i++ {
+		if raw[i] != '%' {
+			continue
+		}
+		value, err := strconv.ParseUint(raw[i+1:i+3], 16, 8)
+		if err == nil && (value < 0x20 || value == 0x7f) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeOptionalWebURL(raw string) string {
