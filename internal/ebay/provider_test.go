@@ -793,6 +793,35 @@ func TestProviderSearchSkipsBrowseTextFieldsWithRawControlCharacters(t *testing.
 	}
 }
 
+func TestProviderSearchSkipsBrowseTextFieldsWithEncodedControlCharacters(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|encoded%0Aid|0","title":"Encoded ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-id","seller":{"username":"seller-text"}},{"itemId":"v1|encoded-title|0","title":"Encoded%7F Title Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-title","seller":{"username":"seller-text"}},{"itemId":"v1|encoded-seller|0","title":"Encoded Seller Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-seller","seller":{"username":"seller%00text"}},{"itemId":"v1|valid-text|0","title":"Valid Text Slot Car","price":{"value":"14.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/valid-text","seller":{"username":"seller-text"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("search ebay: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected encoded-control listing id/title to be skipped while seller fallback survives, got %+v", items)
+	}
+	if items[0].ListingID != "v1|encoded-seller|0" || items[0].Seller != "ebay" {
+		t.Fatalf("expected encoded-control seller to fall back to ebay, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|valid-text|0" || items[1].Seller != "seller-text" {
+		t.Fatalf("expected safe text candidate to survive, got %+v", items[1])
+	}
+}
+
 func TestProviderSearchSkipsDuplicateBrowseListingIDs(t *testing.T) {
 	t.Parallel()
 
