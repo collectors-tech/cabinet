@@ -136,7 +136,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 		},
 		"INTEGRATION-006": {
 			"/api/provider/health?provider=ebay",
-			"latest positive eBay Browse `Retry-After` timing",
+			"latest positive eBay Browse `Retry-After` timing, including HTTP-date retry values",
 			"provider health and scanner failure snapshots remain provider-scoped",
 			"scanner failure list reusable schemas",
 			"scanner failure list method-error diagnostics",
@@ -246,7 +246,8 @@ func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 		"blank keyword/exclusion trimming",
 		"structured auth and non-auth Browse error payload preservation",
 		"bounded whitespace-compacted non-JSON/plain-text upstream body diagnostics",
-		"positive integer `Retry-After` timing",
+		"positive integer or HTTP-date `Retry-After` timing",
+		"TestProviderSearchPreservesHTTPDateRetryAfter",
 		"trimmed Browse string metadata",
 		"trimmed Browse price value",
 		"non-positive Browse price skip",
