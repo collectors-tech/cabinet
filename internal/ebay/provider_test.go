@@ -1684,6 +1684,37 @@ func TestProviderSearchPreservesStructuredAuthErrorPayload(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSanitizesStructuredAuthErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":1100,"domain":"ACCESS\nTOKEN","category":"REQUEST\tSCOPE","message":"Access token\ninvalid","longMessage":"unsafe%0Adetail"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "expired-token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured auth error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	for _, want := range []string{"1100", "ACCESS TOKEN", "REQUEST SCOPE", "Access token invalid"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected sanitized provider auth error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	for _, unwanted := range []string{"\n", "\t", "%0A", "unsafe"} {
+		if strings.Contains(providerErr.Message, unwanted) {
+			t.Fatalf("expected sanitized provider auth error message to omit %q, got %q", unwanted, providerErr.Message)
+		}
+	}
+}
+
 func TestProviderSearchPreservesPlainTextAuthErrorPayload(t *testing.T) {
 	t.Parallel()
 
@@ -1747,6 +1778,37 @@ func TestProviderSearchPreservesStructuredBrowseErrorPayload(t *testing.T) {
 	for _, want := range []string{"12001", "API_BROWSE", "REQUEST", "Rate limit exceeded", "Try again later"} {
 		if !strings.Contains(providerErr.Message, want) {
 			t.Fatalf("expected provider error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+}
+
+func TestProviderSearchSanitizesStructuredBrowseErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":12001,"domain":"API_BROWSE\nSEARCH","category":"REQUEST\tLIMIT","message":"Rate limit\nexceeded","longMessage":"drop%7Fdetail"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured Browse error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	for _, want := range []string{"12001", "API_BROWSE SEARCH", "REQUEST LIMIT", "Rate limit exceeded"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected sanitized provider error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	for _, unwanted := range []string{"\n", "\t", "%7F", "drop"} {
+		if strings.Contains(providerErr.Message, unwanted) {
+			t.Fatalf("expected sanitized provider error message to omit %q, got %q", unwanted, providerErr.Message)
 		}
 	}
 }
