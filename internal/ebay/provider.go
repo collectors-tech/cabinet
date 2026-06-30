@@ -81,7 +81,7 @@ func NewProvider(cfg ProviderConfig) *Provider {
 	if market == "" {
 		market = "EBAY_US"
 	}
-	market = strings.ToUpper(market)
+	market = normalizeMarketplaceID(market)
 	return &Provider{
 		baseURL:     strings.TrimRight(base, "/"),
 		bearerToken: strings.TrimSpace(cfg.BearerToken),
@@ -509,10 +509,43 @@ func retryAfterSeconds(resp *http.Response) int {
 
 func browseCountry(region string) string {
 	region = strings.ToUpper(strings.TrimSpace(region))
-	if len(region) == 2 {
+	if isCountryCode(region) {
 		return region
 	}
 	return ""
+}
+
+func normalizeMarketplaceID(marketplace string) string {
+	marketplace = strings.ToUpper(strings.TrimSpace(marketplace))
+	if !isMarketplaceID(marketplace) {
+		return "EBAY_US"
+	}
+	return marketplace
+}
+
+func isMarketplaceID(marketplace string) bool {
+	if !strings.HasPrefix(marketplace, "EBAY_") || len(marketplace) <= len("EBAY_") {
+		return false
+	}
+	for _, r := range marketplace {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isCountryCode(country string) bool {
+	if len(country) != 2 {
+		return false
+	}
+	for _, r := range country {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 func browseCondition(condition string) string {

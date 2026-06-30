@@ -138,6 +138,26 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 			},
 			wantFilter: "itemLocationCountry:US",
 		},
+		{
+			name:        "malformed region is ignored instead of sending unsupported country filter",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords: []string{"slot car"},
+				MaxPrice: 75,
+				Region:   "U1",
+			},
+			wantFilter: "price:[..75.00],priceCurrency:USD",
+		},
+		{
+			name:        "non-ascii region is ignored instead of sending unsupported country filter",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords: []string{"slot car"},
+				MaxPrice: 75,
+				Region:   "ÅU",
+			},
+			wantFilter: "price:[..75.00],priceCurrency:USD",
+		},
 	}
 
 	for _, tt := range tests {
@@ -219,6 +239,47 @@ func TestProviderSearchCanonicalizesConfiguredMarketplace(t *testing.T) {
 		MaxPrice: 75,
 	}); err != nil {
 		t.Fatalf("Search() error = %v", err)
+	}
+}
+
+func TestProviderSearchFallsBackFromMalformedMarketplace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		marketplace string
+	}{
+		{name: "control characters", marketplace: "EBAY_AU\r\nX-Injected: 1"},
+		{name: "non-ascii", marketplace: "EBAY_ÅU"},
+		{name: "missing prefix", marketplace: "AU"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("X-EBAY-C-MARKETPLACE-ID"); got != "EBAY_US" {
+					t.Errorf("expected malformed marketplace to fall back to EBAY_US, got %q", got)
+				}
+				wantFilter := "price:[..75.00],priceCurrency:USD"
+				if got := r.URL.Query().Get("filter"); got != wantFilter {
+					t.Errorf("expected fallback Browse filters %q, got %q", wantFilter, got)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+			}))
+			defer srv.Close()
+
+			p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: tt.marketplace})
+			if _, err := p.Search(context.Background(), scanner.QuerySet{
+				Keywords: []string{"slot", "car"},
+				MaxPrice: 75,
+			}); err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+		})
 	}
 }
 

@@ -22,6 +22,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - and scanner run APIs MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
 - **AND** the adapter MUST send the Browse request with bearer authorization, `Accept: application/json`, the configured eBay marketplace header, joined search keywords, max-price filter, exclusions, and the effective `items_per_page` limit from the saved query criteria.
 - **AND** the adapter MUST trim and canonicalize the configured marketplace ID before sending the eBay marketplace header or deriving marketplace-specific Browse filters.
+- **AND** malformed marketplace IDs containing unsupported characters, missing the `EBAY_` prefix, or containing non-ASCII characters MUST fall back to the default `EBAY_US` marketplace before the adapter sends headers or derives Browse price-currency filters.
 - **AND** the adapter MUST cap direct Browse `limit` values above `200` before sending the request so provider callers cannot exceed the eBay Browse page-size maximum even when bypassing shared scanner pagination guards.
 - **AND** the adapter MUST request Browse `fieldgroups=EXTENDED` so availability and stock observation payloads are requested before normalization.
 - **AND** the adapter MUST trim and ignore blank keyword or exclusion criteria before building the Browse request, and MUST reject a saved query that has no non-blank keyword criteria without calling eBay.
@@ -45,6 +46,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** non-finite shipping cost values such as `NaN` or `Infinity` MUST be ignored before selecting the first finite positive same-currency shipping amount.
 - **AND** malformed successful Browse response payloads MUST return an actionable `PROVIDER_SEARCH_FAILED` provider error instead of a generic decode failure so provider-run routes can preserve health guidance and retry behavior.
 - **AND** when a saved query includes max price, region, or condition criteria, the adapter MUST translate those criteria into documented Browse field filters before calling eBay: `price` with matching `priceCurrency`, `itemLocationCountry`, and broad `conditions` values where Cabinet can map the saved condition safely.
+- **AND** malformed or non-ASCII saved-query regions MUST be omitted from Browse `itemLocationCountry` filters unless they normalize to a two-letter ASCII country code.
 - **AND** the adapter MUST omit unsupported saved-query condition values instead of sending an invalid Browse `conditions` filter.
 - **AND** scanner candidate persistence MUST store normalized eBay price currency in `scanner_candidates.observed_currency` for both newly inserted and refreshed candidates.
 - **AND** shared scanner candidate read APIs MUST expose the persisted normalized currency as `observed_currency` in eBay provider run and candidate-list responses.
