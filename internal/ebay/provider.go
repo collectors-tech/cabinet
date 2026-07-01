@@ -40,6 +40,7 @@ type ProviderError struct {
 const browseMaxLimit = 200
 const maxProviderErrorBodyRead = 4096
 const maxProviderDiagnosticFieldDetail = 160
+const maxBrowseTextFieldLength = 512
 
 func (e *ProviderError) Error() string {
 	if e == nil {
@@ -325,7 +326,7 @@ func normalizeOptionalWebURL(raw string) string {
 
 func normalizeRequiredText(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
+	if value == "" || len(value) > maxBrowseTextFieldLength || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	return value
