@@ -97,7 +97,7 @@ func NewProvider(cfg ProviderConfig) *Provider {
 
 func normalizeProviderBaseURL(raw string) string {
 	value := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) || containsEncodedUnsafeUnicodeURLText(value) || containsEncodedURLWhitespace(value) || containsRawURLWhitespace(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) || containsEncodedUnsafeURLText(value) || containsEncodedURLWhitespace(value) || containsRawURLWhitespace(value) {
 		return "https://api.ebay.com"
 	}
 	parsed, err := url.Parse(value)
@@ -312,7 +312,7 @@ func readBrowseSuccessBody(body io.Reader) ([]byte, error) {
 }
 
 func isWebURL(raw string) bool {
-	if len(raw) > maxBrowseURLLength || containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsUnsafeUnicodeText(raw) || containsEncodedUnsafeUnicodeURLText(raw) || containsEncodedURLWhitespace(raw) || containsRawURLWhitespace(raw) {
+	if len(raw) > maxBrowseURLLength || containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsUnsafeUnicodeText(raw) || containsEncodedUnsafeURLText(raw) || containsEncodedURLWhitespace(raw) || containsRawURLWhitespace(raw) {
 		return false
 	}
 	parsed, err := url.Parse(raw)
@@ -367,7 +367,7 @@ func containsRawURLWhitespace(raw string) bool {
 	return false
 }
 
-func containsEncodedUnsafeUnicodeURLText(raw string) bool {
+func containsEncodedUnsafeURLText(raw string) bool {
 	decoded, err := url.PathUnescape(raw)
 	if err != nil || decoded == raw {
 		return false
@@ -404,7 +404,7 @@ func normalizeBrowseImageURL(primary string, thumbnailImages, additionalImages [
 
 func normalizeRequiredText(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || len(value) > maxBrowseTextFieldLength || containsRawControlByte(value) || containsEncodedControlByte(value) || containsEncodedUnsafeUnicodeURLText(value) || containsUnsafeUnicodeText(value) {
+	if value == "" || len(value) > maxBrowseTextFieldLength || containsRawControlByte(value) || containsEncodedControlByte(value) || containsEncodedUnsafeURLText(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	return value
