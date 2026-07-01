@@ -404,7 +404,7 @@ func normalizeBrowseImageURL(primary string, thumbnailImages, additionalImages [
 
 func normalizeRequiredText(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || len(value) > maxBrowseTextFieldLength || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
+	if value == "" || len(value) > maxBrowseTextFieldLength || containsRawControlByte(value) || containsEncodedControlByte(value) || containsEncodedUnsafeUnicodeURLText(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	return value
