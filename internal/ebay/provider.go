@@ -203,6 +203,12 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Image      struct {
 				ImageURL string `json:"imageUrl"`
 			} `json:"image"`
+			ThumbnailImages []struct {
+				ImageURL string `json:"imageUrl"`
+			} `json:"thumbnailImages"`
+			AdditionalImages []struct {
+				ImageURL string `json:"imageUrl"`
+			} `json:"additionalImages"`
 			ShippingOptions []struct {
 				ShippingCost struct {
 					Value    string `json:"value"`
@@ -278,7 +284,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Currency:         currency,
 			Shipping:         shipping,
 			URL:              itemURL,
-			Image:            normalizeOptionalWebURL(it.Image.ImageURL),
+			Image:            normalizeBrowseImageURL(it.Image.ImageURL, it.ThumbnailImages, it.AdditionalImages),
 			Seller:           normalizeSellerUsername(it.Seller.Username),
 			Source:           "ebay",
 			StockState:       stockState,
@@ -351,6 +357,25 @@ func normalizeOptionalWebURL(raw string) string {
 		return ""
 	}
 	return value
+}
+
+func normalizeBrowseImageURL(primary string, thumbnailImages, additionalImages []struct {
+	ImageURL string `json:"imageUrl"`
+}) string {
+	if imageURL := normalizeOptionalWebURL(primary); imageURL != "" {
+		return imageURL
+	}
+	for _, image := range thumbnailImages {
+		if imageURL := normalizeOptionalWebURL(image.ImageURL); imageURL != "" {
+			return imageURL
+		}
+	}
+	for _, image := range additionalImages {
+		if imageURL := normalizeOptionalWebURL(image.ImageURL); imageURL != "" {
+			return imageURL
+		}
+	}
+	return ""
 }
 
 func normalizeRequiredText(raw string) string {
