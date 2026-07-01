@@ -1026,6 +1026,61 @@ func TestProviderSearchSkipsBrowseTextFieldsWithUnicodeFormatCharacters(t *testi
 	}
 }
 
+func TestProviderSearchSkipsOversizedBrowseRequiredText(t *testing.T) {
+	t.Parallel()
+
+	oversizedListingID := strings.Repeat("listing-", 90)
+	oversizedTitle := strings.Repeat("title ", 120)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"` + oversizedListingID + `","title":"Oversized ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/oversized-id","seller":{"username":"seller-text"}},{"itemId":"v1|oversized-title|0","title":"` + oversizedTitle + `","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/oversized-title","seller":{"username":"seller-text"}},{"itemId":"v1|valid-sized-text|0","title":"Valid Sized Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/valid-sized-text","seller":{"username":"seller-text"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].ListingID != "v1|valid-sized-text|0" {
+		t.Fatalf("expected oversized required text candidates to be skipped, got %+v", items)
+	}
+}
+
+func TestProviderSearchFallsBackOversizedBrowseSeller(t *testing.T) {
+	t.Parallel()
+
+	oversizedSeller := strings.Repeat("seller-", 90)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|oversized-seller|0","title":"Oversized Seller Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/oversized-seller","seller":{"username":"` + oversizedSeller + `"}},{"itemId":"v1|safe-seller|0","title":"Safe Seller Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-seller","seller":{"username":"seller-safe"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected valid candidates to survive oversized seller fallback, got %+v", items)
+	}
+	if items[0].ListingID != "v1|oversized-seller|0" || items[0].Seller != "ebay" {
+		t.Fatalf("expected oversized seller to fall back to ebay, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|safe-seller|0" || items[1].Seller != "seller-safe" {
+		t.Fatalf("expected safe seller to survive, got %+v", items[1])
+	}
+}
+
 func TestProviderSearchSkipsDuplicateBrowseListingIDs(t *testing.T) {
 	t.Parallel()
 
