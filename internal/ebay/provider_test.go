@@ -2821,3 +2821,44 @@ func TestProviderSearchRequiresBearerToken(t *testing.T) {
 		t.Fatalf("unexpected provider error: %+v", providerErr)
 	}
 }
+
+func TestProviderSearchRejectsUnsafeBearerTokenBeforeBrowseRequest(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{name: "raw control byte", token: "valid-prefix\ninjected"},
+		{name: "encoded control byte", token: "valid-prefix%0Ainjected"},
+		{name: "unicode format control", token: "valid-prefix" + string(rune(0x202e)) + "injected"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Fatalf("unsafe bearer token must be rejected before Browse request")
+			}))
+			defer srv.Close()
+
+			p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: tt.token, Marketplace: "EBAY_AU"})
+			_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+			if err == nil {
+				t.Fatal("expected unsafe bearer token error")
+			}
+			var providerErr *ProviderError
+			if !errors.As(err, &providerErr) {
+				t.Fatalf("expected ProviderError, got %T %v", err, err)
+			}
+			if providerErr.StatusCode != http.StatusUnauthorized || providerErr.ErrorCode != "PROVIDER_AUTH_INVALID" {
+				t.Fatalf("unexpected provider error: %+v", providerErr)
+			}
+			if !strings.Contains(providerErr.Message, "invalid ebay bearer token format") {
+				t.Fatalf("expected actionable token-format message, got %q", providerErr.Message)
+			}
+		})
+	}
+}
