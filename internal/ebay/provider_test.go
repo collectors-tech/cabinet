@@ -372,6 +372,8 @@ func TestNewProviderFallsBackFromUnsafeBaseURLOverrides(t *testing.T) {
 		{name: "non-web scheme", baseURL: "javascript:alert(1)"},
 		{name: "relative URL", baseURL: "/buy/browse"},
 		{name: "embedded userinfo", baseURL: "https://token@api.ebay.com"},
+		{name: "query string", baseURL: "https://api.ebay.com?environment=sandbox"},
+		{name: "fragment", baseURL: "https://api.ebay.com#browse"},
 		{name: "raw control byte", baseURL: "https://api.ebay.com" + string(rune(0x7f))},
 		{name: "encoded control byte", baseURL: "https://api.ebay.com/%0A"},
 		{name: "raw whitespace", baseURL: "https://api.ebay.com/custom path"},
