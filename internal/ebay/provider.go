@@ -263,7 +263,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Shipping:   shipping,
 			URL:        itemURL,
 			Image:      normalizeOptionalWebURL(it.Image.ImageURL),
-			Seller:     normalizeOptionalText(it.Seller.Username, "ebay"),
+			Seller:     normalizeSellerUsername(it.Seller.Username),
 			Source:     "ebay",
 			StockState: stockState,
 			StockCount: stockCount,
@@ -343,6 +343,14 @@ func normalizeOptionalText(raw, fallback string) string {
 	value := normalizeRequiredText(raw)
 	if value == "" {
 		return fallback
+	}
+	return value
+}
+
+func normalizeSellerUsername(raw string) string {
+	value := normalizeOptionalText(raw, "ebay")
+	if containsRawURLWhitespace(value) {
+		return "ebay"
 	}
 	return value
 }
