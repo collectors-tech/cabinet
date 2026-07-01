@@ -510,6 +510,31 @@ func TestProviderSearchOmitsEncodedUnicodeQueryTextBeforeBrowseRequest(t *testin
 	}
 }
 
+func TestProviderSearchOmitsEncodedWhitespaceQueryTextBeforeBrowseRequest(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("q"); got != "AFX P-1" {
+			t.Errorf("expected percent-encoded whitespace keywords to be omitted before joining, got %q", got)
+		}
+		if got := r.URL.Query().Get("exclude"); got != "broken" {
+			t.Errorf("expected percent-encoded whitespace exclusions to be omitted before joining, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords:   []string{"AFX", "bad%20keyword", "wide%C2%A0gap", "P-1"},
+		Exclusions: []string{"broken", "skip%09this"},
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+}
+
 func TestProviderSearchOmitsOversizedQueryTextBeforeBrowseRequest(t *testing.T) {
 	t.Parallel()
 
@@ -1147,6 +1172,35 @@ func TestProviderSearchSkipsBrowseTextFieldsWithEncodedUnicodeText(t *testing.T)
 		t.Fatalf("expected encoded-Unicode seller to fall back to ebay, got %+v", items[0])
 	}
 	if items[1].ListingID != "v1|safe-encoded-text|0" || items[1].Seller != "seller-text" {
+		t.Fatalf("expected safe text candidate to survive, got %+v", items[1])
+	}
+}
+
+func TestProviderSearchSkipsBrowseTextFieldsWithEncodedWhitespaceText(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|encoded%20id|0","title":"Encoded ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-id","seller":{"username":"seller-text"}},{"itemId":"v1|encoded-title|0","title":"Encoded%09Title Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-title","seller":{"username":"seller-text"}},{"itemId":"v1|encoded-seller|0","title":"Encoded Seller Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-seller","seller":{"username":"seller%20text"}},{"itemId":"v1|safe-text|0","title":"Safe Text Slot Car","price":{"value":"14.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-text","seller":{"username":"seller-text"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("search ebay: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected encoded-whitespace listing id/title to be skipped while seller fallback survives, got %+v", items)
+	}
+	if items[0].ListingID != "v1|encoded-seller|0" || items[0].Seller != "ebay" {
+		t.Fatalf("expected encoded-whitespace seller to fall back to ebay, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|safe-text|0" || items[1].Seller != "seller-text" {
 		t.Fatalf("expected safe text candidate to survive, got %+v", items[1])
 	}
 }
