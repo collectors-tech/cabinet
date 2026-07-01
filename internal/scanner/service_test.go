@@ -16,6 +16,7 @@ type testProvider struct {
 	calls      int
 	items      []CandidateInput
 	err        error
+	lastQuery  QuerySet
 }
 
 type scheduledMixedProvider struct{}
@@ -46,8 +47,9 @@ func (p *testProvider) ProviderID() string {
 	return p.providerID
 }
 
-func (p *testProvider) Search(_ context.Context, _ QuerySet) ([]CandidateInput, error) {
+func (p *testProvider) Search(_ context.Context, q QuerySet) ([]CandidateInput, error) {
 	p.calls++
+	p.lastQuery = q
 	if p.calls <= p.failures {
 		if p.err != nil {
 			return nil, p.err
@@ -55,6 +57,103 @@ func (p *testProvider) Search(_ context.Context, _ QuerySet) ([]CandidateInput, 
 		return nil, errors.New("temporary failure")
 	}
 	return p.items, nil
+}
+
+func TestRunNowUsesEbayBrowseItemsPerPageCap(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySet(context.Background(), QuerySet{
+		Name:          "eBay high-volume watch",
+		Keywords:      []string{"afx", "slot car"},
+		ProviderScope: []string{"ebay"},
+		ItemsPerPage:  250,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySet() error = %v", err)
+	}
+
+	provider := &testProvider{
+		providerID: "ebay",
+		items: []CandidateInput{{
+			ListingID: "EBAY-CAP-1",
+			Title:     "eBay capped result",
+			Price:     42,
+			Currency:  "AUD",
+			URL:       "https://www.ebay.com/itm/cap-1",
+			Source:    "ebay",
+		}},
+	}
+	run, err := svc.RunNow(context.Background(), qs.ID, provider)
+	if err != nil {
+		t.Fatalf("RunNow() error = %v", err)
+	}
+
+	if provider.lastQuery.ItemsPerPage != 200 {
+		t.Fatalf("expected eBay provider query to use Browse cap 200, got %d", provider.lastQuery.ItemsPerPage)
+	}
+	if run.ItemsPerPageRequested != 250 || run.ItemsPerPageEffective != 200 {
+		t.Fatalf("expected requested/effective page sizes 250/200, got %+v", run)
+	}
+	if run.ObservedPageSize != 200 || run.PageCount != 1 {
+		t.Fatalf("expected observed page size 200 and one page, got %+v", run)
+	}
+	if run.ItemsPerPageWarning != "items_per_page clamped from 250 to 200" {
+		t.Fatalf("expected eBay page-size clamp warning, got %q", run.ItemsPerPageWarning)
+	}
+}
+
+func TestRunNowUsesExecutingProviderItemsPerPageCap(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySet(context.Background(), QuerySet{
+		Name:          "Mixed provider high-volume watch",
+		Keywords:      []string{"afx", "slot car"},
+		ProviderScope: []string{"ebay", "bonzaslotcars"},
+		ItemsPerPage:  250,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySet() error = %v", err)
+	}
+
+	provider := &testProvider{
+		providerID: "bonzaslotcars",
+		items: []CandidateInput{{
+			ListingID: "BONZA-CAP-1",
+			Title:     "Bonza capped result",
+			Price:     42,
+			Currency:  "AUD",
+			URL:       "https://bonzaslotcars.com.au/product/cap-1/",
+			Source:    "bonzaslotcars",
+		}},
+	}
+	run, err := svc.RunNow(context.Background(), qs.ID, provider)
+	if err != nil {
+		t.Fatalf("RunNow() error = %v", err)
+	}
+
+	if provider.lastQuery.ItemsPerPage != 36 {
+		t.Fatalf("expected Bonza provider query to use local provider cap 36 despite mixed eBay scope, got %d", provider.lastQuery.ItemsPerPage)
+	}
+	if run.ItemsPerPageRequested != 250 || run.ItemsPerPageEffective != 36 {
+		t.Fatalf("expected requested/effective page sizes 250/36, got %+v", run)
+	}
+	if run.ItemsPerPageWarning != "items_per_page clamped from 250 to 36" {
+		t.Fatalf("expected local provider page-size clamp warning, got %q", run.ItemsPerPageWarning)
+	}
 }
 
 type fakeClassifiedProviderError struct {
