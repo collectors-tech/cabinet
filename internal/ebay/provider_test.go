@@ -2894,6 +2894,37 @@ func TestProviderSearchOmitsUnicodeFormatBrowseErrorPayloadFields(t *testing.T) 
 	}
 }
 
+func TestProviderSearchOmitsEncodedUnicodeBrowseErrorPayloadFields(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":13001,"domain":"API_BROWSE","category":"APPLICATION%E2%80%AE","message":"Browse gateway timeout","longMessage":"Retry%E2%80%AFlater"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured Browse error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	for _, want := range []string{"13001", "API_BROWSE", "Browse gateway timeout"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected provider error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	for _, unwanted := range []string{"APPLICATION", "Retry", "%E2%80%AE", "%E2%80%AF"} {
+		if strings.Contains(providerErr.Message, unwanted) {
+			t.Fatalf("expected encoded-Unicode diagnostic field to be omitted for %q, got %q", unwanted, providerErr.Message)
+		}
+	}
+}
+
 func TestProviderSearchBoundsStructuredBrowseErrorPayloadFields(t *testing.T) {
 	t.Parallel()
 
