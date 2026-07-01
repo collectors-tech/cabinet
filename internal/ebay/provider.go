@@ -100,7 +100,7 @@ func normalizeProviderBaseURL(raw string) string {
 		return "https://api.ebay.com"
 	}
 	scheme := strings.ToLower(parsed.Scheme)
-	if parsed.Host == "" || parsed.User != nil || (scheme != "http" && scheme != "https") {
+	if parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (scheme != "http" && scheme != "https") {
 		return "https://api.ebay.com"
 	}
 	return value
