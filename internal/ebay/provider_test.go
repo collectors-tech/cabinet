@@ -50,7 +50,7 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 			t.Errorf("expected Browse EXTENDED fieldgroup for availability metadata, got %q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|123|0","title":"AFX P-1","price":{"value":"45.00","currency":"USD"},"itemWebUrl":"https://ebay/item/123","image":{"imageUrl":"https://img/123.jpg"},"seller":{"username":"seller1"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|123|0","title":"AFX P-1","price":{"value":"45.00","currency":"USD"},"itemWebUrl":"https://ebay/item/123","image":{"imageUrl":"https://img/123.jpg"},"seller":{"username":"seller1"},"itemCreationDate":"2026-06-30T05:04:03.123Z","itemEndDate":"2026-07-07T15:04:03+10:00","estimatedAvailabilities":[{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
 	}))
 	defer srv.Close()
 
@@ -88,6 +88,34 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 	}
 	if items[0].StockState != "low_stock" || items[0].StockCount != 2 {
 		t.Fatalf("expected low_stock/2, got %+v", items[0])
+	}
+	if items[0].ListingCreatedAt != "2026-06-30T05:04:03Z" {
+		t.Fatalf("expected normalized listing creation timestamp, got %q", items[0].ListingCreatedAt)
+	}
+	if items[0].ListingUpdatedAt != "2026-07-07T05:04:03Z" {
+		t.Fatalf("expected normalized listing update/end timestamp, got %q", items[0].ListingUpdatedAt)
+	}
+}
+
+func TestProviderSearchDropsUnsafeBrowseTimestamps(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unsafe-time|0","title":"Unsafe Time Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unsafe-time","itemCreationDate":"2026-06-30T05:04:03Z%0A","itemEndDate":"not-a-time","seller":{"username":"seller-time"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected otherwise valid candidate to survive, got %+v", items)
+	}
+	if items[0].ListingCreatedAt != "" || items[0].ListingUpdatedAt != "" {
+		t.Fatalf("expected unsafe/malformed Browse timestamps to be dropped, got %+v", items[0])
 	}
 }
 

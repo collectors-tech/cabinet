@@ -241,6 +241,8 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			source_result_url TEXT NOT NULL DEFAULT '',
 			stock_state TEXT NOT NULL DEFAULT 'unknown',
 			stock_count INTEGER NOT NULL DEFAULT -1,
+			listing_created_at TEXT NOT NULL DEFAULT '',
+			listing_updated_at TEXT NOT NULL DEFAULT '',
 			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_scanner_candidates_query_set_id ON scanner_candidates(query_set_id);`,
@@ -785,6 +787,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.source_result_url: %w", err)
 	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "listing_created_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.listing_created_at: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "listing_updated_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.listing_updated_at: %w", err)
+	}
 	if err := ensureColumn(ctx, tx, tx, "item_photos", "display_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure item_photos.display_order: %w", err)
@@ -927,14 +937,16 @@ func rebuildScannerCandidatesWithoutGlobalListingUnique(ctx context.Context, tx 
 		source_result_url TEXT NOT NULL DEFAULT '',
 		stock_state TEXT NOT NULL DEFAULT 'unknown',
 		stock_count INTEGER NOT NULL DEFAULT -1,
+		listing_created_at TEXT NOT NULL DEFAULT '',
+		listing_updated_at TEXT NOT NULL DEFAULT '',
 		FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
 	);`); err != nil {
 		return fmt.Errorf("create rebuilt scanner_candidates: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO scanner_candidates(
-		id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count
+		id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count, listing_created_at, listing_updated_at
 	)
-	SELECT id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count
+	SELECT id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count, '', ''
 	FROM scanner_candidates_legacy_unique_listing;`); err != nil {
 		return fmt.Errorf("copy rebuilt scanner_candidates: %w", err)
 	}

@@ -62,37 +62,41 @@ type classifiedProviderError interface {
 }
 
 type CandidateInput struct {
-	ListingID  string  `json:"listing_id"`
-	Title      string  `json:"title"`
-	Price      float64 `json:"price"`
-	Currency   string  `json:"currency,omitempty"`
-	Shipping   float64 `json:"shipping"`
-	URL        string  `json:"url"`
-	Image      string  `json:"image"`
-	Seller     string  `json:"seller"`
-	Source     string  `json:"source"`
-	StockState string  `json:"stock_state"`
-	StockCount int     `json:"stock_count"`
+	ListingID        string  `json:"listing_id"`
+	Title            string  `json:"title"`
+	Price            float64 `json:"price"`
+	Currency         string  `json:"currency,omitempty"`
+	Shipping         float64 `json:"shipping"`
+	URL              string  `json:"url"`
+	Image            string  `json:"image"`
+	Seller           string  `json:"seller"`
+	Source           string  `json:"source"`
+	StockState       string  `json:"stock_state"`
+	StockCount       int     `json:"stock_count"`
+	ListingCreatedAt string  `json:"listing_created_at,omitempty"`
+	ListingUpdatedAt string  `json:"listing_updated_at,omitempty"`
 }
 
 type Candidate struct {
-	ID              string                    `json:"id"`
-	QuerySetID      string                    `json:"query_set_id"`
-	ListingID       string                    `json:"listing_id"`
-	Title           string                    `json:"title"`
-	Price           float64                   `json:"price"`
-	Currency        string                    `json:"observed_currency"`
-	Shipping        float64                   `json:"shipping"`
-	URL             string                    `json:"url"`
-	Image           string                    `json:"image"`
-	Seller          string                    `json:"seller"`
-	FirstSeen       string                    `json:"first_seen"`
-	LastSeen        string                    `json:"last_seen"`
-	Status          string                    `json:"status"`
-	Source          string                    `json:"source"`
-	StockState      string                    `json:"stock_state"`
-	StockCount      int                       `json:"stock_count"`
-	DecisionHistory []CandidateDecisionRecord `json:"decision_history,omitempty"`
+	ID               string                    `json:"id"`
+	QuerySetID       string                    `json:"query_set_id"`
+	ListingID        string                    `json:"listing_id"`
+	Title            string                    `json:"title"`
+	Price            float64                   `json:"price"`
+	Currency         string                    `json:"observed_currency"`
+	Shipping         float64                   `json:"shipping"`
+	URL              string                    `json:"url"`
+	Image            string                    `json:"image"`
+	Seller           string                    `json:"seller"`
+	FirstSeen        string                    `json:"first_seen"`
+	LastSeen         string                    `json:"last_seen"`
+	Status           string                    `json:"status"`
+	Source           string                    `json:"source"`
+	StockState       string                    `json:"stock_state"`
+	StockCount       int                       `json:"stock_count"`
+	ListingCreatedAt string                    `json:"listing_created_at,omitempty"`
+	ListingUpdatedAt string                    `json:"listing_updated_at,omitempty"`
+	DecisionHistory  []CandidateDecisionRecord `json:"decision_history,omitempty"`
 }
 
 type CandidateDecisionRecord struct {
@@ -968,13 +972,15 @@ func (s *Service) persistCandidatesForProfile(
 			stockCount = -1
 		}
 		stockState := normalizeStockState(it.StockState, stockCount)
+		listingCreatedAt := strings.TrimSpace(it.ListingCreatedAt)
+		listingUpdatedAt := strings.TrimSpace(it.ListingUpdatedAt)
 		res, err := s.db.ExecContext(ctx, `
 			UPDATE scanner_candidates
 			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP,
 				status = CASE WHEN status IN ('ignored', 'archived', 'wishlisted', 'purchase_candidate', 'inventory_candidate', 'watching', 'dismissed', 'purchased', 'added_to_wishlist', 'added_to_inventory', 'expired', 'duplicate', 'failed_to_refresh') THEN status ELSE 'seen' END,
-				source = ?, stock_state = ?, stock_count = ?, observed_currency = ?
+				source = ?, stock_state = ?, stock_count = ?, observed_currency = ?, listing_created_at = ?, listing_updated_at = ?
 			WHERE query_set_id = ? AND source = ? AND listing_id = ? AND (? = '' OR profile_id = ?)
-		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, querySetID, source, listingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, listingCreatedAt, listingUpdatedAt, querySetID, source, listingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 		if err != nil {
 			return RunResult{}, fmt.Errorf("update candidate: %w", err)
 		}
@@ -983,9 +989,9 @@ func (s *Service) persistCandidatesForProfile(
 		if affected == 0 {
 			candidateID = uuid.NewString()
 			_, err := s.db.ExecContext(ctx, `
-				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, observed_currency)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?, ?, ?, ?)
-			`, candidateID, strings.TrimSpace(profileID), querySetID, listingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency)
+				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, observed_currency, listing_created_at, listing_updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?, ?, ?, ?, ?, ?)
+			`, candidateID, strings.TrimSpace(profileID), querySetID, listingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, listingCreatedAt, listingUpdatedAt)
 			if err != nil {
 				return RunResult{}, fmt.Errorf("insert candidate: %w", err)
 			}
@@ -1087,7 +1093,7 @@ func (s *Service) ListCandidatesByProfileFiltered(ctx context.Context, profileID
 		return CandidateList{}, fmt.Errorf("count candidates: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
+		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, listing_created_at, listing_updated_at
 		FROM scanner_candidates
 		WHERE query_set_id = ? AND (? = '' OR profile_id = ?) AND (? = '' OR status = ? OR status = ?) AND (? = '' OR LOWER(source) = ?)
 		ORDER BY last_seen DESC
@@ -1100,7 +1106,7 @@ func (s *Service) ListCandidatesByProfileFiltered(ctx context.Context, profileID
 	var out []Candidate
 	for rows.Next() {
 		var c Candidate
-		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
+		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount, &c.ListingCreatedAt, &c.ListingUpdatedAt); err != nil {
 			return CandidateList{}, fmt.Errorf("scan candidate: %w", err)
 		}
 		if err := s.loadCandidateDecisionHistory(ctx, &c); err != nil {
@@ -1156,10 +1162,10 @@ func (s *Service) UpdateCandidateStatusForProfile(ctx context.Context, profileID
 	}
 	var c Candidate
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
+		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, listing_created_at, listing_updated_at
 		FROM scanner_candidates
 		WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, candidateID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
+	`, candidateID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount, &c.ListingCreatedAt, &c.ListingUpdatedAt); err != nil {
 		return Candidate{}, fmt.Errorf("load candidate: %w", err)
 	}
 	if err := s.loadCandidateDecisionHistory(ctx, &c); err != nil {

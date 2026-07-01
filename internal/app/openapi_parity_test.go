@@ -273,6 +273,10 @@ func TestOpenAPIDocumentsScannerCandidateObservedCurrency(t *testing.T) {
 	for _, token := range []string{
 		"observed_currency: { type: string",
 		"Normalized listing price currency",
+		"listing_created_at: { type: string",
+		"Normalized source listing creation timestamp",
+		"listing_updated_at: { type: string",
+		"Normalized source listing update or end timestamp",
 	} {
 		if !strings.Contains(candidateSchema, token) {
 			t.Fatalf("openapi Candidate schema missing %q:\n%s", token, candidateSchema)
@@ -904,6 +908,8 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"source: { type: string, enum: [ebay] }",
 		"stock_state: { type: string, description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown. }",
 		"stock_count: { type: integer }",
+		"listing_created_at: { type: string, description: Normalized eBay Browse itemCreationDate timestamp when provided. }",
+		"listing_updated_at: { type: string, description: Normalized eBay Browse itemEndDate timestamp when provided. }",
 	} {
 		if !strings.Contains(candidateSchema, token) {
 			t.Fatalf("openapi EbayProviderRunCandidate schema missing %q:\n%s", token, candidateSchema)
