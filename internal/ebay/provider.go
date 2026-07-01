@@ -141,8 +141,9 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	if len(exclusions) > 0 {
 		v.Set("exclude", strings.Join(exclusions, ","))
 	}
-	if limit := browseLimit(q.ItemsPerPage); limit > 0 {
-		v.Set("limit", strconv.Itoa(limit))
+	effectiveLimit := browseLimit(q.ItemsPerPage)
+	if effectiveLimit > 0 {
+		v.Set("limit", strconv.Itoa(effectiveLimit))
 	}
 	v.Set("fieldgroups", "EXTENDED")
 	u := p.baseURL + "/buy/browse/v1/item_summary/search?" + v.Encode()
@@ -222,6 +223,9 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
 	seenListingIDs := map[string]struct{}{}
 	for _, it := range payload.ItemSummaries {
+		if effectiveLimit > 0 && len(out) >= effectiveLimit {
+			break
+		}
 		listingID := normalizeRequiredText(it.ItemID)
 		title := normalizeRequiredText(it.Title)
 		itemURL := strings.TrimSpace(it.ItemWebURL)

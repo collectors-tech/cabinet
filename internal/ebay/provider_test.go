@@ -486,6 +486,34 @@ func TestProviderSearchCapsBrowseLimit(t *testing.T) {
 	}
 }
 
+func TestProviderSearchCapsEmittedCandidatesToEffectiveBrowseLimit(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("limit"); got != "2" {
+			t.Errorf("expected Browse limit 2, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|first|0","title":"First Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/first","seller":{"username":"seller-limit"}},{"itemId":"v1|second|0","title":"Second Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/second","seller":{"username":"seller-limit"}},{"itemId":"v1|third|0","title":"Third Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/third","seller":{"username":"seller-limit"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	items, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords:     []string{"slot", "car"},
+		ItemsPerPage: 2,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected oversized Browse payload to be capped to 2 emitted candidates, got %+v", items)
+	}
+	if items[0].ListingID != "v1|first|0" || items[1].ListingID != "v1|second|0" {
+		t.Fatalf("expected first two valid candidates to survive local page-size cap, got %+v", items)
+	}
+}
+
 func TestProviderSearchRejectsOnlyBlankKeywords(t *testing.T) {
 	t.Parallel()
 
