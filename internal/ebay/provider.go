@@ -637,7 +637,7 @@ func appendRawProviderBody(statusMessage string, body []byte) string {
 
 func normalizeProviderDiagnosticField(raw string) string {
 	value := strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsEncodedUnsafeText(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	if len(value) > maxProviderDiagnosticFieldDetail {
