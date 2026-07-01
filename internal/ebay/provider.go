@@ -325,7 +325,7 @@ func normalizeOptionalWebURL(raw string) string {
 
 func normalizeRequiredText(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	return value
@@ -546,7 +546,7 @@ func appendRawProviderBody(statusMessage string, body []byte) string {
 
 func normalizeProviderDiagnosticField(raw string) string {
 	value := strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	if len(value) > maxProviderDiagnosticFieldDetail {
@@ -559,12 +559,21 @@ func compactSearchTerms(values []string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		term := strings.TrimSpace(value)
-		if term == "" || containsRawControlByte(term) || containsEncodedControlByte(term) {
+		if term == "" || containsRawControlByte(term) || containsEncodedControlByte(term) || containsUnsafeUnicodeText(term) {
 			continue
 		}
 		out = append(out, term)
 	}
 	return out
+}
+
+func containsUnsafeUnicodeText(raw string) bool {
+	for _, r := range raw {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return true
+		}
+	}
+	return false
 }
 
 func retryAfterSeconds(resp *http.Response) int {

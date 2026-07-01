@@ -997,6 +997,35 @@ func TestProviderSearchSkipsBrowseTextFieldsWithEncodedControlCharacters(t *test
 	}
 }
 
+func TestProviderSearchSkipsBrowseTextFieldsWithUnicodeFormatCharacters(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|format` + string(rune(0x202e)) + `id|0","title":"Format ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/format-id","seller":{"username":"seller-text"}},{"itemId":"v1|format-title|0","title":"Format` + string(rune(0x2066)) + ` Title Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/format-title","seller":{"username":"seller-text"}},{"itemId":"v1|format-seller|0","title":"Format Seller Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/format-seller","seller":{"username":"seller` + string(rune(0x202e)) + `text"}},{"itemId":"v1|safe-unicode|0","title":"Pokémon Märklin Slot Car","price":{"value":"14.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-unicode","seller":{"username":"seller-text"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("search ebay: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected Unicode-format listing id/title to be skipped while seller fallback survives, got %+v", items)
+	}
+	if items[0].ListingID != "v1|format-seller|0" || items[0].Seller != "ebay" {
+		t.Fatalf("expected Unicode-format seller to fall back to ebay, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|safe-unicode|0" || items[1].Title != "Pokémon Märklin Slot Car" || items[1].Seller != "seller-text" {
+		t.Fatalf("expected safe Unicode text candidate to survive, got %+v", items[1])
+	}
+}
+
 func TestProviderSearchSkipsDuplicateBrowseListingIDs(t *testing.T) {
 	t.Parallel()
 
@@ -2231,6 +2260,37 @@ func TestProviderSearchSanitizesStructuredBrowseErrorPayload(t *testing.T) {
 	for _, unwanted := range []string{"\n", "\t", "%7F", "drop"} {
 		if strings.Contains(providerErr.Message, unwanted) {
 			t.Fatalf("expected sanitized provider error message to omit %q, got %q", unwanted, providerErr.Message)
+		}
+	}
+}
+
+func TestProviderSearchOmitsUnicodeFormatBrowseErrorPayloadFields(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":13000,"domain":"API_BROWSE","category":"APPLICATION` + string(rune(0x202e)) + `","message":"Browse gateway timeout","longMessage":"Retry later` + string(rune(0x2066)) + `"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured Browse error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	for _, want := range []string{"13000", "API_BROWSE", "Browse gateway timeout"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected provider error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	for _, unwanted := range []string{"APPLICATION", "Retry later", string(rune(0x202e)), string(rune(0x2066))} {
+		if strings.Contains(providerErr.Message, unwanted) {
+			t.Fatalf("expected Unicode-format diagnostic field to be omitted for %q, got %q", unwanted, providerErr.Message)
 		}
 	}
 }
