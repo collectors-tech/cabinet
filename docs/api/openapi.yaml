@@ -3645,6 +3645,8 @@ components:
         source: { type: string, enum: [ebay] }
         stock_state: { type: string, description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown. }
         stock_count: { type: integer }
+        listing_created_at: { type: string, description: Normalized eBay Browse itemCreationDate timestamp when provided. }
+        listing_updated_at: { type: string, description: Normalized eBay Browse itemEndDate timestamp when provided. }
     EbayProviderRunSnapshot:
       type: object
       required: [saved, attempts, items_per_page_requested, items_per_page_effective, observed_page_size, page_count]
@@ -3939,6 +3941,8 @@ components:
         status: { type: string }
         stock_state: { type: string, description: Normalized provider stock state such as in_stock, low_stock, out_of_stock, or unknown. }
         stock_count: { type: integer, description: Normalized provider stock quantity when available; -1 indicates unknown. }
+        listing_created_at: { type: string, description: Normalized source listing creation timestamp when provided by the provider. }
+        listing_updated_at: { type: string, description: Normalized source listing update or end timestamp when provided by the provider. }
         source: { type: string, description: Source provider id such as ebay. }
         decision_history:
           type: array

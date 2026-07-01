@@ -212,6 +212,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Seller struct {
 				Username string `json:"username"`
 			} `json:"seller"`
+			ItemCreationDate        string `json:"itemCreationDate"`
+			ItemEndDate             string `json:"itemEndDate"`
 			EstimatedAvailabilities []struct {
 				Status   string `json:"estimatedAvailabilityStatus"`
 				Quantity int    `json:"estimatedAvailableQuantity"`
@@ -270,17 +272,19 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		shipping := normalizeShippingCost(it.ShippingOptions, currency)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
-			ListingID:  listingID,
-			Title:      title,
-			Price:      price,
-			Currency:   currency,
-			Shipping:   shipping,
-			URL:        itemURL,
-			Image:      normalizeOptionalWebURL(it.Image.ImageURL),
-			Seller:     normalizeSellerUsername(it.Seller.Username),
-			Source:     "ebay",
-			StockState: stockState,
-			StockCount: stockCount,
+			ListingID:        listingID,
+			Title:            title,
+			Price:            price,
+			Currency:         currency,
+			Shipping:         shipping,
+			URL:              itemURL,
+			Image:            normalizeOptionalWebURL(it.Image.ImageURL),
+			Seller:           normalizeSellerUsername(it.Seller.Username),
+			Source:           "ebay",
+			StockState:       stockState,
+			StockCount:       stockCount,
+			ListingCreatedAt: normalizeBrowseTimestamp(it.ItemCreationDate),
+			ListingUpdatedAt: normalizeBrowseTimestamp(it.ItemEndDate),
 		})
 	}
 	return out, nil
@@ -379,6 +383,18 @@ func normalizeSellerUsername(raw string) string {
 		return "ebay"
 	}
 	return value
+}
+
+func normalizeBrowseTimestamp(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
+		return ""
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return ""
+	}
+	return parsed.UTC().Format(time.RFC3339)
 }
 
 func normalizeCurrencyCode(raw string) (string, bool) {

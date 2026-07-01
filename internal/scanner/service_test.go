@@ -310,6 +310,65 @@ func TestRunNowPersistsObservedCurrency(t *testing.T) {
 	}
 }
 
+func TestRunNowPersistsListingTimestamps(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySet(context.Background(), QuerySet{
+		Name:     "eBay listing timestamps",
+		Keywords: []string{"afx"},
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySet() error = %v", err)
+	}
+	provider := &testProvider{items: []CandidateInput{{
+		ListingID:        "EBAY-TIME-1",
+		Title:            "AFX timestamp candidate",
+		Price:            42.5,
+		Currency:         "AUD",
+		URL:              "https://example.test/ebay/timestamp",
+		Source:           "ebay",
+		ListingCreatedAt: "2026-06-30T05:04:03Z",
+		ListingUpdatedAt: "2026-07-07T05:04:03Z",
+	}}}
+	if _, err := svc.RunNow(context.Background(), qs.ID, provider); err != nil {
+		t.Fatalf("RunNow() error = %v", err)
+	}
+
+	var listingCreatedAt, listingUpdatedAt string
+	if err := conn.QueryRow(`SELECT listing_created_at, listing_updated_at FROM scanner_candidates WHERE listing_id = ?`, "EBAY-TIME-1").Scan(&listingCreatedAt, &listingUpdatedAt); err != nil {
+		t.Fatalf("query listing timestamps: %v", err)
+	}
+	if listingCreatedAt != "2026-06-30T05:04:03Z" || listingUpdatedAt != "2026-07-07T05:04:03Z" {
+		t.Fatalf("expected persisted listing timestamps, got created=%q updated=%q", listingCreatedAt, listingUpdatedAt)
+	}
+	candidates, err := svc.ListCandidates(context.Background(), qs.ID)
+	if err != nil {
+		t.Fatalf("ListCandidates() error = %v", err)
+	}
+	if len(candidates) != 1 || candidates[0].ListingCreatedAt != "2026-06-30T05:04:03Z" || candidates[0].ListingUpdatedAt != "2026-07-07T05:04:03Z" {
+		t.Fatalf("expected candidate read model to expose listing timestamps, got %+v", candidates)
+	}
+
+	provider.items[0].ListingCreatedAt = "2026-07-01T05:04:03Z"
+	provider.items[0].ListingUpdatedAt = "2026-07-08T05:04:03Z"
+	if _, err := svc.RunNow(context.Background(), qs.ID, provider); err != nil {
+		t.Fatalf("RunNow() second pass error = %v", err)
+	}
+	if err := conn.QueryRow(`SELECT listing_created_at, listing_updated_at FROM scanner_candidates WHERE listing_id = ?`, "EBAY-TIME-1").Scan(&listingCreatedAt, &listingUpdatedAt); err != nil {
+		t.Fatalf("query refreshed listing timestamps: %v", err)
+	}
+	if listingCreatedAt != "2026-07-01T05:04:03Z" || listingUpdatedAt != "2026-07-08T05:04:03Z" {
+		t.Fatalf("expected refreshed listing timestamps, got created=%q updated=%q", listingCreatedAt, listingUpdatedAt)
+	}
+}
+
 func TestRunNowPersistsDurableRunRecordAndDedupesResults(t *testing.T) {
 	t.Parallel()
 
