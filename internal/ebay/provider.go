@@ -119,6 +119,9 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	if p.bearerToken == "" {
 		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_MISSING", Message: "missing ebay bearer token"}
 	}
+	if isUnsafeBearerToken(p.bearerToken) {
+		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_INVALID", Message: "invalid ebay bearer token format"}
+	}
 	keywords := compactSearchTerms(q.Keywords)
 	terms := strings.Join(keywords, " ")
 	if terms == "" {
@@ -654,6 +657,10 @@ func containsUnsafeUnicodeText(raw string) bool {
 		}
 	}
 	return false
+}
+
+func isUnsafeBearerToken(raw string) bool {
+	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsUnsafeUnicodeText(raw)
 }
 
 func retryAfterSeconds(resp *http.Response) int {
