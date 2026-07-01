@@ -1165,6 +1165,82 @@ func TestRunScheduledRecordsPartialFailureWithoutBlockingOtherWatches(t *testing
 	}
 }
 
+func TestRunScheduledSkipsQuerySetsOutsideProviderScope(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	ebayQuery, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Scheduled eBay watch",
+		Keywords:      []string{"afx ebay"},
+		ProviderScope: []string{"ebay"},
+		ScheduleCron:  "*/15 * * * *",
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile(ebay) error = %v", err)
+	}
+	amazonQuery, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "Scheduled Amazon watch",
+		Keywords:      []string{"afx amazon"},
+		ProviderScope: []string{"amazon"},
+		ScheduleCron:  "*/15 * * * *",
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile(amazon) error = %v", err)
+	}
+
+	provider := &testProvider{
+		providerID: "ebay",
+		items: []CandidateInput{{
+			ListingID: "EBAY-SCHEDULED-SCOPE-1",
+			Title:     "Scoped scheduled eBay result",
+			Price:     28,
+			Currency:  "AUD",
+			URL:       "https://market.test/ebay-scheduled-scope-1",
+			Source:    "ebay",
+		}},
+	}
+	ran, err := svc.RunScheduledForProfile(context.Background(), "profile-a", provider)
+	if err != nil {
+		t.Fatalf("RunScheduledForProfile() error = %v", err)
+	}
+	if ran != 1 {
+		t.Fatalf("expected only the eBay-scoped scheduled query to run, got %d", ran)
+	}
+	if provider.calls != 1 || provider.lastQuery.ID != ebayQuery.ID {
+		t.Fatalf("expected provider to be called once for eBay query %q, calls=%d lastQuery=%+v", ebayQuery.ID, provider.calls, provider.lastQuery)
+	}
+
+	var ebayRuns, amazonRuns int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ? AND provider = 'ebay' AND trigger_type = 'scheduled' AND status = 'succeeded'`, "profile-a", ebayQuery.ID).Scan(&ebayRuns); err != nil {
+		t.Fatalf("query eBay scheduled runs: %v", err)
+	}
+	if ebayRuns != 1 {
+		t.Fatalf("expected one eBay scheduled run, got %d", ebayRuns)
+	}
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ?`, "profile-a", amazonQuery.ID).Scan(&amazonRuns); err != nil {
+		t.Fatalf("query skipped Amazon scheduled runs: %v", err)
+	}
+	if amazonRuns != 0 {
+		t.Fatalf("expected Amazon-only query to be skipped by eBay scheduled provider, got %d runs", amazonRuns)
+	}
+
+	reloadedAmazon, err := svc.GetQuerySetForProfile(context.Background(), "profile-a", amazonQuery.ID)
+	if err != nil {
+		t.Fatalf("GetQuerySetForProfile(amazon) error = %v", err)
+	}
+	if reloadedAmazon.LastRunStatus != "never" || reloadedAmazon.LastRunAt != "" || reloadedAmazon.LastCandidateCount != 0 {
+		t.Fatalf("expected skipped Amazon query to retain empty run snapshot, got %+v", reloadedAmazon)
+	}
+}
+
 func TestBuildRecognitionReviewNormalizesCandidatesAndRequiresConfirmation(t *testing.T) {
 	t.Parallel()
 

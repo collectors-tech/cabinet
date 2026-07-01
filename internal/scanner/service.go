@@ -873,6 +873,10 @@ func (s *Service) RunScheduledForProfile(ctx context.Context, profileID string, 
 		if !qs.Enabled || strings.TrimSpace(qs.ScheduleCron) == "" {
 			continue
 		}
+		providerID := providerHealthID(provider, qs)
+		if !providerScopeIncludes(qs.ProviderScope, providerID) {
+			continue
+		}
 		if _, err := s.runNowForProfile(ctx, strings.TrimSpace(profileID), qs.ID, provider, "scheduled"); err != nil {
 			runErrs = append(runErrs, fmt.Errorf("scheduled scanner run failed for query set %s: %w", qs.ID, err))
 			continue

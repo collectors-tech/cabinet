@@ -2064,6 +2064,9 @@ func New(cfg config.Config) (*App, error) {
 			if !qs.Enabled || strings.TrimSpace(qs.ScheduleCron) == "" {
 				continue
 			}
+			if !providerScopeIncludes(qs.ProviderScope, "ebay") {
+				continue
+			}
 			out, runErr := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), qs.ID, provider)
 			if runErr != nil {
 				logSvc.Log(r.Context(), "error", "scanner_run_scheduled_query_failed", map[string]any{
