@@ -409,6 +409,7 @@ func TestNewProviderFallsBackFromUnsafeBaseURLOverrides(t *testing.T) {
 		{name: "encoded unicode format control", baseURL: "https://api.ebay.com/custom%E2%80%AEpath"},
 		{name: "raw whitespace", baseURL: "https://api.ebay.com/custom path"},
 		{name: "unicode whitespace", baseURL: "https://api.ebay.com/custom" + string(rune(0x00a0)) + "path"},
+		{name: "raw unicode format control", baseURL: "https://api.ebay.com/custom" + string(rune(0x202e)) + "path"},
 		{name: "parse failure", baseURL: "http://%zz"},
 	}
 
@@ -1410,6 +1411,29 @@ func TestProviderSearchSkipsBrowseItemURLsWithEncodedUnicodeURLText(t *testing.T
 	}
 }
 
+func TestProviderSearchSkipsBrowseItemURLsWithRawUnicodeFormatCharacters(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|raw-format-url|0","title":"Raw Format URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/raw` + string(rune(0x202e)) + `format","seller":{"username":"seller-url"}},{"itemId":"v1|valid-url|0","title":"Valid URL Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-url","seller":{"username":"seller-url"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].ListingID != "v1|valid-url|0" {
+		t.Fatalf("expected raw Unicode format item URL to be skipped, got %+v", items)
+	}
+}
+
 func TestProviderSearchSkipsBrowseItemURLsWithRawControlCharacters(t *testing.T) {
 	t.Parallel()
 
@@ -1681,6 +1705,43 @@ func TestProviderSearchDropsBrowseImageURLsWithEncodedUnicodeURLText(t *testing.
 		case "v1|encoded-format-image|0":
 			if item.Image != "https://i.ebayimg.com/images/valid-thumb.jpg" {
 				t.Fatalf("expected encoded Unicode format image URL to fall back to safe thumbnail, got %+v", item)
+			}
+		case "v1|valid-image|0":
+			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {
+				t.Fatalf("expected valid image URL to be preserved, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
+func TestProviderSearchDropsBrowseImageURLsWithRawUnicodeFormatCharacters(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|raw-format-image|0","title":"Raw Format Image Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/raw-format-image","image":{"imageUrl":"https://i.ebayimg.com/images/raw` + string(rune(0x202e)) + `format.jpg"},"thumbnailImages":[{"imageUrl":"https://i.ebayimg.com/images/valid-thumb.jpg"}],"seller":{"username":"seller-image"}},{"itemId":"v1|valid-image|0","title":"Valid Image Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-image","image":{"imageUrl":"https://i.ebayimg.com/images/valid.jpg"},"seller":{"username":"seller-image"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected candidates with valid item URLs to survive, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|raw-format-image|0":
+			if item.Image != "https://i.ebayimg.com/images/valid-thumb.jpg" {
+				t.Fatalf("expected raw Unicode format image URL to fall back to safe thumbnail, got %+v", item)
 			}
 		case "v1|valid-image|0":
 			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {
