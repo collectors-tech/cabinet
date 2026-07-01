@@ -1,6 +1,7 @@
 package ebay
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -41,6 +42,7 @@ const browseMaxLimit = 200
 const maxProviderErrorBodyRead = 4096
 const maxProviderDiagnosticFieldDetail = 160
 const maxBrowseTextFieldLength = 512
+const maxBrowseResponseBodyRead = 2 * 1024 * 1024
 
 func (e *ProviderError) Error() string {
 	if e == nil {
@@ -178,6 +180,15 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		}
 	}
 
+	body, err := readBrowseSuccessBody(resp.Body)
+	if err != nil {
+		return nil, &ProviderError{
+			StatusCode: http.StatusBadGateway,
+			ErrorCode:  "PROVIDER_SEARCH_FAILED",
+			Message:    err.Error(),
+		}
+	}
+
 	var payload struct {
 		ItemSummaries []struct {
 			ItemID string `json:"itemId"`
@@ -205,7 +216,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			} `json:"estimatedAvailabilities"`
 		} `json:"itemSummaries"`
 	}
-	decoder := json.NewDecoder(resp.Body)
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	if err := decoder.Decode(&payload); err != nil {
 		return nil, &ProviderError{
 			StatusCode: http.StatusBadGateway,
@@ -271,6 +282,18 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		})
 	}
 	return out, nil
+}
+
+func readBrowseSuccessBody(body io.Reader) ([]byte, error) {
+	limited := io.LimitReader(body, maxBrowseResponseBodyRead+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("read ebay Browse response: %v", err)
+	}
+	if len(data) > maxBrowseResponseBodyRead {
+		return nil, fmt.Errorf("decode ebay Browse response: exceeded maximum response size of %d bytes", maxBrowseResponseBodyRead)
+	}
+	return data, nil
 }
 
 func isWebURL(raw string) bool {
