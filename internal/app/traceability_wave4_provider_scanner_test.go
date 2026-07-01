@@ -798,6 +798,22 @@ func TestWave4ScannerScheduledSummaryAndCandidateDedup(t *testing.T) {
 		t.Fatalf("decode query set: %v", err)
 	}
 	querySetID, _ := qs["id"].(string)
+	if querySetID == "" {
+		t.Fatal("expected query set id")
+	}
+
+	createAmazonQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"Amazon scheduled skip","keywords":["afx amazon"],"provider_scope":["amazon"],"schedule_cron":"*/15 * * * *","enabled":true,"rate_limit_rps":2}`), map[string]string{"Content-Type": "application/json"})
+	if createAmazonQuery.Code != http.StatusCreated {
+		t.Fatalf("create amazon-scoped query set status=%d body=%s", createAmazonQuery.Code, createAmazonQuery.Body.String())
+	}
+	var amazonQS map[string]any
+	if err := json.NewDecoder(createAmazonQuery.Body).Decode(&amazonQS); err != nil {
+		t.Fatalf("decode amazon query set: %v", err)
+	}
+	amazonQuerySetID, _ := amazonQS["id"].(string)
+	if amazonQuerySetID == "" {
+		t.Fatal("expected amazon query set id")
+	}
 
 	scheduled := doRequest(t, a, http.MethodPost, "/api/scanner/run/scheduled", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if scheduled.Code != http.StatusOK {
@@ -811,6 +827,23 @@ func TestWave4ScannerScheduledSummaryAndCandidateDedup(t *testing.T) {
 		if _, ok := summary[field]; !ok {
 			t.Fatalf("scheduled summary missing %q: %+v", field, summary)
 		}
+	}
+	if got, ok := summary["query_sets_executed"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected scheduled route to execute only the eBay-scoped query, got %+v", summary)
+	}
+	if got, ok := summary["candidates_collected"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected one eBay candidate from scoped scheduled run, got %+v", summary)
+	}
+	if got, ok := summary["failures"].(float64); !ok || int(got) != 0 {
+		t.Fatalf("expected skipped non-eBay scheduled query not to count as failure, got %+v", summary)
+	}
+
+	var amazonRuns int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE query_set_id = ?`, amazonQuerySetID).Scan(&amazonRuns); err != nil {
+		t.Fatalf("query amazon scheduled run count: %v", err)
+	}
+	if amazonRuns != 0 {
+		t.Fatalf("expected amazon-scoped scheduled query to be skipped by eBay scheduled route, got %d runs", amazonRuns)
 	}
 
 	run1 := doRequest(t, a, http.MethodPost, "/api/scanner/run", strings.NewReader(`{"query_set_id":"`+querySetID+`"}`), map[string]string{"Content-Type": "application/json"})
