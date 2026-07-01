@@ -3124,6 +3124,7 @@ func TestProviderSearchRejectsUnsafeBearerTokenBeforeBrowseRequest(t *testing.T)
 		{name: "raw control byte", token: "valid-prefix\ninjected"},
 		{name: "encoded control byte", token: "valid-prefix%0Ainjected"},
 		{name: "unicode format control", token: "valid-prefix" + string(rune(0x202e)) + "injected"},
+		{name: "encoded unicode format control", token: "valid-prefix%E2%80%AEinjected"},
 	}
 
 	for _, tt := range tests {
