@@ -625,8 +625,8 @@ func normalizeProviderDiagnosticField(raw string) string {
 func compactSearchTerms(values []string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
-		term := strings.TrimSpace(value)
-		if term == "" || containsRawControlByte(term) || containsEncodedControlByte(term) || containsUnsafeUnicodeText(term) {
+		term := normalizeRequiredText(value)
+		if term == "" {
 			continue
 		}
 		out = append(out, term)
