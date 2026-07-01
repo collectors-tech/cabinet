@@ -44,6 +44,7 @@ const maxProviderDiagnosticFieldDetail = 160
 const maxBrowseTextFieldLength = 512
 const maxBrowseURLLength = 2048
 const maxBrowseResponseBodyRead = 2 * 1024 * 1024
+const maxBrowseStockCount = 100000
 
 func (e *ProviderError) Error() string {
 	if e == nil {
@@ -740,7 +741,7 @@ func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
 	if containsRawControlByte(status) || containsEncodedControlByte(status) || containsUnsafeUnicodeText(status) {
 		status = ""
 	}
-	if count < 0 {
+	if count < 0 || count > maxBrowseStockCount {
 		count = -1
 	}
 	switch status {

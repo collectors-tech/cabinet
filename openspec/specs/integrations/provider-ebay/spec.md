@@ -180,6 +180,7 @@ Cabinet SHALL persist stock/availability observations from eBay listing payloads
 - **AND** provider normalization MUST ignore availability status values containing raw or percent-encoded ASCII control bytes before selecting the first meaningful stock signal.
 - **AND** provider normalization MUST ignore availability status values containing Unicode control or format characters before selecting the first meaningful stock signal.
 - **AND** provider normalization MUST ignore negative eBay availability quantities instead of persisting negative scanner `stock_count` values.
+- **AND** provider normalization MUST ignore implausibly large eBay availability quantities above `100000` instead of persisting oversized scanner `stock_count` values.
 - **AND** provider normalization MUST leave unrecognized upstream availability statuses as `stock_state="unknown"` with `stock_count=-1`, even when the upstream payload includes a positive quantity, so Cabinet does not invent confident stock states from unsupported provider values.
 - **AND** scanner candidate read API documentation MUST expose `stock_state` and `stock_count` for saved-search clients that inspect eBay output details or downstream discoveries.
 
