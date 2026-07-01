@@ -1621,6 +1621,47 @@ func TestProviderSearchDropsOversizedBrowseImageURLs(t *testing.T) {
 	}
 }
 
+func TestProviderSearchUsesFirstSafeAlternateBrowseImageURL(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|thumb-image|0","title":"Thumbnail Image Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/thumb-image","image":{"imageUrl":"javascript:alert(1)"},"thumbnailImages":[{"imageUrl":"/relative-thumb.jpg"},{"imageUrl":" https://i.ebayimg.com/images/thumb.jpg "}],"additionalImages":[{"imageUrl":"https://i.ebayimg.com/images/additional.jpg"}],"seller":{"username":"seller-image"}},{"itemId":"v1|additional-image|0","title":"Additional Image Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/additional-image","thumbnailImages":[{"imageUrl":"https://token@i.ebayimg.com/images/unsafe.jpg"}],"additionalImages":[{"imageUrl":"https://i.ebayimg.com/images/additional-valid.jpg"}],"seller":{"username":"seller-image"}},{"itemId":"v1|primary-image|0","title":"Primary Image Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/primary-image","image":{"imageUrl":"https://i.ebayimg.com/images/primary.jpg"},"thumbnailImages":[{"imageUrl":"https://i.ebayimg.com/images/thumb-ignored.jpg"}],"seller":{"username":"seller-image"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected all candidates to survive alternate image normalization, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|thumb-image|0":
+			if item.Image != "https://i.ebayimg.com/images/thumb.jpg" {
+				t.Fatalf("expected first safe thumbnail image URL, got %+v", item)
+			}
+		case "v1|additional-image|0":
+			if item.Image != "https://i.ebayimg.com/images/additional-valid.jpg" {
+				t.Fatalf("expected first safe additional image URL, got %+v", item)
+			}
+		case "v1|primary-image|0":
+			if item.Image != "https://i.ebayimg.com/images/primary.jpg" {
+				t.Fatalf("expected primary image URL to win, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
 func TestProviderSearchFallsBackBlankBrowseSeller(t *testing.T) {
 	t.Parallel()
 
