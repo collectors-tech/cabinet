@@ -97,7 +97,7 @@ func NewProvider(cfg ProviderConfig) *Provider {
 
 func normalizeProviderBaseURL(raw string) string {
 	value := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsRawURLWhitespace(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsEncodedURLWhitespace(value) || containsRawURLWhitespace(value) {
 		return "https://api.ebay.com"
 	}
 	parsed, err := url.Parse(value)
@@ -309,7 +309,7 @@ func readBrowseSuccessBody(body io.Reader) ([]byte, error) {
 }
 
 func isWebURL(raw string) bool {
-	if len(raw) > maxBrowseURLLength || containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsRawURLWhitespace(raw) {
+	if len(raw) > maxBrowseURLLength || containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedURLWhitespace(raw) || containsRawURLWhitespace(raw) {
 		return false
 	}
 	parsed, err := url.Parse(raw)
@@ -336,6 +336,19 @@ func containsEncodedControlByte(raw string) bool {
 		}
 		value, err := strconv.ParseUint(raw[i+1:i+3], 16, 8)
 		if err == nil && (value < 0x20 || value == 0x7f) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsEncodedURLWhitespace(raw string) bool {
+	for i := 0; i+2 < len(raw); i++ {
+		if raw[i] != '%' {
+			continue
+		}
+		value, err := strconv.ParseUint(raw[i+1:i+3], 16, 8)
+		if err == nil && value == ' ' {
 			return true
 		}
 	}
