@@ -1866,6 +1866,32 @@ func TestProviderSearchUsesFirstMeaningfulAvailability(t *testing.T) {
 	}
 }
 
+func TestProviderSearchIgnoresUnsafeAvailabilityStatusText(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|safe-stock|0","title":"Safe Stock Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-stock","seller":{"username":"seller-stock"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"IN_STOCK` + string(rune(0x7f)) + `","estimatedAvailableQuantity":7},{"estimatedAvailabilityStatus":"LIMITED_STOCK%0A","estimatedAvailableQuantity":4},{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].StockState != "low_stock" || items[0].StockCount != 2 {
+		t.Fatalf("expected unsafe availability statuses to be ignored before low_stock/2, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchIgnoresNegativeAvailabilityQuantity(t *testing.T) {
 	t.Parallel()
 
