@@ -232,7 +232,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if listingID == "" || title == "" || itemURL == "" || !isWebURL(itemURL) {
 			continue
 		}
-		if _, seen := seenListingIDs[listingID]; seen {
+		listingIDDedupeKey := strings.ToLower(listingID)
+		if _, seen := seenListingIDs[listingIDDedupeKey]; seen {
 			continue
 		}
 		price, err := parseBrowseAmount(it.Price.Value)
@@ -251,7 +252,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 				continue
 			}
 		}
-		seenListingIDs[listingID] = struct{}{}
+		seenListingIDs[listingIDDedupeKey] = struct{}{}
 		shipping := normalizeShippingCost(it.ShippingOptions, currency)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{

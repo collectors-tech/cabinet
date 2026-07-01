@@ -1000,6 +1000,35 @@ func TestProviderSearchSkipsDuplicateBrowseListingIDs(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsCaseVariantDuplicateBrowseListingIDs(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":" v1|Case-Duplicate|0 ","title":"First Case Duplicate Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/case-duplicate-first","seller":{"username":"seller-duplicate"}},{"itemId":"V1|case-duplicate|0","title":"Second Case Duplicate Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/case-duplicate-second","seller":{"username":"seller-duplicate"}},{"itemId":"v1|unique-case|0","title":"Unique Case Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unique-case","seller":{"username":"seller-unique"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected case-variant duplicate listing id to be emitted once, got %+v", items)
+	}
+	if items[0].ListingID != "v1|Case-Duplicate|0" || items[0].Title != "First Case Duplicate Slot Car" || items[0].URL != "https://ebay/item/case-duplicate-first" {
+		t.Fatalf("expected first normalized case-variant duplicate listing to survive, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|unique-case|0" {
+		t.Fatalf("expected unique listing to survive after case-variant duplicate, got %+v", items[1])
+	}
+}
+
 func TestProviderSearchUsesFirstValidDuplicateBrowseListingID(t *testing.T) {
 	t.Parallel()
 
