@@ -661,12 +661,12 @@ func recognitionProvenance(candidates []RecognitionCandidateInput) []string {
 	return out
 }
 
-func resolveItemsPerPage(providerScope []string, configured int) (requested int, effective int, warning string) {
+func resolveItemsPerPage(providerID string, providerScope []string, configured int) (requested int, effective int, warning string) {
 	requested = configured
 	if requested <= 0 {
 		requested = 24
 	}
-	cap := itemsPerPageCap(providerScope)
+	cap := itemsPerPageCap(providerID, providerScope)
 	effective = requested
 	if effective > cap {
 		effective = cap
@@ -675,15 +675,39 @@ func resolveItemsPerPage(providerScope []string, configured int) (requested int,
 	return requested, effective, warning
 }
 
-func itemsPerPageCap(providerScope []string) int {
+func itemsPerPageCap(providerID string, providerScope []string) int {
+	normalizedProviderID := strings.TrimSpace(strings.ToLower(providerID))
+	if providerScopeIncludes(providerScope, normalizedProviderID) {
+		if normalizedProviderID == "ebay" {
+			return 200
+		}
+		if strings.Contains(normalizedProviderID, "bonza") {
+			return 36
+		}
+	}
 	cap := 50
 	for _, provider := range providerScope {
 		normalized := strings.TrimSpace(strings.ToLower(provider))
+		if normalized == "ebay" {
+			return 200
+		}
 		if strings.Contains(normalized, "bonza") {
 			return 36
 		}
 	}
 	return cap
+}
+
+func providerScopeIncludes(providerScope []string, providerID string) bool {
+	if strings.TrimSpace(providerID) == "" {
+		return false
+	}
+	for _, provider := range providerScope {
+		if strings.TrimSpace(strings.ToLower(provider)) == providerID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) ListQuerySets(ctx context.Context) ([]QuerySet, error) {
@@ -734,6 +758,7 @@ func (s *Service) runNowForProfile(ctx context.Context, profileID, querySetID st
 	runID := uuid.NewString()
 	startedAt := time.Now().UTC()
 	requestedItemsPerPage, effectiveItemsPerPage, itemsPerPageWarning := resolveItemsPerPage(
+		providerID,
 		qs.ProviderScope,
 		qs.ItemsPerPage,
 	)
