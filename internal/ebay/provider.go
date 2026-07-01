@@ -226,7 +226,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if effectiveLimit > 0 && len(out) >= effectiveLimit {
 			break
 		}
-		listingID := normalizeRequiredText(it.ItemID)
+		listingID := normalizeListingID(it.ItemID)
 		title := normalizeRequiredText(it.Title)
 		itemURL := strings.TrimSpace(it.ItemWebURL)
 		if listingID == "" || title == "" || itemURL == "" || !isWebURL(itemURL) {
@@ -326,6 +326,14 @@ func normalizeOptionalWebURL(raw string) string {
 func normalizeRequiredText(raw string) string {
 	value := strings.TrimSpace(raw)
 	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) {
+		return ""
+	}
+	return value
+}
+
+func normalizeListingID(raw string) string {
+	value := normalizeRequiredText(raw)
+	if value == "" || containsRawURLWhitespace(value) {
 		return ""
 	}
 	return value

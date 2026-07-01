@@ -942,6 +942,32 @@ func TestProviderSearchSkipsBrowseTextFieldsWithRawControlCharacters(t *testing.
 	}
 }
 
+func TestProviderSearchSkipsBrowseListingIDsWithEmbeddedWhitespace(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|space id|0","title":"Space ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/space-id","seller":{"username":"seller-id"}},{"itemId":"v1|unicode` + string(rune(0x00a0)) + `id|0","title":"Unicode Space ID Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unicode-space-id","seller":{"username":"seller-id"}},{"itemId":" v1|valid-id|0 ","title":"Valid ID Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/valid-id","seller":{"username":"seller-id"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only listing id without embedded whitespace to survive, got %+v", items)
+	}
+	if items[0].ListingID != "v1|valid-id|0" {
+		t.Fatalf("expected trim-only listing id to survive whitespace guard, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsBrowseTextFieldsWithEncodedControlCharacters(t *testing.T) {
 	t.Parallel()
 
