@@ -481,6 +481,32 @@ func TestProviderSearchOmitsUnsafeQueryTextBeforeBrowseRequest(t *testing.T) {
 	}
 }
 
+func TestProviderSearchOmitsOversizedQueryTextBeforeBrowseRequest(t *testing.T) {
+	t.Parallel()
+
+	oversized := strings.Repeat("slot", 200)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("q"); got != "AFX P-1" {
+			t.Errorf("expected oversized keywords to be omitted before joining, got %q", got)
+		}
+		if got := r.URL.Query().Get("exclude"); got != "broken" {
+			t.Errorf("expected oversized exclusions to be omitted before joining, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords:   []string{"AFX", oversized, "P-1"},
+		Exclusions: []string{"broken", oversized},
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+}
+
 func TestProviderSearchRejectsOnlyUnsafeKeywords(t *testing.T) {
 	t.Parallel()
 
@@ -488,6 +514,19 @@ func TestProviderSearchRejectsOnlyUnsafeKeywords(t *testing.T) {
 	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"bad\nkeyword", "bad%0Dkeyword"}})
 	if err == nil {
 		t.Fatal("expected unsafe keyword validation error")
+	}
+	if !strings.Contains(err.Error(), "keywords are required") {
+		t.Fatalf("expected keywords validation error, got %v", err)
+	}
+}
+
+func TestProviderSearchRejectsOnlyOversizedKeywords(t *testing.T) {
+	t.Parallel()
+
+	p := NewProvider(ProviderConfig{BaseURL: "https://example.invalid", BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{strings.Repeat("slot", 200)}})
+	if err == nil {
+		t.Fatal("expected oversized keyword validation error")
 	}
 	if !strings.Contains(err.Error(), "keywords are required") {
 		t.Fatalf("expected keywords validation error, got %v", err)
