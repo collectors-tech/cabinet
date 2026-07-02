@@ -279,6 +279,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 			"TestProviderSearchIgnoresNestedEncodedUnsafeAvailabilityStatusText",
 			"TestProviderSearchIgnoresNegativeAvailabilityQuantity",
 			"TestProviderSearchIgnoresOversizedAvailabilityQuantity",
+			"TestProviderSearchPreservesLowStockSignalWithoutUsableQuantity",
 			"TestProviderSearchDoesNotInferUnknownAvailabilityAsInStock",
 			"TestOpenAPIDocumentsEbaySavedSearchHandoffContract",
 			"INTEGRATION-005 + INTEGRATION-007 + #827 surfaces eBay provider run pagination metadata, observed-currency output, and stock state",
