@@ -368,11 +368,18 @@ func containsRawURLWhitespace(raw string) bool {
 }
 
 func containsEncodedUnsafeText(raw string) bool {
-	decoded, err := url.PathUnescape(raw)
-	if err != nil || decoded == raw {
-		return false
+	current := raw
+	for i := 0; i < 3; i++ {
+		decoded, err := url.PathUnescape(current)
+		if err != nil || decoded == current {
+			return false
+		}
+		if containsRawControlByte(decoded) || containsEncodedControlByte(decoded) || containsUnsafeUnicodeText(decoded) || containsRawURLWhitespace(decoded) {
+			return true
+		}
+		current = decoded
 	}
-	return containsUnsafeUnicodeText(decoded) || containsRawURLWhitespace(decoded)
+	return false
 }
 
 func normalizeOptionalWebURL(raw string) string {
