@@ -389,6 +389,10 @@ func TestProviderSearchFallsBackFromMalformedMarketplace(t *testing.T) {
 		marketplace string
 	}{
 		{name: "control characters", marketplace: "EBAY_AU\r\nX-Injected: 1"},
+		{name: "leading control character before valid marketplace", marketplace: "\nEBAY_AU"},
+		{name: "encoded control before valid marketplace", marketplace: "%0AEBAY_AU"},
+		{name: "unicode format control before valid marketplace", marketplace: string(rune(0x202e)) + "EBAY_AU"},
+		{name: "encoded unicode format control before valid marketplace", marketplace: "%E2%80%AEEBAY_AU"},
 		{name: "non-ascii", marketplace: "EBAY_ÅU"},
 		{name: "missing prefix", marketplace: "AU"},
 	}
