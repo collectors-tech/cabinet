@@ -2670,7 +2670,7 @@ func TestProviderSearchIgnoresUnsafeAvailabilityStatusText(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|safe-stock|0","title":"Safe Stock Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-stock","seller":{"username":"seller-stock"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"IN_STOCK` + string(rune(0x7f)) + `","estimatedAvailableQuantity":7},{"estimatedAvailabilityStatus":"LIMITED_STOCK%0A","estimatedAvailableQuantity":4},{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|safe-stock|0","title":"Safe Stock Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-stock","seller":{"username":"seller-stock"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"\nIN_STOCK","estimatedAvailableQuantity":7},{"estimatedAvailabilityStatus":"IN_STOCK` + string(rune(0x7f)) + `","estimatedAvailableQuantity":6},{"estimatedAvailabilityStatus":"LIMITED_STOCK%0A","estimatedAvailableQuantity":4},{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
 	}))
 	defer srv.Close()
 
