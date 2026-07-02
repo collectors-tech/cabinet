@@ -80,6 +80,7 @@ const browseMaxLimit = 200
 const maxProviderErrorBodyRead = 4096
 const maxProviderDiagnosticFieldDetail = 160
 const maxProviderRetryAfterSeconds = 24 * 60 * 60
+const maxBearerTokenLength = 8192
 const maxBrowseTextFieldLength = 512
 const maxBrowseURLLength = 2048
 const maxBrowseResponseBodyRead = 2 * 1024 * 1024
@@ -688,6 +689,9 @@ func containsUnsafeUnicodeText(raw string) bool {
 }
 
 func isUnsafeBearerToken(raw string) bool {
+	if len(raw) > maxBearerTokenLength {
+		return true
+	}
 	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw)
 }
 

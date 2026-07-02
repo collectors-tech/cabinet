@@ -3609,3 +3609,32 @@ func TestProviderSearchRejectsUnsafeBearerTokenBeforeBrowseRequest(t *testing.T)
 		})
 	}
 }
+
+func TestProviderSearchRejectsOversizedBearerTokenBeforeBrowseRequest(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("oversized bearer token must be rejected before Browse request")
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: strings.Repeat("a", maxBearerTokenLength+1),
+		Marketplace: "EBAY_AU",
+	})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err == nil {
+		t.Fatal("expected oversized bearer token error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusUnauthorized || providerErr.ErrorCode != "PROVIDER_AUTH_INVALID" {
+		t.Fatalf("unexpected provider error: %+v", providerErr)
+	}
+	if !strings.Contains(providerErr.Message, "invalid ebay bearer token format") {
+		t.Fatalf("expected actionable token-format message, got %q", providerErr.Message)
+	}
+}
