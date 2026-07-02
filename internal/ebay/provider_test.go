@@ -1496,6 +1496,29 @@ func TestProviderSearchSkipsBrowseItemURLsWithEncodedSpaces(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsBrowseItemURLsWithMalformedEscapes(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|malformed-escape-url|0","title":"Malformed Escape URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/malformed%ZZescape","seller":{"username":"seller-url"}},{"itemId":"v1|valid-url|0","title":"Valid URL Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-url","seller":{"username":"seller-url"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].ListingID != "v1|valid-url|0" {
+		t.Fatalf("expected malformed-escape item URL to be skipped, got %+v", items)
+	}
+}
+
 func TestProviderSearchSkipsBrowseItemURLsWithEncodedUnicodeURLText(t *testing.T) {
 	t.Parallel()
 
@@ -1780,6 +1803,32 @@ func TestProviderSearchDropsBrowseImageURLsWithEncodedSpaces(t *testing.T) {
 		default:
 			t.Fatalf("unexpected candidate %+v", item)
 		}
+	}
+}
+
+func TestProviderSearchDropsBrowseImageURLsWithMalformedEscapes(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|malformed-image-url|0","title":"Malformed Image URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/malformed-image-url","image":{"imageUrl":"https://i.ebayimg.com/images/malformed%ZZimage.jpg"},"thumbnailImages":[{"imageUrl":"https://i.ebayimg.com/images/valid-thumb.jpg"}],"seller":{"username":"seller-image"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected otherwise valid candidate to survive, got %+v", items)
+	}
+	if items[0].Image != "https://i.ebayimg.com/images/valid-thumb.jpg" {
+		t.Fatalf("expected malformed-escape primary image URL to fall back to safe thumbnail, got %+v", items[0])
 	}
 }
 
