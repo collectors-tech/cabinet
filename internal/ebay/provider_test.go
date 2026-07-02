@@ -122,6 +122,28 @@ func TestProviderSearchDropsUnsafeBrowseTimestamps(t *testing.T) {
 	}
 }
 
+func TestProviderSearchDropsImplausiblyFutureBrowseTimestamps(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|future-time|0","title":"Future Time Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/future-time","itemCreationDate":"2100-06-30T05:04:03Z","itemEndDate":"2100-07-07T05:04:03Z","seller":{"username":"seller-time"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected otherwise valid candidate to survive, got %+v", items)
+	}
+	if items[0].ListingCreatedAt != "" || items[0].ListingUpdatedAt != "" {
+		t.Fatalf("expected implausibly future Browse timestamps to be dropped, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 	t.Parallel()
 

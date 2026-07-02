@@ -46,6 +46,7 @@ const maxBrowseTextFieldLength = 512
 const maxBrowseURLLength = 2048
 const maxBrowseResponseBodyRead = 2 * 1024 * 1024
 const maxBrowseStockCount = 100000
+const maxBrowseTimestampFutureSkew = 366 * 24 * time.Hour
 
 func (e *ProviderError) Error() string {
 	if e == nil {
@@ -445,6 +446,9 @@ func normalizeBrowseTimestamp(raw string) string {
 	}
 	parsed, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil {
+		return ""
+	}
+	if parsed.After(time.Now().UTC().Add(maxBrowseTimestampFutureSkew)) {
 		return ""
 	}
 	return parsed.UTC().Format(time.RFC3339)
