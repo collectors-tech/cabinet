@@ -102,7 +102,7 @@ func TestProviderSearchDropsUnsafeBrowseTimestamps(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unsafe-time|0","title":"Unsafe Time Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unsafe-time","itemCreationDate":"2026-06-30T05:04:03Z%0A","itemEndDate":"not-a-time","seller":{"username":"seller-time"}}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unsafe-time|0","title":"Unsafe Time Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unsafe-time","itemCreationDate":"2026-06-30T05:04:03Z%0A","itemEndDate":"not-a-time","seller":{"username":"seller-time"}},{"itemId":"v1|encoded-unsafe-time|0","title":"Encoded Unsafe Time Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-unsafe-time","itemCreationDate":"2026-06-30T05:04:03Z%E2%80%AE","itemEndDate":"2026-07-07T15:04:03%25E2%2580%25AFZ","seller":{"username":"seller-time"}}]}`))
 	}))
 	defer srv.Close()
 
@@ -111,11 +111,13 @@ func TestProviderSearchDropsUnsafeBrowseTimestamps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
-	if len(items) != 1 {
+	if len(items) != 2 {
 		t.Fatalf("expected otherwise valid candidate to survive, got %+v", items)
 	}
-	if items[0].ListingCreatedAt != "" || items[0].ListingUpdatedAt != "" {
-		t.Fatalf("expected unsafe/malformed Browse timestamps to be dropped, got %+v", items[0])
+	for _, item := range items {
+		if item.ListingCreatedAt != "" || item.ListingUpdatedAt != "" {
+			t.Fatalf("expected unsafe/malformed Browse timestamps to be dropped, got %+v", item)
+		}
 	}
 }
 
