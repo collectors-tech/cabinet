@@ -372,7 +372,7 @@ func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 		"unsafe keyword/exclusion encoded-whitespace/control text omission",
 		"nested-encoded keyword/exclusion unsafe text omission",
 		"oversized keyword/exclusion omission",
-		"malformed marketplace fallback",
+		"malformed marketplace fallback including unsafe raw/encoded pre-trim marketplace text",
 		"malformed saved-query region filter omission",
 		"unsafe saved-query region/condition filter omission",
 		"structured auth and non-auth Browse error payload preservation",

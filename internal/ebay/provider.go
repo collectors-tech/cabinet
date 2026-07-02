@@ -82,11 +82,7 @@ func (e *ProviderError) ProviderErrorCode() string {
 
 func NewProvider(cfg ProviderConfig) *Provider {
 	base := normalizeProviderBaseURL(cfg.BaseURL)
-	market := strings.TrimSpace(cfg.Marketplace)
-	if market == "" {
-		market = "EBAY_US"
-	}
-	market = normalizeMarketplaceID(market)
+	market := normalizeMarketplaceID(cfg.Marketplace)
 	return &Provider{
 		baseURL:     strings.TrimRight(base, "/"),
 		bearerToken: strings.TrimSpace(cfg.BearerToken),
@@ -712,11 +708,26 @@ func browseCountry(region string) string {
 }
 
 func normalizeMarketplaceID(marketplace string) string {
+	if isUnsafeMarketplaceIDText(marketplace) {
+		return "EBAY_US"
+	}
 	marketplace = strings.ToUpper(strings.TrimSpace(marketplace))
 	if !isMarketplaceID(marketplace) {
 		return "EBAY_US"
 	}
 	return marketplace
+}
+
+func isUnsafeMarketplaceIDText(raw string) bool {
+	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) {
+		return true
+	}
+	for _, r := range raw {
+		if r > unicode.MaxASCII {
+			return true
+		}
+	}
+	return false
 }
 
 func isMarketplaceID(marketplace string) bool {
