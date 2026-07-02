@@ -41,6 +41,7 @@ type ProviderError struct {
 const browseMaxLimit = 200
 const maxProviderErrorBodyRead = 4096
 const maxProviderDiagnosticFieldDetail = 160
+const maxProviderRetryAfterSeconds = 24 * 60 * 60
 const maxBrowseTextFieldLength = 512
 const maxBrowseURLLength = 2048
 const maxBrowseResponseBodyRead = 2 * 1024 * 1024
@@ -692,6 +693,9 @@ func retryAfterSeconds(resp *http.Response) int {
 		if seconds <= 0 {
 			return 0
 		}
+	}
+	if seconds > maxProviderRetryAfterSeconds {
+		return maxProviderRetryAfterSeconds
 	}
 	return seconds
 }
