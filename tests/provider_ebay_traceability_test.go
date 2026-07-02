@@ -229,6 +229,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 			"TestProviderSearchOmitsUnicodeFormatBrowseErrorPayloadFields",
 			"TestProviderSearchBoundsStructuredBrowseErrorPayloadFields",
 			"TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria",
+			"TestProviderSearchUsesExtendedMarketplaceCurrencies",
 			"TestProviderSearchFallsBackFromMalformedMarketplace",
 			"TestEbayProviderRunPreservesForbiddenAuthStatus",
 			"source listing timestamps on insert/refresh",
