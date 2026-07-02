@@ -810,6 +810,18 @@ func currencyForCountry(country string) string {
 		return "GBP"
 	case "DE", "FR", "IT", "ES", "IE", "NL", "AT", "BE":
 		return "EUR"
+	case "CH":
+		return "CHF"
+	case "HK":
+		return "HKD"
+	case "MY":
+		return "MYR"
+	case "PH":
+		return "PHP"
+	case "PL":
+		return "PLN"
+	case "SG":
+		return "SGD"
 	case "US":
 		return "USD"
 	default:

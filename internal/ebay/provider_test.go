@@ -245,6 +245,55 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 	}
 }
 
+func TestProviderSearchUsesExtendedMarketplaceCurrencies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		marketplace   string
+		priceCurrency string
+	}{
+		{name: "singapore", marketplace: "EBAY_SG", priceCurrency: "SGD"},
+		{name: "hong kong", marketplace: "EBAY_HK", priceCurrency: "HKD"},
+		{name: "malaysia", marketplace: "EBAY_MY", priceCurrency: "MYR"},
+		{name: "philippines", marketplace: "EBAY_PH", priceCurrency: "PHP"},
+		{name: "poland", marketplace: "EBAY_PL", priceCurrency: "PLN"},
+		{name: "switzerland", marketplace: "EBAY_CH", priceCurrency: "CHF"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				wantFilter := "price:[..75.00],priceCurrency:" + tt.priceCurrency
+				if got := r.URL.Query().Get("filter"); got != wantFilter {
+					t.Errorf("expected Browse max-price filter %q, got %q", wantFilter, got)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|` + tt.marketplace + `|0","title":"Marketplace Currency Slot Car","price":{"value":"70.00","currency":"` + tt.priceCurrency + `"},"itemWebUrl":"https://ebay/item/marketplace-currency","seller":{"username":"seller-currency"}}]}`))
+			}))
+			defer srv.Close()
+
+			p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: tt.marketplace})
+			items, err := p.Search(context.Background(), scanner.QuerySet{
+				Keywords: []string{"slot", "car"},
+				MaxPrice: 75,
+			})
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(items) != 1 {
+				t.Fatalf("expected %s candidate to survive marketplace currency filtering, got %+v", tt.priceCurrency, items)
+			}
+			if items[0].Currency != tt.priceCurrency {
+				t.Fatalf("expected candidate currency %s, got %+v", tt.priceCurrency, items[0])
+			}
+		})
+	}
+}
+
 func TestProviderSearchSkipsBrowsePricesAboveSavedQueryMax(t *testing.T) {
 	t.Parallel()
 
