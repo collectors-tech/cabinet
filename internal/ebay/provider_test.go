@@ -2757,6 +2757,7 @@ func TestProviderSearchPreservesLowStockSignalWithoutUsableQuantity(t *testing.T
 		name     string
 		quantity int
 	}{
+		{name: "zero", quantity: 0},
 		{name: "negative", quantity: -1},
 		{name: "oversized", quantity: 100001},
 	}

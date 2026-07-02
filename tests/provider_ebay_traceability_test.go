@@ -270,6 +270,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 			"nested percent-encoded ASCII/Unicode whitespace/control/format text",
 			"negative eBay availability quantities",
 			"implausibly large eBay availability quantities",
+			"quantity is zero or otherwise unusable",
 			"unrecognized positive-quantity availability statuses",
 			"TestProviderSearchNormalizesCandidates",
 			"TestProviderSearchUsesFirstMeaningfulAvailability",
