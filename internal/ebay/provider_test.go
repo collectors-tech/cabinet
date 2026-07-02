@@ -2667,6 +2667,43 @@ func TestProviderSearchSkipsBlankShippingCurrency(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsUnsafeShippingCurrency(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|shipping-currency-unsafe|0","title":"Unsafe Shipping Currency Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/shipping-currency-unsafe","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"7.25","currency":"AUD%0A"}},{"shippingCost":{"value":"8.25","currency":"A` + string(rune(0x202e)) + `UD"}},{"shippingCost":{"value":"9.50","currency":"aud"}}]},{"itemId":"v1|shipping-currency-unsafe-zero|0","title":"Unsafe Shipping Currency Zero Slot Car","price":{"value":"23.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/shipping-currency-unsafe-zero","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"4.25","currency":"AUD%0A"}},{"shippingCost":{"value":"5.25","currency":"A` + string(rune(0x202e)) + `UD"}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected both candidates to survive unsafe shipping currency normalization, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|shipping-currency-unsafe|0":
+			if item.Shipping != 9.50 {
+				t.Fatalf("expected unsafe shipping currency options to fall through to 9.50 AUD, got %+v", item)
+			}
+		case "v1|shipping-currency-unsafe-zero|0":
+			if item.Shipping != 0 {
+				t.Fatalf("expected only unsafe shipping currency options to fall back to zero, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
 func TestProviderSearchSkipsMismatchedShippingCurrency(t *testing.T) {
 	t.Parallel()
 
