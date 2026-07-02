@@ -1146,6 +1146,32 @@ func TestProviderSearchSkipsMalformedBrowsePriceCurrency(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsUnsafeBrowsePriceCurrency(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|raw-control-currency|0","title":"Raw Control Currency Slot Car","price":{"value":"11.00","currency":"\nAUD"},"itemWebUrl":"https://ebay/item/raw-control-currency","seller":{"username":"seller-currency"}},{"itemId":"v1|encoded-control-currency|0","title":"Encoded Control Currency Slot Car","price":{"value":"12.00","currency":"AUD%0A"},"itemWebUrl":"https://ebay/item/encoded-control-currency","seller":{"username":"seller-currency"}},{"itemId":"v1|unicode-format-currency|0","title":"Unicode Format Currency Slot Car","price":{"value":"13.00","currency":"A` + string(rune(0x202e)) + `UD"},"itemWebUrl":"https://ebay/item/unicode-format-currency","seller":{"username":"seller-currency"}},{"itemId":"v1|encoded-unicode-currency|0","title":"Encoded Unicode Currency Slot Car","price":{"value":"13.50","currency":"AUD%E2%80%AE"},"itemWebUrl":"https://ebay/item/encoded-unicode-currency","seller":{"username":"seller-currency"}},{"itemId":"v1|required-currency|0","title":"Required Currency Slot Car","price":{"value":"14.00","currency":" aud "},"itemWebUrl":"https://ebay/item/required-currency","seller":{"username":"seller-currency"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only candidate with safe trimmed currency to survive, got %+v", items)
+	}
+	if items[0].ListingID != "v1|required-currency|0" || items[0].Currency != "AUD" {
+		t.Fatalf("expected required-currency candidate to survive with normalized AUD currency, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsIncompleteBrowseItemSummaries(t *testing.T) {
 	t.Parallel()
 
