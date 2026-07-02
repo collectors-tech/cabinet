@@ -103,7 +103,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the provider-specific run route MUST reject malformed or non-positive active-profile `integration.ebay.items_per_page` values with `error="invalid_ebay_items_per_page"`, `setting="integration.ebay.items_per_page"`, the resolved `query_set_id`, and `next_action="update_ebay_items_per_page"` before calling Browse.
 - **AND** Market Watch run feedback MUST preserve the eBay setup page-size validation diagnostic fields, including `setting` and `next_action`, so operators can fix the setup value without treating it as a credential denial.
 - **AND** eBay saved-search output handoff MUST preserve eBay source attribution when the user sends a candidate to Discoveries, Wishlist, or Inventory.
-- **AND** when Browse availability reports `LIMITED_STOCK` with a missing, negative, or implausibly large quantity, the adapter MUST preserve `stock_state="low_stock"` while omitting the unusable count as `stock_count=-1` so clients do not downgrade explicit scarcity to generic in-stock state.
+- **AND** when Browse availability reports `LIMITED_STOCK` with a missing, zero, negative, or implausibly large quantity, the adapter MUST preserve `stock_state="low_stock"` while omitting the unusable count as `stock_count=-1` so clients do not downgrade explicit scarcity to generic in-stock state.
 
 #### Scenario: Provider run route is documented for client integrations
 - **GIVEN** an API client uses the provider-specific `POST /api/providers/ebay/run` route for an eBay-scoped saved search
