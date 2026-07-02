@@ -468,7 +468,7 @@ func normalizeBrowseTimestamp(raw string) string {
 }
 
 func normalizeCurrencyCode(raw string) (string, bool) {
-	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) {
+	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) || containsRawNonASCIIWhitespace(raw) {
 		return "", false
 	}
 	value := strings.ToUpper(strings.TrimSpace(raw))
@@ -549,8 +549,12 @@ func containsUnsafeAmountText(raw string) bool {
 	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) {
 		return true
 	}
+	return containsRawNonASCIIWhitespace(raw)
+}
+
+func containsRawNonASCIIWhitespace(raw string) bool {
 	for _, r := range raw {
-		if r != ' ' && unicode.IsSpace(r) {
+		if r > unicode.MaxASCII && unicode.IsSpace(r) {
 			return true
 		}
 	}
