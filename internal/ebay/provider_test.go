@@ -964,6 +964,32 @@ func TestProviderSearchSkipsDecimalCommaBrowsePrices(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsUnsafeBrowsePriceAmounts(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|raw-control-price|0","title":"Raw Control Price Slot Car","price":{"value":"\n12.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/raw-control-price","seller":{"username":"seller-price"}},{"itemId":"v1|encoded-control-price|0","title":"Encoded Control Price Slot Car","price":{"value":"12.50%0A","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-control-price","seller":{"username":"seller-price"}},{"itemId":"v1|unicode-format-price|0","title":"Unicode Format Price Slot Car","price":{"value":"1` + string(rune(0x202e)) + `2.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/unicode-format-price","seller":{"username":"seller-price"}},{"itemId":"v1|encoded-unicode-price|0","title":"Encoded Unicode Price Slot Car","price":{"value":"%E2%80%AF12.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/encoded-unicode-price","seller":{"username":"seller-price"}},{"itemId":"v1|safe-price|0","title":"Safe Price Slot Car","price":{"value":" 12.50 ","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-price","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the safe price item, got %+v", items)
+	}
+	if items[0].ListingID != "v1|safe-price|0" || items[0].Price != 12.50 {
+		t.Fatalf("expected safe-price candidate to survive unsafe amount normalization, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsNonPositiveBrowsePrices(t *testing.T) {
 	t.Parallel()
 
@@ -2519,6 +2545,43 @@ func TestProviderSearchSkipsDecimalCommaShippingCost(t *testing.T) {
 		case "v1|decimal-comma-shipping-zero|0":
 			if item.Shipping != 0 {
 				t.Fatalf("expected decimal-comma shipping-only option to fall back to zero, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
+func TestProviderSearchSkipsUnsafeShippingCostAmounts(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unsafe-shipping|0","title":"Unsafe Shipping Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unsafe-shipping","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"\n7.25","currency":"AUD"}},{"shippingCost":{"value":"8.25%0A","currency":"AUD"}},{"shippingCost":{"value":"8` + string(rune(0x202e)) + `.75","currency":"AUD"}},{"shippingCost":{"value":"%E2%80%AF9.00","currency":"AUD"}},{"shippingCost":{"value":"9.50","currency":"AUD"}}]},{"itemId":"v1|unsafe-shipping-zero|0","title":"Unsafe Shipping Zero Slot Car","price":{"value":"23.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/unsafe-shipping-zero","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"4.25%0A","currency":"AUD"}},{"shippingCost":{"value":"5` + string(rune(0x202e)) + `.25","currency":"AUD"}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected both candidates to survive unsafe shipping normalization, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|unsafe-shipping|0":
+			if item.Shipping != 9.50 {
+				t.Fatalf("expected unsafe shipping amounts to fall through to 9.50, got %+v", item)
+			}
+		case "v1|unsafe-shipping-zero|0":
+			if item.Shipping != 0 {
+				t.Fatalf("expected only unsafe shipping amounts to fall back to zero, got %+v", item)
 			}
 		default:
 			t.Fatalf("unexpected candidate %+v", item)

@@ -501,8 +501,8 @@ func normalizeShippingCost(options []struct {
 		return 0
 	}
 	for _, option := range options {
-		raw := strings.TrimSpace(option.ShippingCost.Value)
-		if raw == "" {
+		raw := option.ShippingCost.Value
+		if strings.TrimSpace(raw) == "" {
 			continue
 		}
 		shippingCurrency, ok := normalizeCurrencyCode(option.ShippingCost.Currency)
@@ -519,6 +519,9 @@ func normalizeShippingCost(options []struct {
 }
 
 func parseBrowseAmount(raw string) (float64, error) {
+	if containsUnsafeAmountText(raw) {
+		return 0, fmt.Errorf("amount contains unsafe text")
+	}
 	value := strings.TrimSpace(raw)
 	if strings.HasPrefix(value, "+") || strings.ContainsAny(value, "eE") {
 		return 0, fmt.Errorf("amount must use plain decimal syntax")
@@ -540,6 +543,18 @@ func parseBrowseAmount(raw string) (float64, error) {
 		return 0, fmt.Errorf("amount must be finite")
 	}
 	return amount, nil
+}
+
+func containsUnsafeAmountText(raw string) bool {
+	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) {
+		return true
+	}
+	for _, r := range raw {
+		if r != ' ' && unicode.IsSpace(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func isPositiveFiniteAmount(value float64) bool {
