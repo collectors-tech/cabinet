@@ -3397,6 +3397,44 @@ func TestProviderSearchClassifiesMalformedBrowsePayload(t *testing.T) {
 	}
 }
 
+func TestProviderSearchRequiresBrowseItemSummariesArray(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing item summaries", body: `{"href":"https://api.ebay.com/buy/browse/v1/item_summary/search"}`},
+		{name: "null item summaries", body: `{"itemSummaries":null}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+			_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+			if err == nil {
+				t.Fatal("expected missing Browse itemSummaries error")
+			}
+			var providerErr *ProviderError
+			if !errors.As(err, &providerErr) {
+				t.Fatalf("expected ProviderError, got %T %v", err, err)
+			}
+			if providerErr.StatusCode != http.StatusBadGateway || providerErr.ErrorCode != "PROVIDER_SEARCH_FAILED" {
+				t.Fatalf("unexpected provider error: %+v", providerErr)
+			}
+			if !strings.Contains(providerErr.Message, "missing itemSummaries array") {
+				t.Fatalf("expected missing itemSummaries diagnostic, got %q", providerErr.Message)
+			}
+		})
+	}
+}
+
 func TestProviderSearchRejectsBrowsePayloadWithTrailingData(t *testing.T) {
 	t.Parallel()
 
