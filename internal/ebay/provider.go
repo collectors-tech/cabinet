@@ -443,7 +443,7 @@ func normalizeSellerUsername(raw string) string {
 
 func normalizeBrowseTimestamp(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsEncodedUnsafeText(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	parsed, err := time.Parse(time.RFC3339Nano, value)

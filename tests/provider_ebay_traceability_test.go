@@ -163,6 +163,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 			"TestProviderSearchTrimsBrowseStringMetadata",
 			"normalized Browse itemCreationDate/itemEndDate timestamp preservation",
 			"unsafe or malformed Browse timestamp drop",
+			"percent-encoded Unicode whitespace/format Browse timestamp drop",
 			"TestProviderSearchDropsUnsafeBrowseTimestamps",
 			"TestProviderSearchTrimsBrowsePriceValue",
 			"TestProviderSearchSkipsUnparseableBrowsePrices",
