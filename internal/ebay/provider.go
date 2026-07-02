@@ -854,9 +854,9 @@ func normalizeAvailability(items []struct {
 }
 
 func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
-	status := strings.ToUpper(strings.TrimSpace(rawStatus))
-	if containsRawControlByte(status) || containsEncodedControlByte(status) || containsEncodedUnsafeText(status) || containsUnsafeUnicodeText(status) {
-		status = ""
+	status := ""
+	if !containsRawControlByte(rawStatus) && !containsEncodedControlByte(rawStatus) && !containsEncodedUnsafeText(rawStatus) && !containsUnsafeUnicodeText(rawStatus) {
+		status = strings.ToUpper(strings.TrimSpace(rawStatus))
 	}
 	if count < 0 || count > maxBrowseStockCount {
 		count = -1

@@ -198,7 +198,7 @@ Cabinet SHALL persist stock/availability observations from eBay listing payloads
   - `stock_count`
   - `last_seen`
 - **AND** provider normalization MUST use the first meaningful availability entry when eBay returns a leading blank or unknown `estimatedAvailabilities` entry before a later stock signal.
-- **AND** provider normalization MUST ignore availability status values containing raw or percent-encoded ASCII control bytes before selecting the first meaningful stock signal.
+- **AND** provider normalization MUST ignore availability status values containing raw or percent-encoded ASCII control bytes before trimming or selecting the first meaningful stock signal.
 - **AND** provider normalization MUST ignore availability status values containing Unicode control or format characters before selecting the first meaningful stock signal.
 - **AND** provider normalization MUST ignore availability status values containing percent-encoded ASCII or Unicode whitespace, control, or format characters before selecting the first meaningful stock signal.
 - **AND** provider normalization MUST ignore availability status values containing nested percent-encoded ASCII or Unicode whitespace, control, or format characters before selecting the first meaningful stock signal.

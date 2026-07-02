@@ -268,6 +268,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 			"fieldgroups=EXTENDED",
 			"first meaningful availability entry",
 			"unsafe availability status text",
+			"before trimming",
 			"Unicode control/format text",
 			"percent-encoded ASCII/Unicode whitespace/control/format text",
 			"nested percent-encoded ASCII/Unicode whitespace/control/format text",
