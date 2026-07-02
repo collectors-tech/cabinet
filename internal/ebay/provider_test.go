@@ -508,6 +508,7 @@ func TestNewProviderFallsBackFromUnsafeBaseURLOverrides(t *testing.T) {
 		{name: "non-web scheme", baseURL: "javascript:alert(1)"},
 		{name: "relative URL", baseURL: "/buy/browse"},
 		{name: "embedded userinfo", baseURL: "https://token@api.ebay.com"},
+		{name: "path prefix", baseURL: "https://api.ebay.com/custom"},
 		{name: "query string", baseURL: "https://api.ebay.com?environment=sandbox"},
 		{name: "fragment", baseURL: "https://api.ebay.com#browse"},
 		{name: "raw control byte", baseURL: "https://api.ebay.com" + string(rune(0x7f))},
@@ -538,9 +539,9 @@ func TestNewProviderFallsBackFromUnsafeBaseURLOverrides(t *testing.T) {
 func TestNewProviderTrimsValidBaseURLOverride(t *testing.T) {
 	t.Parallel()
 
-	p := NewProvider(ProviderConfig{BaseURL: " http://127.0.0.1:4567/custom/// ", BearerToken: "token", Marketplace: "EBAY_AU"})
-	if p.baseURL != "http://127.0.0.1:4567/custom" {
-		t.Fatalf("expected valid controlled base URL override to be trimmed, got %q", p.baseURL)
+	p := NewProvider(ProviderConfig{BaseURL: " http://127.0.0.1:4567/// ", BearerToken: "token", Marketplace: "EBAY_AU"})
+	if p.baseURL != "http://127.0.0.1:4567" {
+		t.Fatalf("expected valid controlled origin override to be trimmed, got %q", p.baseURL)
 	}
 }
 
