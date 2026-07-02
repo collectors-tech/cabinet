@@ -668,7 +668,7 @@ func containsUnsafeUnicodeText(raw string) bool {
 }
 
 func isUnsafeBearerToken(raw string) bool {
-	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsUnsafeUnicodeText(raw)
+	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw)
 }
 
 func retryAfterSeconds(resp *http.Response) int {
