@@ -843,6 +843,9 @@ func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
 	}
 	switch status {
 	case "IN_STOCK", "AVAILABLE", "LIMITED_STOCK":
+		if status == "LIMITED_STOCK" && count < 0 {
+			return "low_stock", -1
+		}
 		if count == 0 {
 			return "in_stock", -1
 		}
