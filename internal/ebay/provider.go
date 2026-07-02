@@ -701,6 +701,9 @@ func retryAfterSeconds(resp *http.Response) int {
 }
 
 func browseCountry(region string) string {
+	if isUnsafeSavedQueryFilterText(region) {
+		return ""
+	}
 	region = strings.ToUpper(strings.TrimSpace(region))
 	if isCountryCode(region) {
 		return region
@@ -742,6 +745,9 @@ func isCountryCode(country string) bool {
 }
 
 func browseCondition(condition string) string {
+	if isUnsafeSavedQueryFilterText(condition) {
+		return ""
+	}
 	switch strings.ToLower(strings.TrimSpace(condition)) {
 	case "new", "mint", "sealed":
 		return "NEW"
@@ -752,6 +758,10 @@ func browseCondition(condition string) string {
 	default:
 		return ""
 	}
+}
+
+func isUnsafeSavedQueryFilterText(raw string) bool {
+	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw)
 }
 
 func browseCurrency(region, marketplace string) string {
