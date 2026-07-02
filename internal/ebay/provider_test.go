@@ -190,6 +190,36 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 			},
 			wantFilter: "price:[..75.00],priceCurrency:USD",
 		},
+		{
+			name:        "unsafe saved-query region is ignored before trim can make it valid",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords: []string{"slot car"},
+				MaxPrice: 75,
+				Region:   "\nUS",
+			},
+			wantFilter: "price:[..75.00],priceCurrency:USD",
+		},
+		{
+			name:        "unsafe saved-query condition is ignored before trim can make it valid",
+			marketplace: "EBAY_AU",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				Region:    "AU",
+				Condition: "used\n",
+			},
+			wantFilter: "itemLocationCountry:AU",
+		},
+		{
+			name:        "encoded unsafe saved-query region and condition are omitted",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				Region:    "US%0A",
+				Condition: "used%2520",
+			},
+			wantFilter: "",
+		},
 	}
 
 	for _, tt := range tests {
