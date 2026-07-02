@@ -535,6 +535,31 @@ func TestProviderSearchOmitsEncodedWhitespaceQueryTextBeforeBrowseRequest(t *tes
 	}
 }
 
+func TestProviderSearchOmitsNestedEncodedUnsafeQueryTextBeforeBrowseRequest(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("q"); got != "AFX P-1" {
+			t.Errorf("expected nested percent-encoded unsafe keywords to be omitted before joining, got %q", got)
+		}
+		if got := r.URL.Query().Get("exclude"); got != "broken" {
+			t.Errorf("expected nested percent-encoded unsafe exclusions to be omitted before joining, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords:   []string{"AFX", "bad%250Akeyword", "wide%25E2%2580%25AFgap", "P-1"},
+		Exclusions: []string{"broken", "skip%2509this", "skip%25E2%2580%25AEthis"},
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+}
+
 func TestProviderSearchOmitsOversizedQueryTextBeforeBrowseRequest(t *testing.T) {
 	t.Parallel()
 
@@ -1201,6 +1226,35 @@ func TestProviderSearchSkipsBrowseTextFieldsWithEncodedWhitespaceText(t *testing
 		t.Fatalf("expected encoded-whitespace seller to fall back to ebay, got %+v", items[0])
 	}
 	if items[1].ListingID != "v1|safe-text|0" || items[1].Seller != "seller-text" {
+		t.Fatalf("expected safe text candidate to survive, got %+v", items[1])
+	}
+}
+
+func TestProviderSearchSkipsBrowseTextFieldsWithNestedEncodedUnsafeText(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|nested%250Aid|0","title":"Nested ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/nested-id","seller":{"username":"seller-text"}},{"itemId":"v1|nested-title|0","title":"Nested%25E2%2580%25AFTitle Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/nested-title","seller":{"username":"seller-text"}},{"itemId":"v1|nested-seller|0","title":"Nested Seller Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/nested-seller","seller":{"username":"seller%2509text"}},{"itemId":"v1|safe-nested-text|0","title":"Safe Nested Text Slot Car","price":{"value":"14.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-nested-text","seller":{"username":"seller-text"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("search ebay: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected nested-encoded listing id/title to be skipped while seller fallback survives, got %+v", items)
+	}
+	if items[0].ListingID != "v1|nested-seller|0" || items[0].Seller != "ebay" {
+		t.Fatalf("expected nested-encoded seller to fall back to ebay, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|safe-nested-text|0" || items[1].Seller != "seller-text" {
 		t.Fatalf("expected safe text candidate to survive, got %+v", items[1])
 	}
 }
@@ -2921,6 +2975,37 @@ func TestProviderSearchOmitsEncodedUnicodeBrowseErrorPayloadFields(t *testing.T)
 	for _, unwanted := range []string{"APPLICATION", "Retry", "%E2%80%AE", "%E2%80%AF"} {
 		if strings.Contains(providerErr.Message, unwanted) {
 			t.Fatalf("expected encoded-Unicode diagnostic field to be omitted for %q, got %q", unwanted, providerErr.Message)
+		}
+	}
+}
+
+func TestProviderSearchOmitsNestedEncodedBrowseErrorPayloadFields(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":13002,"domain":"API_BROWSE","category":"APPLICATION%250A","message":"Browse gateway timeout","longMessage":"Retry%25E2%2580%25AFlater"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured Browse error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	for _, want := range []string{"13002", "API_BROWSE", "Browse gateway timeout"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected provider error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+	for _, unwanted := range []string{"APPLICATION", "Retry", "%250A", "%25E2%2580%25AF"} {
+		if strings.Contains(providerErr.Message, unwanted) {
+			t.Fatalf("expected nested-encoded diagnostic field to be omitted for %q, got %q", unwanted, providerErr.Message)
 		}
 	}
 }
