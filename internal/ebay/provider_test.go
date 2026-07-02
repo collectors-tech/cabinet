@@ -3272,6 +3272,46 @@ func TestProviderSearchPreservesHTTPDateRetryAfter(t *testing.T) {
 	}
 }
 
+func TestProviderSearchCapsExcessiveRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		retryAfter string
+	}{
+		{name: "integer", retryAfter: "999999999"},
+		{name: "http date", retryAfter: time.Now().UTC().Add(30 * 24 * time.Hour).Format(http.TimeFormat)},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Retry-After", tt.retryAfter)
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte(`{"errors":[{"errorId":12001,"message":"Rate limit exceeded"}]}`))
+			}))
+			defer srv.Close()
+
+			p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+			_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+			if err == nil {
+				t.Fatal("expected capped Retry-After Browse error")
+			}
+			var providerErr *ProviderError
+			if !errors.As(err, &providerErr) {
+				t.Fatalf("expected ProviderError, got %T %v", err, err)
+			}
+			if providerErr.RetryAfterSeconds != maxProviderRetryAfterSeconds {
+				t.Fatalf("expected Retry-After cap %d, got %+v", maxProviderRetryAfterSeconds, providerErr)
+			}
+		})
+	}
+}
+
 func TestProviderSearchPreservesPlainTextBrowseErrorPayload(t *testing.T) {
 	t.Parallel()
 
