@@ -38,6 +38,44 @@ type ProviderError struct {
 	RetryAfterSeconds int
 }
 
+type browseSuccessPayload struct {
+	ItemSummaries *[]browseItemSummary `json:"itemSummaries"`
+}
+
+type browseItemSummary struct {
+	ItemID string `json:"itemId"`
+	Title  string `json:"title"`
+	Price  struct {
+		Value    string `json:"value"`
+		Currency string `json:"currency"`
+	} `json:"price"`
+	ItemWebURL string `json:"itemWebUrl"`
+	Image      struct {
+		ImageURL string `json:"imageUrl"`
+	} `json:"image"`
+	ThumbnailImages []struct {
+		ImageURL string `json:"imageUrl"`
+	} `json:"thumbnailImages"`
+	AdditionalImages []struct {
+		ImageURL string `json:"imageUrl"`
+	} `json:"additionalImages"`
+	ShippingOptions []struct {
+		ShippingCost struct {
+			Value    string `json:"value"`
+			Currency string `json:"currency"`
+		} `json:"shippingCost"`
+	} `json:"shippingOptions"`
+	Seller struct {
+		Username string `json:"username"`
+	} `json:"seller"`
+	ItemCreationDate        string `json:"itemCreationDate"`
+	ItemEndDate             string `json:"itemEndDate"`
+	EstimatedAvailabilities []struct {
+		Status   string `json:"estimatedAvailabilityStatus"`
+		Quantity int    `json:"estimatedAvailableQuantity"`
+	} `json:"estimatedAvailabilities"`
+}
+
 const browseMaxLimit = 200
 const maxProviderErrorBodyRead = 4096
 const maxProviderDiagnosticFieldDetail = 160
@@ -192,41 +230,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		}
 	}
 
-	var payload struct {
-		ItemSummaries []struct {
-			ItemID string `json:"itemId"`
-			Title  string `json:"title"`
-			Price  struct {
-				Value    string `json:"value"`
-				Currency string `json:"currency"`
-			} `json:"price"`
-			ItemWebURL string `json:"itemWebUrl"`
-			Image      struct {
-				ImageURL string `json:"imageUrl"`
-			} `json:"image"`
-			ThumbnailImages []struct {
-				ImageURL string `json:"imageUrl"`
-			} `json:"thumbnailImages"`
-			AdditionalImages []struct {
-				ImageURL string `json:"imageUrl"`
-			} `json:"additionalImages"`
-			ShippingOptions []struct {
-				ShippingCost struct {
-					Value    string `json:"value"`
-					Currency string `json:"currency"`
-				} `json:"shippingCost"`
-			} `json:"shippingOptions"`
-			Seller struct {
-				Username string `json:"username"`
-			} `json:"seller"`
-			ItemCreationDate        string `json:"itemCreationDate"`
-			ItemEndDate             string `json:"itemEndDate"`
-			EstimatedAvailabilities []struct {
-				Status   string `json:"estimatedAvailabilityStatus"`
-				Quantity int    `json:"estimatedAvailableQuantity"`
-			} `json:"estimatedAvailabilities"`
-		} `json:"itemSummaries"`
-	}
+	var payload browseSuccessPayload
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	if err := decoder.Decode(&payload); err != nil {
 		return nil, &ProviderError{
@@ -242,10 +246,18 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Message:    "decode ebay Browse response: trailing data after JSON object",
 		}
 	}
+	if payload.ItemSummaries == nil {
+		return nil, &ProviderError{
+			StatusCode: http.StatusBadGateway,
+			ErrorCode:  "PROVIDER_SEARCH_FAILED",
+			Message:    "decode ebay Browse response: missing itemSummaries array",
+		}
+	}
 
-	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
+	itemSummaries := *payload.ItemSummaries
+	out := make([]scanner.CandidateInput, 0, len(itemSummaries))
 	seenListingIDs := map[string]struct{}{}
-	for _, it := range payload.ItemSummaries {
+	for _, it := range itemSummaries {
 		if effectiveLimit > 0 && len(out) >= effectiveLimit {
 			break
 		}
