@@ -21,6 +21,8 @@ Continue Cabinet work in the same Telegram group session that scheduled the cron
 - All normal Cabinet project rules still apply.
 - Follow Issue -> Spec -> Validate -> Commit for implementation work.
 - Keep work on one focused issue branch at a time.
+- When a cron turn picks a new eligible issue from `Ready`, `Backlog`, or another non-active state, move the linked GitHub Project item Status to `In progress` before starting implementation.
+- If project status cannot be updated, record the attempted command/error on the issue and treat the pickup as blocked unless the issue was already active.
 - Do not claim completion without concrete evidence.
 - For every turn, make bounded, reliable progress that can be seen in the Telegram update.
 - If blocked, capture exact blocker evidence, state what was checked, and either advance the same issue to the next concrete unblock step or report the blocker plainly.
