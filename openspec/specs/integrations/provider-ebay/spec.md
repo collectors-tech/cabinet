@@ -46,6 +46,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** Browse item summaries with non-finite numeric price values such as `NaN` or `Infinity` MUST be skipped instead of persisted as invalid scanner candidate amounts.
 - **AND** Browse item summaries with blank price currency after trimming MUST be skipped instead of creating candidates with empty observed currency.
 - **AND** Browse item summaries with malformed price currency after trimming MUST be skipped unless the normalized value is a three-letter ASCII currency code.
+- **AND** Browse item summaries with price currency values containing raw or percent-encoded ASCII control bytes, Unicode control/format characters, or percent-encoded Unicode whitespace/control/format characters before trimming MUST be skipped instead of creating candidates with unsafe observed currency provenance.
 - **AND** Browse item summaries with blank listing id, title, or item URL after trimming MUST be skipped instead of creating candidates that cannot preserve source identity or handoff provenance.
 - **AND** Browse item summaries with listing id values containing embedded raw ASCII or Unicode whitespace after trimming MUST be skipped instead of creating candidates with ambiguous source identity or handoff provenance.
 - **AND** Browse item summaries with listing id or title values containing raw or percent-encoded ASCII control bytes after trimming MUST be skipped instead of creating candidates with unsafe text provenance.

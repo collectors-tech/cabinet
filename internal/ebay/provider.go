@@ -468,6 +468,9 @@ func normalizeBrowseTimestamp(raw string) string {
 }
 
 func normalizeCurrencyCode(raw string) (string, bool) {
+	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) {
+		return "", false
+	}
 	value := strings.ToUpper(strings.TrimSpace(raw))
 	if !isCurrencyCode(value) {
 		return "", false
