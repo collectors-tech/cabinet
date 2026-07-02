@@ -2585,6 +2585,32 @@ func TestProviderSearchIgnoresEncodedUnsafeAvailabilityStatusText(t *testing.T) 
 	}
 }
 
+func TestProviderSearchIgnoresNestedEncodedUnsafeAvailabilityStatusText(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|nested-encoded-stock|0","title":"Nested Encoded Stock Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/nested-encoded-stock","seller":{"username":"seller-stock"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"IN%2520STOCK","estimatedAvailableQuantity":7},{"estimatedAvailabilityStatus":"LIMITED%25E2%2580%25AFSTOCK","estimatedAvailableQuantity":4},{"estimatedAvailabilityStatus":"LIMITED%25E2%2580%25AESTOCK","estimatedAvailableQuantity":3},{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected nested-encoded unsafe availability status item to survive, got %+v", items)
+	}
+	if items[0].StockState != "low_stock" || items[0].StockCount != 2 {
+		t.Fatalf("expected nested-encoded unsafe availability statuses to be ignored before low_stock/2, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchIgnoresNegativeAvailabilityQuantity(t *testing.T) {
 	t.Parallel()
 
