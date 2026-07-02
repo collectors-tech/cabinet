@@ -194,6 +194,24 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 			wantFilter: "itemLocationCountry:US",
 		},
 		{
+			name:        "common new condition alias maps to broad Browse filter",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				Condition: " new with tags ",
+			},
+			wantFilter: "conditions:{NEW}",
+		},
+		{
+			name:        "common used condition alias maps to broad Browse filter",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				Condition: "pre-owned",
+			},
+			wantFilter: "conditions:{USED}",
+		},
+		{
 			name:        "malformed region is ignored instead of sending unsupported country filter",
 			marketplace: "EBAY_US",
 			query: scanner.QuerySet{

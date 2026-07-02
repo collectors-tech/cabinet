@@ -806,9 +806,9 @@ func browseCondition(condition string) string {
 		return ""
 	}
 	switch strings.ToLower(strings.TrimSpace(condition)) {
-	case "new", "mint", "sealed":
+	case "new", "mint", "sealed", "brand new", "new other", "new with tags", "new without tags":
 		return "NEW"
-	case "used", "loose", "opened":
+	case "used", "loose", "opened", "open box", "pre-owned", "preowned", "pre owned", "very good", "good", "acceptable", "for parts":
 		return "USED"
 	case "unspecified":
 		return "UNSPECIFIED"
