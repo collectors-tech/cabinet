@@ -656,12 +656,15 @@ func TestIntegrationsEbaySetupStatusPanelContract(t *testing.T) {
 		"setupStatus?.next_action ??",
 		"editingProvider.health?.next_action",
 		"formatEbaySetupNextAction(setupNextAction)",
+		"formatEbaySetupBaseURLState",
 		"base_url_set?: boolean",
 		"setupStatus?.base_url_set",
 		"data-testid='ebay-setup-base-url-override'",
 		"Ready for Market Watch runs",
 		"Check provider health and credentials",
 		"Save credentials, then validate health",
+		"Using default eBay Browse API base URL",
+		"Base URL override configured",
 	}
 	for _, token := range required {
 		if !strings.Contains(src, token) {

@@ -149,6 +149,11 @@ const formatEbaySetupNextAction = (nextAction?: string | null) => {
   }
 }
 
+const formatEbaySetupBaseURLState = (baseURLSet?: boolean) =>
+  baseURLSet
+    ? 'Base URL override configured'
+    : 'Using default eBay Browse API base URL'
+
 type IntegrationForm = {
   baseURL: string
   token: string
@@ -2816,11 +2821,11 @@ export function Apps({
                               <p data-testid='ebay-setup-readiness-state'>
                                 Health state: {healthState}
                               </p>
-                              {setupStatus?.base_url_set ? (
-                                <p data-testid='ebay-setup-base-url-override'>
-                                  Base URL override configured
-                                </p>
-                              ) : null}
+                              <p data-testid='ebay-setup-base-url-override'>
+                                {formatEbaySetupBaseURLState(
+                                  setupStatus?.base_url_set
+                                )}
+                              </p>
                             </div>
                           </>
                         )
