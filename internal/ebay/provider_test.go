@@ -1652,6 +1652,29 @@ func TestProviderSearchSkipsBrowseItemURLsWithEncodedUnicodeURLText(t *testing.T
 	}
 }
 
+func TestProviderSearchSkipsBrowseItemURLsWithNestedEncodedUnsafeText(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|nested-encoded-space-url|0","title":"Nested Encoded Space URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/nested%2520space","seller":{"username":"seller-url"}},{"itemId":"v1|nested-encoded-format-url|0","title":"Nested Encoded Format URL Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/nested%25E2%2580%25AEformat","seller":{"username":"seller-url"}},{"itemId":"v1|valid-url|0","title":"Valid URL Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-url","seller":{"username":"seller-url"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].ListingID != "v1|valid-url|0" {
+		t.Fatalf("expected nested-encoded unsafe item URLs to be skipped, got %+v", items)
+	}
+}
+
 func TestProviderSearchSkipsBrowseItemURLsWithRawUnicodeFormatCharacters(t *testing.T) {
 	t.Parallel()
 
@@ -1972,6 +1995,47 @@ func TestProviderSearchDropsBrowseImageURLsWithEncodedUnicodeURLText(t *testing.
 		case "v1|encoded-format-image|0":
 			if item.Image != "https://i.ebayimg.com/images/valid-thumb.jpg" {
 				t.Fatalf("expected encoded Unicode format image URL to fall back to safe thumbnail, got %+v", item)
+			}
+		case "v1|valid-image|0":
+			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {
+				t.Fatalf("expected valid image URL to be preserved, got %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected candidate %+v", item)
+		}
+	}
+}
+
+func TestProviderSearchDropsBrowseImageURLsWithNestedEncodedUnsafeText(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|nested-encoded-space-image|0","title":"Nested Encoded Space Image Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/nested-encoded-space-image","image":{"imageUrl":"https://i.ebayimg.com/images/nested%2520space.jpg"},"seller":{"username":"seller-image"}},{"itemId":"v1|nested-encoded-format-image|0","title":"Nested Encoded Format Image Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/nested-encoded-format-image","image":{"imageUrl":"https://i.ebayimg.com/images/nested%25E2%2580%25AEformat.jpg"},"thumbnailImages":[{"imageUrl":"https://i.ebayimg.com/images/valid-thumb.jpg"}],"seller":{"username":"seller-image"}},{"itemId":"v1|valid-image|0","title":"Valid Image Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-image","image":{"imageUrl":"https://i.ebayimg.com/images/valid.jpg"},"seller":{"username":"seller-image"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected candidates with valid item URLs to survive, got %+v", items)
+	}
+	for _, item := range items {
+		switch item.ListingID {
+		case "v1|nested-encoded-space-image|0":
+			if item.Image != "" {
+				t.Fatalf("expected nested-encoded whitespace image URL to be dropped, got %+v", item)
+			}
+		case "v1|nested-encoded-format-image|0":
+			if item.Image != "https://i.ebayimg.com/images/valid-thumb.jpg" {
+				t.Fatalf("expected nested-encoded Unicode format image URL to fall back to safe thumbnail, got %+v", item)
 			}
 		case "v1|valid-image|0":
 			if item.Image != "https://i.ebayimg.com/images/valid.jpg" {
