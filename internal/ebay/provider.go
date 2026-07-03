@@ -135,7 +135,7 @@ func NewProvider(cfg ProviderConfig) *Provider {
 
 func normalizeProviderBaseURL(raw string) string {
 	value := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsUnsafeUnicodeText(value) || containsEncodedUnsafeText(value) || containsEncodedURLWhitespace(value) || containsRawURLWhitespace(value) {
+	if value == "" || containsRawControlByte(value) || containsEncodedControlByte(value) || containsMalformedPercentEscape(value) || containsUnsafeUnicodeText(value) || containsEncodedUnsafeText(value) || containsEncodedURLWhitespace(value) || containsRawURLWhitespace(value) {
 		return "https://api.ebay.com"
 	}
 	parsed, err := url.Parse(value)
@@ -330,7 +330,7 @@ func readBrowseSuccessBody(body io.Reader) ([]byte, error) {
 }
 
 func isWebURL(raw string) bool {
-	if len(raw) > maxBrowseURLLength || containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsUnsafeUnicodeText(raw) || containsEncodedUnsafeText(raw) || containsEncodedURLWhitespace(raw) || containsRawURLWhitespace(raw) {
+	if len(raw) > maxBrowseURLLength || containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsMalformedPercentEscape(raw) || containsUnsafeUnicodeText(raw) || containsEncodedUnsafeText(raw) || containsEncodedURLWhitespace(raw) || containsRawURLWhitespace(raw) {
 		return false
 	}
 	parsed, err := url.Parse(raw)

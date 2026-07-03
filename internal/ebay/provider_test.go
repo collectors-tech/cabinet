@@ -564,6 +564,8 @@ func TestNewProviderFallsBackFromUnsafeBaseURLOverrides(t *testing.T) {
 		{name: "encoded unicode whitespace", baseURL: "https://api.ebay.com/custom%E2%80%AFpath"},
 		{name: "encoded unicode format control", baseURL: "https://api.ebay.com/custom%E2%80%AEpath"},
 		{name: "malformed percent escape", baseURL: "https://api.ebay.com/custom%ZZpath"},
+		{name: "malformed percent escape in host", baseURL: "https://api.ebay.com%ZZ"},
+		{name: "trailing percent escape", baseURL: "https://api.ebay.com/%"},
 		{name: "raw whitespace", baseURL: "https://api.ebay.com/custom path"},
 		{name: "unicode whitespace", baseURL: "https://api.ebay.com/custom" + string(rune(0x00a0)) + "path"},
 		{name: "raw unicode format control", baseURL: "https://api.ebay.com/custom" + string(rune(0x202e)) + "path"},
