@@ -258,6 +258,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	itemSummaries := *payload.ItemSummaries
 	out := make([]scanner.CandidateInput, 0, len(itemSummaries))
 	seenListingIDs := map[string]struct{}{}
+	seenItemURLs := map[string]struct{}{}
 	for _, it := range itemSummaries {
 		if effectiveLimit > 0 && len(out) >= effectiveLimit {
 			break
@@ -288,7 +289,12 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 				continue
 			}
 		}
+		itemURLDedupeKey := listingURLDedupeKey(itemURL)
+		if _, seen := seenItemURLs[itemURLDedupeKey]; seen {
+			continue
+		}
 		seenListingIDs[listingIDDedupeKey] = struct{}{}
+		seenItemURLs[itemURLDedupeKey] = struct{}{}
 		shipping := normalizeShippingCost(it.ShippingOptions, currency)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
@@ -419,6 +425,16 @@ func normalizeOptionalWebURL(raw string) string {
 		return ""
 	}
 	return value
+}
+
+func listingURLDedupeKey(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	return strings.ToLower(parsed.String())
 }
 
 func normalizeBrowseImageURL(primary string, thumbnailImages, additionalImages []struct {
