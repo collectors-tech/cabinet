@@ -900,7 +900,7 @@ func normalizeAvailability(items []struct {
 
 func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
 	status := ""
-	if !containsRawControlByte(rawStatus) && !containsEncodedControlByte(rawStatus) && !containsEncodedUnsafeText(rawStatus) && !containsUnsafeUnicodeText(rawStatus) {
+	if !containsRawControlByte(rawStatus) && !containsEncodedControlByte(rawStatus) && !containsEncodedUnsafeText(rawStatus) && !containsUnsafeUnicodeText(rawStatus) && !containsRawNonASCIIWhitespace(rawStatus) {
 		status = strings.ToUpper(strings.TrimSpace(rawStatus))
 	}
 	if count < 0 || count > maxBrowseStockCount {
