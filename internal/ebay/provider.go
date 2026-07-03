@@ -264,8 +264,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		}
 		listingID := normalizeListingID(it.ItemID)
 		title := normalizeRequiredText(it.Title)
-		itemURL := strings.TrimSpace(it.ItemWebURL)
-		if listingID == "" || title == "" || itemURL == "" || !isWebURL(itemURL) {
+		itemURL := normalizeOptionalWebURL(it.ItemWebURL)
+		if listingID == "" || title == "" || itemURL == "" {
 			continue
 		}
 		listingIDDedupeKey := strings.ToLower(listingID)
@@ -394,6 +394,9 @@ func containsEncodedUnsafeText(raw string) bool {
 }
 
 func normalizeOptionalWebURL(raw string) string {
+	if containsRawNonASCIIWhitespace(raw) {
+		return ""
+	}
 	value := strings.TrimSpace(raw)
 	if value == "" || !isWebURL(value) {
 		return ""
