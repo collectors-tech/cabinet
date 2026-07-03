@@ -864,6 +864,101 @@ func TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance(t *testing.T) 
 	}
 }
 
+func TestEbayProviderRunMapsBlankSafeKeywordsToQueryGuidance(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profile := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/profiles",
+		strings.NewReader(`{"name":"ebay-query-validation-profile"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if profile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profile.Code, profile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile payload: %v", err)
+	}
+	activate := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/active",
+		strings.NewReader(`{"profile_id":"`+p.ID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	saveSettings := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/"+p.ID+"/settings",
+		strings.NewReader(`{"settings":{"ebay_bearer_token":"valid-token","ebay_marketplace":"EBAY_AU"}}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save ebay settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	create := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/scanner/query-sets",
+		strings.NewReader(`{"name":"eBay Blank Keywords","keywords":["placeholder"],"provider_scope":["ebay"],"enabled":true}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", create.Code, create.Body.String())
+	}
+	var created map[string]any
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create payload: %v", err)
+	}
+	querySetID, _ := created["id"].(string)
+	if _, err := a.db.Exec(`UPDATE scanner_query_sets SET keywords_json = '[" ","bad%0Akeyword"]' WHERE id = ?`, querySetID); err != nil {
+		t.Fatalf("force blank safe keywords: %v", err)
+	}
+
+	run := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/providers/ebay/run",
+		strings.NewReader(`{"query_set_id":"`+querySetID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 query validation failure, got %d body=%s", run.Code, run.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode ebay query validation payload: %v", err)
+	}
+	for key, expected := range map[string]any{
+		"error":        "failed_to_run_ebay_provider",
+		"error_code":   "PROVIDER_QUERY_INVALID",
+		"provider":     "ebay",
+		"query_set_id": querySetID,
+		"next_action":  "edit_ebay_query_criteria",
+	} {
+		if got := payload[key]; got != expected {
+			t.Fatalf("query validation payload %s=%v, want %v in %+v", key, got, expected, payload)
+		}
+	}
+	if message, _ := payload["message"].(string); !strings.Contains(message, "keywords are required") {
+		t.Fatalf("expected actionable keyword message, got %+v", payload)
+	}
+}
+
 func TestScannerRunMapsEbayBrowseRetryAfterToProviderErrorEnvelope(t *testing.T) {
 	t.Parallel()
 

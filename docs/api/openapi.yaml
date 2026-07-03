@@ -710,11 +710,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/EbayProviderRunResponse"
         "400":
-          description: eBay provider run request could not be parsed or resolved against the active profile.
+          description: eBay provider run request could not be parsed or resolved against the active profile, or the saved-search query criteria are invalid after provider safety filtering.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EbayProviderRunClientErrorResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/EbayProviderRunClientErrorResponse"
+                  - $ref: "#/components/schemas/EbayProviderRunQueryErrorResponse"
         "401":
           description: eBay provider credentials are missing, expired, or rejected.
           content:
@@ -3585,6 +3587,16 @@ components:
           enum: [integration.ebay.items_per_page]
           description: Active-profile setup setting that blocked the provider run.
         next_action: { type: string, enum: [select_existing_ebay_query_set, select_active_profile, retry_profile_settings, choose_ebay_scoped_query_set, update_ebay_items_per_page] }
+    EbayProviderRunQueryErrorResponse:
+      type: object
+      required: [error, error_code, provider, message, next_action, query_set_id]
+      properties:
+        error: { type: string, enum: [failed_to_run_ebay_provider] }
+        error_code: { type: string, enum: [PROVIDER_QUERY_INVALID] }
+        provider: { type: string, enum: [ebay] }
+        message: { type: string, description: Saved-search keyword criteria validation guidance after provider safety filtering. }
+        next_action: { type: string, enum: [edit_ebay_query_criteria] }
+        query_set_id: { type: string }
     EbayProviderRunMethodErrorResponse:
       type: object
       required: [error, error_code, provider, message, next_action, allowed_method]

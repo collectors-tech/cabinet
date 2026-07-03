@@ -164,7 +164,11 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	keywords := compactSearchTerms(q.Keywords)
 	terms := strings.Join(keywords, " ")
 	if terms == "" {
-		return nil, fmt.Errorf("keywords are required")
+		return nil, &ProviderError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  "PROVIDER_QUERY_INVALID",
+			Message:    "eBay saved-search keywords are required after query safety filtering",
+		}
 	}
 	v := url.Values{}
 	v.Set("q", terms)
