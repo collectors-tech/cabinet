@@ -1758,7 +1758,7 @@ func TestProviderSearchCanonicalizesBrowseItemAndImageURLs(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|url-fragment-first|0","title":"URL Fragment First Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"HTTPS://WWW.EBAY.COM/itm/fragment-url#details","image":{"imageUrl":"HTTPS://I.EBAYIMG.COM/images/fragment.jpg#thumb"},"seller":{"username":"seller-url"}},{"itemId":"v1|url-fragment-duplicate|0","title":"URL Fragment Duplicate Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/fragment-url#seller","image":{"imageUrl":"https://i.ebayimg.com/images/ignored.jpg"},"seller":{"username":"seller-url"}},{"itemId":"v1|url-fragment-unique|0","title":"URL Fragment Unique Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/fragment-url-unique#watch","image":{"imageUrl":"javascript:alert(1)"},"thumbnailImages":[{"imageUrl":"HTTPS://I.EBAYIMG.COM/images/thumb.jpg#variant"}],"seller":{"username":"seller-url"}}]}`))
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|url-fragment-first|0","title":"URL Fragment First Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"HTTPS://WWW.EBAY.COM:443/itm/fragment-url#details","image":{"imageUrl":"HTTPS://I.EBAYIMG.COM:443/images/fragment.jpg#thumb"},"seller":{"username":"seller-url"}},{"itemId":"v1|url-fragment-duplicate|0","title":"URL Fragment Duplicate Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/fragment-url#seller","image":{"imageUrl":"https://i.ebayimg.com/images/ignored.jpg"},"seller":{"username":"seller-url"}},{"itemId":"v1|url-fragment-unique|0","title":"URL Fragment Unique Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"http://www.ebay.com:80/itm/fragment-url-unique#watch","image":{"imageUrl":"javascript:alert(1)"},"thumbnailImages":[{"imageUrl":"HTTPS://I.EBAYIMG.COM:443/images/thumb.jpg#variant"}],"seller":{"username":"seller-url"}}]}`))
 	}))
 	defer srv.Close()
 
@@ -1777,7 +1777,7 @@ func TestProviderSearchCanonicalizesBrowseItemAndImageURLs(t *testing.T) {
 	if items[0].ListingID != "v1|url-fragment-first|0" || items[0].URL != "https://www.ebay.com/itm/fragment-url" || items[0].Image != "https://i.ebayimg.com/images/fragment.jpg" {
 		t.Fatalf("expected first item URL and primary image URL to be canonicalized, got %+v", items[0])
 	}
-	if items[1].ListingID != "v1|url-fragment-unique|0" || items[1].URL != "https://www.ebay.com/itm/fragment-url-unique" || items[1].Image != "https://i.ebayimg.com/images/thumb.jpg" {
+	if items[1].ListingID != "v1|url-fragment-unique|0" || items[1].URL != "http://www.ebay.com/itm/fragment-url-unique" || items[1].Image != "https://i.ebayimg.com/images/thumb.jpg" {
 		t.Fatalf("expected unique item URL and thumbnail fallback URL to be canonicalized, got %+v", items[1])
 	}
 }
