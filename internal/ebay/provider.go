@@ -757,7 +757,7 @@ func isUnsafeBearerToken(raw string) bool {
 	if len(raw) > maxBearerTokenLength {
 		return true
 	}
-	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw)
+	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) || containsRawNonASCIIWhitespace(raw)
 }
 
 func retryAfterSeconds(resp *http.Response) int {
