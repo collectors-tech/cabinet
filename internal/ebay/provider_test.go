@@ -1067,6 +1067,31 @@ func TestProviderSearchUsesCurrentBidPriceWhenBrowsePriceMissing(t *testing.T) {
 	}
 }
 
+func TestProviderSearchFallsBackToCurrentBidPriceWhenBrowsePriceUnsafe(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unsafe-primary-price|0","title":"Unsafe Primary Price Slot Car","price":{"value":"12.50%0A","currency":"AUD"},"currentBidPrice":{"value":"13.75","currency":"AUD"},"itemWebUrl":"https://ebay/item/unsafe-primary-price","seller":{"username":"seller-bid"}},{"itemId":"v1|invalid-bid-fallback|0","title":"Invalid Bid Fallback Slot Car","price":{"value":"not-a-price","currency":"AUD"},"currentBidPrice":{"value":"bid pending","currency":"AUD"},"itemWebUrl":"https://ebay/item/invalid-bid-fallback","seller":{"username":"seller-bid"}},{"itemId":"v1|mismatched-bid-fallback|0","title":"Mismatched Bid Fallback Slot Car","price":{"value":"not-a-price","currency":"AUD"},"currentBidPrice":{"value":"14.25","currency":"USD"},"itemWebUrl":"https://ebay/item/mismatched-bid-fallback","seller":{"username":"seller-bid"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	items, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords: []string{"slot", "car"},
+		MaxPrice: 20,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the safe currentBidPrice fallback candidate, got %+v", items)
+	}
+	if items[0].ListingID != "v1|unsafe-primary-price|0" || items[0].Price != 13.75 || items[0].Currency != "AUD" {
+		t.Fatalf("expected unsafe primary price to fall through to safe currentBidPrice, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
 	t.Parallel()
 
