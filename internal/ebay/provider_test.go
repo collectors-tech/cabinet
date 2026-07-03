@@ -199,6 +199,16 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 			wantFilter: "price:[..75.00],priceCurrency:GBP",
 		},
 		{
+			name:        "uk region aliases to ebay gb location country",
+			marketplace: "EBAY_GB",
+			query: scanner.QuerySet{
+				Keywords: []string{"slot car"},
+				MaxPrice: 75,
+				Region:   " uk ",
+			},
+			wantFilter: "price:[..75.00],priceCurrency:GBP,itemLocationCountry:GB",
+		},
+		{
 			name:        "marketplace currency wins when location country differs",
 			marketplace: "EBAY_US",
 			query: scanner.QuerySet{
