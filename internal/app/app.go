@@ -8123,6 +8123,8 @@ func ebayProviderErrorNextAction(providerErr *ebay.ProviderError) string {
 	switch providerErr.ErrorCode {
 	case "PROVIDER_AUTH_MISSING", "PROVIDER_AUTH_INVALID":
 		return "review_provider_credentials_and_health"
+	case "PROVIDER_QUERY_INVALID":
+		return "edit_ebay_query_criteria"
 	default:
 		return "check_provider_health_and_credentials"
 	}

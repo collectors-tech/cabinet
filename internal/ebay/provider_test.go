@@ -813,7 +813,14 @@ func TestProviderSearchRejectsOnlyUnsafeKeywords(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsafe keyword validation error")
 	}
-	if !strings.Contains(err.Error(), "keywords are required") {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected structured provider error, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusBadRequest || providerErr.ErrorCode != "PROVIDER_QUERY_INVALID" {
+		t.Fatalf("expected structured query validation error, got %+v", providerErr)
+	}
+	if !strings.Contains(providerErr.Error(), "keywords are required") {
 		t.Fatalf("expected keywords validation error, got %v", err)
 	}
 }
@@ -826,7 +833,14 @@ func TestProviderSearchRejectsOnlyOversizedKeywords(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected oversized keyword validation error")
 	}
-	if !strings.Contains(err.Error(), "keywords are required") {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected structured provider error, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusBadRequest || providerErr.ErrorCode != "PROVIDER_QUERY_INVALID" {
+		t.Fatalf("expected structured query validation error, got %+v", providerErr)
+	}
+	if !strings.Contains(providerErr.Error(), "keywords are required") {
 		t.Fatalf("expected keywords validation error, got %v", err)
 	}
 }
@@ -889,7 +903,14 @@ func TestProviderSearchRejectsOnlyBlankKeywords(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected blank keyword validation error")
 	}
-	if !strings.Contains(err.Error(), "keywords are required") {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected structured provider error, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusBadRequest || providerErr.ErrorCode != "PROVIDER_QUERY_INVALID" {
+		t.Fatalf("expected structured query validation error, got %+v", providerErr)
+	}
+	if !strings.Contains(providerErr.Error(), "keywords are required") {
 		t.Fatalf("expected keywords validation error, got %v", err)
 	}
 }

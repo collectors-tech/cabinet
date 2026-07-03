@@ -939,6 +939,13 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("openapi missing EbayProviderRunClientErrorResponse schema in %s", specPath)
 	}
+	runPathSection, ok := openAPIPathSection(raw, "/api/providers/ebay/run")
+	if !ok {
+		t.Fatalf("openapi missing /api/providers/ebay/run path in %s", specPath)
+	}
+	if !strings.Contains(runPathSection, "$ref: \"#/components/schemas/EbayProviderRunQueryErrorResponse\"") {
+		t.Fatalf("openapi /api/providers/ebay/run missing query-error response reference")
+	}
 	for _, token := range []string{
 		"required: [error, error_code, provider, message, next_action, query_set_id]",
 		"error:",
@@ -957,6 +964,23 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	} {
 		if !strings.Contains(clientErrorSchema, token) {
 			t.Fatalf("openapi EbayProviderRunClientErrorResponse schema missing %q:\n%s", token, clientErrorSchema)
+		}
+	}
+
+	queryErrorSchema, ok := openAPIComponentSection(raw, "EbayProviderRunQueryErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunQueryErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"error: { type: string, enum: [failed_to_run_ebay_provider] }",
+		"error_code: { type: string, enum: [PROVIDER_QUERY_INVALID] }",
+		"provider: { type: string, enum: [ebay] }",
+		"message: { type: string, description: Saved-search keyword criteria validation guidance after provider safety filtering. }",
+		"next_action: { type: string, enum: [edit_ebay_query_criteria] }",
+		"query_set_id: { type: string }",
+	} {
+		if !strings.Contains(queryErrorSchema, token) {
+			t.Fatalf("openapi EbayProviderRunQueryErrorResponse schema missing %q:\n%s", token, queryErrorSchema)
 		}
 	}
 
