@@ -1891,6 +1891,29 @@ func TestProviderSearchSkipsBrowseItemURLsWithUnicodeWhitespace(t *testing.T) {
 	}
 }
 
+func TestProviderSearchSkipsBrowseItemURLsWithEdgeUnicodeWhitespace(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unicode-edge-url|0","title":"Unicode Edge URL Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"` + string(rune(0x00a0)) + `https://www.ebay.com/itm/unicode-edge-url` + string(rune(0x202f)) + `","seller":{"username":"seller-url"}},{"itemId":"v1|valid-url|0","title":"Valid URL Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/valid-url","seller":{"username":"seller-url"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].ListingID != "v1|valid-url|0" {
+		t.Fatalf("expected edge unicode-whitespace item URL to be skipped, got %+v", items)
+	}
+}
+
 func TestProviderSearchSkipsOversizedBrowseItemURLs(t *testing.T) {
 	t.Parallel()
 
@@ -2354,6 +2377,32 @@ func TestProviderSearchDropsOversizedBrowseImageURLs(t *testing.T) {
 		default:
 			t.Fatalf("unexpected candidate %+v", item)
 		}
+	}
+}
+
+func TestProviderSearchDropsBrowseImageURLsWithEdgeUnicodeWhitespace(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|unicode-edge-image|0","title":"Unicode Edge Image Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://www.ebay.com/itm/unicode-edge-image","image":{"imageUrl":"` + string(rune(0x00a0)) + `https://i.ebayimg.com/images/unicode-edge.jpg` + string(rune(0x202f)) + `"},"seller":{"username":"seller-image"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected candidate with valid item URL to survive, got %+v", items)
+	}
+	if items[0].Image != "" {
+		t.Fatalf("expected edge unicode-whitespace image URL to be dropped, got %+v", items[0])
 	}
 }
 
