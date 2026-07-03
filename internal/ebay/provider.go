@@ -813,6 +813,9 @@ func browseCountry(region string) string {
 		return ""
 	}
 	region = strings.ToUpper(strings.TrimSpace(region))
+	if region == "UK" {
+		return "GB"
+	}
 	if isCountryCode(region) {
 		return region
 	}
