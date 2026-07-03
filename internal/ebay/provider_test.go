@@ -242,6 +242,16 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 			wantFilter: "price:[..75.00],priceCurrency:USD",
 		},
 		{
+			name:        "unicode whitespace saved-query region is ignored before trim can make it valid",
+			marketplace: "EBAY_US",
+			query: scanner.QuerySet{
+				Keywords: []string{"slot car"},
+				MaxPrice: 75,
+				Region:   string(rune(0x00a0)) + "US",
+			},
+			wantFilter: "price:[..75.00],priceCurrency:USD",
+		},
+		{
 			name:        "unsafe saved-query condition is ignored before trim can make it valid",
 			marketplace: "EBAY_AU",
 			query: scanner.QuerySet{
@@ -250,6 +260,25 @@ func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 				Condition: "used\n",
 			},
 			wantFilter: "itemLocationCountry:AU",
+		},
+		{
+			name:        "unicode whitespace saved-query condition is ignored before trim can make it valid",
+			marketplace: "EBAY_AU",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				Region:    "AU",
+				Condition: string(rune(0x00a0)) + "used",
+			},
+			wantFilter: "itemLocationCountry:AU",
+		},
+		{
+			name:        "safe ascii-spaced condition alias still maps",
+			marketplace: "EBAY_AU",
+			query: scanner.QuerySet{
+				Keywords:  []string{"slot car"},
+				Condition: " pre owned ",
+			},
+			wantFilter: "conditions:{USED}",
 		},
 		{
 			name:        "encoded unsafe saved-query region and condition are omitted",

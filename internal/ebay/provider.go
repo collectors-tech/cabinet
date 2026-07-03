@@ -818,7 +818,7 @@ func browseCondition(condition string) string {
 }
 
 func isUnsafeSavedQueryFilterText(raw string) bool {
-	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw)
+	return containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) || containsRawNonASCIIWhitespace(raw)
 }
 
 func browseCurrency(region, marketplace string) string {
