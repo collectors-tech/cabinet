@@ -298,6 +298,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		seenItemURLs[itemURLDedupeKey] = struct{}{}
 		shipping := normalizeShippingCost(it.ShippingOptions, currency)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
+		listingCreatedAt, listingUpdatedAt := normalizeBrowseTimestampPair(it.ItemCreationDate, it.ItemEndDate)
 		out = append(out, scanner.CandidateInput{
 			ListingID:        listingID,
 			Title:            title,
@@ -310,8 +311,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Source:           "ebay",
 			StockState:       stockState,
 			StockCount:       stockCount,
-			ListingCreatedAt: normalizeBrowseTimestamp(it.ItemCreationDate),
-			ListingUpdatedAt: normalizeBrowseTimestamp(it.ItemEndDate),
+			ListingCreatedAt: listingCreatedAt,
+			ListingUpdatedAt: listingUpdatedAt,
 		})
 	}
 	return out, nil
@@ -509,6 +510,20 @@ func normalizeBrowseTimestamp(raw string) string {
 		return ""
 	}
 	return parsed.UTC().Format(time.RFC3339)
+}
+
+func normalizeBrowseTimestampPair(createdRaw, updatedRaw string) (string, string) {
+	created := normalizeBrowseTimestamp(createdRaw)
+	updated := normalizeBrowseTimestamp(updatedRaw)
+	if created == "" || updated == "" {
+		return created, updated
+	}
+	createdAt, createdErr := time.Parse(time.RFC3339, created)
+	updatedAt, updatedErr := time.Parse(time.RFC3339, updated)
+	if createdErr != nil || updatedErr != nil || createdAt.After(updatedAt) {
+		return "", ""
+	}
+	return created, updated
 }
 
 func normalizeCurrencyCode(raw string) (string, bool) {

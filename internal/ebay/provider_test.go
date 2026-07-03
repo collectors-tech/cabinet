@@ -144,6 +144,31 @@ func TestProviderSearchDropsImplausiblyFutureBrowseTimestamps(t *testing.T) {
 	}
 }
 
+func TestProviderSearchDropsImpossibleBrowseTimestampPairs(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|reversed-time|0","title":"Reversed Time Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/reversed-time","itemCreationDate":"2026-07-08T05:04:03Z","itemEndDate":"2026-07-07T05:04:03Z","seller":{"username":"seller-time"}},{"itemId":"v1|partial-time|0","title":"Partial Time Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/partial-time","itemCreationDate":"2026-07-07T05:04:03Z","seller":{"username":"seller-time"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected otherwise valid candidates to survive, got %+v", items)
+	}
+	if items[0].ListingCreatedAt != "" || items[0].ListingUpdatedAt != "" {
+		t.Fatalf("expected reversed Browse timestamp pair to be dropped, got %+v", items[0])
+	}
+	if items[1].ListingCreatedAt != "2026-07-07T05:04:03Z" || items[1].ListingUpdatedAt != "" {
+		t.Fatalf("expected one-sided Browse timestamp to be preserved, got %+v", items[1])
+	}
+}
+
 func TestProviderSearchBuildsBrowseFiltersFromSavedQueryCriteria(t *testing.T) {
 	t.Parallel()
 
