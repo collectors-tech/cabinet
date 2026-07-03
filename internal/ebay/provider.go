@@ -583,7 +583,7 @@ func parseBrowseAmount(raw string) (float64, error) {
 }
 
 func containsUnsafeAmountText(raw string) bool {
-	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) {
+	if containsRawControlByte(raw) || containsEncodedControlByte(raw) || containsMalformedPercentEscape(raw) || containsEncodedUnsafeText(raw) || containsUnsafeUnicodeText(raw) {
 		return true
 	}
 	return containsRawNonASCIIWhitespace(raw)
