@@ -3351,7 +3351,7 @@ func TestProviderSearchPreservesLowStockSignalWithoutUsableQuantity(t *testing.T
 	}
 }
 
-func TestProviderSearchDoesNotInferUnknownAvailabilityAsInStock(t *testing.T) {
+func TestProviderSearchPreservesUnknownPositiveAvailabilityCount(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3372,8 +3372,8 @@ func TestProviderSearchDoesNotInferUnknownAvailabilityAsInStock(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("expected one normalized item, got %+v", items)
 	}
-	if items[0].StockState != "unknown" || items[0].StockCount != -1 {
-		t.Fatalf("expected unrecognized availability status to remain unknown/-1, got %+v", items[0])
+	if items[0].StockState != "unknown" || items[0].StockCount != 6 {
+		t.Fatalf("expected unrecognized availability status to preserve unknown/6, got %+v", items[0])
 	}
 }
 
