@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -431,7 +432,7 @@ func normalizeOptionalWebURL(raw string) string {
 		return ""
 	}
 	parsed.Scheme = strings.ToLower(parsed.Scheme)
-	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.Host = canonicalWebURLHost(parsed)
 	parsed.Fragment = ""
 	return parsed.String()
 }
@@ -442,8 +443,28 @@ func listingURLDedupeKey(raw string) string {
 		return strings.ToLower(strings.TrimSpace(raw))
 	}
 	parsed.Scheme = strings.ToLower(parsed.Scheme)
-	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.Host = canonicalWebURLHost(parsed)
 	return strings.ToLower(parsed.String())
+}
+
+func canonicalWebURLHost(parsed *url.URL) string {
+	if parsed == nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Host)
+	port := parsed.Port()
+	if port == "" {
+		return host
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		hostname := strings.ToLower(parsed.Hostname())
+		if strings.Contains(hostname, ":") {
+			return "[" + hostname + "]"
+		}
+		return hostname
+	}
+	return strings.ToLower(net.JoinHostPort(parsed.Hostname(), port))
 }
 
 func normalizeBrowseImageURL(primary string, thumbnailImages, additionalImages []struct {
