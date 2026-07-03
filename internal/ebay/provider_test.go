@@ -1042,6 +1042,31 @@ func TestProviderSearchParsesCommaGroupedBrowsePriceValue(t *testing.T) {
 	}
 }
 
+func TestProviderSearchUsesCurrentBidPriceWhenBrowsePriceMissing(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|auction-bid|0","title":"Auction Bid Slot Car","currentBidPrice":{"value":"38.50","currency":"AUD"},"itemWebUrl":"https://ebay/item/auction-bid","seller":{"username":"seller-bid"}},{"itemId":"v1|invalid-bid|0","title":"Invalid Bid Slot Car","currentBidPrice":{"value":"bid pending","currency":"AUD"},"itemWebUrl":"https://ebay/item/invalid-bid","seller":{"username":"seller-bid"}},{"itemId":"v1|over-bid|0","title":"Over Bid Slot Car","currentBidPrice":{"value":"51.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/over-bid","seller":{"username":"seller-bid"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	items, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords: []string{"slot", "car"},
+		MaxPrice: 50,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only safe in-range currentBidPrice candidate, got %+v", items)
+	}
+	if items[0].ListingID != "v1|auction-bid|0" || items[0].Price != 38.50 || items[0].Currency != "AUD" {
+		t.Fatalf("expected currentBidPrice to normalize as candidate price/currency, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchSkipsUnparseableBrowsePrices(t *testing.T) {
 	t.Parallel()
 
