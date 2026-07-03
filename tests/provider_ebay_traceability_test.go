@@ -644,6 +644,113 @@ func TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented(t *testing.T) 
 	}
 }
 
+func TestEbayProductionHardeningAcceptanceRollupImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	rows := map[string]string{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		for _, id := range []string{
+			"INTEGRATION-005",
+			"INTEGRATION-006",
+			"INTEGRATION-007",
+			"DEFAULT-SITE-SEARCH-006",
+			"UI-SCREEN-MARKET-WATCH-008",
+			"UI-SCREEN-MARKET-WATCH-009",
+			"UI-SCREEN-MARKET-WATCH-010",
+			"UI-SCREEN-MARKET-WATCH-012",
+			"UI-SCREEN-MARKET-WATCH-017",
+		} {
+			if strings.HasPrefix(line, "| `"+id+"` ") || strings.HasPrefix(line, "| "+id+" ") {
+				rows[id] = line
+			}
+		}
+	}
+
+	required := map[string][]string{
+		"INTEGRATION-005": {
+			"eBay setup UI status panel renders registry `setup_status` readiness",
+			"Help Center Integrations guide documents eBay bearer-token setup, marketplace/region, base URL override state, validation, Market Watch run path, auth/search diagnostics, and live-credential limitations",
+			"`internal/ebay/provider.go` Browse request headers/query criteria",
+			"normalized candidate metadata",
+			"`/api/scanner/run` provider-error envelope",
+			"`/api/providers/ebay/run` saved-search candidate persistence",
+			"eBay saved-query create/edit/schedule/delete lifecycle with provider_scope=[\"ebay\"]",
+			"Wishlist/Inventory provenance handoff",
+			"TestProviderSearchNormalizesCandidates",
+			"TestScannerRunMapsEbayAuthFailureToProviderErrorCode",
+			"TestOpenAPIDocumentsEbayProviderRunContract",
+			"Cypress `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts`",
+			"Cypress `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts`",
+			"| implemented |",
+		},
+		"INTEGRATION-006": {
+			"provider health and scanner failure snapshots remain provider-scoped",
+			"TestProviderHealthEndpointKeepsUnrelatedProvidersIsolated",
+			"TestRunNowRecordsProviderHealthForExecutingProvider",
+			"UI-SCREEN-SCANNER-002 exposes provider health and failure retry",
+			"| implemented |",
+		},
+		"INTEGRATION-007": {
+			"stock_state",
+			"stock_count",
+			"TestProviderSearchNormalizesCandidates",
+			"TestProviderSearchUsesFirstMeaningfulAvailability",
+			"| implemented |",
+		},
+		"DEFAULT-SITE-SEARCH-006": {
+			"Discoveries, Wishlist, and Inventory handoff",
+			"eBay source/query provenance",
+			"TestApplySavedSearchActionsRetainAuditProvenance",
+			"`ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts`",
+			"| implemented |",
+		},
+		"UI-SCREEN-MARKET-WATCH-008": {
+			"Market Watch output-detail result table with provider/source, title, price/currency, source URL or listing id, stock/status, handoff state",
+			"`UI-SCREEN-MARKET-WATCH-008 shows output result provenance and handoff state`",
+			"| implemented |",
+		},
+		"UI-SCREEN-MARKET-WATCH-009": {
+			"Wishlist handoff action posts selected candidate with Market Watch query provenance",
+			"`UI-SCREEN-MARKET-WATCH-009 persists output-detail Wishlist handoff provenance`",
+			"| implemented |",
+		},
+		"UI-SCREEN-MARKET-WATCH-010": {
+			"Inventory handoff action posts selected candidate with Market Watch query provenance",
+			"`UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance`",
+			"| implemented |",
+		},
+		"UI-SCREEN-MARKET-WATCH-012": {
+			"Discoveries handoff action calls Discoveries with the saved watch keyword context",
+			"`UI-SCREEN-MARKET-WATCH-012 hands output-detail context to Discoveries with saved-watch keyword`",
+			"| implemented |",
+		},
+		"UI-SCREEN-MARKET-WATCH-017": {
+			"persisted `scanner_runs` history",
+			"provider health taxonomy",
+			"`UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history`",
+			"| implemented |",
+		},
+	}
+
+	for id, fragments := range required {
+		row := rows[id]
+		if row == "" {
+			t.Fatalf("expected traceability row for %s", id)
+		}
+		for _, fragment := range fragments {
+			if !strings.Contains(row, fragment) {
+				t.Fatalf("expected %s acceptance rollup row to include %q; row: %s", id, fragment, row)
+			}
+		}
+	}
+}
+
 func TestEbaySetupDocsTraceabilityImplemented(t *testing.T) {
 	t.Parallel()
 
