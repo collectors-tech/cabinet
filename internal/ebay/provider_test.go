@@ -1493,6 +1493,35 @@ func TestProviderSearchSkipsBrowseTextFieldsWithNestedEncodedUnsafeText(t *testi
 	}
 }
 
+func TestProviderSearchSkipsBrowseTextFieldsWithMalformedEscapes(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|malformed%ZZid|0","title":"Malformed ID Slot Car","price":{"value":"11.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/malformed-id","seller":{"username":"seller-text"}},{"itemId":"v1|malformed-title|0","title":"Malformed%2 Title Slot Car","price":{"value":"12.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/malformed-title","seller":{"username":"seller-text"}},{"itemId":"v1|malformed-seller|0","title":"Malformed Seller Slot Car","price":{"value":"13.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/malformed-seller","seller":{"username":"seller%GGtext"}},{"itemId":"v1|safe-malformed-escape-text|0","title":"Safe Malformed Escape Text Slot Car","price":{"value":"14.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/safe-malformed-escape-text","seller":{"username":"seller-text"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"afx"}})
+	if err != nil {
+		t.Fatalf("search ebay: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected malformed-escape listing id/title to be skipped while seller fallback survives, got %+v", items)
+	}
+	if items[0].ListingID != "v1|malformed-seller|0" || items[0].Seller != "ebay" {
+		t.Fatalf("expected malformed-escape seller to fall back to ebay, got %+v", items[0])
+	}
+	if items[1].ListingID != "v1|safe-malformed-escape-text|0" || items[1].Seller != "seller-text" {
+		t.Fatalf("expected safe text candidate to survive, got %+v", items[1])
+	}
+}
+
 func TestProviderSearchSkipsOversizedBrowseRequiredText(t *testing.T) {
 	t.Parallel()
 

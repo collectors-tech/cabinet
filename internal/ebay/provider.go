@@ -393,6 +393,23 @@ func containsEncodedUnsafeText(raw string) bool {
 	return false
 }
 
+func containsMalformedPercentEscape(raw string) bool {
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '%' {
+			continue
+		}
+		if i+2 >= len(raw) || !isHexDigit(raw[i+1]) || !isHexDigit(raw[i+2]) {
+			return true
+		}
+		i += 2
+	}
+	return false
+}
+
+func isHexDigit(value byte) bool {
+	return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F')
+}
+
 func normalizeOptionalWebURL(raw string) string {
 	if containsRawNonASCIIWhitespace(raw) {
 		return ""
@@ -425,7 +442,7 @@ func normalizeBrowseImageURL(primary string, thumbnailImages, additionalImages [
 
 func normalizeRequiredText(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || len(value) > maxBrowseTextFieldLength || containsRawControlByte(value) || containsEncodedControlByte(value) || containsEncodedUnsafeText(value) || containsUnsafeUnicodeText(value) {
+	if value == "" || len(value) > maxBrowseTextFieldLength || containsRawControlByte(value) || containsEncodedControlByte(value) || containsMalformedPercentEscape(value) || containsEncodedUnsafeText(value) || containsUnsafeUnicodeText(value) {
 		return ""
 	}
 	return value
