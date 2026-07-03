@@ -983,7 +983,8 @@ func normalizeAvailability(items []struct {
 
 func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
 	status := ""
-	if !containsRawControlByte(rawStatus) && !containsEncodedControlByte(rawStatus) && !containsEncodedUnsafeText(rawStatus) && !containsUnsafeUnicodeText(rawStatus) && !containsRawNonASCIIWhitespace(rawStatus) {
+	statusSafe := !containsRawControlByte(rawStatus) && !containsEncodedControlByte(rawStatus) && !containsEncodedUnsafeText(rawStatus) && !containsUnsafeUnicodeText(rawStatus) && !containsRawNonASCIIWhitespace(rawStatus)
+	if statusSafe {
 		status = strings.ToUpper(strings.TrimSpace(rawStatus))
 	}
 	if count < 0 || count > maxBrowseStockCount {
@@ -1004,6 +1005,9 @@ func normalizeAvailabilityEntry(rawStatus string, count int) (string, int) {
 	case "OUT_OF_STOCK", "SOLD_OUT":
 		return "out_of_stock", 0
 	default:
+		if status != "" && count > 0 {
+			return "unknown", count
+		}
 		return "unknown", -1
 	}
 }
