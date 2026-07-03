@@ -50,6 +50,10 @@ type browseItemSummary struct {
 		Value    string `json:"value"`
 		Currency string `json:"currency"`
 	} `json:"price"`
+	CurrentBidPrice struct {
+		Value    string `json:"value"`
+		Currency string `json:"currency"`
+	} `json:"currentBidPrice"`
 	ItemWebURL string `json:"itemWebUrl"`
 	Image      struct {
 		ImageURL string `json:"imageUrl"`
@@ -279,11 +283,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		if _, seen := seenListingIDs[listingIDDedupeKey]; seen {
 			continue
 		}
-		price, err := parseBrowseAmount(it.Price.Value)
-		if err != nil || price <= 0 {
-			continue
-		}
-		currency, ok := normalizeCurrencyCode(it.Price.Currency)
+		price, currency, ok := normalizeBrowseCandidatePrice(it)
 		if !ok {
 			continue
 		}
@@ -321,6 +321,27 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		})
 	}
 	return out, nil
+}
+
+func normalizeBrowseCandidatePrice(it browseItemSummary) (float64, string, bool) {
+	for _, candidate := range []struct {
+		value    string
+		currency string
+	}{
+		{value: it.Price.Value, currency: it.Price.Currency},
+		{value: it.CurrentBidPrice.Value, currency: it.CurrentBidPrice.Currency},
+	} {
+		price, err := parseBrowseAmount(candidate.value)
+		if err != nil || price <= 0 {
+			continue
+		}
+		currency, ok := normalizeCurrencyCode(candidate.currency)
+		if !ok {
+			continue
+		}
+		return price, currency, true
+	}
+	return 0, "", false
 }
 
 func readBrowseSuccessBody(body io.Reader) ([]byte, error) {
