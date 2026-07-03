@@ -667,6 +667,31 @@ func TestProviderSearchOmitsEncodedUnicodeQueryTextBeforeBrowseRequest(t *testin
 	}
 }
 
+func TestProviderSearchOmitsRawUnicodeWhitespaceQueryTextBeforeBrowseRequest(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("q"); got != "AFX P-1 slot car" {
+			t.Errorf("expected raw Unicode-whitespace keywords to be omitted before joining, got %q", got)
+		}
+		if got := r.URL.Query().Get("exclude"); got != "broken,parts only" {
+			t.Errorf("expected raw Unicode-whitespace exclusions to be omitted before joining, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{
+		Keywords:   []string{"AFX", "bad" + string(rune(0x00a0)) + "keyword", "wide" + string(rune(0x202f)) + "gap", "P-1", "slot car"},
+		Exclusions: []string{"broken", "skip" + string(rune(0x00a0)) + "this", "parts only"},
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+}
+
 func TestProviderSearchOmitsEncodedWhitespaceQueryTextBeforeBrowseRequest(t *testing.T) {
 	t.Parallel()
 
@@ -747,7 +772,7 @@ func TestProviderSearchRejectsOnlyUnsafeKeywords(t *testing.T) {
 	t.Parallel()
 
 	p := NewProvider(ProviderConfig{BaseURL: "https://example.invalid", BearerToken: "token", Marketplace: "EBAY_AU"})
-	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"bad\nkeyword", "bad%0Dkeyword"}})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"bad\nkeyword", "bad%0Dkeyword", "bad" + string(rune(0x00a0)) + "keyword"}})
 	if err == nil {
 		t.Fatal("expected unsafe keyword validation error")
 	}

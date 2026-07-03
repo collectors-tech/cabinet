@@ -692,13 +692,20 @@ func normalizeProviderDiagnosticField(raw string) string {
 func compactSearchTerms(values []string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
-		term := normalizeRequiredText(value)
+		term := normalizeSearchTerm(value)
 		if term == "" {
 			continue
 		}
 		out = append(out, term)
 	}
 	return out
+}
+
+func normalizeSearchTerm(raw string) string {
+	if containsRawNonASCIIWhitespace(raw) {
+		return ""
+	}
+	return normalizeRequiredText(raw)
 }
 
 func containsUnsafeUnicodeText(raw string) bool {
