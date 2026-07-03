@@ -86,6 +86,7 @@ const maxBrowseURLLength = 2048
 const maxBrowseResponseBodyRead = 2 * 1024 * 1024
 const maxBrowseStockCount = 100000
 const maxBrowseTimestampFutureSkew = 366 * 24 * time.Hour
+const maxEncodedUnsafeDecodeDepth = 8
 
 func (e *ProviderError) Error() string {
 	if e == nil {
@@ -386,12 +387,12 @@ func containsRawURLWhitespace(raw string) bool {
 
 func containsEncodedUnsafeText(raw string) bool {
 	current := raw
-	for i := 0; i < 3; i++ {
+	for i := 0; i < maxEncodedUnsafeDecodeDepth; i++ {
 		decoded, err := url.PathUnescape(current)
 		if err != nil || decoded == current {
 			return false
 		}
-		if containsRawControlByte(decoded) || containsEncodedControlByte(decoded) || containsUnsafeUnicodeText(decoded) || containsRawURLWhitespace(decoded) {
+		if containsRawControlByte(decoded) || containsEncodedControlByte(decoded) || containsEncodedURLWhitespace(decoded) || containsUnsafeUnicodeText(decoded) || containsRawURLWhitespace(decoded) {
 			return true
 		}
 		current = decoded
