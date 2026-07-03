@@ -425,7 +425,14 @@ func normalizeOptionalWebURL(raw string) string {
 	if value == "" || !isWebURL(value) {
 		return ""
 	}
-	return value
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 func listingURLDedupeKey(raw string) string {
