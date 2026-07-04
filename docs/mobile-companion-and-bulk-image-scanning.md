@@ -1,7 +1,7 @@
 # Cabinet Mobile Companion and Bulk Image Scanning
 
-Status: Planning document  
-Scope: Cabinet desktop-first companion mobile app, offline capture cache, upload queue, and bulk image scan workflow  
+Status: Planning document
+Scope: Cabinet desktop-first companion mobile app, offline capture cache, upload queue, and bulk image scan workflow
 Target implementation repository: `collectors-tech/cabinet`
 
 ## Purpose
@@ -55,25 +55,25 @@ The phone should help the user collect data. It should not silently mutate the m
 
 ## Design principles
 
-1. **Desktop-first authority**  
+1. **Desktop-first authority**
    The desktop Cabinet profile remains the source of truth for inventory, wishlist, collections, storage, backup, import, export, and repository publication.
 
-2. **Mobile-first capture speed**  
+2. **Mobile-first capture speed**
    The phone should make capture extremely fast: scan, snap, note, queue, and move on.
 
-3. **Offline by default**  
+3. **Offline by default**
    Every capture must survive poor reception, convention halls, store basements, and home network interruptions.
 
-4. **Review before truth**  
+4. **Review before truth**
    Bulk scans create candidates, not final inventory truth.
 
-5. **Idempotent upload**  
+5. **Idempotent upload**
    Retrying a failed upload must not create duplicate inventory or duplicate media records.
 
-6. **Private by default**  
+6. **Private by default**
    Mobile capture data is private local data until the user uploads it to their own Cabinet desktop workspace.
 
-7. **No destructive mobile permissions in MVP**  
+7. **No destructive mobile permissions in MVP**
    A paired mobile device can upload capture batches, but cannot delete or overwrite desktop inventory.
 
 ## Non-goals for MVP
