@@ -21,7 +21,7 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 	}})
 
 	skills := registry.List()
-	if len(skills) < 8 {
+	if len(skills) < 20 {
 		t.Fatalf("expected built-in plus imported skills, got %d", len(skills))
 	}
 	for _, id := range []string{
@@ -32,6 +32,18 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 		"cabinet.collection.assign_item",
 		"cabinet.guided.inventory.update_item",
 		"cabinet.chat.action_timeline.view",
+		"cabinet.inbox.search_notifications",
+		"cabinet.inbox.summarise_unhandled",
+		"cabinet.inbox.open_notification",
+		"cabinet.inbox.mark_handled",
+		"cabinet.inbox.archive_or_hide",
+		"cabinet.inbox.route_to_surface",
+		"cabinet.users.search",
+		"cabinet.users.invite_user",
+		"cabinet.users.resend_invitation",
+		"cabinet.users.update_role",
+		"cabinet.users.activate_or_deactivate",
+		"cabinet.users.remove_user",
 		"local.archive.read_only",
 	} {
 		if !containsSkill(skills, id) {
@@ -51,6 +63,97 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 	}
 	if resolved.SafetyLevel != SafetyConfirmRequired || !resolved.Permissions.RequiresConfirm || !resolved.Permissions.LocalWrite {
 		t.Fatalf("expected confirm-required local write permission metadata, got %+v", resolved)
+	}
+}
+
+func TestInboxAndUsersAdminSkillsExposeSafetyAndExecutionBoundaries(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	inboxSearch, ok := registry.Resolve("cabinet.inbox.search_notifications")
+	if !ok {
+		t.Fatalf("expected inbox search skill")
+	}
+	if inboxSearch.SafetyLevel != SafetyReadOnly || inboxSearch.Permissions.LocalWrite || !inboxSearch.Executable {
+		t.Fatalf("inbox search should be executable read-only metadata, got %+v", inboxSearch)
+	}
+
+	inboxMutation, ok := registry.Resolve("cabinet.inbox.mark_handled")
+	if !ok {
+		t.Fatalf("expected inbox mark handled skill")
+	}
+	if inboxMutation.SafetyLevel != SafetyConfirmRequired || !inboxMutation.Permissions.RequiresConfirm || !inboxMutation.Permissions.LocalWrite {
+		t.Fatalf("inbox mutation should declare confirm-required local write safety, got %+v", inboxMutation)
+	}
+	if inboxMutation.Status != StatusAvailable || !inboxMutation.Executable || inboxMutation.NextAction != "" {
+		t.Fatalf("inbox mutation should be executable after handler binding, got %+v", inboxMutation)
+	}
+
+	userSearch, ok := registry.Resolve("cabinet.users.search")
+	if !ok {
+		t.Fatalf("expected users search skill")
+	}
+	if userSearch.SafetyLevel != SafetyReadOnly || !slices.Contains(userSearch.RequiredContext, "admin_session") || !userSearch.Executable {
+		t.Fatalf("users search should be executable read-only admin metadata, got %+v", userSearch)
+	}
+
+	removeUser, ok := registry.Resolve("cabinet.users.remove_user")
+	if !ok {
+		t.Fatalf("expected remove user skill")
+	}
+	if removeUser.SafetyLevel != SafetyDestructive || !removeUser.Permissions.Destructive || !removeUser.Permissions.RequiresConfirm {
+		t.Fatalf("remove user should declare destructive confirmation safety, got %+v", removeUser)
+	}
+	if removeUser.Status != StatusAvailable || !removeUser.Executable || removeUser.NextAction != "" {
+		t.Fatalf("remove user should be executable after protected admin handlers are bound, got %+v", removeUser)
+	}
+}
+
+func TestSkillPreviewBlocksUnboundInboxAndUsersMutations(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	inboxMissingTarget, err := registry.Preview(PreviewRequest{SkillID: "cabinet.inbox.mark_handled"})
+	if err != nil {
+		t.Fatalf("preview inbox skill: %v", err)
+	}
+	if inboxMissingTarget.Allowed || inboxMissingTarget.MutationApplied || inboxMissingTarget.Blocker != "inbox_notification_target_required" {
+		t.Fatalf("expected missing Inbox target blocker without mutation, got %+v", inboxMissingTarget)
+	}
+
+	inboxTargeted, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.inbox.archive_or_hide",
+		Parameters: map[string]any{"notification_id": "notice-1", "action": "hide"},
+	})
+	if err != nil {
+		t.Fatalf("preview inbox targeted skill: %v", err)
+	}
+	if inboxTargeted.Allowed || !inboxTargeted.ConfirmationRequired || inboxTargeted.Blocker != "confirmation_required" {
+		t.Fatalf("expected Inbox confirmation blocker, got %+v", inboxTargeted)
+	}
+
+	usersMissingTarget, err := registry.Preview(PreviewRequest{SkillID: "cabinet.users.update_role"})
+	if err != nil {
+		t.Fatalf("preview users skill: %v", err)
+	}
+	if usersMissingTarget.Allowed || usersMissingTarget.Blocker != "users_admin_target_required" {
+		t.Fatalf("expected users admin missing target blocker, got %+v", usersMissingTarget)
+	}
+
+	protectedRemove, err := registry.Preview(PreviewRequest{
+		SkillID: "cabinet.users.remove_user",
+		Parameters: map[string]any{
+			"target_user":         "owner@example.test",
+			"target_role_current": "owner",
+		},
+	})
+	if err != nil {
+		t.Fatalf("preview remove user skill: %v", err)
+	}
+	if protectedRemove.Allowed || protectedRemove.MutationApplied || protectedRemove.Blocker != "users_admin_protected_owner_remove_blocked" {
+		t.Fatalf("expected protected owner removal blocker without mutation, got %+v", protectedRemove)
 	}
 }
 
