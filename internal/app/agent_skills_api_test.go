@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -99,6 +100,41 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	}
 	if removeUser.SafetyLevel != "destructive" || !removeUser.Permissions.Destructive || removeUser.Executable {
 		t.Fatalf("expected destructive non-executable remove user metadata, got %+v", removeUser)
+	}
+}
+
+func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"test-profile",
+		"skill_id":"cabinet.users.remove_user",
+		"confirm":true,
+		"parameters":{
+			"target_user":"owner@example.test",
+			"target_role_current":"owner"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		SkillID              string `json:"skill_id"`
+		Allowed              bool   `json:"allowed"`
+		PreviewOnly          bool   `json:"preview_only"`
+		MutationApplied      bool   `json:"mutation_applied"`
+		ConfirmationRequired bool   `json:"confirmation_required"`
+		Blocker              string `json:"blocker"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if payload.SkillID != "cabinet.users.remove_user" || payload.Allowed || !payload.PreviewOnly || payload.MutationApplied {
+		t.Fatalf("expected preview-only blocked admin mutation, got %+v", payload)
+	}
+	if !payload.ConfirmationRequired || payload.Blocker != "users_admin_protected_owner_remove_blocked" {
+		t.Fatalf("expected protected owner confirmation blocker, got %+v", payload)
 	}
 }
 

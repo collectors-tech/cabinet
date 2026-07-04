@@ -80,6 +80,27 @@ type Registry struct {
 	imported []Skill
 }
 
+type PreviewRequest struct {
+	SkillID    string         `json:"skill_id"`
+	ProfileID  string         `json:"profile_id"`
+	Confirm    bool           `json:"confirm"`
+	Parameters map[string]any `json:"parameters,omitempty"`
+}
+
+type PreviewResponse struct {
+	SkillID              string         `json:"skill_id"`
+	Status               Status         `json:"status"`
+	SafetyLevel          SafetyLevel    `json:"safety_level"`
+	Executable           bool           `json:"executable"`
+	Allowed              bool           `json:"allowed"`
+	PreviewOnly          bool           `json:"preview_only"`
+	MutationApplied      bool           `json:"mutation_applied"`
+	ConfirmationRequired bool           `json:"confirmation_required"`
+	Blocker              string         `json:"blocker,omitempty"`
+	NextAction           string         `json:"next_action,omitempty"`
+	Target               map[string]any `json:"target,omitempty"`
+}
+
 func NewRegistry(imported []Skill) Registry {
 	return Registry{
 		builtIns: builtInSkills(),
@@ -124,6 +145,47 @@ func (r Registry) ValidateImportedSkill(skill Skill) error {
 		}
 	}
 	return nil
+}
+
+func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
+	skill, ok := r.Resolve(strings.TrimSpace(req.SkillID))
+	if !ok {
+		return PreviewResponse{}, errors.New("skill_not_found")
+	}
+	resp := PreviewResponse{
+		SkillID:              skill.ID,
+		Status:               skill.Status,
+		SafetyLevel:          skill.SafetyLevel,
+		Executable:           skill.Executable,
+		Allowed:              skill.Executable,
+		PreviewOnly:          true,
+		MutationApplied:      false,
+		ConfirmationRequired: skill.Permissions.RequiresConfirm,
+		NextAction:           skill.NextAction,
+	}
+	params := req.Parameters
+	if params == nil {
+		params = map[string]any{}
+	}
+	if strings.HasPrefix(skill.ID, "cabinet.users.") && skill.ID != "cabinet.users.search" {
+		resp.Allowed = false
+		resp.Blocker = previewUsersAdminBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "target_user", "target_email", "target_role", "target_status")
+		if resp.NextAction == "" {
+			resp.NextAction = "Select a target user and confirm the requested admin action in Cabinet before applying any mutation."
+		}
+		return resp, nil
+	}
+	if strings.HasPrefix(skill.ID, "cabinet.inbox.") && skill.SafetyLevel == SafetyConfirmRequired {
+		resp.Allowed = false
+		resp.Blocker = previewInboxBlocker(params)
+		resp.Target = previewTarget(params, "target_notification", "notification_id", "action")
+		if resp.NextAction == "" {
+			resp.NextAction = "Select an Inbox notification and confirm the requested state change in Cabinet before applying any mutation."
+		}
+		return resp, nil
+	}
+	return resp, nil
 }
 
 func builtInSkills() []Skill {
@@ -196,6 +258,81 @@ func builtIn(id, displayName, description, category string, safety SafetyLevel, 
 		Executable:    executable,
 		NextAction:    nextAction,
 	})
+}
+
+func previewUsersAdminBlocker(skillID string, params map[string]any) string {
+	target := strings.TrimSpace(stringParam(params, "target_user"))
+	if target == "" && strings.TrimSpace(stringParam(params, "target_email")) == "" {
+		return "users_admin_target_required"
+	}
+	role := strings.ToLower(strings.TrimSpace(stringParam(params, "target_role")))
+	if skillID == "cabinet.users.update_role" && role == "" {
+		return "users_admin_target_role_required"
+	}
+	if protectedUser(params) {
+		switch skillID {
+		case "cabinet.users.remove_user":
+			return "users_admin_protected_owner_remove_blocked"
+		case "cabinet.users.update_role":
+			if role != "" && role != "owner" && role != "admin" {
+				return "users_admin_protected_owner_downgrade_blocked"
+			}
+		case "cabinet.users.activate_or_deactivate":
+			status := strings.ToLower(strings.TrimSpace(stringParam(params, "target_status")))
+			if status == "inactive" || status == "deactivated" || status == "disabled" {
+				return "users_admin_protected_owner_deactivate_blocked"
+			}
+		}
+	}
+	return "users_admin_preview_confirm_apply_not_bound"
+}
+
+func previewInboxBlocker(params map[string]any) string {
+	if strings.TrimSpace(stringParam(params, "target_notification")) == "" && strings.TrimSpace(stringParam(params, "notification_id")) == "" {
+		return "inbox_notification_target_required"
+	}
+	return "inbox_preview_confirm_apply_not_bound"
+}
+
+func protectedUser(params map[string]any) bool {
+	if boolParam(params, "protected") || boolParam(params, "local_admin") || boolParam(params, "owner") {
+		return true
+	}
+	role := strings.ToLower(strings.TrimSpace(stringParam(params, "target_role_current")))
+	return role == "owner" || role == "local_admin"
+}
+
+func previewTarget(params map[string]any, keys ...string) map[string]any {
+	target := map[string]any{}
+	for _, key := range keys {
+		if value, ok := params[key]; ok {
+			target[key] = value
+		}
+	}
+	if len(target) == 0 {
+		return nil
+	}
+	return target
+}
+
+func stringParam(params map[string]any, key string) string {
+	value, ok := params[key]
+	if !ok || value == nil {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return ""
+}
+
+func boolParam(params map[string]any, key string) bool {
+	value, ok := params[key]
+	if !ok || value == nil {
+		return false
+	}
+	flag, ok := value.(bool)
+	return ok && flag
 }
 
 func normalizeImported(imported []Skill) []Skill {

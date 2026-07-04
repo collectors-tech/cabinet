@@ -5139,6 +5139,29 @@ func New(cfg config.Config) (*App, error) {
 			"skills":     registry.List(),
 		})
 	})
+	mux.HandleFunc("/api/agent/skills/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentskills.NewRegistry(nil)
+		preview, err := registry.Preview(req)
+		if err != nil {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
 	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
