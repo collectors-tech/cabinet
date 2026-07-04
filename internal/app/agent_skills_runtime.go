@@ -10,6 +10,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/profile"
+	"github.com/collectors-tech/cabinet/internal/scanner"
 )
 
 func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
@@ -37,7 +38,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.market_watch.review_results",
 		"cabinet.market_watch.dismiss_result",
 		"cabinet.market_watch.handoff_result":
-		return applyAgentMarketWatchSkill(ctx, conn, skillID, params)
+		return applyAgentMarketWatchSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.purchases.search_orders",
 		"cabinet.purchases.create_order",
 		"cabinet.purchases.add_line_item",
@@ -178,7 +179,7 @@ func applyAgentIntegrationSkill(ctx context.Context, conn *sql.DB, skillID, prof
 	return result, "", nil
 }
 
-func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID string, params map[string]any) (map[string]any, string, error) {
+func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
 	providerID := stringMapParam(params, "provider_id")
 	if providerID == "" {
 		providerID = stringMapParam(params, "provider_name")
@@ -186,6 +187,10 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID strin
 	if providerID == "" {
 		return nil, "market_watch_provider_required", fmt.Errorf("provider required")
 	}
+	if conn == nil {
+		return nil, "market_watch_store_required", fmt.Errorf("database connection required")
+	}
+	scannerSvc := scanner.NewService(conn)
 	result := map[string]any{
 		"provider_id":              providerID,
 		"external_write_claimed":   false,
@@ -195,9 +200,15 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID strin
 	}
 	switch skillID {
 	case "cabinet.market_watch.search_watches":
+		watches, err := agentMarketWatchSearch(ctx, scannerSvc, profileID, providerID, stringMapParam(params, "query"))
+		if err != nil {
+			return nil, "market_watch_search_failed", err
+		}
 		result["operation"] = "market_watch.watch.search"
 		result["read_only"] = true
 		result["query"] = stringMapParam(params, "query")
+		result["watches"] = watches
+		result["total"] = len(watches)
 		result["next_action"] = "Review saved watches and provider health before running or changing a watch."
 	case "cabinet.market_watch.review_results":
 		result["operation"] = "market_watch.results.review"
@@ -212,24 +223,47 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID strin
 		if query == "" {
 			return nil, "market_watch_query_required", fmt.Errorf("watch query required")
 		}
+		created, err := scannerSvc.CreateQuerySetForProfile(ctx, profileID, agentMarketWatchQuerySet(providerID, query, params))
+		if err != nil {
+			return nil, "market_watch_watch_persist_failed", err
+		}
 		result["operation"] = "market_watch.watch.create"
-		result["status"] = "confirmed_preview"
+		result["status"] = "confirmed"
+		result["watch_id"] = created.ID
 		result["watch_query"] = query
-		result["next_action"] = "Persist the saved watch through the Market Watch workflow once provider setup is healthy."
+		result["watch_persisted"] = true
+		result["saved_watch"] = created
+		result["next_action"] = "Review provider health before running the saved watch."
 	case "cabinet.market_watch.update_saved_watch", "cabinet.market_watch.run_watch":
 		watchID := stringMapParam(params, "watch_id")
 		if watchID == "" {
 			return nil, "market_watch_watch_required", fmt.Errorf("watch required")
 		}
 		if skillID == "cabinet.market_watch.update_saved_watch" {
+			existing, err := scannerSvc.GetQuerySetForProfile(ctx, profileID, watchID)
+			if err != nil {
+				return nil, "market_watch_watch_required", err
+			}
+			updated, err := scannerSvc.UpdateQuerySetForProfile(ctx, profileID, watchID, agentMarketWatchUpdatedQuerySet(existing, providerID, params))
+			if err != nil {
+				return nil, "market_watch_watch_persist_failed", err
+			}
 			result["operation"] = "market_watch.watch.update"
-			result["status"] = "confirmed_preview"
+			result["status"] = "confirmed"
+			result["watch_persisted"] = true
+			result["saved_watch"] = updated
+			result["query"] = strings.Join(updated.Keywords, " ")
 		} else {
+			watch, err := scannerSvc.GetQuerySetForProfile(ctx, profileID, watchID)
+			if err != nil {
+				return nil, "market_watch_watch_required", err
+			}
 			result["operation"] = "market_watch.watch.run"
 			result["status"] = "confirmed_provider_ready_check"
+			result["saved_watch"] = watch
+			result["query"] = strings.Join(watch.Keywords, " ")
 		}
 		result["watch_id"] = watchID
-		result["query"] = stringMapParam(params, "query")
 		result["next_action"] = "Review provider-health evidence before treating any live result sync as complete."
 	case "cabinet.market_watch.dismiss_result", "cabinet.market_watch.handoff_result":
 		resultID := stringMapParam(params, "result_id")
@@ -413,6 +447,107 @@ func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profil
 		result["reconciled_instance_id"] = arrival.ReconciledInstanceID
 	}
 	return result, "", nil
+}
+
+func agentMarketWatchQuerySet(providerID, query string, params map[string]any) scanner.QuerySet {
+	keywords := stringSliceMapParam(params, "keywords")
+	if len(keywords) == 0 {
+		keywords = strings.Fields(query)
+	}
+	name := firstNonEmptyString(
+		stringMapParam(params, "watch_name"),
+		stringMapParam(params, "name"),
+		query,
+	)
+	return scanner.QuerySet{
+		Name:          name,
+		Keywords:      keywords,
+		Exclusions:    stringSliceMapParam(params, "exclusions"),
+		ProviderScope: []string{providerID},
+		ItemsPerPage:  intMapParam(params, "items_per_page"),
+		MaxPrice:      floatMapParam(params, "max_price"),
+		Region:        stringMapParam(params, "region"),
+		Condition:     stringMapParam(params, "condition"),
+		ScheduleCron:  stringMapParam(params, "schedule_cron"),
+		Enabled:       boolMapParam(params, "enabled"),
+		RateLimitRPS:  intMapParam(params, "rate_limit_rps"),
+		MaxRetryCount: intMapParam(params, "max_retry_count"),
+	}
+}
+
+func agentMarketWatchUpdatedQuerySet(existing scanner.QuerySet, providerID string, params map[string]any) scanner.QuerySet {
+	updated := existing
+	if name := firstNonEmptyString(stringMapParam(params, "watch_name"), stringMapParam(params, "name")); name != "" {
+		updated.Name = name
+	}
+	if query := firstNonEmptyString(stringMapParam(params, "watch_query"), stringMapParam(params, "query")); query != "" {
+		updated.Keywords = strings.Fields(query)
+	}
+	if keywords := stringSliceMapParam(params, "keywords"); len(keywords) > 0 {
+		updated.Keywords = keywords
+	}
+	if exclusions := stringSliceMapParam(params, "exclusions"); len(exclusions) > 0 {
+		updated.Exclusions = exclusions
+	}
+	updated.ProviderScope = []string{providerID}
+	if value := intMapParam(params, "items_per_page"); value > 0 {
+		updated.ItemsPerPage = value
+	}
+	if value := floatMapParam(params, "max_price"); value > 0 {
+		updated.MaxPrice = value
+	}
+	if value := stringMapParam(params, "region"); value != "" {
+		updated.Region = value
+	}
+	if value := stringMapParam(params, "condition"); value != "" {
+		updated.Condition = value
+	}
+	if value := stringMapParam(params, "schedule_cron"); value != "" {
+		updated.ScheduleCron = value
+	}
+	if _, ok := params["enabled"]; ok {
+		updated.Enabled = boolMapParam(params, "enabled")
+	}
+	if value := intMapParam(params, "rate_limit_rps"); value > 0 {
+		updated.RateLimitRPS = value
+	}
+	if _, ok := params["max_retry_count"]; ok {
+		value := intMapParam(params, "max_retry_count")
+		updated.MaxRetryCount = value
+	}
+	return updated
+}
+
+func agentMarketWatchSearch(ctx context.Context, svc *scanner.Service, profileID, providerID, query string) ([]scanner.QuerySet, error) {
+	watches, err := svc.ListQuerySetsByProfile(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	needle := strings.ToLower(strings.TrimSpace(query))
+	providerID = strings.ToLower(strings.TrimSpace(providerID))
+	var out []scanner.QuerySet
+	for _, watch := range watches {
+		if providerID != "" && !stringSliceContainsFold(watch.ProviderScope, providerID) {
+			continue
+		}
+		if needle != "" && !agentMarketWatchMatchesQuery(watch, needle) {
+			continue
+		}
+		out = append(out, watch)
+	}
+	return out, nil
+}
+
+func agentMarketWatchMatchesQuery(watch scanner.QuerySet, needle string) bool {
+	if strings.Contains(strings.ToLower(watch.ID), needle) || strings.Contains(strings.ToLower(watch.Name), needle) {
+		return true
+	}
+	for _, keyword := range watch.Keywords {
+		if strings.Contains(strings.ToLower(keyword), needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func receiveAgentPurchaseOrder(ctx context.Context, svc *commerce.Service, profileID, orderID string, params map[string]any) ([]map[string]any, error) {
@@ -766,6 +901,70 @@ func stringMapParam(params map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(text)
+}
+
+func stringSliceMapParam(params map[string]any, key string) []string {
+	value, ok := params[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case []string:
+		return compactStringSlice(typed)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				continue
+			}
+			out = append(out, text)
+		}
+		return compactStringSlice(out)
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil
+		}
+		return compactStringSlice(strings.Split(typed, ","))
+	default:
+		return nil
+	}
+}
+
+func compactStringSlice(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if text := strings.TrimSpace(value); text != "" {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
+func stringSliceContainsFold(values []string, want string) bool {
+	want = strings.TrimSpace(strings.ToLower(want))
+	for _, value := range values {
+		if strings.TrimSpace(strings.ToLower(value)) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func boolMapParam(params map[string]any, key string) bool {
+	value, ok := params[key]
+	if !ok || value == nil {
+		return false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		parsed, _ := strconv.ParseBool(strings.TrimSpace(typed))
+		return parsed
+	default:
+		return false
+	}
 }
 
 func intMapParam(params map[string]any, key string) int {

@@ -765,13 +765,66 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 		t.Fatalf("expected provider blocker without mutation, body=%s", missingProvider.Body.String())
 	}
 
+	createWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.create_saved_watch",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","watch_name":"Agent boxed kits","watch_query":"boxed model kit","region":"AU","enabled":true}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createWatch.Code != http.StatusOK {
+		t.Fatalf("create saved watch status=%d body=%s", createWatch.Code, createWatch.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"market_watch.watch.create"`,
+		`"watch_persisted":true`,
+		`"watch_query":"boxed model kit"`,
+		`"provider_scope":["ebay"]`,
+	} {
+		if !strings.Contains(createWatch.Body.String(), want) {
+			t.Fatalf("create watch response missing %s: body=%s", want, createWatch.Body.String())
+		}
+	}
+	var watchID string
+	if err := a.db.QueryRow(`SELECT id FROM scanner_query_sets WHERE profile_id = ? AND name = 'Agent boxed kits'`, p.ID).Scan(&watchID); err != nil {
+		t.Fatalf("load created saved watch: %v", err)
+	}
+
+	updateWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.update_saved_watch",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","watch_id":"`+watchID+`","watch_name":"Agent boxed kits under 100","keywords":["boxed","kit"],"max_price":100}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateWatch.Code != http.StatusOK {
+		t.Fatalf("update saved watch status=%d body=%s", updateWatch.Code, updateWatch.Body.String())
+	}
+	if !strings.Contains(updateWatch.Body.String(), `"operation":"market_watch.watch.update"`) ||
+		!strings.Contains(updateWatch.Body.String(), `"watch_persisted":true`) ||
+		!strings.Contains(updateWatch.Body.String(), `"max_price":100`) {
+		t.Fatalf("expected persisted saved watch update evidence, body=%s", updateWatch.Body.String())
+	}
+
+	searchWatches := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.search_watches",
+		"parameters":{"provider_id":"ebay","query":"under 100"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchWatches.Code != http.StatusOK {
+		t.Fatalf("search saved watches status=%d body=%s", searchWatches.Code, searchWatches.Body.String())
+	}
+	if !strings.Contains(searchWatches.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(searchWatches.Body.String(), `"operation":"market_watch.watch.search"`) ||
+		!strings.Contains(searchWatches.Body.String(), `"name":"Agent boxed kits under 100"`) {
+		t.Fatalf("expected read-only saved watch reload evidence, body=%s", searchWatches.Body.String())
+	}
+
 	runWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.market_watch.run_watch",
 		"confirm":true,
 		"source_surface":"market_watch.saved_watch.row",
 		"source_channel":"in-app",
-		"parameters":{"provider_id":"ebay","watch_id":"watch-42","query":"boxed model kit"}
+		"parameters":{"provider_id":"ebay","watch_id":"`+watchID+`"}
 	}`), map[string]string{"Content-Type": "application/json"})
 	if runWatch.Code != http.StatusOK {
 		t.Fatalf("run watch status=%d body=%s", runWatch.Code, runWatch.Body.String())
@@ -780,8 +833,9 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 		`"mutation_applied":true`,
 		`"operation":"market_watch.watch.run"`,
 		`"provider_id":"ebay"`,
-		`"watch_id":"watch-42"`,
+		`"watch_id":"` + watchID + `"`,
 		`"provider_health"`,
+		`"saved_watch"`,
 		`"external_write_claimed":false`,
 		`"source_surface":"market_watch.saved_watch.row"`,
 	} {
