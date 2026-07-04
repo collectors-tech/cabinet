@@ -590,6 +590,11 @@ try {
       Reset-CypressRuntimeDataDir $e2eDataDir
       if (-not [string]::IsNullOrWhiteSpace($resolvedRuntimeExecutablePath)) {
         Write-Step "Runtime executable resolved: $resolvedRuntimeExecutablePath"
+        $serverEnv = @{
+          CABINET_E2E_MODE = "1"
+          CABINET_ALLOW_INSECURE_SECRET_FALLBACK = "1"
+          CABINET_FALLBACK_SECRET_PEPPER = "cypress-e2e-secret-fallback"
+        }
         $serverProc = Start-Process -FilePath $resolvedRuntimeExecutablePath -ArgumentList @(
           "--no-open-browser",
           "--port", "$runtimePort",
@@ -597,9 +602,14 @@ try {
           "--profile", "$e2eProfile",
           "--instance-name", "$e2eInstanceName",
           "--allow-parallel"
-        ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
+        ) -WorkingDirectory $repoRoot -Environment $serverEnv -PassThru
       } else {
         Write-Step "Runtime executable resolved: go run ./cmd/cabinet (project-local bin executable missing)"
+        $serverEnv = @{
+          CABINET_E2E_MODE = "1"
+          CABINET_ALLOW_INSECURE_SECRET_FALLBACK = "1"
+          CABINET_FALLBACK_SECRET_PEPPER = "cypress-e2e-secret-fallback"
+        }
         $serverProc = Start-Process -FilePath "go" -ArgumentList @(
           "run",
           "./cmd/cabinet",
@@ -609,7 +619,7 @@ try {
           "--profile", "$e2eProfile",
           "--instance-name", "$e2eInstanceName",
           "--allow-parallel"
-        ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
+        ) -WorkingDirectory $repoRoot -Environment $serverEnv -PassThru
       }
       $startedServer = $true
 
