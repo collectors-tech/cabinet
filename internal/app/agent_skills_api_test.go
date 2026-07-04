@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
 type apiSkillPayload struct {
@@ -597,6 +599,125 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T) {
+	t.Parallel()
+
+	const providerSecret = "issue-1780-provider-secret-must-not-leak"
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Provider Evidence"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('openai', 'auth_missing', 'missing credential: configure provider API key', 0, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed provider health: %v", err)
+	}
+
+	testConnection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.test_connection",
+		"source_surface":"settings.integrations.provider.card",
+		"source_channel":"in-app",
+		"parameters":{"provider_id":"openai","provider_secret":"`+providerSecret+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if testConnection.Code != http.StatusOK {
+		t.Fatalf("test connection status=%d body=%s", testConnection.Code, testConnection.Body.String())
+	}
+	requireBodyOmitsSecret(t, testConnection.Body.String(), providerSecret)
+	for _, want := range []string{
+		`"mutation_applied":false`,
+		`"operation":"integrations.provider.test_connection"`,
+		`"connection_status":"needs_setup"`,
+		`"guidance":"Save provider credentials and marketplace setup before running Market Watch."`,
+		`"next_action":"review_provider_status"`,
+	} {
+		if !strings.Contains(testConnection.Body.String(), want) {
+			t.Fatalf("provider readiness response missing %s: body=%s", want, testConnection.Body.String())
+		}
+	}
+
+	configure := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.configure_provider",
+		"confirm":true,
+		"source_surface":"settings.integrations.provider.card",
+		"source_channel":"in-app",
+		"parameters":{
+			"provider_id":"openai",
+			"provider_secret":"`+providerSecret+`",
+			"setup_step":"api-key",
+			"base_url":"https://api.openai.test",
+			"marketplace":"global",
+			"items_per_page":"25"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if configure.Code != http.StatusOK {
+		t.Fatalf("configure provider status=%d body=%s", configure.Code, configure.Body.String())
+	}
+	configureBody := configure.Body.String()
+	requireBodyOmitsSecret(t, configureBody, providerSecret)
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"integrations.provider.configure"`,
+		`"secret_redacted":true`,
+		`"secret_persisted":true`,
+		`"external_write_claimed":false`,
+		`"source_surface":"settings.integrations.provider.card"`,
+		`"source_channel":"in-app"`,
+		`"next_action":"Run provider health validation from Integrations before routing live provider workflows."`,
+	} {
+		if !strings.Contains(configureBody, want) {
+			t.Fatalf("configure provider response missing %s: body=%s", want, configureBody)
+		}
+	}
+	assertProfileSetting(t, a, p.ID, "integration.openai.enabled", "true")
+	assertProfileSetting(t, a, p.ID, "integration.openai.setup_step", "api-key")
+	assertProfileSetting(t, a, p.ID, "integration.openai.base_url", "https://api.openai.test")
+	assertProfileSetting(t, a, p.ID, "integration.openai.marketplace", "global")
+	assertProfileSetting(t, a, p.ID, "integration.openai.items_per_page", "25")
+	assertProfileSecret(t, a, p.ID, "integration.openai.token", providerSecret)
+
+	repair := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.repair_provider",
+		"confirm":true,
+		"parameters":{"provider_id":"openai"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if repair.Code != http.StatusOK {
+		t.Fatalf("repair provider status=%d body=%s", repair.Code, repair.Body.String())
+	}
+	requireBodyOmitsSecret(t, repair.Body.String(), providerSecret)
+	if !strings.Contains(repair.Body.String(), `"operation":"integrations.provider.repair"`) ||
+		!strings.Contains(repair.Body.String(), `"next_action":"Run a provider health check after reviewing repaired setup steps."`) ||
+		!strings.Contains(repair.Body.String(), `"external_write_claimed":false`) {
+		t.Fatalf("expected actionable repair result without external write claim, body=%s", repair.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "integration.openai.repair_status", "reviewed")
+
+	disable := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.disable_provider",
+		"confirm":true,
+		"parameters":{"provider_id":"openai"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if disable.Code != http.StatusOK {
+		t.Fatalf("disable provider status=%d body=%s", disable.Code, disable.Body.String())
+	}
+	requireBodyOmitsSecret(t, disable.Body.String(), providerSecret)
+	if !strings.Contains(disable.Body.String(), `"operation":"integrations.provider.disable"`) ||
+		!strings.Contains(disable.Body.String(), `"next_action":"Confirm provider disabled state in Integrations before routing provider-backed workflows."`) ||
+		!strings.Contains(disable.Body.String(), `"external_write_claimed":false`) {
+		t.Fatalf("expected actionable disable result without external write claim, body=%s", disable.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "integration.openai.enabled", "false")
+}
+
 func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing.T) {
 	t.Parallel()
 
@@ -664,5 +785,23 @@ func assertProfileSetting(t *testing.T, a *App, profileID, key, want string) {
 	}
 	if got != want {
 		t.Fatalf("profile setting %s = %q, want %q", key, got, want)
+	}
+}
+
+func assertProfileSecret(t *testing.T, a *App, profileID, key, want string) {
+	t.Helper()
+	got, err := profile.NewRepository(a.db).GetSecret(context.Background(), profileID, key)
+	if err != nil {
+		t.Fatalf("read profile secret %s: %v", key, err)
+	}
+	if got != want {
+		t.Fatalf("profile secret %s = %q, want %q", key, got, want)
+	}
+}
+
+func requireBodyOmitsSecret(t *testing.T, body, secret string) {
+	t.Helper()
+	if strings.Contains(body, secret) {
+		t.Fatalf("response leaked secret %q: body=%s", secret, body)
 	}
 }

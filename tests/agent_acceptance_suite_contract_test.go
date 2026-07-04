@@ -10,7 +10,7 @@ import (
 func TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope(t *testing.T) {
 	t.Parallel()
 
-	mapPath := filepath.Join("..", "docs", "validation", "agent-acceptance-suite.md")
+	mapPath := filepath.Join("..", "openspec", "traceability", "agent-acceptance-suite.md")
 	raw, err := os.ReadFile(mapPath)
 	if err != nil {
 		t.Fatalf("read agent acceptance evidence map: %v", err)
@@ -41,7 +41,7 @@ func TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope(t *testing.T) {
 		"TestTelegramCatalogCaptureWebhookAPIResolvesProfileAuthorization",
 		"TestTelegramExternalIntakeProofRequiresAuthorizedProviderEvidence",
 		"manual live Telegram-channel checklist",
-		"docs/validation/agent-live-telegram-channel-checklist.md",
+		"openspec/traceability/agent-live-telegram-channel-checklist.md",
 		"#1773",
 	}
 
@@ -55,7 +55,7 @@ func TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope(t *testing.T) {
 func TestAgentLiveTelegramChecklistNamesNonSecretProofRequirements(t *testing.T) {
 	t.Parallel()
 
-	checklistPath := filepath.Join("..", "docs", "validation", "agent-live-telegram-channel-checklist.md")
+	checklistPath := filepath.Join("..", "openspec", "traceability", "agent-live-telegram-channel-checklist.md")
 	raw, err := os.ReadFile(checklistPath)
 	if err != nil {
 		t.Fatalf("read live Telegram channel checklist: %v", err)
@@ -97,7 +97,7 @@ func TestAgentAcceptanceSuiteTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 	for _, fragment := range []string{
 		"AGENT-ACCEPTANCE-SUITE-001",
 		"#1716",
-		"docs/validation/agent-acceptance-suite.md",
+		"openspec/traceability/agent-acceptance-suite.md",
 		"TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope",
 		"AGENT-UNIVERSAL-CHANNELS-003",
 		"AGENT-UNIVERSAL-CHANNELS-004",
