@@ -147,16 +147,57 @@ type AgentSkillApplyResult = {
   source_message_id?: string
 }
 
+type AgentSkillOption = {
+  id: string
+  label: string
+  surface: string
+  primaryLabel: string
+  contextLabel: string
+  secretLabel: string
+}
+
 const agentSkillOptions = [
   {
     id: 'cabinet.integrations.test_connection',
     label: 'Test provider connection',
+    surface: 'settings.integrations.provider.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Setup step',
+    secretLabel: 'Secret input is redacted',
   },
   {
     id: 'cabinet.integrations.configure_provider',
     label: 'Configure provider',
+    surface: 'settings.integrations.provider.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Setup step',
+    secretLabel: 'Secret input is redacted',
   },
-]
+  {
+    id: 'cabinet.market_watch.run_watch',
+    label: 'Run saved watch',
+    surface: 'market_watch.saved_watch.row',
+    primaryLabel: 'Provider',
+    contextLabel: 'Saved watch ID',
+    secretLabel: 'Optional note',
+  },
+  {
+    id: 'cabinet.market_watch.handoff_result',
+    label: 'Handoff watch result',
+    surface: 'market_watch.result.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Result ID',
+    secretLabel: 'Destination',
+  },
+  {
+    id: 'cabinet.purchases.create_order',
+    label: 'Create purchase order',
+    surface: 'purchases.inbox.capture',
+    primaryLabel: 'Purchase source',
+    contextLabel: 'Item ID',
+    secretLabel: 'Tracking or source URL',
+  },
+] satisfies AgentSkillOption[]
 
 type NavigationAction = {
   id: string
@@ -372,6 +413,12 @@ export function AssistantWorkspacePanel() {
   const displayedPermissionGuidance = appControl?.setup_needed
     ? 'Provider setup is needed before Cabinet can run this assistant action.'
     : permissionGuidance
+  const selectedAgentSkillOption = useMemo(
+    () =>
+      agentSkillOptions.find((option) => option.id === agentSkillID) ??
+      agentSkillOptions[0],
+    [agentSkillID]
+  )
 
   const selectedThreadTitle = useMemo(
     () =>
@@ -987,14 +1034,52 @@ export function AssistantWorkspacePanel() {
   }
 
   function agentSkillParameters() {
-    const params: Record<string, string> = {
-      provider_id: agentSkillProvider.trim(),
+    const primary = agentSkillProvider.trim()
+    const context = agentSkillSetupStep.trim()
+    const secretOrTarget = agentSkillSecret.trim()
+    const params: Record<string, string> = {}
+    if (agentSkillID.startsWith('cabinet.integrations.')) {
+      params.provider_id = primary
+      if (context) {
+        params.setup_step = context
+      }
+      if (secretOrTarget) {
+        params.provider_secret = secretOrTarget
+      }
+      return params
     }
-    if (agentSkillSetupStep.trim()) {
-      params.setup_step = agentSkillSetupStep.trim()
+    if (agentSkillID === 'cabinet.market_watch.run_watch') {
+      params.provider_id = primary
+      if (context) {
+        params.watch_id = context
+      }
+      if (secretOrTarget) {
+        params.note = secretOrTarget
+      }
+      return params
     }
-    if (agentSkillSecret.trim()) {
-      params.provider_secret = agentSkillSecret.trim()
+    if (agentSkillID === 'cabinet.market_watch.handoff_result') {
+      params.provider_id = primary
+      if (context) {
+        params.result_id = context
+      }
+      if (secretOrTarget) {
+        params.destination = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.purchases.create_order') {
+      if (primary) {
+        params.purchase_source = primary
+        params.source = primary
+      }
+      if (context) {
+        params.item_id = context
+      }
+      if (secretOrTarget) {
+        params.tracking_number = secretOrTarget
+        params.source_url = secretOrTarget
+      }
     }
     return params
   }
@@ -1014,7 +1099,7 @@ export function AssistantWorkspacePanel() {
         body: JSON.stringify({
           profile_id: activeProfileId,
           skill_id: agentSkillID,
-          source_surface: 'settings.integrations.provider.card',
+          source_surface: selectedAgentSkillOption.surface,
           source_channel: 'in-app',
           source_thread_id: threadId,
           source_message_id: 'assistant-workspace-agent-skill',
@@ -1080,7 +1165,7 @@ export function AssistantWorkspacePanel() {
           profile_id: activeProfileId,
           skill_id: agentSkillPreview.skill_id,
           confirm: true,
-          source_surface: 'settings.integrations.provider.card',
+          source_surface: selectedAgentSkillOption.surface,
           source_channel: 'in-app',
           source_thread_id: threadId,
           source_message_id: 'assistant-workspace-agent-skill',
@@ -1533,7 +1618,7 @@ export function AssistantWorkspacePanel() {
                     >
                       <div className='flex items-center justify-between gap-2'>
                         <p className='font-medium text-slate-100'>
-                          Integration Agent Skill
+                          Agent Skill
                         </p>
                         <Badge
                           variant='outline'
@@ -1548,9 +1633,11 @@ export function AssistantWorkspacePanel() {
                           data-testid='shell-assistant-agent-skill-select'
                           className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-100'
                           value={agentSkillID}
-                          onChange={(event) =>
+                          onChange={(event) => {
                             setAgentSkillID(event.target.value)
-                          }
+                            setAgentSkillPreview(null)
+                            setAgentSkillResult(null)
+                          }}
                           disabled={!threadId || sending}
                         >
                           {agentSkillOptions.map((option) => (
@@ -1566,7 +1653,7 @@ export function AssistantWorkspacePanel() {
                           onChange={(event) =>
                             setAgentSkillProvider(event.target.value)
                           }
-                          placeholder='Provider'
+                          placeholder={selectedAgentSkillOption.primaryLabel}
                           disabled={!threadId || sending}
                         />
                         <Input
@@ -1576,7 +1663,7 @@ export function AssistantWorkspacePanel() {
                           onChange={(event) =>
                             setAgentSkillSetupStep(event.target.value)
                           }
-                          placeholder='Setup step'
+                          placeholder={selectedAgentSkillOption.contextLabel}
                           disabled={!threadId || sending}
                         />
                         <Input
@@ -1586,7 +1673,7 @@ export function AssistantWorkspacePanel() {
                           onChange={(event) =>
                             setAgentSkillSecret(event.target.value)
                           }
-                          placeholder='Secret input is redacted'
+                          placeholder={selectedAgentSkillOption.secretLabel}
                           disabled={!threadId || sending}
                         />
                       </div>
@@ -1847,7 +1934,7 @@ export function AssistantWorkspacePanel() {
             <AlertDialogTitle>Confirm Assistant Action</AlertDialogTitle>
             <AlertDialogDescription data-testid='shell-assistant-apply-confirm-summary'>
               {confirmTarget === 'agent-skill' && agentSkillPreview
-                ? `Apply ${agentSkillPreview.skill_id} for provider=${agentSkillProvider.trim()} from settings.integrations.provider.card`
+                ? `Apply ${agentSkillPreview.skill_id} for ${selectedAgentSkillOption.primaryLabel.toLowerCase()}=${agentSkillProvider.trim()} from ${selectedAgentSkillOption.surface}`
                 : actionPreview
                   ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
                   : 'No action preview selected.'}
