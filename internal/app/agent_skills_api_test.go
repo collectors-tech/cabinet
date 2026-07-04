@@ -238,6 +238,94 @@ func TestAgentSkillAPIPropagatesInvocationSourceContext(t *testing.T) {
 	}
 }
 
+func TestAgentSkillAPIPropagatesExternalChannelContextForMarketWatchAndPurchases(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill External Channel Context"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	marketWatchPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"source_surface":"telegram.market_watch.result",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-chat-1710",
+		"source_message_id":"tg-message-market-watch-1710",
+		"parameters":{"provider_id":"ebay","result_id":"result-telegram-1710","destination":"wishlist","source_url":"https://example.test/listing/telegram-1710"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if marketWatchPreview.Code != http.StatusOK {
+		t.Fatalf("market watch external preview status=%d body=%s", marketWatchPreview.Code, marketWatchPreview.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.market_watch.handoff_result"`,
+		`"source_surface":"telegram.market_watch.result"`,
+		`"source_channel":"telegram"`,
+		`"source_thread_id":"tg-chat-1710"`,
+		`"source_message_id":"tg-message-market-watch-1710"`,
+		`"mutation_applied":false`,
+		`"confirmation_required":true`,
+	} {
+		if !strings.Contains(marketWatchPreview.Body.String(), want) {
+			t.Fatalf("market watch external preview missing %s: body=%s", want, marketWatchPreview.Body.String())
+		}
+	}
+
+	purchasesApply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.create_order",
+		"confirm":true,
+		"source_surface":"telegram.purchase.capture",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-chat-1710",
+		"source_message_id":"tg-message-purchase-1710",
+		"parameters":{
+			"purchase_source":"telegram",
+			"order_id":"telegram-order-1710",
+			"title":"Telegram purchase order item",
+			"part_number":"TG-1710",
+			"source_url":"https://example.test/orders/telegram-1710",
+			"quantity":1,
+			"amount":88,
+			"currency":"AUD"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if purchasesApply.Code != http.StatusOK {
+		t.Fatalf("purchases external apply status=%d body=%s", purchasesApply.Code, purchasesApply.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.purchases.create_order"`,
+		`"source_surface":"telegram.purchase.capture"`,
+		`"source_channel":"telegram"`,
+		`"source_thread_id":"tg-chat-1710"`,
+		`"source_message_id":"tg-message-purchase-1710"`,
+		`"mutation_applied":true`,
+		`"operation":"purchases.order.create"`,
+		`"order_id":"telegram-order-1710"`,
+		`"purchase_persisted":true`,
+		`"provenance_preserved":true`,
+	} {
+		if !strings.Contains(purchasesApply.Body.String(), want) {
+			t.Fatalf("purchases external apply missing %s: body=%s", want, purchasesApply.Body.String())
+		}
+	}
+	var purchaseCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM commerce_lifecycle_entries WHERE profile_id = ? AND external_ref = 'telegram-order-1710' AND source = 'telegram'`, p.ID).Scan(&purchaseCount); err != nil {
+		t.Fatalf("count external purchase order evidence: %v", err)
+	}
+	if purchaseCount != 1 {
+		t.Fatalf("expected one persisted external purchase order, got %d", purchaseCount)
+	}
+}
+
 func TestAgentSkillApplyAPIConfirmsInboxMutation(t *testing.T) {
 	t.Parallel()
 
