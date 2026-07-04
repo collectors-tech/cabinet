@@ -888,13 +888,16 @@ export function AssistantWorkspacePanel() {
         method: 'POST',
         body: form,
       })
-      if (!response.ok) throw new Error(`assistant_attachment_${response.status}`)
+      if (!response.ok)
+        throw new Error(`assistant_attachment_${response.status}`)
       const attachment = (await response.json()) as ChatAttachment
       setAttachments((current) => [attachment, ...current])
       setPendingAttachment(null)
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'assistant_attachment_upload_failed'
+        err instanceof Error
+          ? err.message
+          : 'assistant_attachment_upload_failed'
       )
     }
   }
@@ -1106,7 +1109,8 @@ export function AssistantWorkspacePanel() {
           parameters: agentSkillParameters(),
         }),
       })
-      if (!response.ok) throw new Error(`agent_skill_preview_${response.status}`)
+      if (!response.ok)
+        throw new Error(`agent_skill_preview_${response.status}`)
       const preview = (await response.json()) as AgentSkillPreview
       setAgentSkillPreview(preview)
       setExecutionState(preview.confirmation_required ? 'running' : 'success')
@@ -1788,7 +1792,7 @@ export function AssistantWorkspacePanel() {
                             <span className='font-medium text-slate-200'>
                               {run.status}
                             </span>
-                            <span className='text-[10px] uppercase text-slate-500'>
+                            <span className='text-[10px] text-slate-500 uppercase'>
                               {run.confirmation_state}
                             </span>
                           </div>
