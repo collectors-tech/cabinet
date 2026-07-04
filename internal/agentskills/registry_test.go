@@ -73,6 +73,18 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 		"cabinet.purchases.receive_line_item",
 		"cabinet.purchases.reconcile_item",
 		"cabinet.purchases.review_purchase",
+		"cabinet.media.search",
+		"cabinet.media.upload_or_import",
+		"cabinet.media.attach_to_item",
+		"cabinet.media.review_unlinked",
+		"cabinet.media.update_notes",
+		"cabinet.media.detach_from_item",
+		"cabinet.discoveries.search",
+		"cabinet.discoveries.review_result",
+		"cabinet.discoveries.dismiss_result",
+		"cabinet.discoveries.send_to_wishlist",
+		"cabinet.discoveries.create_purchase",
+		"cabinet.discoveries.create_or_update_inventory_candidate",
 		"local.archive.read_only",
 	} {
 		if !containsSkill(skills, id) {
@@ -175,6 +187,92 @@ func TestMarketWatchAndPurchasesSkillsExposePreviewAndProvenanceBoundaries(t *te
 	}
 	if missingItem.Allowed || missingItem.Blocker != "purchases_item_required" {
 		t.Fatalf("expected purchase item blocker without mutation, got %+v", missingItem)
+	}
+}
+
+func TestMediaAndDiscoveriesSkillsExposePreviewAndProvenanceBoundaries(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	searchMedia, ok := registry.Resolve("cabinet.media.search")
+	if !ok {
+		t.Fatalf("expected Media search skill")
+	}
+	if searchMedia.SafetyLevel != SafetyReadOnly || !searchMedia.Executable || searchMedia.Permissions.LocalWrite {
+		t.Fatalf("Media search should be executable read-only metadata, got %+v", searchMedia)
+	}
+	if !slices.Contains(searchMedia.Capabilities, "media.workflow") || !slices.Contains(searchMedia.IntegrationWorkflows, "media.search") {
+		t.Fatalf("expected Media workflow binding, got capabilities=%+v workflows=%+v", searchMedia.Capabilities, searchMedia.IntegrationWorkflows)
+	}
+
+	attachMedia, ok := registry.Resolve("cabinet.media.attach_to_item")
+	if !ok {
+		t.Fatalf("expected Media attach skill")
+	}
+	if attachMedia.SafetyLevel != SafetyConfirmRequired || !attachMedia.Permissions.RequiresConfirm || !slices.Contains(attachMedia.RequiredContext, "target_item") {
+		t.Fatalf("attach media should require target item and confirmation, got %+v", attachMedia)
+	}
+	missingMedia, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.media.attach_to_item",
+		Parameters: map[string]any{"item_id": "item-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview attach media missing media: %v", err)
+	}
+	if missingMedia.Allowed || missingMedia.Blocker != "media_target_required" || missingMedia.MutationApplied {
+		t.Fatalf("expected missing media blocker without mutation, got %+v", missingMedia)
+	}
+
+	missingItem, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.media.detach_from_item",
+		Parameters: map[string]any{"media_id": "media-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview detach media missing item: %v", err)
+	}
+	if missingItem.Allowed || missingItem.Blocker != "media_item_required" {
+		t.Fatalf("expected missing item blocker without mutation, got %+v", missingItem)
+	}
+
+	searchDiscoveries, ok := registry.Resolve("cabinet.discoveries.search")
+	if !ok {
+		t.Fatalf("expected Discoveries search skill")
+	}
+	if searchDiscoveries.SafetyLevel != SafetyReadOnly || !searchDiscoveries.Executable || searchDiscoveries.Permissions.LocalWrite {
+		t.Fatalf("Discoveries search should be executable read-only metadata, got %+v", searchDiscoveries)
+	}
+	if !slices.Contains(searchDiscoveries.RequiredProviders, "provider-registry") || !searchDiscoveries.Permissions.ExternalRead {
+		t.Fatalf("expected provider-backed Discoveries read metadata, got providers=%+v permissions=%+v", searchDiscoveries.RequiredProviders, searchDiscoveries.Permissions)
+	}
+
+	sendToWishlist, ok := registry.Resolve("cabinet.discoveries.send_to_wishlist")
+	if !ok {
+		t.Fatalf("expected Discoveries wishlist handoff skill")
+	}
+	if sendToWishlist.SafetyLevel != SafetyConfirmRequired || !sendToWishlist.Permissions.RequiresConfirm {
+		t.Fatalf("discovery handoff should require confirmation, got %+v", sendToWishlist)
+	}
+	missingProvider, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.discoveries.send_to_wishlist",
+		Parameters: map[string]any{"result_id": "result-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview discovery handoff missing provider: %v", err)
+	}
+	if missingProvider.Allowed || missingProvider.Blocker != "discoveries_provider_required" {
+		t.Fatalf("expected provider blocker without mutation, got %+v", missingProvider)
+	}
+
+	missingResult, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.discoveries.create_purchase",
+		Parameters: map[string]any{"provider_id": "ebay"},
+	})
+	if err != nil {
+		t.Fatalf("preview discovery purchase missing result: %v", err)
+	}
+	if missingResult.Allowed || missingResult.Blocker != "discoveries_result_required" {
+		t.Fatalf("expected discovery result blocker without mutation, got %+v", missingResult)
 	}
 }
 
