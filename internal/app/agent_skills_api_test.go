@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -103,6 +104,22 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	}
 	if removeUser.SafetyLevel != "destructive" || !removeUser.Permissions.Destructive || !removeUser.Executable {
 		t.Fatalf("expected destructive executable remove user metadata, got %+v", removeUser)
+	}
+
+	runWatch := findAPISkill(payload.Skills, "cabinet.market_watch.run_watch")
+	if runWatch == nil {
+		t.Fatalf("missing Market Watch run skill")
+	}
+	if runWatch.SafetyLevel != "confirm-required" || !runWatch.Permissions.RequiresConfirm || !runWatch.Executable {
+		t.Fatalf("expected confirmation-gated Market Watch run metadata, got %+v", runWatch)
+	}
+
+	addPurchaseLine := findAPISkill(payload.Skills, "cabinet.purchases.add_line_item")
+	if addPurchaseLine == nil {
+		t.Fatalf("missing Purchases add line item skill")
+	}
+	if addPurchaseLine.SafetyLevel != "confirm-required" || !addPurchaseLine.Permissions.RequiresConfirm || !slices.Contains(addPurchaseLine.RequiredContext, "target_order") {
+		t.Fatalf("expected confirmation-gated purchase line item metadata, got %+v", addPurchaseLine)
 	}
 }
 
@@ -218,6 +235,94 @@ func TestAgentSkillAPIPropagatesInvocationSourceContext(t *testing.T) {
 		!strings.Contains(apply.Body.String(), `"mutation_applied":true`) ||
 		!strings.Contains(apply.Body.String(), `"status":"read"`) {
 		t.Fatalf("expected confirmed apply to retain channel source context, body=%s", apply.Body.String())
+	}
+}
+
+func TestAgentSkillAPIPropagatesExternalChannelContextForMarketWatchAndPurchases(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill External Channel Context"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	marketWatchPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"source_surface":"telegram.market_watch.result",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-chat-1710",
+		"source_message_id":"tg-message-market-watch-1710",
+		"parameters":{"provider_id":"ebay","result_id":"result-telegram-1710","destination":"wishlist","source_url":"https://example.test/listing/telegram-1710"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if marketWatchPreview.Code != http.StatusOK {
+		t.Fatalf("market watch external preview status=%d body=%s", marketWatchPreview.Code, marketWatchPreview.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.market_watch.handoff_result"`,
+		`"source_surface":"telegram.market_watch.result"`,
+		`"source_channel":"telegram"`,
+		`"source_thread_id":"tg-chat-1710"`,
+		`"source_message_id":"tg-message-market-watch-1710"`,
+		`"mutation_applied":false`,
+		`"confirmation_required":true`,
+	} {
+		if !strings.Contains(marketWatchPreview.Body.String(), want) {
+			t.Fatalf("market watch external preview missing %s: body=%s", want, marketWatchPreview.Body.String())
+		}
+	}
+
+	purchasesApply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.create_order",
+		"confirm":true,
+		"source_surface":"telegram.purchase.capture",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-chat-1710",
+		"source_message_id":"tg-message-purchase-1710",
+		"parameters":{
+			"purchase_source":"telegram",
+			"order_id":"telegram-order-1710",
+			"title":"Telegram purchase order item",
+			"part_number":"TG-1710",
+			"source_url":"https://example.test/orders/telegram-1710",
+			"quantity":1,
+			"amount":88,
+			"currency":"AUD"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if purchasesApply.Code != http.StatusOK {
+		t.Fatalf("purchases external apply status=%d body=%s", purchasesApply.Code, purchasesApply.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.purchases.create_order"`,
+		`"source_surface":"telegram.purchase.capture"`,
+		`"source_channel":"telegram"`,
+		`"source_thread_id":"tg-chat-1710"`,
+		`"source_message_id":"tg-message-purchase-1710"`,
+		`"mutation_applied":true`,
+		`"operation":"purchases.order.create"`,
+		`"order_id":"telegram-order-1710"`,
+		`"purchase_persisted":true`,
+		`"provenance_preserved":true`,
+	} {
+		if !strings.Contains(purchasesApply.Body.String(), want) {
+			t.Fatalf("purchases external apply missing %s: body=%s", want, purchasesApply.Body.String())
+		}
+	}
+	var purchaseCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM commerce_lifecycle_entries WHERE profile_id = ? AND external_ref = 'telegram-order-1710' AND source = 'telegram'`, p.ID).Scan(&purchaseCount); err != nil {
+		t.Fatalf("count external purchase order evidence: %v", err)
+	}
+	if purchaseCount != 1 {
+		t.Fatalf("expected one persisted external purchase order, got %d", purchaseCount)
 	}
 }
 
@@ -716,6 +821,416 @@ func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T
 		t.Fatalf("expected actionable disable result without external write claim, body=%s", disable.Body.String())
 	}
 	assertProfileSetting(t, a, p.ID, "integration.openai.enabled", "false")
+}
+
+func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
+	t.Parallel()
+
+	ebayStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer agent-skill-token" {
+			t.Fatalf("expected bearer token header, got %q", got)
+		}
+		if got := r.Header.Get("X-EBAY-C-MARKETPLACE-ID"); got != "EBAY_AU" {
+			t.Fatalf("expected EBAY_AU marketplace header, got %q", got)
+		}
+		if got := r.URL.Query().Get("q"); got != "boxed kit" {
+			t.Fatalf("expected query q=boxed kit, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"agent-skill-ebay-1","title":"Agent skill eBay live provider result","price":{"value":"88.50","currency":"AUD"},"itemWebUrl":"https://www.ebay.com.au/itm/agent-skill-ebay-1","image":{"imageUrl":"https://example.test/agent-skill-ebay-1.jpg"},"seller":{"username":"agent-seller"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"IN_STOCK","estimatedAvailableQuantity":4}]}]}`))
+	}))
+	defer ebayStub.Close()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Market Watch Purchases"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if err := profile.NewRepository(a.db).PutSettings(context.Background(), p.ID, map[string]string{
+		"ebay_base_url":                   ebayStub.URL,
+		"ebay_bearer_token":               "agent-skill-token",
+		"ebay_marketplace":                "EBAY_AU",
+		"integration.ebay.items_per_page": "11",
+	}); err != nil {
+		t.Fatalf("save ebay provider settings: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'auth_missing', 'provider credentials required before live watch run', 0, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed provider health: %v", err)
+	}
+
+	missingProvider := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.run_watch",
+		"parameters":{"watch_id":"watch-42"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if missingProvider.Code != http.StatusOK {
+		t.Fatalf("market watch preview status=%d body=%s", missingProvider.Code, missingProvider.Body.String())
+	}
+	if !strings.Contains(missingProvider.Body.String(), `"blocker":"market_watch_provider_required"`) ||
+		!strings.Contains(missingProvider.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected provider blocker without mutation, body=%s", missingProvider.Body.String())
+	}
+
+	createWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.create_saved_watch",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","watch_name":"Agent boxed kits","watch_query":"boxed model kit","region":"AU","enabled":true}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createWatch.Code != http.StatusOK {
+		t.Fatalf("create saved watch status=%d body=%s", createWatch.Code, createWatch.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"market_watch.watch.create"`,
+		`"watch_persisted":true`,
+		`"watch_query":"boxed model kit"`,
+		`"provider_scope":["ebay"]`,
+	} {
+		if !strings.Contains(createWatch.Body.String(), want) {
+			t.Fatalf("create watch response missing %s: body=%s", want, createWatch.Body.String())
+		}
+	}
+	var watchID string
+	if err := a.db.QueryRow(`SELECT id FROM scanner_query_sets WHERE profile_id = ? AND name = 'Agent boxed kits'`, p.ID).Scan(&watchID); err != nil {
+		t.Fatalf("load created saved watch: %v", err)
+	}
+
+	updateWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.update_saved_watch",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","watch_id":"`+watchID+`","watch_name":"Agent boxed kits under 100","keywords":["boxed","kit"],"max_price":100}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateWatch.Code != http.StatusOK {
+		t.Fatalf("update saved watch status=%d body=%s", updateWatch.Code, updateWatch.Body.String())
+	}
+	if !strings.Contains(updateWatch.Body.String(), `"operation":"market_watch.watch.update"`) ||
+		!strings.Contains(updateWatch.Body.String(), `"watch_persisted":true`) ||
+		!strings.Contains(updateWatch.Body.String(), `"max_price":100`) {
+		t.Fatalf("expected persisted saved watch update evidence, body=%s", updateWatch.Body.String())
+	}
+
+	searchWatches := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.search_watches",
+		"parameters":{"provider_id":"ebay","query":"under 100"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchWatches.Code != http.StatusOK {
+		t.Fatalf("search saved watches status=%d body=%s", searchWatches.Code, searchWatches.Body.String())
+	}
+	if !strings.Contains(searchWatches.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(searchWatches.Body.String(), `"operation":"market_watch.watch.search"`) ||
+		!strings.Contains(searchWatches.Body.String(), `"name":"Agent boxed kits under 100"`) {
+		t.Fatalf("expected read-only saved watch reload evidence, body=%s", searchWatches.Body.String())
+	}
+	if _, err := a.db.Exec(`UPDATE provider_health SET status = 'ok', message = '', retry_after_seconds = 0, updated_at = CURRENT_TIMESTAMP WHERE provider = 'ebay'`); err != nil {
+		t.Fatalf("mark provider health ready: %v", err)
+	}
+
+	runWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.run_watch",
+		"confirm":true,
+		"source_surface":"market_watch.saved_watch.row",
+		"source_channel":"in-app",
+		"parameters":{"provider_id":"ebay","watch_id":"`+watchID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if runWatch.Code != http.StatusOK {
+		t.Fatalf("run watch status=%d body=%s", runWatch.Code, runWatch.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"market_watch.watch.run"`,
+		`"provider_id":"ebay"`,
+		`"watch_id":"` + watchID + `"`,
+		`"provider_health"`,
+		`"saved_watch"`,
+		`"external_write_claimed":false`,
+		`"live_provider_dispatched":true`,
+		`"status":"confirmed_provider_run"`,
+		`"candidate_count":1`,
+		`"title":"Agent skill eBay live provider result"`,
+		`"items_per_page_requested":11`,
+		`"source_surface":"market_watch.saved_watch.row"`,
+	} {
+		if !strings.Contains(runWatch.Body.String(), want) {
+			t.Fatalf("run watch response missing %s: body=%s", want, runWatch.Body.String())
+		}
+	}
+	var providerRunCount, providerCandidateCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ? AND provider = 'ebay' AND status = 'succeeded'`, p.ID, watchID).Scan(&providerRunCount); err != nil {
+		t.Fatalf("count agent skill provider runs: %v", err)
+	}
+	if providerRunCount != 1 {
+		t.Fatalf("expected one persisted provider run, got %d", providerRunCount)
+	}
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND source = 'ebay' AND listing_id = 'agent-skill-ebay-1'`, p.ID, watchID).Scan(&providerCandidateCount); err != nil {
+		t.Fatalf("count agent skill provider candidates: %v", err)
+	}
+	if providerCandidateCount != 1 {
+		t.Fatalf("expected one persisted provider candidate, got %d", providerCandidateCount)
+	}
+
+	handoff := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"result-9","destination":"purchases","source_url":"https://example.test/listing/9"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if handoff.Code != http.StatusOK {
+		t.Fatalf("handoff status=%d body=%s", handoff.Code, handoff.Body.String())
+	}
+	if !strings.Contains(handoff.Body.String(), `"provenance_preserved":true`) ||
+		!strings.Contains(handoff.Body.String(), `"result_id":"result-9"`) ||
+		!strings.Contains(handoff.Body.String(), `"destination":"purchases"`) ||
+		!strings.Contains(handoff.Body.String(), `"handoff_persisted":true`) ||
+		!strings.Contains(handoff.Body.String(), `"lifecycle_entry_id":"`) ||
+		!strings.Contains(handoff.Body.String(), `"expected_arrival_id":"`) {
+		t.Fatalf("expected provenance-preserving handoff result, body=%s", handoff.Body.String())
+	}
+	var handoffPurchaseCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM commerce_lifecycle_entries WHERE profile_id = ? AND source = 'market_watch' AND external_ref = 'result-9'`, p.ID).Scan(&handoffPurchaseCount); err != nil {
+		t.Fatalf("count market watch purchase handoff: %v", err)
+	}
+	if handoffPurchaseCount != 1 {
+		t.Fatalf("expected one persisted purchase handoff, got %d", handoffPurchaseCount)
+	}
+
+	wishlistHandoff := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"result-10","destination":"wishlist","title":"Wishlist handoff result","source_url":"https://example.test/listing/10","target_price":55,"priority":"high"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if wishlistHandoff.Code != http.StatusOK {
+		t.Fatalf("wishlist handoff status=%d body=%s", wishlistHandoff.Code, wishlistHandoff.Body.String())
+	}
+	if !strings.Contains(wishlistHandoff.Body.String(), `"destination_applied":"wishlist"`) ||
+		!strings.Contains(wishlistHandoff.Body.String(), `"wishlist_entry_id":"`) ||
+		!strings.Contains(wishlistHandoff.Body.String(), `"handoff_persisted":true`) {
+		t.Fatalf("expected wishlist handoff persistence evidence, body=%s", wishlistHandoff.Body.String())
+	}
+	var wishlistHandoffCount int
+	if err := a.db.QueryRow(`
+		SELECT COUNT(1)
+		FROM wishlist_entries w
+		JOIN canonical_items i ON i.id = w.item_id
+		WHERE w.profile_id = ? AND i.title = 'Wishlist handoff result' AND w.priority = 'high'
+	`, p.ID).Scan(&wishlistHandoffCount); err != nil {
+		t.Fatalf("count market watch wishlist handoff: %v", err)
+	}
+	if wishlistHandoffCount != 1 {
+		t.Fatalf("expected one persisted wishlist handoff, got %d", wishlistHandoffCount)
+	}
+
+	inventoryHandoff := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"result-11","destination":"inventory","title":"Inventory handoff result","source_url":"https://example.test/listing/11","condition":"sealed","quantity":3}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if inventoryHandoff.Code != http.StatusOK {
+		t.Fatalf("inventory handoff status=%d body=%s", inventoryHandoff.Code, inventoryHandoff.Body.String())
+	}
+	if !strings.Contains(inventoryHandoff.Body.String(), `"destination_applied":"inventory"`) ||
+		!strings.Contains(inventoryHandoff.Body.String(), `"instance_id":"`) ||
+		!strings.Contains(inventoryHandoff.Body.String(), `"handoff_persisted":true`) {
+		t.Fatalf("expected inventory handoff persistence evidence, body=%s", inventoryHandoff.Body.String())
+	}
+	var inventoryHandoffCount int
+	if err := a.db.QueryRow(`
+		SELECT COUNT(1)
+		FROM instances inst
+		JOIN canonical_items i ON i.id = inst.item_id
+		WHERE i.profile_id = ? AND i.title = 'Inventory handoff result' AND inst.condition = 'sealed' AND inst.quantity = 3
+	`, p.ID).Scan(&inventoryHandoffCount); err != nil {
+		t.Fatalf("count market watch inventory handoff: %v", err)
+	}
+	if inventoryHandoffCount != 1 {
+		t.Fatalf("expected one persisted inventory handoff, got %d", inventoryHandoffCount)
+	}
+
+	missingOrder := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.add_line_item",
+		"parameters":{"item_id":"item-99"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if missingOrder.Code != http.StatusOK {
+		t.Fatalf("purchase preview status=%d body=%s", missingOrder.Code, missingOrder.Body.String())
+	}
+	if !strings.Contains(missingOrder.Body.String(), `"blocker":"purchases_order_required"`) {
+		t.Fatalf("expected missing order blocker, body=%s", missingOrder.Body.String())
+	}
+
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status) VALUES ('item-99', ?, 'AFX', 'Slot Cars', 'AGENT-PURCHASE-99', 'Agent purchase line item', 'active')`, p.ID); err != nil {
+		t.Fatalf("seed purchase target item: %v", err)
+	}
+
+	createOrder := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.create_order",
+		"confirm":true,
+		"parameters":{
+			"purchase_source":"agent_manual",
+			"order_id":"agent-order-1",
+			"title":"Agent created purchase order item",
+			"part_number":"AGENT-CREATE-1",
+			"source_url":"https://example.test/order/1",
+			"quantity":1,
+			"amount":77,
+			"currency":"AUD"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createOrder.Code != http.StatusOK {
+		t.Fatalf("create order status=%d body=%s", createOrder.Code, createOrder.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.order.create"`,
+		`"order_id":"agent-order-1"`,
+		`"created_item":true`,
+		`"purchase_persisted":true`,
+		`"provenance_preserved":true`,
+		`"expected_arrival_id":"`,
+	} {
+		if !strings.Contains(createOrder.Body.String(), want) {
+			t.Fatalf("create order response missing %s: body=%s", want, createOrder.Body.String())
+		}
+	}
+
+	addLine := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.add_line_item",
+		"confirm":true,
+		"parameters":{
+			"order_id":"order-1",
+			"item_id":"item-99",
+			"source":"market_watch",
+			"result_id":"result-9",
+			"source_url":"https://example.test/listing/9",
+			"seller":"seller-one",
+			"tracking":"TRACK-99",
+			"quantity":2,
+			"amount":42.5,
+			"currency":"AUD"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if addLine.Code != http.StatusOK {
+		t.Fatalf("add line item status=%d body=%s", addLine.Code, addLine.Body.String())
+	}
+	if !strings.Contains(addLine.Body.String(), `"operation":"purchases.order.add_line_item"`) ||
+		!strings.Contains(addLine.Body.String(), `"order_id":"order-1"`) ||
+		!strings.Contains(addLine.Body.String(), `"item_id":"item-99"`) ||
+		!strings.Contains(addLine.Body.String(), `"purchase_persisted":true`) ||
+		!strings.Contains(addLine.Body.String(), `"provenance_preserved":true`) ||
+		!strings.Contains(addLine.Body.String(), `"lifecycle_entry_id":"`) ||
+		!strings.Contains(addLine.Body.String(), `"expected_arrival_id":"`) {
+		t.Fatalf("expected purchase add line item preview/apply evidence, body=%s", addLine.Body.String())
+	}
+
+	searchOrders := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.search_orders",
+		"parameters":{"query":"order-1","status":"all"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchOrders.Code != http.StatusOK {
+		t.Fatalf("search purchase orders status=%d body=%s", searchOrders.Code, searchOrders.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":false`,
+		`"operation":"purchases.orders.search"`,
+		`"order_id":"order-1"`,
+		`"source":"market_watch"`,
+		`"seller":"seller-one"`,
+		`"tracking":"TRACK-99"`,
+		`"line_item_count":1`,
+		`"expected_arrival_id":"`,
+	} {
+		if !strings.Contains(searchOrders.Body.String(), want) {
+			t.Fatalf("purchase order search response missing %s: body=%s", want, searchOrders.Body.String())
+		}
+	}
+
+	receiveLine := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.receive_line_item",
+		"confirm":true,
+		"parameters":{"order_id":"order-1","line_item_id":"item-99","delivered_on":"2026-07-05","notes":"received by agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if receiveLine.Code != http.StatusOK {
+		t.Fatalf("receive line item status=%d body=%s", receiveLine.Code, receiveLine.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.line_item.receive"`,
+		`"purchase_persisted":true`,
+		`"arrival_status":"delivered"`,
+		`"delivered_on":"2026-07-05"`,
+	} {
+		if !strings.Contains(receiveLine.Body.String(), want) {
+			t.Fatalf("receive line response missing %s: body=%s", want, receiveLine.Body.String())
+		}
+	}
+
+	reconcile := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.reconcile_item",
+		"confirm":true,
+		"parameters":{"order_id":"order-1","item_id":"item-99","instance_id":"instance-99","notes":"reconciled by agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if reconcile.Code != http.StatusOK {
+		t.Fatalf("reconcile item status=%d body=%s", reconcile.Code, reconcile.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.item.reconcile"`,
+		`"purchase_persisted":true`,
+		`"reconciliation_persisted":true`,
+		`"arrival_status":"reconciled"`,
+		`"reconciled_instance_id":"instance-99"`,
+	} {
+		if !strings.Contains(reconcile.Body.String(), want) {
+			t.Fatalf("reconcile item response missing %s: body=%s", want, reconcile.Body.String())
+		}
+	}
+
+	searchReceived := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.search_orders",
+		"parameters":{"query":"order-1","status":"received"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchReceived.Code != http.StatusOK {
+		t.Fatalf("search received purchase orders status=%d body=%s", searchReceived.Code, searchReceived.Body.String())
+	}
+	if !strings.Contains(searchReceived.Body.String(), `"status":"received"`) ||
+		!strings.Contains(searchReceived.Body.String(), `"received_count":1`) ||
+		!strings.Contains(searchReceived.Body.String(), `"status":"reconciled"`) {
+		t.Fatalf("expected received/reconciled purchase order search evidence, body=%s", searchReceived.Body.String())
+	}
+
+	receiveOrder := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.receive_order",
+		"confirm":true,
+		"parameters":{"order_id":"agent-order-1","delivered_on":"2026-07-06","notes":"bulk receive by agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if receiveOrder.Code != http.StatusOK {
+		t.Fatalf("receive order status=%d body=%s", receiveOrder.Code, receiveOrder.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.order.receive"`,
+		`"order_id":"agent-order-1"`,
+		`"purchase_persisted":true`,
+		`"received_count":1`,
+		`"status":"delivered"`,
+	} {
+		if !strings.Contains(receiveOrder.Body.String(), want) {
+			t.Fatalf("receive order response missing %s: body=%s", want, receiveOrder.Body.String())
+		}
+	}
 }
 
 func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing.T) {

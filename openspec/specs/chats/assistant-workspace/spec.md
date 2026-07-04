@@ -119,3 +119,20 @@ The shell Assistant side-panel MUST turn provider-backed app-control setup-neede
 - **THEN** the chat message API response MUST include `setup_needed=true`
 - **AND** the side-panel MUST render visible provider setup-needed guidance
 - **AND** the side-panel MUST NOT render a route action card for the unavailable provider-backed request
+
+### Requirement ASSISTANT-WORKSPACE-012: Assistant side-panel SHALL dispatch governed Agent Skills with source context
+The shell Assistant side-panel Agent Skill card MUST support governed skill execution for Integrations, Market Watch, and Purchases without losing the active profile, thread, source channel, source surface, or preview-before-apply confirmation boundary.
+
+#### Scenario: Dispatch Market Watch skill from the Assistant side-panel
+- **GIVEN** the shell Assistant side-panel is open with an active profile-scoped thread
+- **WHEN** the user selects `cabinet.market_watch.run_watch`, enters provider and saved-watch context, previews the skill, and confirms apply
+- **THEN** the preview request MUST include the active profile, thread, `source_channel=in-app`, `source_surface=market_watch.saved_watch.row`, provider ID, and saved watch ID
+- **AND** the apply request MUST repeat that same source context with `confirm=true`
+- **AND** the side-panel MUST show preview and result state without applying an unconfirmed mutation
+
+#### Scenario: Dispatch Purchases skill from the Assistant side-panel
+- **GIVEN** the shell Assistant side-panel is open with an active profile-scoped thread
+- **WHEN** the user selects `cabinet.purchases.create_order`, enters purchase source, item, and source URL context, previews the skill, and confirms apply
+- **THEN** the preview request MUST include the active profile, thread, `source_channel=in-app`, `source_surface=purchases.inbox.capture`, purchase source, item ID, and source URL
+- **AND** the apply request MUST repeat that same source context with `confirm=true`
+- **AND** the side-panel MUST show preview and result state without applying an unconfirmed mutation

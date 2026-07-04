@@ -59,6 +59,20 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 		"cabinet.data.export_bundle",
 		"cabinet.data.restore_backup",
 		"cabinet.maintenance.run_safe_check",
+		"cabinet.market_watch.search_watches",
+		"cabinet.market_watch.create_saved_watch",
+		"cabinet.market_watch.update_saved_watch",
+		"cabinet.market_watch.run_watch",
+		"cabinet.market_watch.review_results",
+		"cabinet.market_watch.dismiss_result",
+		"cabinet.market_watch.handoff_result",
+		"cabinet.purchases.search_orders",
+		"cabinet.purchases.create_order",
+		"cabinet.purchases.add_line_item",
+		"cabinet.purchases.receive_order",
+		"cabinet.purchases.receive_line_item",
+		"cabinet.purchases.reconcile_item",
+		"cabinet.purchases.review_purchase",
 		"local.archive.read_only",
 	} {
 		if !containsSkill(skills, id) {
@@ -78,6 +92,89 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 	}
 	if resolved.SafetyLevel != SafetyConfirmRequired || !resolved.Permissions.RequiresConfirm || !resolved.Permissions.LocalWrite {
 		t.Fatalf("expected confirm-required local write permission metadata, got %+v", resolved)
+	}
+}
+
+func TestMarketWatchAndPurchasesSkillsExposePreviewAndProvenanceBoundaries(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	searchWatches, ok := registry.Resolve("cabinet.market_watch.search_watches")
+	if !ok {
+		t.Fatalf("expected Market Watch search skill")
+	}
+	if searchWatches.SafetyLevel != SafetyReadOnly || !searchWatches.Executable || searchWatches.Permissions.LocalWrite {
+		t.Fatalf("Market Watch search should be executable read-only metadata, got %+v", searchWatches)
+	}
+	if !slices.Contains(searchWatches.RequiredProviders, "provider-registry") || !slices.Contains(searchWatches.IntegrationWorkflows, "market_watch.watch.search") {
+		t.Fatalf("expected provider-backed Market Watch workflow binding, got providers=%+v workflows=%+v", searchWatches.RequiredProviders, searchWatches.IntegrationWorkflows)
+	}
+
+	runWatch, ok := registry.Resolve("cabinet.market_watch.run_watch")
+	if !ok {
+		t.Fatalf("expected Market Watch run skill")
+	}
+	if runWatch.SafetyLevel != SafetyConfirmRequired || !runWatch.Permissions.RequiresConfirm || !runWatch.Permissions.ExternalWrite {
+		t.Fatalf("run watch should be confirmation-gated external-read/write metadata, got %+v", runWatch)
+	}
+	missingProvider, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.market_watch.run_watch",
+		Parameters: map[string]any{"watch_id": "watch-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview run watch missing provider: %v", err)
+	}
+	if missingProvider.Allowed || missingProvider.Blocker != "market_watch_provider_required" || missingProvider.MutationApplied {
+		t.Fatalf("expected provider readiness blocker without mutation, got %+v", missingProvider)
+	}
+
+	missingResult, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.market_watch.handoff_result",
+		Parameters: map[string]any{"provider_id": "ebay"},
+	})
+	if err != nil {
+		t.Fatalf("preview handoff missing result: %v", err)
+	}
+	if missingResult.Allowed || missingResult.Blocker != "market_watch_result_required" {
+		t.Fatalf("expected Market Watch result blocker, got %+v", missingResult)
+	}
+
+	searchOrders, ok := registry.Resolve("cabinet.purchases.search_orders")
+	if !ok {
+		t.Fatalf("expected Purchases search skill")
+	}
+	if searchOrders.SafetyLevel != SafetyReadOnly || !searchOrders.Executable || searchOrders.Permissions.LocalWrite {
+		t.Fatalf("Purchases search should be executable read-only metadata, got %+v", searchOrders)
+	}
+
+	addLineItem, ok := registry.Resolve("cabinet.purchases.add_line_item")
+	if !ok {
+		t.Fatalf("expected Purchases add line item skill")
+	}
+	if addLineItem.SafetyLevel != SafetyConfirmRequired || !slices.Contains(addLineItem.RequiredContext, "target_order") || !addLineItem.Permissions.RequiresConfirm {
+		t.Fatalf("add line item should require target order and confirmation, got %+v", addLineItem)
+	}
+	missingOrder, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.purchases.add_line_item",
+		Parameters: map[string]any{"item_id": "item-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview purchase add line item: %v", err)
+	}
+	if missingOrder.Allowed || missingOrder.Blocker != "purchases_order_required" {
+		t.Fatalf("expected purchase order blocker without mutation, got %+v", missingOrder)
+	}
+
+	missingItem, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.purchases.reconcile_item",
+		Parameters: map[string]any{"order_id": "order-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview purchase reconcile item: %v", err)
+	}
+	if missingItem.Allowed || missingItem.Blocker != "purchases_item_required" {
+		t.Fatalf("expected purchase item blocker without mutation, got %+v", missingItem)
 	}
 }
 

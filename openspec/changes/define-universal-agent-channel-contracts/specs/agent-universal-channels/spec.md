@@ -91,6 +91,13 @@ Telegram and future approved external channels SHALL enter Cabinet Agent through
 - **AND** confirmation from a different sender/chat, stale preview, missing permission, or failed apply SHALL be rejected with retryable audit evidence
 - **AND** successful apply SHALL record the source channel, skill id, preview id, confirmation state, mutation result, and non-secret provider/runtime evidence
 
+#### Scenario: Preserve Market Watch and Purchases external skill source context
+- **GIVEN** an authorized Telegram or approved external channel invokes a Market Watch or Purchases Agent Skill
+- **WHEN** Cabinet creates the skill preview or confirmed apply response
+- **THEN** the response MUST preserve the external source surface, source channel, source thread id, and source message id
+- **AND** Market Watch result handoff preview MUST remain non-mutating until confirmed
+- **AND** Purchases order creation apply MUST preserve purchase provenance and confirmation evidence without claiming an external provider write
+
 ### Requirement: Universal Agent specification SHALL classify implementation state
 Cabinet SHALL distinguish implemented, planned, blocked, and deferred Agent behavior so follow-up issues cannot treat this parent specification as a broad implementation claim.
 
