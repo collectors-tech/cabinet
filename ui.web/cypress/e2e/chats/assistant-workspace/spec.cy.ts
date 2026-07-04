@@ -269,6 +269,85 @@ describe('chats/assistant-workspace', () => {
     })
   })
 
+  it('AGENT-ATTACHMENTS-001 handles side-panel attachments with the same scoped message binding as main Chat', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/attachments').as('assistantAttachment')
+    cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-attachment-panel"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="shell-assistant-attachment-input"]').selectFile(
+      {
+        contents: Cypress.Buffer.from('side panel attachment proof'),
+        fileName: 'side-panel-proof.txt',
+        mimeType: 'text/plain',
+      },
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-pending-attachment"]').should(
+      'contain',
+      'side-panel-proof.txt'
+    )
+    cy.get('[data-testid="shell-assistant-attachment-upload"]').click()
+
+    let attachmentId = ''
+    let threadId = ''
+    cy.wait('@assistantAttachment').then(({ request, response }) => {
+      expect(request.headers['content-type']).to.include(
+        'multipart/form-data'
+      )
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.profile_id).to.eq('e2e-profile-001')
+      expect(response?.body.filename).to.eq('side-panel-proof.txt')
+      expect(response?.body.mime_type).to.eq('text/plain')
+      attachmentId = String(response?.body.id)
+      threadId = String(response?.body.thread_id)
+    })
+    cy.get('[data-testid="shell-assistant-attachment-list"]')
+      .should('contain', 'side-panel-proof.txt')
+      .and('contain', 'text/plain')
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type(
+      'use this side-panel attachment'
+    )
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+
+    cy.wait('@assistantMessage').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.thread_id).to.eq(threadId)
+      expect(request.body.attachment_ids).to.deep.eq([attachmentId])
+      expect(request.body.context.route.pathname).to.match(/^\/inventory\/?$/)
+      expect(request.body.context.profile.id).to.eq('e2e-profile-001')
+      expect(request.body.context.assistant.provider).to.eq('openai')
+      expect(request.body.context.assistant.model).to.eq('gpt-4o-mini')
+      expect(response?.statusCode).to.eq(201)
+      expect(
+        JSON.stringify(response?.body.message.attachments_json)
+      ).to.include(attachmentId)
+    })
+    cy.get('[data-testid="shell-assistant-attachment-list"]').should(
+      'not.exist'
+    )
+
+    cy.then(() => {
+      cy.request(
+        `/api/chat/messages?profile_id=e2e-profile-001&thread_id=${encodeURIComponent(
+          threadId
+        )}`
+      )
+        .its('body')
+        .should((payload) => {
+          const serialized = JSON.stringify(payload)
+          expect(serialized).to.include('side-panel-proof.txt')
+          expect(serialized).to.include('explicit_user_upload')
+          expect(serialized).to.include('in_app_chat')
+          expect(serialized).to.include(attachmentId)
+        })
+    })
+  })
+
   it('ASSISTANT-WORKSPACE-010/#1508 shows provider setup-needed guidance for unavailable provider-backed side-panel actions', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/messages').as('assistantProviderSetup')
