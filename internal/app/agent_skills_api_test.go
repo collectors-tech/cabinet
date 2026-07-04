@@ -426,6 +426,9 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'error', 'credentials expired; refresh token required', 0, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed provider health: %v", err)
+	}
 
 	testConnection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
@@ -437,9 +440,11 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	}
 	if !strings.Contains(testConnection.Body.String(), `"mutation_applied":false`) ||
 		!strings.Contains(testConnection.Body.String(), `"operation":"integrations.provider.test_connection"`) ||
-		!strings.Contains(testConnection.Body.String(), `"connection_status":"setup_needed"`) ||
+		!strings.Contains(testConnection.Body.String(), `"connection_status":"needs_reauthentication"`) ||
+		!strings.Contains(testConnection.Body.String(), `"provider_health"`) ||
+		!strings.Contains(testConnection.Body.String(), `"next_action":"check_provider_health_and_credentials"`) ||
 		strings.Contains(testConnection.Body.String(), "must-not-leak") {
-		t.Fatalf("expected non-mutating provider test without secret leak, body=%s", testConnection.Body.String())
+		t.Fatalf("expected non-mutating provider health test without secret leak, body=%s", testConnection.Body.String())
 	}
 
 	configure := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{

@@ -26,7 +26,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.integrations.repair_provider",
 		"cabinet.integrations.disable_provider",
 		"cabinet.integrations.explain_required_setup":
-		return applyAgentIntegrationSkill(skillID, params)
+		return applyAgentIntegrationSkill(ctx, conn, skillID, params)
 	case "cabinet.settings.update_profile",
 		"cabinet.settings.update_account",
 		"cabinet.settings.update_appearance",
@@ -89,7 +89,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 	}
 }
 
-func applyAgentIntegrationSkill(skillID string, params map[string]any) (map[string]any, string, error) {
+func applyAgentIntegrationSkill(ctx context.Context, conn *sql.DB, skillID string, params map[string]any) (map[string]any, string, error) {
 	providerID := stringMapParam(params, "provider_id")
 	if providerID == "" {
 		providerID = stringMapParam(params, "provider_name")
@@ -114,8 +114,10 @@ func applyAgentIntegrationSkill(skillID string, params map[string]any) (map[stri
 	case "cabinet.integrations.test_connection":
 		result["operation"] = "integrations.provider.test_connection"
 		result["read_only"] = true
-		result["connection_status"] = "setup_needed"
-		result["next_action"] = "Review non-secret setup requirements before running a live provider health check."
+		health := agentSkillProviderHealthSnapshot(ctx, conn, providerID)
+		result["provider_health"] = health
+		result["connection_status"] = health["category"]
+		result["next_action"] = health["next_action"]
 	case "cabinet.integrations.explain_required_setup":
 		result["operation"] = "integrations.provider.explain_setup"
 		result["read_only"] = true
@@ -136,6 +138,40 @@ func applyAgentIntegrationSkill(skillID string, params map[string]any) (map[stri
 		result["next_action"] = "Confirm provider disabled state in Integrations before routing provider-backed workflows."
 	}
 	return result, "", nil
+}
+
+func agentSkillProviderHealthSnapshot(ctx context.Context, conn *sql.DB, providerID string) map[string]any {
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" {
+		return map[string]any{
+			"provider":    "",
+			"status":      "unknown",
+			"state":       "disabled",
+			"category":    "not_checked",
+			"label":       "Not checked yet",
+			"last_error":  "",
+			"next_action": "select_provider",
+		}
+	}
+	if conn == nil {
+		return providerHealthResponse(map[string]string{"provider": providerID, "status": "unknown", "message": ""})
+	}
+	var status, msg, updated string
+	var retryAfterSeconds int
+	err := conn.QueryRowContext(ctx, `
+		SELECT status, message, updated_at, retry_after_seconds
+		FROM provider_health WHERE provider = ?
+	`, providerID).Scan(&status, &msg, &updated, &retryAfterSeconds)
+	if err != nil {
+		return providerHealthResponse(map[string]string{"provider": providerID, "status": "unknown", "message": ""})
+	}
+	return providerHealthResponse(map[string]string{
+		"provider":            providerID,
+		"status":              status,
+		"message":             msg,
+		"updated_at":          updated,
+		"retry_after_seconds": fmt.Sprintf("%d", retryAfterSeconds),
+	})
 }
 
 func applyAgentSettingsDataSkill(skillID, profileID string, params map[string]any) (map[string]any, string, error) {
