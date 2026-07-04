@@ -209,6 +209,30 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 		}
 		return resp, nil
 	}
+	if strings.HasPrefix(skill.ID, "cabinet.market_watch.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewMarketWatchBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "provider_id", "provider_name", "watch_id", "result_id", "destination", "query")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select the provider and saved watch or result, review provenance and provider health, then confirm before Cabinet changes watch or handoff state."
+		}
+		return resp, nil
+	}
+	if strings.HasPrefix(skill.ID, "cabinet.purchases.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewPurchasesBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "order_id", "line_item_id", "item_id", "result_id", "source", "review_status")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select the purchase order, line, item, or review target and confirm before Cabinet changes purchase or reconciliation state."
+		}
+		return resp, nil
+	}
 	if strings.HasPrefix(skill.ID, "cabinet.settings.") || strings.HasPrefix(skill.ID, "cabinet.storage.") || strings.HasPrefix(skill.ID, "cabinet.data.") || strings.HasPrefix(skill.ID, "cabinet.maintenance.") {
 		resp.Allowed = skill.SafetyLevel == SafetyReadOnly || skill.ID == "cabinet.data.export_bundle"
 		resp.Blocker = previewSettingsDataBlocker(skill.ID, params)
@@ -260,6 +284,20 @@ func builtInSkills() []Skill {
 		settingsSkill("cabinet.data.export_bundle", "Export data bundle", "Prepare a non-mutating data export preview before creating a bundle.", SafetyPreviewOnly, []string{"profile", "export_scope"}, []string{"data.export.bundle"}, nil),
 		settingsSkill("cabinet.data.restore_backup", "Restore backup", "Require destructive confirmation before restoring a selected backup.", SafetyDestructive, []string{"profile", "selected_backup"}, []string{"data.backup.restore"}, []string{"backup_path"}),
 		settingsSkill("cabinet.maintenance.run_safe_check", "Run maintenance safe check", "Run read-only maintenance checks and report actionable health status.", SafetyReadOnly, []string{"profile", "storage"}, []string{"maintenance.safe_check"}, nil),
+		marketWatchSkill("cabinet.market_watch.search_watches", "Search saved watches", "Search saved Market Watch definitions and current provider readiness without mutating watch state.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"market_watch.watch.search"}, nil),
+		marketWatchSkill("cabinet.market_watch.create_saved_watch", "Create saved watch", "Preview a provider-backed saved watch definition before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "watch_query"}, []string{"market_watch.watch.create"}, []string{"watch_query"}),
+		marketWatchSkill("cabinet.market_watch.update_saved_watch", "Update saved watch", "Preview edits to an existing saved watch before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "watch_id"}, []string{"market_watch.watch.update"}, []string{"watch_id"}),
+		marketWatchSkill("cabinet.market_watch.run_watch", "Run saved watch", "Review provider health and run a selected saved watch only after confirmation.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "watch_id"}, []string{"market_watch.watch.run"}, []string{"watch_id"}),
+		marketWatchSkill("cabinet.market_watch.review_results", "Review watch results", "Review Market Watch results with provider and listing provenance without mutating state.", SafetyReadOnly, []string{"profile", "workspace", "provider"}, []string{"market_watch.results.review"}, nil),
+		marketWatchSkill("cabinet.market_watch.dismiss_result", "Dismiss watch result", "Preview dismissing a selected Market Watch result before confirmed state change.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "result_id"}, []string{"market_watch.result.dismiss"}, []string{"result_id"}),
+		marketWatchSkill("cabinet.market_watch.handoff_result", "Handoff watch result", "Preview handing a Market Watch result to Wishlist, Purchases, or Inventory while preserving source provenance.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "result_id", "destination"}, []string{"market_watch.result.handoff"}, []string{"result_id", "destination"}),
+		purchasesSkill("cabinet.purchases.search_orders", "Search purchase orders", "Search purchase orders, line items, and review state without mutating purchase data.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"purchases.orders.search"}, nil),
+		purchasesSkill("cabinet.purchases.create_order", "Create purchase order", "Preview a new purchase order before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "purchase_source"}, []string{"purchases.order.create"}, []string{"purchase_source"}),
+		purchasesSkill("cabinet.purchases.add_line_item", "Add purchase line item", "Add a line item to an explicitly selected order through preview and confirmation.", SafetyConfirmRequired, []string{"profile", "workspace", "target_order", "target_item"}, []string{"purchases.order.add_line_item"}, []string{"order_id", "item_id"}),
+		purchasesSkill("cabinet.purchases.receive_order", "Receive purchase order", "Preview receiving all pending line items for a selected order before confirmed state change.", SafetyConfirmRequired, []string{"profile", "workspace", "target_order"}, []string{"purchases.order.receive"}, []string{"order_id"}),
+		purchasesSkill("cabinet.purchases.receive_line_item", "Receive purchase line item", "Preview receiving a selected purchase line item before confirmed state change.", SafetyConfirmRequired, []string{"profile", "workspace", "target_order", "line_item"}, []string{"purchases.line_item.receive"}, []string{"order_id", "line_item_id"}),
+		purchasesSkill("cabinet.purchases.reconcile_item", "Reconcile purchased item", "Preview reconciling a purchased line with an inventory item while preserving source provenance.", SafetyConfirmRequired, []string{"profile", "workspace", "target_order", "target_item"}, []string{"purchases.item.reconcile"}, []string{"order_id", "item_id"}),
+		purchasesSkill("cabinet.purchases.review_purchase", "Review purchase", "Review purchase/order evidence and feedback state without changing records unless a confirmed review state is supplied.", SafetyReadOnly, []string{"profile", "workspace", "target_order"}, []string{"purchases.order.review"}, nil),
 	}
 }
 
@@ -332,6 +370,25 @@ func settingsSkill(id, displayName, description string, safety SafetyLevel, cont
 	return deriveExecutionState(skill)
 }
 
+func marketWatchSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "market-watch", safety, context, []string{"market-watch.workflow"}, nil, []string{"market-watch.table", "market-watch.result.review"})
+	skill.RequiredProviders = []string{"provider-registry"}
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	skill.Permissions.ExternalRead = true
+	if safety == SafetyConfirmRequired {
+		skill.Permissions.ExternalWrite = true
+	}
+	return deriveExecutionState(skill)
+}
+
+func purchasesSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "purchases", safety, context, []string{"purchases.workflow"}, nil, []string{"purchases.table", "purchases.order.detail"})
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	return deriveExecutionState(skill)
+}
+
 func previewUsersAdminBlocker(skillID string, params map[string]any) string {
 	target := strings.TrimSpace(stringParam(params, "target_user"))
 	if target == "" && strings.TrimSpace(stringParam(params, "target_email")) == "" {
@@ -375,6 +432,69 @@ func previewIntegrationBlocker(skillID string, params map[string]any) string {
 	}
 	if skillID == "cabinet.integrations.explain_required_setup" || skillID == "cabinet.integrations.test_connection" {
 		return ""
+	}
+	return "confirmation_required"
+}
+
+func previewMarketWatchBlocker(skillID string, params map[string]any) string {
+	if strings.TrimSpace(stringParam(params, "provider_id")) == "" && strings.TrimSpace(stringParam(params, "provider_name")) == "" {
+		return "market_watch_provider_required"
+	}
+	switch skillID {
+	case "cabinet.market_watch.search_watches", "cabinet.market_watch.review_results":
+		return ""
+	case "cabinet.market_watch.create_saved_watch":
+		if strings.TrimSpace(stringParam(params, "watch_query")) == "" && strings.TrimSpace(stringParam(params, "query")) == "" {
+			return "market_watch_query_required"
+		}
+	case "cabinet.market_watch.update_saved_watch", "cabinet.market_watch.run_watch":
+		if strings.TrimSpace(stringParam(params, "watch_id")) == "" {
+			return "market_watch_watch_required"
+		}
+	case "cabinet.market_watch.dismiss_result", "cabinet.market_watch.handoff_result":
+		if strings.TrimSpace(stringParam(params, "result_id")) == "" {
+			return "market_watch_result_required"
+		}
+		if skillID == "cabinet.market_watch.handoff_result" && strings.TrimSpace(stringParam(params, "destination")) == "" {
+			return "market_watch_destination_required"
+		}
+	}
+	return "confirmation_required"
+}
+
+func previewPurchasesBlocker(skillID string, params map[string]any) string {
+	switch skillID {
+	case "cabinet.purchases.search_orders", "cabinet.purchases.review_purchase":
+		return ""
+	case "cabinet.purchases.create_order":
+		if strings.TrimSpace(stringParam(params, "purchase_source")) == "" && strings.TrimSpace(stringParam(params, "source")) == "" {
+			return "purchases_source_required"
+		}
+	case "cabinet.purchases.add_line_item":
+		if strings.TrimSpace(stringParam(params, "order_id")) == "" {
+			return "purchases_order_required"
+		}
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" && strings.TrimSpace(stringParam(params, "line_item_id")) == "" {
+			return "purchases_item_required"
+		}
+	case "cabinet.purchases.receive_order":
+		if strings.TrimSpace(stringParam(params, "order_id")) == "" {
+			return "purchases_order_required"
+		}
+	case "cabinet.purchases.receive_line_item":
+		if strings.TrimSpace(stringParam(params, "order_id")) == "" {
+			return "purchases_order_required"
+		}
+		if strings.TrimSpace(stringParam(params, "line_item_id")) == "" {
+			return "purchases_line_item_required"
+		}
+	case "cabinet.purchases.reconcile_item":
+		if strings.TrimSpace(stringParam(params, "order_id")) == "" {
+			return "purchases_order_required"
+		}
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" {
+			return "purchases_item_required"
+		}
 	}
 	return "confirmation_required"
 }

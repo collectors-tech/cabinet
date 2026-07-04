@@ -104,6 +104,22 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	if removeUser.SafetyLevel != "destructive" || !removeUser.Permissions.Destructive || !removeUser.Executable {
 		t.Fatalf("expected destructive executable remove user metadata, got %+v", removeUser)
 	}
+
+	runWatch := findAPISkill(payload.Skills, "cabinet.market_watch.run_watch")
+	if runWatch == nil {
+		t.Fatalf("missing Market Watch run skill")
+	}
+	if runWatch.SafetyLevel != "confirm-required" || !runWatch.Permissions.RequiresConfirm || !runWatch.Executable {
+		t.Fatalf("expected confirmation-gated Market Watch run metadata, got %+v", runWatch)
+	}
+
+	addPurchaseLine := findAPISkill(payload.Skills, "cabinet.purchases.add_line_item")
+	if addPurchaseLine == nil {
+		t.Fatalf("missing Purchases add line item skill")
+	}
+	if addPurchaseLine.SafetyLevel != "confirm-required" || !addPurchaseLine.Permissions.RequiresConfirm || !slices.Contains(addPurchaseLine.RequiredContext, "target_order") {
+		t.Fatalf("expected confirmation-gated purchase line item metadata, got %+v", addPurchaseLine)
+	}
 }
 
 func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
@@ -716,6 +732,106 @@ func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T
 		t.Fatalf("expected actionable disable result without external write claim, body=%s", disable.Body.String())
 	}
 	assertProfileSetting(t, a, p.ID, "integration.openai.enabled", "false")
+}
+
+func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Market Watch Purchases"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'auth_missing', 'provider credentials required before live watch run', 0, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed provider health: %v", err)
+	}
+
+	missingProvider := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.run_watch",
+		"parameters":{"watch_id":"watch-42"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if missingProvider.Code != http.StatusOK {
+		t.Fatalf("market watch preview status=%d body=%s", missingProvider.Code, missingProvider.Body.String())
+	}
+	if !strings.Contains(missingProvider.Body.String(), `"blocker":"market_watch_provider_required"`) ||
+		!strings.Contains(missingProvider.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected provider blocker without mutation, body=%s", missingProvider.Body.String())
+	}
+
+	runWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.run_watch",
+		"confirm":true,
+		"source_surface":"market_watch.saved_watch.row",
+		"source_channel":"in-app",
+		"parameters":{"provider_id":"ebay","watch_id":"watch-42","query":"boxed model kit"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if runWatch.Code != http.StatusOK {
+		t.Fatalf("run watch status=%d body=%s", runWatch.Code, runWatch.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"market_watch.watch.run"`,
+		`"provider_id":"ebay"`,
+		`"watch_id":"watch-42"`,
+		`"provider_health"`,
+		`"external_write_claimed":false`,
+		`"source_surface":"market_watch.saved_watch.row"`,
+	} {
+		if !strings.Contains(runWatch.Body.String(), want) {
+			t.Fatalf("run watch response missing %s: body=%s", want, runWatch.Body.String())
+		}
+	}
+
+	handoff := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"result-9","destination":"purchases","source_url":"https://example.test/listing/9"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if handoff.Code != http.StatusOK {
+		t.Fatalf("handoff status=%d body=%s", handoff.Code, handoff.Body.String())
+	}
+	if !strings.Contains(handoff.Body.String(), `"provenance_preserved":true`) ||
+		!strings.Contains(handoff.Body.String(), `"result_id":"result-9"`) ||
+		!strings.Contains(handoff.Body.String(), `"destination":"purchases"`) {
+		t.Fatalf("expected provenance-preserving handoff result, body=%s", handoff.Body.String())
+	}
+
+	missingOrder := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.add_line_item",
+		"parameters":{"item_id":"item-99"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if missingOrder.Code != http.StatusOK {
+		t.Fatalf("purchase preview status=%d body=%s", missingOrder.Code, missingOrder.Body.String())
+	}
+	if !strings.Contains(missingOrder.Body.String(), `"blocker":"purchases_order_required"`) {
+		t.Fatalf("expected missing order blocker, body=%s", missingOrder.Body.String())
+	}
+
+	addLine := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.add_line_item",
+		"confirm":true,
+		"parameters":{"order_id":"order-1","item_id":"item-99","source":"market_watch","result_id":"result-9"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if addLine.Code != http.StatusOK {
+		t.Fatalf("add line item status=%d body=%s", addLine.Code, addLine.Body.String())
+	}
+	if !strings.Contains(addLine.Body.String(), `"operation":"purchases.order.add_line_item"`) ||
+		!strings.Contains(addLine.Body.String(), `"order_id":"order-1"`) ||
+		!strings.Contains(addLine.Body.String(), `"item_id":"item-99"`) ||
+		!strings.Contains(addLine.Body.String(), `"provenance_preserved":true`) {
+		t.Fatalf("expected purchase add line item preview/apply evidence, body=%s", addLine.Body.String())
+	}
 }
 
 func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing.T) {

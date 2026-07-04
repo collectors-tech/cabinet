@@ -28,6 +28,22 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.integrations.disable_provider",
 		"cabinet.integrations.explain_required_setup":
 		return applyAgentIntegrationSkill(ctx, conn, skillID, profileID, params)
+	case "cabinet.market_watch.search_watches",
+		"cabinet.market_watch.create_saved_watch",
+		"cabinet.market_watch.update_saved_watch",
+		"cabinet.market_watch.run_watch",
+		"cabinet.market_watch.review_results",
+		"cabinet.market_watch.dismiss_result",
+		"cabinet.market_watch.handoff_result":
+		return applyAgentMarketWatchSkill(ctx, conn, skillID, params)
+	case "cabinet.purchases.search_orders",
+		"cabinet.purchases.create_order",
+		"cabinet.purchases.add_line_item",
+		"cabinet.purchases.receive_order",
+		"cabinet.purchases.receive_line_item",
+		"cabinet.purchases.reconcile_item",
+		"cabinet.purchases.review_purchase":
+		return applyAgentPurchasesSkill(skillID, profileID, params)
 	case "cabinet.settings.update_profile",
 		"cabinet.settings.update_account",
 		"cabinet.settings.update_appearance",
@@ -156,6 +172,171 @@ func applyAgentIntegrationSkill(ctx context.Context, conn *sql.DB, skillID, prof
 		}
 		result["settings_persisted"] = []string{keys.EnabledKey}
 		result["next_action"] = "Confirm provider disabled state in Integrations before routing provider-backed workflows."
+	}
+	return result, "", nil
+}
+
+func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID string, params map[string]any) (map[string]any, string, error) {
+	providerID := stringMapParam(params, "provider_id")
+	if providerID == "" {
+		providerID = stringMapParam(params, "provider_name")
+	}
+	if providerID == "" {
+		return nil, "market_watch_provider_required", fmt.Errorf("provider required")
+	}
+	result := map[string]any{
+		"provider_id":              providerID,
+		"external_write_claimed":   false,
+		"provenance_preserved":     false,
+		"provider_health":          agentSkillProviderHealthSnapshot(ctx, conn, providerID),
+		"live_provider_dispatched": false,
+	}
+	switch skillID {
+	case "cabinet.market_watch.search_watches":
+		result["operation"] = "market_watch.watch.search"
+		result["read_only"] = true
+		result["query"] = stringMapParam(params, "query")
+		result["next_action"] = "Review saved watches and provider health before running or changing a watch."
+	case "cabinet.market_watch.review_results":
+		result["operation"] = "market_watch.results.review"
+		result["read_only"] = true
+		result["watch_id"] = stringMapParam(params, "watch_id")
+		result["next_action"] = "Select a result before dismissing or handing it off."
+	case "cabinet.market_watch.create_saved_watch":
+		query := stringMapParam(params, "watch_query")
+		if query == "" {
+			query = stringMapParam(params, "query")
+		}
+		if query == "" {
+			return nil, "market_watch_query_required", fmt.Errorf("watch query required")
+		}
+		result["operation"] = "market_watch.watch.create"
+		result["status"] = "confirmed_preview"
+		result["watch_query"] = query
+		result["next_action"] = "Persist the saved watch through the Market Watch workflow once provider setup is healthy."
+	case "cabinet.market_watch.update_saved_watch", "cabinet.market_watch.run_watch":
+		watchID := stringMapParam(params, "watch_id")
+		if watchID == "" {
+			return nil, "market_watch_watch_required", fmt.Errorf("watch required")
+		}
+		if skillID == "cabinet.market_watch.update_saved_watch" {
+			result["operation"] = "market_watch.watch.update"
+			result["status"] = "confirmed_preview"
+		} else {
+			result["operation"] = "market_watch.watch.run"
+			result["status"] = "confirmed_provider_ready_check"
+		}
+		result["watch_id"] = watchID
+		result["query"] = stringMapParam(params, "query")
+		result["next_action"] = "Review provider-health evidence before treating any live result sync as complete."
+	case "cabinet.market_watch.dismiss_result", "cabinet.market_watch.handoff_result":
+		resultID := stringMapParam(params, "result_id")
+		if resultID == "" {
+			return nil, "market_watch_result_required", fmt.Errorf("result required")
+		}
+		result["result_id"] = resultID
+		result["provenance_preserved"] = true
+		result["source_url"] = stringMapParam(params, "source_url")
+		if skillID == "cabinet.market_watch.dismiss_result" {
+			result["operation"] = "market_watch.result.dismiss"
+			result["status"] = "confirmed_preview"
+			result["next_action"] = "Confirm the result dismissal in the Market Watch review queue."
+			break
+		}
+		destination := stringMapParam(params, "destination")
+		if destination == "" {
+			return nil, "market_watch_destination_required", fmt.Errorf("destination required")
+		}
+		result["operation"] = "market_watch.result.handoff"
+		result["destination"] = destination
+		result["status"] = "confirmed_preview"
+		result["next_action"] = "Review the destination preview before applying Wishlist, Purchases, or Inventory state."
+	}
+	return result, "", nil
+}
+
+func applyAgentPurchasesSkill(skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+	result := map[string]any{
+		"profile_id":           profileID,
+		"provenance_preserved": false,
+	}
+	switch skillID {
+	case "cabinet.purchases.search_orders":
+		result["operation"] = "purchases.orders.search"
+		result["read_only"] = true
+		result["query"] = stringMapParam(params, "query")
+		result["next_action"] = "Select an order or line item before applying purchase state."
+	case "cabinet.purchases.review_purchase":
+		result["operation"] = "purchases.order.review"
+		result["read_only"] = true
+		result["order_id"] = stringMapParam(params, "order_id")
+		result["review_status"] = stringMapParam(params, "review_status")
+	case "cabinet.purchases.create_order":
+		source := stringMapParam(params, "purchase_source")
+		if source == "" {
+			source = stringMapParam(params, "source")
+		}
+		if source == "" {
+			return nil, "purchases_source_required", fmt.Errorf("purchase source required")
+		}
+		result["operation"] = "purchases.order.create"
+		result["purchase_source"] = source
+		result["status"] = "confirmed_preview"
+		result["provenance_preserved"] = true
+	case "cabinet.purchases.add_line_item":
+		orderID := stringMapParam(params, "order_id")
+		if orderID == "" {
+			return nil, "purchases_order_required", fmt.Errorf("order required")
+		}
+		itemID := stringMapParam(params, "item_id")
+		if itemID == "" {
+			itemID = stringMapParam(params, "line_item_id")
+		}
+		if itemID == "" {
+			return nil, "purchases_item_required", fmt.Errorf("item required")
+		}
+		result["operation"] = "purchases.order.add_line_item"
+		result["order_id"] = orderID
+		result["item_id"] = itemID
+		result["source"] = stringMapParam(params, "source")
+		result["result_id"] = stringMapParam(params, "result_id")
+		result["status"] = "confirmed_preview"
+		result["provenance_preserved"] = true
+	case "cabinet.purchases.receive_order":
+		orderID := stringMapParam(params, "order_id")
+		if orderID == "" {
+			return nil, "purchases_order_required", fmt.Errorf("order required")
+		}
+		result["operation"] = "purchases.order.receive"
+		result["order_id"] = orderID
+		result["status"] = "confirmed_preview"
+	case "cabinet.purchases.receive_line_item":
+		orderID := stringMapParam(params, "order_id")
+		if orderID == "" {
+			return nil, "purchases_order_required", fmt.Errorf("order required")
+		}
+		lineItemID := stringMapParam(params, "line_item_id")
+		if lineItemID == "" {
+			return nil, "purchases_line_item_required", fmt.Errorf("line item required")
+		}
+		result["operation"] = "purchases.line_item.receive"
+		result["order_id"] = orderID
+		result["line_item_id"] = lineItemID
+		result["status"] = "confirmed_preview"
+	case "cabinet.purchases.reconcile_item":
+		orderID := stringMapParam(params, "order_id")
+		itemID := stringMapParam(params, "item_id")
+		if orderID == "" {
+			return nil, "purchases_order_required", fmt.Errorf("order required")
+		}
+		if itemID == "" {
+			return nil, "purchases_item_required", fmt.Errorf("item required")
+		}
+		result["operation"] = "purchases.item.reconcile"
+		result["order_id"] = orderID
+		result["item_id"] = itemID
+		result["status"] = "confirmed_preview"
+		result["provenance_preserved"] = true
 	}
 	return result, "", nil
 }
