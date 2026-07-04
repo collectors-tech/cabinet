@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -737,6 +738,21 @@ func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T
 func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 	t.Parallel()
 
+	ebayStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer agent-skill-token" {
+			t.Fatalf("expected bearer token header, got %q", got)
+		}
+		if got := r.Header.Get("X-EBAY-C-MARKETPLACE-ID"); got != "EBAY_AU" {
+			t.Fatalf("expected EBAY_AU marketplace header, got %q", got)
+		}
+		if got := r.URL.Query().Get("q"); got != "boxed kit" {
+			t.Fatalf("expected query q=boxed kit, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"agent-skill-ebay-1","title":"Agent skill eBay live provider result","price":{"value":"88.50","currency":"AUD"},"itemWebUrl":"https://www.ebay.com.au/itm/agent-skill-ebay-1","image":{"imageUrl":"https://example.test/agent-skill-ebay-1.jpg"},"seller":{"username":"agent-seller"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"IN_STOCK","estimatedAvailableQuantity":4}]}]}`))
+	}))
+	defer ebayStub.Close()
+
 	a := newTestApp(t)
 	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Market Watch Purchases"}`), map[string]string{"Content-Type": "application/json"})
 	if create.Code != http.StatusCreated {
@@ -747,6 +763,14 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 	}
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
+	}
+	if err := profile.NewRepository(a.db).PutSettings(context.Background(), p.ID, map[string]string{
+		"ebay_base_url":                   ebayStub.URL,
+		"ebay_bearer_token":               "agent-skill-token",
+		"ebay_marketplace":                "EBAY_AU",
+		"integration.ebay.items_per_page": "11",
+	}); err != nil {
+		t.Fatalf("save ebay provider settings: %v", err)
 	}
 	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'auth_missing', 'provider credentials required before live watch run', 0, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("seed provider health: %v", err)
@@ -817,6 +841,9 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 		!strings.Contains(searchWatches.Body.String(), `"name":"Agent boxed kits under 100"`) {
 		t.Fatalf("expected read-only saved watch reload evidence, body=%s", searchWatches.Body.String())
 	}
+	if _, err := a.db.Exec(`UPDATE provider_health SET status = 'ok', message = '', retry_after_seconds = 0, updated_at = CURRENT_TIMESTAMP WHERE provider = 'ebay'`); err != nil {
+		t.Fatalf("mark provider health ready: %v", err)
+	}
 
 	runWatch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
@@ -837,11 +864,29 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 		`"provider_health"`,
 		`"saved_watch"`,
 		`"external_write_claimed":false`,
+		`"live_provider_dispatched":true`,
+		`"status":"confirmed_provider_run"`,
+		`"candidate_count":1`,
+		`"title":"Agent skill eBay live provider result"`,
+		`"items_per_page_requested":11`,
 		`"source_surface":"market_watch.saved_watch.row"`,
 	} {
 		if !strings.Contains(runWatch.Body.String(), want) {
 			t.Fatalf("run watch response missing %s: body=%s", want, runWatch.Body.String())
 		}
+	}
+	var providerRunCount, providerCandidateCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM scanner_runs WHERE profile_id = ? AND query_set_id = ? AND provider = 'ebay' AND status = 'succeeded'`, p.ID, watchID).Scan(&providerRunCount); err != nil {
+		t.Fatalf("count agent skill provider runs: %v", err)
+	}
+	if providerRunCount != 1 {
+		t.Fatalf("expected one persisted provider run, got %d", providerRunCount)
+	}
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM scanner_candidates WHERE profile_id = ? AND query_set_id = ? AND source = 'ebay' AND listing_id = 'agent-skill-ebay-1'`, p.ID, watchID).Scan(&providerCandidateCount); err != nil {
+		t.Fatalf("count agent skill provider candidates: %v", err)
+	}
+	if providerCandidateCount != 1 {
+		t.Fatalf("expected one persisted provider candidate, got %d", providerCandidateCount)
 	}
 
 	handoff := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{

@@ -10,6 +10,7 @@ import (
 
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/ebay"
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
@@ -265,9 +266,21 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID, prof
 			result["status"] = "confirmed_provider_ready_check"
 			result["saved_watch"] = watch
 			result["query"] = strings.Join(watch.Keywords, " ")
+			if runResult, candidates, dispatched, err := runAgentMarketWatchProvider(ctx, conn, scannerSvc, profileID, providerID, watch); err != nil {
+				return nil, "market_watch_provider_run_failed", err
+			} else if dispatched {
+				result["status"] = "confirmed_provider_run"
+				result["live_provider_dispatched"] = true
+				result["run"] = runResult
+				result["candidates"] = candidates
+				result["candidate_count"] = len(candidates)
+				result["next_action"] = "Review the persisted Market Watch provider results before dismissing or handing off candidates."
+			}
 		}
 		result["watch_id"] = watchID
-		result["next_action"] = "Review provider-health evidence before treating any live result sync as complete."
+		if _, ok := result["next_action"]; !ok {
+			result["next_action"] = "Review provider-health evidence before treating any live result sync as complete."
+		}
 	case "cabinet.market_watch.dismiss_result", "cabinet.market_watch.handoff_result":
 		resultID := stringMapParam(params, "result_id")
 		if resultID == "" {
@@ -297,6 +310,45 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID, prof
 		}
 	}
 	return result, "", nil
+}
+
+func runAgentMarketWatchProvider(ctx context.Context, conn *sql.DB, scannerSvc *scanner.Service, profileID, providerID string, watch scanner.QuerySet) (scanner.RunResult, []scanner.Candidate, bool, error) {
+	switch strings.ToLower(strings.TrimSpace(providerID)) {
+	case "ebay":
+		settings, err := profile.NewRepository(conn).GetSettings(ctx, strings.TrimSpace(profileID))
+		if err != nil {
+			return scanner.RunResult{}, nil, false, err
+		}
+		if strings.TrimSpace(settings["ebay_bearer_token"]) == "" || strings.TrimSpace(settings["ebay_marketplace"]) == "" {
+			return scanner.RunResult{}, nil, false, nil
+		}
+		if raw := strings.TrimSpace(settings[providerSettingsKeys("ebay").ItemsPerPageKey]); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value <= 0 {
+				return scanner.RunResult{}, nil, false, fmt.Errorf("invalid ebay items_per_page setting")
+			}
+			watch.ItemsPerPage = value
+			if _, err := scannerSvc.UpdateQuerySetForProfile(ctx, strings.TrimSpace(profileID), watch.ID, watch); err != nil {
+				return scanner.RunResult{}, nil, false, err
+			}
+		}
+		provider := ebay.NewProvider(ebay.ProviderConfig{
+			BaseURL:     settings["ebay_base_url"],
+			BearerToken: settings["ebay_bearer_token"],
+			Marketplace: settings["ebay_marketplace"],
+		})
+		run, err := scannerSvc.RunNowForProfile(ctx, strings.TrimSpace(profileID), watch.ID, provider)
+		if err != nil {
+			return scanner.RunResult{}, nil, false, err
+		}
+		candidates, err := scannerSvc.ListCandidatesByProfile(ctx, strings.TrimSpace(profileID), watch.ID)
+		if err != nil {
+			return scanner.RunResult{}, nil, false, err
+		}
+		return run, candidates, true, nil
+	default:
+		return scanner.RunResult{}, nil, false, nil
+	}
 }
 
 func applyAgentMarketWatchHandoff(ctx context.Context, conn *sql.DB, profileID, providerID, resultID, destination string, params map[string]any) (map[string]any, error) {
