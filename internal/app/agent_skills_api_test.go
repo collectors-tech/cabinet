@@ -855,8 +855,72 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 	}
 	if !strings.Contains(handoff.Body.String(), `"provenance_preserved":true`) ||
 		!strings.Contains(handoff.Body.String(), `"result_id":"result-9"`) ||
-		!strings.Contains(handoff.Body.String(), `"destination":"purchases"`) {
+		!strings.Contains(handoff.Body.String(), `"destination":"purchases"`) ||
+		!strings.Contains(handoff.Body.String(), `"handoff_persisted":true`) ||
+		!strings.Contains(handoff.Body.String(), `"lifecycle_entry_id":"`) ||
+		!strings.Contains(handoff.Body.String(), `"expected_arrival_id":"`) {
 		t.Fatalf("expected provenance-preserving handoff result, body=%s", handoff.Body.String())
+	}
+	var handoffPurchaseCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM commerce_lifecycle_entries WHERE profile_id = ? AND source = 'market_watch' AND external_ref = 'result-9'`, p.ID).Scan(&handoffPurchaseCount); err != nil {
+		t.Fatalf("count market watch purchase handoff: %v", err)
+	}
+	if handoffPurchaseCount != 1 {
+		t.Fatalf("expected one persisted purchase handoff, got %d", handoffPurchaseCount)
+	}
+
+	wishlistHandoff := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"result-10","destination":"wishlist","title":"Wishlist handoff result","source_url":"https://example.test/listing/10","target_price":55,"priority":"high"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if wishlistHandoff.Code != http.StatusOK {
+		t.Fatalf("wishlist handoff status=%d body=%s", wishlistHandoff.Code, wishlistHandoff.Body.String())
+	}
+	if !strings.Contains(wishlistHandoff.Body.String(), `"destination_applied":"wishlist"`) ||
+		!strings.Contains(wishlistHandoff.Body.String(), `"wishlist_entry_id":"`) ||
+		!strings.Contains(wishlistHandoff.Body.String(), `"handoff_persisted":true`) {
+		t.Fatalf("expected wishlist handoff persistence evidence, body=%s", wishlistHandoff.Body.String())
+	}
+	var wishlistHandoffCount int
+	if err := a.db.QueryRow(`
+		SELECT COUNT(1)
+		FROM wishlist_entries w
+		JOIN canonical_items i ON i.id = w.item_id
+		WHERE w.profile_id = ? AND i.title = 'Wishlist handoff result' AND w.priority = 'high'
+	`, p.ID).Scan(&wishlistHandoffCount); err != nil {
+		t.Fatalf("count market watch wishlist handoff: %v", err)
+	}
+	if wishlistHandoffCount != 1 {
+		t.Fatalf("expected one persisted wishlist handoff, got %d", wishlistHandoffCount)
+	}
+
+	inventoryHandoff := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.market_watch.handoff_result",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"result-11","destination":"inventory","title":"Inventory handoff result","source_url":"https://example.test/listing/11","condition":"sealed","quantity":3}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if inventoryHandoff.Code != http.StatusOK {
+		t.Fatalf("inventory handoff status=%d body=%s", inventoryHandoff.Code, inventoryHandoff.Body.String())
+	}
+	if !strings.Contains(inventoryHandoff.Body.String(), `"destination_applied":"inventory"`) ||
+		!strings.Contains(inventoryHandoff.Body.String(), `"instance_id":"`) ||
+		!strings.Contains(inventoryHandoff.Body.String(), `"handoff_persisted":true`) {
+		t.Fatalf("expected inventory handoff persistence evidence, body=%s", inventoryHandoff.Body.String())
+	}
+	var inventoryHandoffCount int
+	if err := a.db.QueryRow(`
+		SELECT COUNT(1)
+		FROM instances inst
+		JOIN canonical_items i ON i.id = inst.item_id
+		WHERE i.profile_id = ? AND i.title = 'Inventory handoff result' AND inst.condition = 'sealed' AND inst.quantity = 3
+	`, p.ID).Scan(&inventoryHandoffCount); err != nil {
+		t.Fatalf("count market watch inventory handoff: %v", err)
+	}
+	if inventoryHandoffCount != 1 {
+		t.Fatalf("expected one persisted inventory handoff, got %d", inventoryHandoffCount)
 	}
 
 	missingOrder := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/scanner"
+	"github.com/collectors-tech/cabinet/internal/wishlist"
+	"github.com/google/uuid"
 )
 
 func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
@@ -285,10 +288,136 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID, prof
 		}
 		result["operation"] = "market_watch.result.handoff"
 		result["destination"] = destination
-		result["status"] = "confirmed_preview"
-		result["next_action"] = "Review the destination preview before applying Wishlist, Purchases, or Inventory state."
+		applied, err := applyAgentMarketWatchHandoff(ctx, conn, profileID, providerID, resultID, destination, params)
+		if err != nil {
+			return nil, "market_watch_handoff_apply_failed", err
+		}
+		for key, value := range applied {
+			result[key] = value
+		}
 	}
 	return result, "", nil
+}
+
+func applyAgentMarketWatchHandoff(ctx context.Context, conn *sql.DB, profileID, providerID, resultID, destination string, params map[string]any) (map[string]any, error) {
+	destination = strings.ToLower(strings.TrimSpace(destination))
+	itemID, createdItem, err := ensureAgentMarketWatchHandoffItem(ctx, conn, profileID, providerID, resultID, destination, params)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{
+		"status":              "confirmed",
+		"handoff_persisted":   true,
+		"destination_applied": destination,
+		"item_id":             itemID,
+		"created_item":        createdItem,
+		"next_action":         "Open the destination surface to review the persisted Market Watch handoff.",
+	}
+	switch destination {
+	case "wishlist":
+		entry, err := wishlist.NewService(conn).CreateForProfile(ctx, profileID, wishlist.Entry{
+			ItemID:         itemID,
+			TargetPrice:    floatMapParam(params, "target_price"),
+			Priority:       firstNonEmptyString(stringMapParam(params, "priority"), "medium"),
+			Notes:          agentMarketWatchHandoffNotes(providerID, resultID, params),
+			HighlightHit:   true,
+			Quantity:       intMapParam(params, "quantity"),
+			NeededQuantity: intMapParam(params, "needed_quantity"),
+		})
+		if err != nil {
+			return nil, err
+		}
+		out["wishlist_entry_id"] = entry.ID
+	case "purchases":
+		orderID := firstNonEmptyString(stringMapParam(params, "order_id"), resultID)
+		created, arrival, err := commerce.NewService(conn).CreateLifecycleForProfile(ctx, profileID, commerce.LifecycleEntry{
+			ItemID:      itemID,
+			State:       "purchase",
+			Source:      "market_watch",
+			ExternalRef: orderID,
+			Quantity:    intMapParam(params, "quantity"),
+			Amount:      floatMapParam(params, "amount"),
+			Currency:    stringMapParam(params, "currency"),
+			Notes:       agentMarketWatchHandoffNotes(providerID, resultID, params),
+		})
+		if err != nil {
+			return nil, err
+		}
+		out["order_id"] = orderID
+		out["lifecycle_entry_id"] = created.ID
+		out["expected_arrival_id"] = created.ExpectedArrivalID
+		if arrival != nil {
+			out["arrival_status"] = arrival.Status
+		}
+	case "inventory":
+		instanceID := uuid.NewString()
+		quantity := intMapParam(params, "quantity")
+		if quantity <= 0 {
+			quantity = 1
+		}
+		_, err := conn.ExecContext(ctx, `
+			INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, instanceID, itemID, firstNonEmptyString(stringMapParam(params, "condition"), "custom"), firstNonEmptyString(stringMapParam(params, "inventory_status"), "loose"), quantity, stringMapParam(params, "storage_location"), floatMapParam(params, "amount"), stringMapParam(params, "acquisition_date"), agentMarketWatchHandoffNotes(providerID, resultID, params))
+		if err != nil {
+			return nil, err
+		}
+		out["instance_id"] = instanceID
+	default:
+		return nil, fmt.Errorf("unsupported handoff destination")
+	}
+	return out, nil
+}
+
+func ensureAgentMarketWatchHandoffItem(ctx context.Context, conn *sql.DB, profileID, providerID, resultID, destination string, params map[string]any) (string, bool, error) {
+	if itemID := stringMapParam(params, "item_id"); itemID != "" {
+		return itemID, false, nil
+	}
+	itemID := uuid.NewString()
+	sourceURL := stringMapParam(params, "source_url")
+	sourceURLs := "[]"
+	if sourceURL != "" {
+		encoded, _ := json.Marshal([]string{sourceURL})
+		sourceURLs = string(encoded)
+	}
+	partNumber := firstNonEmptyString(stringMapParam(params, "part_number"), strings.ToUpper(providerSettingSlug(providerID)+"-"+providerSettingSlug(resultID)+"-"+providerSettingSlug(destination)))
+	title := firstNonEmptyString(stringMapParam(params, "title"), stringMapParam(params, "listing_title"), "Market Watch result "+resultID)
+	_, err := conn.ExecContext(ctx, `
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, notes, source_urls_json, created_by, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent.market_watch.handoff', 'agent.market_watch.handoff')
+	`, itemID, strings.TrimSpace(profileID), firstNonEmptyString(stringMapParam(params, "brand"), providerID), firstNonEmptyString(stringMapParam(params, "category"), "Market Watch"), partNumber, title, agentMarketWatchItemStatus(destination), agentMarketWatchHandoffNotes(providerID, resultID, params), sourceURLs)
+	if err != nil {
+		return "", false, err
+	}
+	return itemID, true, nil
+}
+
+func agentMarketWatchItemStatus(destination string) string {
+	if strings.EqualFold(destination, "wishlist") {
+		return "wishlist"
+	}
+	return "active"
+}
+
+func agentMarketWatchHandoffNotes(providerID, resultID string, params map[string]any) string {
+	notes := []string{
+		"source=market_watch",
+		"provider_id=" + strings.TrimSpace(providerID),
+		"result_id=" + strings.TrimSpace(resultID),
+	}
+	if sourceURL := stringMapParam(params, "source_url"); sourceURL != "" {
+		notes = append(notes, "source_url="+sourceURL)
+	}
+	if seller := stringMapParam(params, "seller"); seller != "" {
+		notes = append(notes, "seller="+seller)
+	}
+	if tracking := stringMapParam(params, "tracking"); tracking != "" {
+		notes = append(notes, "tracking="+tracking)
+	}
+	if note := stringMapParam(params, "notes"); note != "" {
+		notes = append(notes, "notes="+note)
+	}
+	return strings.Join(notes, " ")
 }
 
 func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
