@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/auth"
 	"github.com/collectors-tech/cabinet/internal/backup"
@@ -5119,6 +5120,23 @@ func New(cfg config.Config) (*App, error) {
 			"guided_workflows": chat.GuidedWorkflowRegistry(),
 			"policy":           "preview-before-apply",
 			"confirm_apply":    true,
+		})
+	})
+	mux.HandleFunc("/api/agent/skills", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentskills.NewRegistry(nil)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id": profileID,
+			"skills":     registry.List(),
 		})
 	})
 	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
