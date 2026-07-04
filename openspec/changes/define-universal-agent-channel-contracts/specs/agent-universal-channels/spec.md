@@ -100,3 +100,10 @@ Cabinet SHALL distinguish implemented, planned, blocked, and deferred Agent beha
 - **THEN** existing Chat, assistant execution, Telegram catalog capture, and Agent Skill Registry behaviors MAY be marked implemented only when linked tests already prove them
 - **AND** #1703, #1704, #1705, #1706, #1708, #1709, #1710, #1711, #1715, and #1716 SHALL remain planned validation or implementation work until their own issues provide code, tests, runtime evidence, and closure proof
 - **AND** public marketplace, unauthorised external write access, arbitrary local file access, secret exposure, and external-channel bypass of preview/confirmation SHALL remain deferred or disallowed
+
+#### Scenario: Maintain an acceptance evidence map
+- **GIVEN** #1716 is the Agent acceptance-suite issue for in-app work, attachments, and Telegram intake
+- **WHEN** Cabinet reports acceptance coverage for Agent work
+- **THEN** Cabinet SHALL maintain a #1716 Agent acceptance evidence map that names the exact requirement IDs, scenario groups, test targets, and evidence status for each required acceptance area
+- **AND** the map SHALL distinguish implemented fixture/proof-packet validation from live production-channel validation
+- **AND** #1716 SHALL NOT be claimed complete until attachment success/failure coverage and a live Telegram-channel checklist or explicit live-channel blocker are linked from durable issue/PR evidence
