@@ -41,11 +41,45 @@ func TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope(t *testing.T) {
 		"TestTelegramCatalogCaptureWebhookAPIResolvesProfileAuthorization",
 		"TestTelegramExternalIntakeProofRequiresAuthorizedProviderEvidence",
 		"manual live Telegram-channel checklist",
+		"docs/validation/agent-live-telegram-channel-checklist.md",
+		"#1773",
 	}
 
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {
 			t.Fatalf("expected agent acceptance evidence map to include %q", fragment)
+		}
+	}
+}
+
+func TestAgentLiveTelegramChecklistNamesNonSecretProofRequirements(t *testing.T) {
+	t.Parallel()
+
+	checklistPath := filepath.Join("..", "docs", "validation", "agent-live-telegram-channel-checklist.md")
+	raw, err := os.ReadFile(checklistPath)
+	if err != nil {
+		t.Fatalf("read live Telegram channel checklist: %v", err)
+	}
+	content := string(raw)
+
+	for _, fragment := range []string{
+		"Issue: #1773",
+		"Parent: #1716",
+		"non-secret evidence",
+		"Do not record bot tokens",
+		"Authorized Text Intake",
+		"Authorized Media Intake",
+		"Unauthorized Sender Rejection",
+		"Source message id",
+		"Workflow run / preview id",
+		"Response or deep-link state",
+		"Mutation state before confirmation",
+		"Record absence check",
+		"Mutation absence check",
+		"linked issue/PR comment",
+	} {
+		if !strings.Contains(content, fragment) {
+			t.Fatalf("expected live Telegram checklist to include %q", fragment)
 		}
 	}
 }
