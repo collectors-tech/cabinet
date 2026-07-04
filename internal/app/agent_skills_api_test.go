@@ -412,6 +412,81 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Integrations Apply"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	testConnection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.test_connection",
+		"parameters":{"provider_id":"ebay","provider_secret":"must-not-leak"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if testConnection.Code != http.StatusOK {
+		t.Fatalf("test connection apply status=%d body=%s", testConnection.Code, testConnection.Body.String())
+	}
+	if !strings.Contains(testConnection.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(testConnection.Body.String(), `"operation":"integrations.provider.test_connection"`) ||
+		!strings.Contains(testConnection.Body.String(), `"connection_status":"setup_needed"`) ||
+		strings.Contains(testConnection.Body.String(), "must-not-leak") {
+		t.Fatalf("expected non-mutating provider test without secret leak, body=%s", testConnection.Body.String())
+	}
+
+	configure := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.configure_provider",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","provider_secret":"must-not-leak","setup_step":"oauth"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if configure.Code != http.StatusOK {
+		t.Fatalf("configure provider apply status=%d body=%s", configure.Code, configure.Body.String())
+	}
+	if !strings.Contains(configure.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(configure.Body.String(), `"operation":"integrations.provider.configure"`) ||
+		!strings.Contains(configure.Body.String(), `"secret_redacted":true`) ||
+		strings.Contains(configure.Body.String(), "must-not-leak") {
+		t.Fatalf("expected confirmed provider configure result without secret leak, body=%s", configure.Body.String())
+	}
+
+	appearance := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_appearance",
+		"confirm":true,
+		"parameters":{"setting_key":"theme","setting_scope":"appearance","setting_value":"dark"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if appearance.Code != http.StatusOK {
+		t.Fatalf("appearance apply status=%d body=%s", appearance.Code, appearance.Body.String())
+	}
+	if !strings.Contains(appearance.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(appearance.Body.String(), `"operation":"settings.appearance.update"`) ||
+		!strings.Contains(appearance.Body.String(), `"setting_key":"theme"`) {
+		t.Fatalf("expected confirmed appearance setting result, body=%s", appearance.Body.String())
+	}
+
+	storageStatus := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.storage.show_status"
+	}`), map[string]string{"Content-Type": "application/json"})
+	if storageStatus.Code != http.StatusOK {
+		t.Fatalf("storage status apply status=%d body=%s", storageStatus.Code, storageStatus.Body.String())
+	}
+	if !strings.Contains(storageStatus.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(storageStatus.Body.String(), `"operation":"storage.status.show"`) ||
+		!strings.Contains(storageStatus.Body.String(), `"read_only":true`) {
+		t.Fatalf("expected read-only storage status result, body=%s", storageStatus.Body.String())
+	}
+}
+
 func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing.T) {
 	t.Parallel()
 
