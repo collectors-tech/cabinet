@@ -197,6 +197,30 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 		}
 		return resp, nil
 	}
+	if strings.HasPrefix(skill.ID, "cabinet.integrations.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewIntegrationBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "provider_id", "provider_name", "action", "setup_step")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select a provider and review the non-secret setup or health preview before applying any configuration change."
+		}
+		return resp, nil
+	}
+	if strings.HasPrefix(skill.ID, "cabinet.settings.") || strings.HasPrefix(skill.ID, "cabinet.storage.") || strings.HasPrefix(skill.ID, "cabinet.data.") || strings.HasPrefix(skill.ID, "cabinet.maintenance.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly || skill.ID == "cabinet.data.export_bundle"
+		resp.Blocker = previewSettingsDataBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "profile_id", "setting_key", "setting_scope", "backup_path", "file_path", "export_scope", "maintenance_check")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Review the expected data or settings impact before applying any write, import, backup, or restore operation."
+		}
+		return resp, nil
+	}
 	return resp, nil
 }
 
@@ -221,6 +245,21 @@ func builtInSkills() []Skill {
 		builtIn("cabinet.users.update_role", "Update user role", "Preview a role change with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user", "target_role"}, nil, nil, []string{"users.row.role", "users.role.editor"}),
 		builtIn("cabinet.users.activate_or_deactivate", "Activate or deactivate user", "Preview activation state changes with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user", "target_status"}, nil, nil, []string{"users.row.status", "users.status.editor"}),
 		builtIn("cabinet.users.remove_user", "Remove user", "Require destructive confirmation before removing a non-protected workspace user.", "users", SafetyDestructive, []string{"profile", "workspace", "admin_session", "target_user"}, nil, nil, []string{"users.row.remove", "users.remove.confirmation"}),
+		integrationSkill("cabinet.integrations.search_providers", "Search integration providers", "Search available integration providers and setup state without mutating configuration.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"integrations.provider.search"}, nil),
+		integrationSkill("cabinet.integrations.configure_provider", "Configure integration provider", "Prepare a provider configuration preview without echoing secrets before confirmed setup.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "setup_payload"}, []string{"integrations.provider.configure"}, []string{"provider_secret"}),
+		integrationSkill("cabinet.integrations.test_connection", "Test integration connection", "Check a selected provider connection and return actionable setup or health guidance.", SafetyPreviewOnly, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.test_connection"}, nil),
+		integrationSkill("cabinet.integrations.repair_provider", "Repair integration provider", "Prepare provider repair steps and require confirmation before changing setup.", SafetyConfirmRequired, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.repair"}, nil),
+		integrationSkill("cabinet.integrations.disable_provider", "Disable integration provider", "Preview disabling a selected provider before confirmed configuration changes.", SafetyConfirmRequired, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.disable"}, nil),
+		integrationSkill("cabinet.integrations.explain_required_setup", "Explain provider setup", "Explain non-secret provider setup prerequisites without changing configuration.", SafetyReadOnly, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.explain_setup"}, nil),
+		settingsSkill("cabinet.settings.update_profile", "Update profile settings", "Preview profile setting changes before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "settings.profile"}, []string{"settings.profile.update"}, nil),
+		settingsSkill("cabinet.settings.update_account", "Update account settings", "Preview account preference changes before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "account"}, []string{"settings.account.update"}, nil),
+		settingsSkill("cabinet.settings.update_appearance", "Update appearance settings", "Preview appearance changes before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "settings.appearance"}, []string{"settings.appearance.update"}, nil),
+		settingsSkill("cabinet.storage.show_status", "Show storage status", "Read active storage, backup, and integrity status without mutating data.", SafetyReadOnly, []string{"profile", "storage"}, []string{"storage.status.show"}, nil),
+		settingsSkill("cabinet.storage.configure_backup", "Configure backups", "Preview backup target and schedule changes before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "storage", "backup_target"}, []string{"storage.backup.configure"}, nil),
+		settingsSkill("cabinet.data.import_file", "Import data file", "Preview a selected import file and its impact before confirmed data changes.", SafetyConfirmRequired, []string{"profile", "selected_file"}, []string{"data.import.file"}, []string{"file_path"}),
+		settingsSkill("cabinet.data.export_bundle", "Export data bundle", "Prepare a non-mutating data export preview before creating a bundle.", SafetyPreviewOnly, []string{"profile", "export_scope"}, []string{"data.export.bundle"}, nil),
+		settingsSkill("cabinet.data.restore_backup", "Restore backup", "Require destructive confirmation before restoring a selected backup.", SafetyDestructive, []string{"profile", "selected_backup"}, []string{"data.backup.restore"}, []string{"backup_path"}),
+		settingsSkill("cabinet.maintenance.run_safe_check", "Run maintenance safe check", "Run read-only maintenance checks and report actionable health status.", SafetyReadOnly, []string{"profile", "storage"}, []string{"maintenance.safe_check"}, nil),
 	}
 }
 
@@ -262,6 +301,37 @@ func builtIn(id, displayName, description, category string, safety SafetyLevel, 
 	})
 }
 
+func integrationSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "integrations", safety, context, []string{"integrations.provider"}, nil, []string{"integrations.provider.card", "integrations.provider.setup"})
+	skill.RequiredProviders = []string{"provider-registry"}
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	if safety == SafetyConfirmRequired {
+		skill.Permissions.ExternalWrite = true
+	}
+	if slices.Contains(schemaRefs, "provider_secret") {
+		skill.Permissions.SecretAccess = true
+	}
+	return deriveExecutionState(skill)
+}
+
+func settingsSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	category := "settings"
+	if strings.HasPrefix(id, "cabinet.storage.") {
+		category = "storage"
+	}
+	if strings.HasPrefix(id, "cabinet.data.") || strings.HasPrefix(id, "cabinet.maintenance.") {
+		category = "data-management"
+	}
+	skill := builtIn(id, displayName, description, category, safety, context, nil, nil, []string{"settings.surface"})
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	if strings.HasPrefix(id, "cabinet.data.export_") {
+		skill.OutputSchemaRefs = []string{"data_export_bundle"}
+	}
+	return deriveExecutionState(skill)
+}
+
 func previewUsersAdminBlocker(skillID string, params map[string]any) string {
 	target := strings.TrimSpace(stringParam(params, "target_user"))
 	if target == "" && strings.TrimSpace(stringParam(params, "target_email")) == "" {
@@ -292,6 +362,44 @@ func previewUsersAdminBlocker(skillID string, params map[string]any) string {
 func previewInboxBlocker(params map[string]any) string {
 	if strings.TrimSpace(stringParam(params, "target_notification")) == "" && strings.TrimSpace(stringParam(params, "notification_id")) == "" {
 		return "inbox_notification_target_required"
+	}
+	return "confirmation_required"
+}
+
+func previewIntegrationBlocker(skillID string, params map[string]any) string {
+	if skillID == "cabinet.integrations.search_providers" {
+		return ""
+	}
+	if strings.TrimSpace(stringParam(params, "provider_id")) == "" && strings.TrimSpace(stringParam(params, "provider_name")) == "" {
+		return "integrations_provider_required"
+	}
+	if skillID == "cabinet.integrations.explain_required_setup" || skillID == "cabinet.integrations.test_connection" {
+		return ""
+	}
+	return "confirmation_required"
+}
+
+func previewSettingsDataBlocker(skillID string, params map[string]any) string {
+	switch skillID {
+	case "cabinet.storage.show_status", "cabinet.maintenance.run_safe_check", "cabinet.data.export_bundle":
+		return ""
+	case "cabinet.data.import_file":
+		if strings.TrimSpace(stringParam(params, "file_path")) == "" {
+			return "data_import_file_required"
+		}
+	case "cabinet.data.restore_backup":
+		if strings.TrimSpace(stringParam(params, "backup_path")) == "" {
+			return "data_backup_target_required"
+		}
+	case "cabinet.storage.configure_backup":
+		if strings.TrimSpace(stringParam(params, "backup_path")) == "" && strings.TrimSpace(stringParam(params, "backup_target")) == "" {
+			return "storage_backup_target_required"
+		}
+	}
+	if strings.HasPrefix(skillID, "cabinet.settings.") {
+		if strings.TrimSpace(stringParam(params, "setting_key")) == "" && strings.TrimSpace(stringParam(params, "setting_scope")) == "" {
+			return "settings_target_required"
+		}
 	}
 	return "confirmation_required"
 }

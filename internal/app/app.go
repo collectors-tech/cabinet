@@ -5183,7 +5183,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
 			return
 		}
-		if !preview.ConfirmationRequired || !req.Confirm {
+		if preview.ConfirmationRequired && !req.Confirm {
 			preview.Allowed = false
 			preview.Blocker = "confirmation_required"
 			http.Error(w, `{"error":"confirmation_required"}`, http.StatusConflict)
@@ -5199,7 +5199,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		preview.Allowed = true
 		preview.PreviewOnly = false
-		preview.MutationApplied = true
+		preview.MutationApplied = preview.ConfirmationRequired
 		preview.Blocker = ""
 		preview.NextAction = ""
 		preview.Target = result

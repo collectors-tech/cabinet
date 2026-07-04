@@ -412,6 +412,191 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Integrations Apply"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'error', 'credentials expired; refresh token required', 0, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed provider health: %v", err)
+	}
+
+	testConnection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.test_connection",
+		"parameters":{"provider_id":"ebay","provider_secret":"must-not-leak"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if testConnection.Code != http.StatusOK {
+		t.Fatalf("test connection apply status=%d body=%s", testConnection.Code, testConnection.Body.String())
+	}
+	if !strings.Contains(testConnection.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(testConnection.Body.String(), `"operation":"integrations.provider.test_connection"`) ||
+		!strings.Contains(testConnection.Body.String(), `"connection_status":"needs_reauthentication"`) ||
+		!strings.Contains(testConnection.Body.String(), `"provider_health"`) ||
+		!strings.Contains(testConnection.Body.String(), `"next_action":"check_provider_health_and_credentials"`) ||
+		strings.Contains(testConnection.Body.String(), "must-not-leak") {
+		t.Fatalf("expected non-mutating provider health test without secret leak, body=%s", testConnection.Body.String())
+	}
+
+	configure := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.configure_provider",
+		"confirm":true,
+		"source_surface":"settings.integrations.provider.card",
+		"source_channel":"telegram",
+		"source_thread_id":"integration-thread-1",
+		"source_message_id":"integration-message-1",
+		"parameters":{"provider_id":"ebay","provider_secret":"must-not-leak","setup_step":"oauth"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if configure.Code != http.StatusOK {
+		t.Fatalf("configure provider apply status=%d body=%s", configure.Code, configure.Body.String())
+	}
+	if !strings.Contains(configure.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(configure.Body.String(), `"source_surface":"settings.integrations.provider.card"`) ||
+		!strings.Contains(configure.Body.String(), `"source_channel":"telegram"`) ||
+		!strings.Contains(configure.Body.String(), `"source_thread_id":"integration-thread-1"`) ||
+		!strings.Contains(configure.Body.String(), `"source_message_id":"integration-message-1"`) ||
+		!strings.Contains(configure.Body.String(), `"operation":"integrations.provider.configure"`) ||
+		!strings.Contains(configure.Body.String(), `"secret_redacted":true`) ||
+		!strings.Contains(configure.Body.String(), `"secret_persisted":true`) ||
+		strings.Contains(configure.Body.String(), "must-not-leak") {
+		t.Fatalf("expected confirmed provider configure result without secret leak, body=%s", configure.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "integration.ebay.enabled", "true")
+	assertProfileSetting(t, a, p.ID, "integration.ebay.setup_step", "oauth")
+
+	repair := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.repair_provider",
+		"confirm":true,
+		"parameters":{"provider_name":"ebay"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if repair.Code != http.StatusOK {
+		t.Fatalf("repair provider apply status=%d body=%s", repair.Code, repair.Body.String())
+	}
+	if !strings.Contains(repair.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(repair.Body.String(), `"operation":"integrations.provider.repair"`) ||
+		!strings.Contains(repair.Body.String(), `"external_write_claimed":false`) {
+		t.Fatalf("expected confirmed provider repair result without external write claim, body=%s", repair.Body.String())
+	}
+
+	disable := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.disable_provider",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if disable.Code != http.StatusOK {
+		t.Fatalf("disable provider apply status=%d body=%s", disable.Code, disable.Body.String())
+	}
+	if !strings.Contains(disable.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(disable.Body.String(), `"operation":"integrations.provider.disable"`) ||
+		!strings.Contains(disable.Body.String(), `"external_write_claimed":false`) ||
+		!strings.Contains(disable.Body.String(), `"settings_persisted":["`) {
+		t.Fatalf("expected confirmed provider disable result without external write claim, body=%s", disable.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "integration.ebay.enabled", "false")
+
+	appearance := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_appearance",
+		"confirm":true,
+		"parameters":{"setting_key":"theme","setting_scope":"appearance","setting_value":"dark"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if appearance.Code != http.StatusOK {
+		t.Fatalf("appearance apply status=%d body=%s", appearance.Code, appearance.Body.String())
+	}
+	if !strings.Contains(appearance.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(appearance.Body.String(), `"operation":"settings.appearance.update"`) ||
+		!strings.Contains(appearance.Body.String(), `"setting_key":"theme"`) ||
+		!strings.Contains(appearance.Body.String(), `"settings_persisted":["`) {
+		t.Fatalf("expected confirmed appearance setting result, body=%s", appearance.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "theme", "dark")
+
+	storageStatus := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.storage.show_status"
+	}`), map[string]string{"Content-Type": "application/json"})
+	if storageStatus.Code != http.StatusOK {
+		t.Fatalf("storage status apply status=%d body=%s", storageStatus.Code, storageStatus.Body.String())
+	}
+	if !strings.Contains(storageStatus.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(storageStatus.Body.String(), `"operation":"storage.status.show"`) ||
+		!strings.Contains(storageStatus.Body.String(), `"read_only":true`) {
+		t.Fatalf("expected read-only storage status result, body=%s", storageStatus.Body.String())
+	}
+
+	configureBackup := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.storage.configure_backup",
+		"confirm":true,
+		"parameters":{"backup_target":"backups/nightly"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if configureBackup.Code != http.StatusOK {
+		t.Fatalf("configure backup apply status=%d body=%s", configureBackup.Code, configureBackup.Body.String())
+	}
+	if !strings.Contains(configureBackup.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(configureBackup.Body.String(), `"operation":"storage.backup.configure"`) ||
+		!strings.Contains(configureBackup.Body.String(), `"settings_persisted":["`) {
+		t.Fatalf("expected confirmed backup settings persistence result, body=%s", configureBackup.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "storage.backup_target", "backups/nightly")
+
+	exportBundle := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.export_bundle",
+		"parameters":{"export_scope":"profile"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if exportBundle.Code != http.StatusOK {
+		t.Fatalf("export bundle apply status=%d body=%s", exportBundle.Code, exportBundle.Body.String())
+	}
+	if !strings.Contains(exportBundle.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(exportBundle.Body.String(), `"operation":"data.export.bundle"`) ||
+		!strings.Contains(exportBundle.Body.String(), `"read_only":true`) {
+		t.Fatalf("expected read-only export bundle result, body=%s", exportBundle.Body.String())
+	}
+
+	importFile := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.import_file",
+		"confirm":true,
+		"parameters":{"file_path":"imports/profile.json"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importFile.Code != http.StatusOK {
+		t.Fatalf("import file apply status=%d body=%s", importFile.Code, importFile.Body.String())
+	}
+	if !strings.Contains(importFile.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(importFile.Body.String(), `"operation":"data.import.file"`) ||
+		!strings.Contains(importFile.Body.String(), `"impact":"import_preview_confirmed"`) {
+		t.Fatalf("expected confirmed import preview result, body=%s", importFile.Body.String())
+	}
+
+	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.restore_backup",
+		"confirm":true,
+		"parameters":{"backup_path":"backups/cabinet-backup.zip"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if restore.Code != http.StatusOK {
+		t.Fatalf("restore backup apply status=%d body=%s", restore.Code, restore.Body.String())
+	}
+	if !strings.Contains(restore.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(restore.Body.String(), `"operation":"data.backup.restore"`) ||
+		!strings.Contains(restore.Body.String(), `"destructive_confirmation":true`) {
+		t.Fatalf("expected destructive restore confirmation result, body=%s", restore.Body.String())
+	}
+}
+
 func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing.T) {
 	t.Parallel()
 
@@ -469,4 +654,15 @@ func findAPISkill(skills []apiSkillPayload, id string) *apiSkillPayload {
 		}
 	}
 	return nil
+}
+
+func assertProfileSetting(t *testing.T, a *App, profileID, key, want string) {
+	t.Helper()
+	var got string
+	if err := a.db.QueryRow(`SELECT value FROM profile_settings WHERE profile_id = ? AND key = ?`, profileID, key).Scan(&got); err != nil {
+		t.Fatalf("read profile setting %s: %v", key, err)
+	}
+	if got != want {
+		t.Fatalf("profile setting %s = %q, want %q", key, got, want)
+	}
 }
