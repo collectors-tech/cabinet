@@ -139,6 +139,86 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	}
 }
 
+func TestAgentSkillAPIPropagatesInvocationSourceContext(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Source Context"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	record := doRequest(t, a, http.MethodPost, "/api/chat/inbox", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"records":[{
+			"local_history_id":"agent-skill-source-context",
+			"title":"Agent skill source context",
+			"summary":"Needs sourced review"
+		}]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if record.Code != http.StatusCreated {
+		t.Fatalf("create inbox record status=%d body=%s", record.Code, record.Body.String())
+	}
+	var recordPayload struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(record.Body).Decode(&recordPayload); err != nil {
+		t.Fatalf("decode inbox record: %v", err)
+	}
+	if len(recordPayload.Items) != 1 {
+		t.Fatalf("expected one inbox item, got %+v", recordPayload.Items)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"source_surface":"inbox.notification.card",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-source-context",
+		"source_message_id":"message-source-context",
+		"parameters":{"notification_id":"`+recordPayload.Items[0].ID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview source context status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"source_surface":"inbox.notification.card"`) ||
+		!strings.Contains(preview.Body.String(), `"source_channel":"in-app"`) ||
+		!strings.Contains(preview.Body.String(), `"source_thread_id":"thread-source-context"`) ||
+		!strings.Contains(preview.Body.String(), `"source_message_id":"message-source-context"`) ||
+		!strings.Contains(preview.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected preview to retain source context without mutation, body=%s", preview.Body.String())
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"confirm":true,
+		"source_surface":"inbox.notification.card",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-chat-42",
+		"source_message_id":"tg-message-99",
+		"parameters":{"notification_id":"`+recordPayload.Items[0].ID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply source context status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	if !strings.Contains(apply.Body.String(), `"source_surface":"inbox.notification.card"`) ||
+		!strings.Contains(apply.Body.String(), `"source_channel":"telegram"`) ||
+		!strings.Contains(apply.Body.String(), `"source_thread_id":"tg-chat-42"`) ||
+		!strings.Contains(apply.Body.String(), `"source_message_id":"tg-message-99"`) ||
+		!strings.Contains(apply.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(apply.Body.String(), `"status":"read"`) {
+		t.Fatalf("expected confirmed apply to retain channel source context, body=%s", apply.Body.String())
+	}
+}
+
 func TestAgentSkillApplyAPIConfirmsInboxMutation(t *testing.T) {
 	t.Parallel()
 
