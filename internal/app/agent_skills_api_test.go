@@ -467,9 +467,12 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 		!strings.Contains(configure.Body.String(), `"source_message_id":"integration-message-1"`) ||
 		!strings.Contains(configure.Body.String(), `"operation":"integrations.provider.configure"`) ||
 		!strings.Contains(configure.Body.String(), `"secret_redacted":true`) ||
+		!strings.Contains(configure.Body.String(), `"secret_persisted":true`) ||
 		strings.Contains(configure.Body.String(), "must-not-leak") {
 		t.Fatalf("expected confirmed provider configure result without secret leak, body=%s", configure.Body.String())
 	}
+	assertProfileSetting(t, a, p.ID, "integration.ebay.enabled", "true")
+	assertProfileSetting(t, a, p.ID, "integration.ebay.setup_step", "oauth")
 
 	repair := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
@@ -497,9 +500,11 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	}
 	if !strings.Contains(disable.Body.String(), `"mutation_applied":true`) ||
 		!strings.Contains(disable.Body.String(), `"operation":"integrations.provider.disable"`) ||
-		!strings.Contains(disable.Body.String(), `"external_write_claimed":false`) {
+		!strings.Contains(disable.Body.String(), `"external_write_claimed":false`) ||
+		!strings.Contains(disable.Body.String(), `"settings_persisted":["`) {
 		t.Fatalf("expected confirmed provider disable result without external write claim, body=%s", disable.Body.String())
 	}
+	assertProfileSetting(t, a, p.ID, "integration.ebay.enabled", "false")
 
 	appearance := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
@@ -512,9 +517,11 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	}
 	if !strings.Contains(appearance.Body.String(), `"mutation_applied":true`) ||
 		!strings.Contains(appearance.Body.String(), `"operation":"settings.appearance.update"`) ||
-		!strings.Contains(appearance.Body.String(), `"setting_key":"theme"`) {
+		!strings.Contains(appearance.Body.String(), `"setting_key":"theme"`) ||
+		!strings.Contains(appearance.Body.String(), `"settings_persisted":["`) {
 		t.Fatalf("expected confirmed appearance setting result, body=%s", appearance.Body.String())
 	}
+	assertProfileSetting(t, a, p.ID, "theme", "dark")
 
 	storageStatus := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
@@ -528,6 +535,22 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 		!strings.Contains(storageStatus.Body.String(), `"read_only":true`) {
 		t.Fatalf("expected read-only storage status result, body=%s", storageStatus.Body.String())
 	}
+
+	configureBackup := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.storage.configure_backup",
+		"confirm":true,
+		"parameters":{"backup_target":"backups/nightly"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if configureBackup.Code != http.StatusOK {
+		t.Fatalf("configure backup apply status=%d body=%s", configureBackup.Code, configureBackup.Body.String())
+	}
+	if !strings.Contains(configureBackup.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(configureBackup.Body.String(), `"operation":"storage.backup.configure"`) ||
+		!strings.Contains(configureBackup.Body.String(), `"settings_persisted":["`) {
+		t.Fatalf("expected confirmed backup settings persistence result, body=%s", configureBackup.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "storage.backup_target", "backups/nightly")
 
 	exportBundle := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
@@ -631,4 +654,15 @@ func findAPISkill(skills []apiSkillPayload, id string) *apiSkillPayload {
 		}
 	}
 	return nil
+}
+
+func assertProfileSetting(t *testing.T, a *App, profileID, key, want string) {
+	t.Helper()
+	var got string
+	if err := a.db.QueryRow(`SELECT value FROM profile_settings WHERE profile_id = ? AND key = ?`, profileID, key).Scan(&got); err != nil {
+		t.Fatalf("read profile setting %s: %v", key, err)
+	}
+	if got != want {
+		t.Fatalf("profile setting %s = %q, want %q", key, got, want)
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/chat"
+	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
 func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
@@ -26,7 +27,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.integrations.repair_provider",
 		"cabinet.integrations.disable_provider",
 		"cabinet.integrations.explain_required_setup":
-		return applyAgentIntegrationSkill(ctx, conn, skillID, params)
+		return applyAgentIntegrationSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.settings.update_profile",
 		"cabinet.settings.update_account",
 		"cabinet.settings.update_appearance",
@@ -36,7 +37,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.data.export_bundle",
 		"cabinet.data.restore_backup",
 		"cabinet.maintenance.run_safe_check":
-		return applyAgentSettingsDataSkill(skillID, profileID, params)
+		return applyAgentSettingsDataSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.users.invite_user", "cabinet.users.resend_invitation":
 		email := stringMapParam(params, "target_email")
 		if email == "" {
@@ -89,7 +90,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 	}
 }
 
-func applyAgentIntegrationSkill(ctx context.Context, conn *sql.DB, skillID string, params map[string]any) (map[string]any, string, error) {
+func applyAgentIntegrationSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
 	providerID := stringMapParam(params, "provider_id")
 	if providerID == "" {
 		providerID = stringMapParam(params, "provider_name")
@@ -127,14 +128,33 @@ func applyAgentIntegrationSkill(ctx context.Context, conn *sql.DB, skillID strin
 		result["operation"] = "integrations.provider.configure"
 		result["status"] = "confirmed"
 		result["setup_step"] = stringMapParam(params, "setup_step")
-		result["next_action"] = "Persist provider credentials through the provider settings surface before live health validation."
+		persisted, secretPersisted, err := persistAgentProviderSettings(ctx, conn, profileID, providerID, params)
+		if err != nil {
+			return nil, "integrations_provider_settings_persist_failed", err
+		}
+		result["settings_persisted"] = persisted
+		result["secret_persisted"] = secretPersisted
+		result["next_action"] = "Run provider health validation from Integrations before routing live provider workflows."
 	case "cabinet.integrations.repair_provider":
 		result["operation"] = "integrations.provider.repair"
 		result["status"] = "confirmed"
+		if err := persistAgentProfileSettings(ctx, conn, profileID, map[string]string{
+			"integration." + providerSettingSlug(providerID) + ".repair_status": "reviewed",
+		}); err != nil {
+			return nil, "integrations_provider_settings_persist_failed", err
+		}
+		result["settings_persisted"] = []string{"integration." + providerSettingSlug(providerID) + ".repair_status"}
 		result["next_action"] = "Run a provider health check after reviewing repaired setup steps."
 	case "cabinet.integrations.disable_provider":
 		result["operation"] = "integrations.provider.disable"
 		result["status"] = "confirmed"
+		keys := providerSettingsKeys(providerID)
+		if err := persistAgentProfileSettings(ctx, conn, profileID, map[string]string{
+			keys.EnabledKey: "false",
+		}); err != nil {
+			return nil, "integrations_provider_settings_persist_failed", err
+		}
+		result["settings_persisted"] = []string{keys.EnabledKey}
 		result["next_action"] = "Confirm provider disabled state in Integrations before routing provider-backed workflows."
 	}
 	return result, "", nil
@@ -174,18 +194,18 @@ func agentSkillProviderHealthSnapshot(ctx context.Context, conn *sql.DB, provide
 	})
 }
 
-func applyAgentSettingsDataSkill(skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+func applyAgentSettingsDataSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
 	result := map[string]any{
 		"profile_id": profileID,
 		"read_only":  false,
 	}
 	switch skillID {
 	case "cabinet.settings.update_profile":
-		return applyAgentSettingUpdate("settings.profile.update", result, params)
+		return applyAgentSettingUpdate(ctx, conn, profileID, "settings.profile.update", result, params)
 	case "cabinet.settings.update_account":
-		return applyAgentSettingUpdate("settings.account.update", result, params)
+		return applyAgentSettingUpdate(ctx, conn, profileID, "settings.account.update", result, params)
 	case "cabinet.settings.update_appearance":
-		return applyAgentSettingUpdate("settings.appearance.update", result, params)
+		return applyAgentSettingUpdate(ctx, conn, profileID, "settings.appearance.update", result, params)
 	case "cabinet.storage.show_status":
 		result["operation"] = "storage.status.show"
 		result["read_only"] = true
@@ -200,8 +220,12 @@ func applyAgentSettingsDataSkill(skillID, profileID string, params map[string]an
 		if backupPath == "" {
 			return nil, "storage_backup_target_required", fmt.Errorf("backup target required")
 		}
+		if err := persistAgentProfileSettings(ctx, conn, profileID, map[string]string{"storage.backup_target": backupPath}); err != nil {
+			return nil, "storage_backup_settings_persist_failed", err
+		}
 		result["operation"] = "storage.backup.configure"
 		result["backup_target"] = backupPath
+		result["settings_persisted"] = []string{"storage.backup_target"}
 		result["status"] = "confirmed"
 	case "cabinet.data.import_file":
 		filePath := stringMapParam(params, "file_path")
@@ -234,7 +258,7 @@ func applyAgentSettingsDataSkill(skillID, profileID string, params map[string]an
 	return result, "", nil
 }
 
-func applyAgentSettingUpdate(operation string, result map[string]any, params map[string]any) (map[string]any, string, error) {
+func applyAgentSettingUpdate(ctx context.Context, conn *sql.DB, profileID, operation string, result map[string]any, params map[string]any) (map[string]any, string, error) {
 	settingKey := stringMapParam(params, "setting_key")
 	if settingKey == "" {
 		settingKey = stringMapParam(params, "setting_scope")
@@ -242,11 +266,79 @@ func applyAgentSettingUpdate(operation string, result map[string]any, params map
 	if settingKey == "" {
 		return nil, "settings_target_required", fmt.Errorf("settings target required")
 	}
+	settingValue := stringMapParam(params, "setting_value")
+	if settingValue == "" {
+		return nil, "settings_value_required", fmt.Errorf("settings value required")
+	}
+	if err := persistAgentProfileSettings(ctx, conn, profileID, map[string]string{settingKey: settingValue}); err != nil {
+		return nil, "settings_persist_failed", err
+	}
 	result["operation"] = operation
 	result["setting_key"] = settingKey
 	result["setting_scope"] = stringMapParam(params, "setting_scope")
+	result["settings_persisted"] = []string{settingKey}
 	result["status"] = "confirmed"
 	return result, "", nil
+}
+
+func persistAgentProviderSettings(ctx context.Context, conn *sql.DB, profileID, providerID string, params map[string]any) ([]string, bool, error) {
+	keys := providerSettingsKeys(providerID)
+	settings := map[string]string{
+		keys.EnabledKey: "true",
+	}
+	if setupStep := stringMapParam(params, "setup_step"); setupStep != "" {
+		settings["integration."+providerSettingSlug(providerID)+".setup_step"] = setupStep
+	}
+	if baseURL := stringMapParam(params, "base_url"); baseURL != "" {
+		settings[keys.BaseURLKey] = baseURL
+	}
+	if marketplace := stringMapParam(params, "marketplace"); marketplace != "" {
+		settings[keys.MarketplaceKey] = marketplace
+	}
+	if itemsPerPage := stringMapParam(params, "items_per_page"); itemsPerPage != "" {
+		settings[keys.ItemsPerPageKey] = itemsPerPage
+	}
+	if err := persistAgentProfileSettings(ctx, conn, profileID, settings); err != nil {
+		return nil, false, err
+	}
+	secretPersisted := false
+	if secret := firstAgentSecretParam(params); secret != "" {
+		if err := profile.NewRepository(conn).PutSecret(ctx, profileID, keys.TokenKey, secret); err != nil {
+			return nil, false, err
+		}
+		secretPersisted = true
+	}
+	persisted := make([]string, 0, len(settings))
+	for key := range settings {
+		persisted = append(persisted, key)
+	}
+	return persisted, secretPersisted, nil
+}
+
+func persistAgentProfileSettings(ctx context.Context, conn *sql.DB, profileID string, values map[string]string) error {
+	if conn == nil {
+		return fmt.Errorf("database connection required")
+	}
+	return profile.NewRepository(conn).PutSettings(ctx, profileID, values)
+}
+
+func firstAgentSecretParam(params map[string]any) string {
+	for _, key := range []string{"provider_secret", "provider_token", "access_token", "bearer_token", "api_key"} {
+		if value := stringMapParam(params, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func providerSettingSlug(providerID string) string {
+	slug := strings.TrimSpace(strings.ToLower(providerID))
+	slug = strings.ReplaceAll(slug, "-", "_")
+	slug = strings.ReplaceAll(slug, ".", "_")
+	if slug == "" {
+		return "provider"
+	}
+	return slug
 }
 
 func applyAgentInboxSkill(ctx context.Context, chatSvc *chat.Service, profileID string, params map[string]any, status string) (map[string]any, string, error) {
