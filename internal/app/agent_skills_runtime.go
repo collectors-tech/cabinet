@@ -340,14 +340,27 @@ func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profil
 			result["arrival_status"] = arrival.Status
 		}
 	case "cabinet.purchases.receive_order":
+		if conn == nil {
+			return nil, "purchases_store_required", fmt.Errorf("database connection required")
+		}
 		orderID := stringMapParam(params, "order_id")
 		if orderID == "" {
 			return nil, "purchases_order_required", fmt.Errorf("order required")
 		}
+		updates, err := receiveAgentPurchaseOrder(ctx, commerce.NewService(conn), profileID, orderID, params)
+		if err != nil {
+			return nil, "purchases_order_receive_failed", err
+		}
 		result["operation"] = "purchases.order.receive"
 		result["order_id"] = orderID
-		result["status"] = "confirmed_preview"
+		result["status"] = "confirmed"
+		result["purchase_persisted"] = true
+		result["received_count"] = len(updates)
+		result["received_arrivals"] = updates
 	case "cabinet.purchases.receive_line_item":
+		if conn == nil {
+			return nil, "purchases_store_required", fmt.Errorf("database connection required")
+		}
 		orderID := stringMapParam(params, "order_id")
 		if orderID == "" {
 			return nil, "purchases_order_required", fmt.Errorf("order required")
@@ -356,11 +369,22 @@ func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profil
 		if lineItemID == "" {
 			return nil, "purchases_line_item_required", fmt.Errorf("line item required")
 		}
+		arrival, err := updateAgentPurchaseLine(ctx, commerce.NewService(conn), profileID, orderID, lineItemID, "delivered", params)
+		if err != nil {
+			return nil, "purchases_line_item_receive_failed", err
+		}
 		result["operation"] = "purchases.line_item.receive"
 		result["order_id"] = orderID
 		result["line_item_id"] = lineItemID
-		result["status"] = "confirmed_preview"
+		result["status"] = "confirmed"
+		result["purchase_persisted"] = true
+		result["expected_arrival_id"] = arrival.ID
+		result["arrival_status"] = arrival.Status
+		result["delivered_on"] = arrival.DeliveredOn
 	case "cabinet.purchases.reconcile_item":
+		if conn == nil {
+			return nil, "purchases_store_required", fmt.Errorf("database connection required")
+		}
 		orderID := stringMapParam(params, "order_id")
 		itemID := stringMapParam(params, "item_id")
 		if orderID == "" {
@@ -369,13 +393,104 @@ func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profil
 		if itemID == "" {
 			return nil, "purchases_item_required", fmt.Errorf("item required")
 		}
+		lineItemID := stringMapParam(params, "line_item_id")
+		if lineItemID == "" {
+			lineItemID = itemID
+		}
+		arrival, err := updateAgentPurchaseLine(ctx, commerce.NewService(conn), profileID, orderID, lineItemID, "reconciled", params)
+		if err != nil {
+			return nil, "purchases_item_reconcile_failed", err
+		}
 		result["operation"] = "purchases.item.reconcile"
 		result["order_id"] = orderID
 		result["item_id"] = itemID
-		result["status"] = "confirmed_preview"
+		result["status"] = "confirmed"
+		result["purchase_persisted"] = true
+		result["reconciliation_persisted"] = true
 		result["provenance_preserved"] = true
+		result["expected_arrival_id"] = arrival.ID
+		result["arrival_status"] = arrival.Status
+		result["reconciled_instance_id"] = arrival.ReconciledInstanceID
 	}
 	return result, "", nil
+}
+
+func receiveAgentPurchaseOrder(ctx context.Context, svc *commerce.Service, profileID, orderID string, params map[string]any) ([]map[string]any, error) {
+	orders, err := svc.ListPurchaseOrdersByProfile(ctx, profileID, "all", orderID, 1, 100)
+	if err != nil {
+		return nil, err
+	}
+	var updates []map[string]any
+	for _, order := range orders.Orders {
+		if order.OrderID != orderID {
+			continue
+		}
+		for _, line := range order.LineItems {
+			if line.Status == "delivered" || line.Status == "reconciled" {
+				continue
+			}
+			arrival, err := updateAgentPurchaseLine(ctx, svc, profileID, orderID, line.ExpectedArrivalID, "delivered", params)
+			if err != nil {
+				return nil, err
+			}
+			updates = append(updates, map[string]any{
+				"item_id":             line.ItemID,
+				"lifecycle_entry_id":  line.LifecycleEntryID,
+				"expected_arrival_id": arrival.ID,
+				"status":              arrival.Status,
+			})
+		}
+	}
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("matching unreceived purchase lines not found")
+	}
+	return updates, nil
+}
+
+func updateAgentPurchaseLine(ctx context.Context, svc *commerce.Service, profileID, orderID, lineItemID, status string, params map[string]any) (commerce.ExpectedArrival, error) {
+	arrival, err := findAgentPurchaseArrival(ctx, svc, profileID, orderID, lineItemID)
+	if err != nil {
+		return commerce.ExpectedArrival{}, err
+	}
+	arrival.Status = status
+	if deliveredOn := stringMapParam(params, "delivered_on"); deliveredOn != "" {
+		arrival.DeliveredOn = deliveredOn
+	}
+	if status == "reconciled" {
+		arrival.ReconciledInstanceID = firstNonEmptyString(
+			stringMapParam(params, "instance_id"),
+			stringMapParam(params, "target_instance_id"),
+			stringMapParam(params, "item_id"),
+		)
+	}
+	if note := stringMapParam(params, "notes"); note != "" {
+		arrival.Notes = strings.TrimSpace(strings.TrimSpace(arrival.Notes) + " " + note)
+	}
+	if err := svc.UpdateArrivalForProfile(ctx, profileID, arrival); err != nil {
+		return commerce.ExpectedArrival{}, err
+	}
+	return svc.GetArrivalByIDForProfile(ctx, profileID, arrival.ID)
+}
+
+func findAgentPurchaseArrival(ctx context.Context, svc *commerce.Service, profileID, orderID, lineItemID string) (commerce.ExpectedArrival, error) {
+	orders, err := svc.ListPurchaseOrdersByProfile(ctx, profileID, "all", orderID, 1, 100)
+	if err != nil {
+		return commerce.ExpectedArrival{}, err
+	}
+	for _, order := range orders.Orders {
+		if order.OrderID != orderID {
+			continue
+		}
+		for _, line := range order.LineItems {
+			if line.ExpectedArrivalID == lineItemID || line.LifecycleEntryID == lineItemID || line.ItemID == lineItemID {
+				if line.ExpectedArrivalID == "" {
+					return commerce.ExpectedArrival{}, fmt.Errorf("purchase line has no expected arrival")
+				}
+				return svc.GetArrivalByIDForProfile(ctx, profileID, line.ExpectedArrivalID)
+			}
+		}
+	}
+	return commerce.ExpectedArrival{}, fmt.Errorf("matching purchase line not found")
 }
 
 func purchaseAgentSkillNotes(params map[string]any) string {

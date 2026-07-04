@@ -873,6 +873,61 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 			t.Fatalf("purchase order search response missing %s: body=%s", want, searchOrders.Body.String())
 		}
 	}
+
+	receiveLine := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.receive_line_item",
+		"confirm":true,
+		"parameters":{"order_id":"order-1","line_item_id":"item-99","delivered_on":"2026-07-05","notes":"received by agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if receiveLine.Code != http.StatusOK {
+		t.Fatalf("receive line item status=%d body=%s", receiveLine.Code, receiveLine.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.line_item.receive"`,
+		`"purchase_persisted":true`,
+		`"arrival_status":"delivered"`,
+		`"delivered_on":"2026-07-05"`,
+	} {
+		if !strings.Contains(receiveLine.Body.String(), want) {
+			t.Fatalf("receive line response missing %s: body=%s", want, receiveLine.Body.String())
+		}
+	}
+
+	reconcile := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.reconcile_item",
+		"confirm":true,
+		"parameters":{"order_id":"order-1","item_id":"item-99","instance_id":"instance-99","notes":"reconciled by agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if reconcile.Code != http.StatusOK {
+		t.Fatalf("reconcile item status=%d body=%s", reconcile.Code, reconcile.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.item.reconcile"`,
+		`"purchase_persisted":true`,
+		`"reconciliation_persisted":true`,
+		`"arrival_status":"reconciled"`,
+		`"reconciled_instance_id":"instance-99"`,
+	} {
+		if !strings.Contains(reconcile.Body.String(), want) {
+			t.Fatalf("reconcile item response missing %s: body=%s", want, reconcile.Body.String())
+		}
+	}
+
+	searchReceived := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.search_orders",
+		"parameters":{"query":"order-1","status":"received"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchReceived.Code != http.StatusOK {
+		t.Fatalf("search received purchase orders status=%d body=%s", searchReceived.Code, searchReceived.Body.String())
+	}
+	if !strings.Contains(searchReceived.Body.String(), `"status":"received"`) ||
+		!strings.Contains(searchReceived.Body.String(), `"received_count":1`) ||
+		!strings.Contains(searchReceived.Body.String(), `"status":"reconciled"`) {
+		t.Fatalf("expected received/reconciled purchase order search evidence, body=%s", searchReceived.Body.String())
+	}
 }
 
 func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing.T) {
