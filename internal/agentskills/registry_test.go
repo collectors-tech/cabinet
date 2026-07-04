@@ -86,8 +86,8 @@ func TestInboxAndUsersAdminSkillsExposeSafetyAndExecutionBoundaries(t *testing.T
 	if inboxMutation.SafetyLevel != SafetyConfirmRequired || !inboxMutation.Permissions.RequiresConfirm || !inboxMutation.Permissions.LocalWrite {
 		t.Fatalf("inbox mutation should declare confirm-required local write safety, got %+v", inboxMutation)
 	}
-	if inboxMutation.Status != StatusRequiresImplementation || inboxMutation.Executable || inboxMutation.NextAction == "" {
-		t.Fatalf("inbox mutation should stay non-executable until handlers are bound, got %+v", inboxMutation)
+	if inboxMutation.Status != StatusAvailable || !inboxMutation.Executable || inboxMutation.NextAction != "" {
+		t.Fatalf("inbox mutation should be executable after handler binding, got %+v", inboxMutation)
 	}
 
 	userSearch, ok := registry.Resolve("cabinet.users.search")
@@ -105,8 +105,8 @@ func TestInboxAndUsersAdminSkillsExposeSafetyAndExecutionBoundaries(t *testing.T
 	if removeUser.SafetyLevel != SafetyDestructive || !removeUser.Permissions.Destructive || !removeUser.Permissions.RequiresConfirm {
 		t.Fatalf("remove user should declare destructive confirmation safety, got %+v", removeUser)
 	}
-	if removeUser.Status != StatusRequiresImplementation || removeUser.Executable || removeUser.NextAction == "" {
-		t.Fatalf("remove user should stay non-executable until protected admin handlers are bound, got %+v", removeUser)
+	if removeUser.Status != StatusAvailable || !removeUser.Executable || removeUser.NextAction != "" {
+		t.Fatalf("remove user should be executable after protected admin handlers are bound, got %+v", removeUser)
 	}
 }
 
@@ -130,8 +130,8 @@ func TestSkillPreviewBlocksUnboundInboxAndUsersMutations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preview inbox targeted skill: %v", err)
 	}
-	if inboxTargeted.Allowed || !inboxTargeted.ConfirmationRequired || inboxTargeted.Blocker != "inbox_preview_confirm_apply_not_bound" {
-		t.Fatalf("expected unbound Inbox confirm/apply blocker, got %+v", inboxTargeted)
+	if inboxTargeted.Allowed || !inboxTargeted.ConfirmationRequired || inboxTargeted.Blocker != "confirmation_required" {
+		t.Fatalf("expected Inbox confirmation blocker, got %+v", inboxTargeted)
 	}
 
 	usersMissingTarget, err := registry.Preview(PreviewRequest{SkillID: "cabinet.users.update_role"})

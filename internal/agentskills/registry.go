@@ -221,16 +221,6 @@ func builtIn(id, displayName, description, category string, safety SafetyLevel, 
 		nextAction = "Complete and validate issue #1513 before advertising this guided skill as executable."
 		executable = false
 	}
-	if strings.HasPrefix(id, "cabinet.inbox.mark_") || id == "cabinet.inbox.archive_or_hide" {
-		status = StatusRequiresImplementation
-		nextAction = "Bind Inbox preview/confirm/apply handlers before advertising this Inbox state-change skill as executable."
-		executable = false
-	}
-	if strings.HasPrefix(id, "cabinet.users.") && id != "cabinet.users.search" {
-		status = StatusRequiresImplementation
-		nextAction = "Bind Users admin preview/confirm/apply handlers and protected owner/admin enforcement before advertising this admin skill as executable."
-		executable = false
-	}
 	return deriveExecutionState(Skill{
 		ID:              id,
 		Version:         "1.0.0",
@@ -284,14 +274,14 @@ func previewUsersAdminBlocker(skillID string, params map[string]any) string {
 			}
 		}
 	}
-	return "users_admin_preview_confirm_apply_not_bound"
+	return "confirmation_required"
 }
 
 func previewInboxBlocker(params map[string]any) string {
 	if strings.TrimSpace(stringParam(params, "target_notification")) == "" && strings.TrimSpace(stringParam(params, "notification_id")) == "" {
 		return "inbox_notification_target_required"
 	}
-	return "inbox_preview_confirm_apply_not_bound"
+	return "confirmation_required"
 }
 
 func protectedUser(params map[string]any) bool {

@@ -5162,6 +5162,49 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(preview)
 	})
+	mux.HandleFunc("/api/agent/skills/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentskills.NewRegistry(nil)
+		preview, err := registry.Preview(req)
+		if err != nil {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if !preview.ConfirmationRequired || !req.Confirm {
+			preview.Allowed = false
+			preview.Blocker = "confirmation_required"
+			http.Error(w, `{"error":"confirmation_required"}`, http.StatusConflict)
+			return
+		}
+		result, blocker, err := applyAgentSkill(r.Context(), conn, chatSvc, req.SkillID, req.ProfileID, req.Parameters)
+		if err != nil {
+			preview.Allowed = false
+			preview.Blocker = blocker
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
+		preview.Allowed = true
+		preview.PreviewOnly = false
+		preview.MutationApplied = true
+		preview.Blocker = ""
+		preview.NextAction = ""
+		preview.Target = result
+		_ = json.NewEncoder(w).Encode(preview)
+	})
 	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
