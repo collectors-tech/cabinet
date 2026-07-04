@@ -446,16 +446,54 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.integrations.configure_provider",
 		"confirm":true,
+		"source_surface":"settings.integrations.provider.card",
+		"source_channel":"telegram",
+		"source_thread_id":"integration-thread-1",
+		"source_message_id":"integration-message-1",
 		"parameters":{"provider_id":"ebay","provider_secret":"must-not-leak","setup_step":"oauth"}
 	}`), map[string]string{"Content-Type": "application/json"})
 	if configure.Code != http.StatusOK {
 		t.Fatalf("configure provider apply status=%d body=%s", configure.Code, configure.Body.String())
 	}
 	if !strings.Contains(configure.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(configure.Body.String(), `"source_surface":"settings.integrations.provider.card"`) ||
+		!strings.Contains(configure.Body.String(), `"source_channel":"telegram"`) ||
+		!strings.Contains(configure.Body.String(), `"source_thread_id":"integration-thread-1"`) ||
+		!strings.Contains(configure.Body.String(), `"source_message_id":"integration-message-1"`) ||
 		!strings.Contains(configure.Body.String(), `"operation":"integrations.provider.configure"`) ||
 		!strings.Contains(configure.Body.String(), `"secret_redacted":true`) ||
 		strings.Contains(configure.Body.String(), "must-not-leak") {
 		t.Fatalf("expected confirmed provider configure result without secret leak, body=%s", configure.Body.String())
+	}
+
+	repair := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.repair_provider",
+		"confirm":true,
+		"parameters":{"provider_name":"ebay"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if repair.Code != http.StatusOK {
+		t.Fatalf("repair provider apply status=%d body=%s", repair.Code, repair.Body.String())
+	}
+	if !strings.Contains(repair.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(repair.Body.String(), `"operation":"integrations.provider.repair"`) ||
+		!strings.Contains(repair.Body.String(), `"external_write_claimed":false`) {
+		t.Fatalf("expected confirmed provider repair result without external write claim, body=%s", repair.Body.String())
+	}
+
+	disable := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.disable_provider",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if disable.Code != http.StatusOK {
+		t.Fatalf("disable provider apply status=%d body=%s", disable.Code, disable.Body.String())
+	}
+	if !strings.Contains(disable.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(disable.Body.String(), `"operation":"integrations.provider.disable"`) ||
+		!strings.Contains(disable.Body.String(), `"external_write_claimed":false`) {
+		t.Fatalf("expected confirmed provider disable result without external write claim, body=%s", disable.Body.String())
 	}
 
 	appearance := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
@@ -484,6 +522,50 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 		!strings.Contains(storageStatus.Body.String(), `"operation":"storage.status.show"`) ||
 		!strings.Contains(storageStatus.Body.String(), `"read_only":true`) {
 		t.Fatalf("expected read-only storage status result, body=%s", storageStatus.Body.String())
+	}
+
+	exportBundle := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.export_bundle",
+		"parameters":{"export_scope":"profile"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if exportBundle.Code != http.StatusOK {
+		t.Fatalf("export bundle apply status=%d body=%s", exportBundle.Code, exportBundle.Body.String())
+	}
+	if !strings.Contains(exportBundle.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(exportBundle.Body.String(), `"operation":"data.export.bundle"`) ||
+		!strings.Contains(exportBundle.Body.String(), `"read_only":true`) {
+		t.Fatalf("expected read-only export bundle result, body=%s", exportBundle.Body.String())
+	}
+
+	importFile := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.import_file",
+		"confirm":true,
+		"parameters":{"file_path":"imports/profile.json"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importFile.Code != http.StatusOK {
+		t.Fatalf("import file apply status=%d body=%s", importFile.Code, importFile.Body.String())
+	}
+	if !strings.Contains(importFile.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(importFile.Body.String(), `"operation":"data.import.file"`) ||
+		!strings.Contains(importFile.Body.String(), `"impact":"import_preview_confirmed"`) {
+		t.Fatalf("expected confirmed import preview result, body=%s", importFile.Body.String())
+	}
+
+	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.restore_backup",
+		"confirm":true,
+		"parameters":{"backup_path":"backups/cabinet-backup.zip"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if restore.Code != http.StatusOK {
+		t.Fatalf("restore backup apply status=%d body=%s", restore.Code, restore.Body.String())
+	}
+	if !strings.Contains(restore.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(restore.Body.String(), `"operation":"data.backup.restore"`) ||
+		!strings.Contains(restore.Body.String(), `"destructive_confirmation":true`) {
+		t.Fatalf("expected destructive restore confirmation result, body=%s", restore.Body.String())
 	}
 }
 
