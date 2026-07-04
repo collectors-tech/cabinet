@@ -12,6 +12,7 @@ type apiSkillPayload struct {
 	Source          string   `json:"source"`
 	Status          string   `json:"status"`
 	SafetyLevel     string   `json:"safety_level"`
+	RequiredContext []string `json:"required_context"`
 	Capabilities    []string `json:"capabilities"`
 	GuidedWorkflows []string `json:"guided_workflows"`
 	BuiltIn         bool     `json:"built_in"`
@@ -20,6 +21,7 @@ type apiSkillPayload struct {
 	NextAction      string   `json:"next_action"`
 	Permissions     struct {
 		LocalWrite      bool `json:"local_write"`
+		Destructive     bool `json:"destructive"`
 		RequiresConfirm bool `json:"requires_confirm"`
 	} `json:"permissions"`
 }
@@ -65,6 +67,38 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	}
 	if !slices.Contains(guided.GuidedWorkflows, "inventory.item.update") || guided.NextAction == "" {
 		t.Fatalf("expected guided workflow binding and next action, got %+v", guided)
+	}
+
+	inboxSearch := findAPISkill(payload.Skills, "cabinet.inbox.search_notifications")
+	if inboxSearch == nil {
+		t.Fatalf("missing Inbox search skill")
+	}
+	if inboxSearch.SafetyLevel != "read-only" || inboxSearch.Permissions.LocalWrite || !inboxSearch.Executable {
+		t.Fatalf("expected executable read-only Inbox search metadata, got %+v", inboxSearch)
+	}
+
+	inboxMutation := findAPISkill(payload.Skills, "cabinet.inbox.mark_handled")
+	if inboxMutation == nil {
+		t.Fatalf("missing Inbox mark handled skill")
+	}
+	if inboxMutation.Status != "requires-implementation" || inboxMutation.Executable || !inboxMutation.Permissions.RequiresConfirm {
+		t.Fatalf("expected Inbox mutation to stay confirmation-gated and non-executable, got %+v", inboxMutation)
+	}
+
+	userSearch := findAPISkill(payload.Skills, "cabinet.users.search")
+	if userSearch == nil {
+		t.Fatalf("missing Users search skill")
+	}
+	if userSearch.SafetyLevel != "read-only" || !slices.Contains(userSearch.RequiredContext, "admin_session") || !userSearch.Executable {
+		t.Fatalf("expected executable read-only Users search metadata, got %+v", userSearch)
+	}
+
+	removeUser := findAPISkill(payload.Skills, "cabinet.users.remove_user")
+	if removeUser == nil {
+		t.Fatalf("missing remove user skill")
+	}
+	if removeUser.SafetyLevel != "destructive" || !removeUser.Permissions.Destructive || removeUser.Executable {
+		t.Fatalf("expected destructive non-executable remove user metadata, got %+v", removeUser)
 	}
 }
 

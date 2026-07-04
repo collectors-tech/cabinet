@@ -31,6 +31,7 @@ const (
 	SafetyReadOnly        SafetyLevel = "read-only"
 	SafetyPreviewOnly     SafetyLevel = "preview-only"
 	SafetyConfirmRequired SafetyLevel = "confirm-required"
+	SafetyDestructive     SafetyLevel = "destructive"
 )
 
 type PermissionDeclaration struct {
@@ -134,6 +135,18 @@ func builtInSkills() []Skill {
 		builtIn("cabinet.collection.assign_item", "Assign item to collection", "Prepare a collection assignment preview before collection membership changes.", "collections", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"collections.item.assign"}, nil, nil),
 		builtIn("cabinet.guided.inventory.update_item", "Guided inventory item update", "Guide an inventory item update through route focus, target highlight, preview, and confirmation.", "guided-workflows", SafetyConfirmRequired, []string{"profile", "thread", "target_inventory_item", "editable_field"}, []string{"inventory.item.update"}, []string{"inventory.item.update"}, []string{"inventory.item.row", "inventory.item.editor.title", "inventory.item.editor.save"}),
 		builtIn("cabinet.chat.action_timeline.view", "View chat Action Timeline", "Read assistant workflow and action timeline evidence for the active thread.", "chat", SafetyReadOnly, []string{"profile", "thread"}, nil, nil, nil),
+		builtIn("cabinet.inbox.search_notifications", "Search Inbox notifications", "Search and filter Inbox notifications without mutating review state.", "inbox", SafetyReadOnly, []string{"profile", "workspace"}, nil, nil, []string{"inbox.list", "inbox.search"}),
+		builtIn("cabinet.inbox.summarise_unhandled", "Summarise unhandled Inbox", "Summarise unhandled Inbox items without marking them handled.", "inbox", SafetyReadOnly, []string{"profile", "workspace"}, nil, nil, []string{"inbox.summary", "inbox.unhandled"}),
+		builtIn("cabinet.inbox.open_notification", "Open Inbox notification", "Open a selected Inbox notification and route to its related Cabinet surface.", "inbox", SafetyPreviewOnly, []string{"profile", "workspace", "selected_notification"}, []string{"navigate.open_surface"}, nil, []string{"inbox.notification.card", "inbox.notification.open"}),
+		builtIn("cabinet.inbox.mark_handled", "Mark Inbox item handled", "Preview and confirm marking a selected Inbox item as handled.", "inbox", SafetyConfirmRequired, []string{"profile", "workspace", "selected_notification"}, nil, nil, []string{"inbox.notification.card", "inbox.notification.mark_handled"}),
+		builtIn("cabinet.inbox.archive_or_hide", "Archive or hide Inbox item", "Preview and confirm archiving or hiding a selected Inbox item.", "inbox", SafetyConfirmRequired, []string{"profile", "workspace", "selected_notification"}, nil, nil, []string{"inbox.notification.card", "inbox.notification.archive"}),
+		builtIn("cabinet.inbox.route_to_surface", "Route Inbox item to surface", "Open the Cabinet surface connected to an Inbox item without applying a state change.", "inbox", SafetyPreviewOnly, []string{"profile", "workspace", "selected_notification"}, []string{"navigate.open_surface"}, nil, []string{"inbox.notification.route", "app.surface.target"}),
+		builtIn("cabinet.users.search", "Search users", "Search workspace users without changing roles, status, or invitations.", "users", SafetyReadOnly, []string{"profile", "workspace", "admin_session"}, nil, nil, []string{"users.table", "users.search"}),
+		builtIn("cabinet.users.invite_user", "Invite user", "Prepare a user invitation draft that requires explicit confirmation before sending or persistence.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_email", "target_role"}, nil, nil, []string{"users.invite.form", "users.invite.submit"}),
+		builtIn("cabinet.users.resend_invitation", "Resend invitation", "Preview resending an invitation to an explicitly selected invited user.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user"}, nil, nil, []string{"users.row.invitation", "users.invite.resend"}),
+		builtIn("cabinet.users.update_role", "Update user role", "Preview a role change with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user", "target_role"}, nil, nil, []string{"users.row.role", "users.role.editor"}),
+		builtIn("cabinet.users.activate_or_deactivate", "Activate or deactivate user", "Preview activation state changes with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user", "target_status"}, nil, nil, []string{"users.row.status", "users.status.editor"}),
+		builtIn("cabinet.users.remove_user", "Remove user", "Require destructive confirmation before removing a non-protected workspace user.", "users", SafetyDestructive, []string{"profile", "workspace", "admin_session", "target_user"}, nil, nil, []string{"users.row.remove", "users.remove.confirmation"}),
 	}
 }
 
@@ -144,6 +157,16 @@ func builtIn(id, displayName, description, category string, safety SafetyLevel, 
 	if id == "cabinet.guided.inventory.update_item" {
 		status = StatusRequiresImplementation
 		nextAction = "Complete and validate issue #1513 before advertising this guided skill as executable."
+		executable = false
+	}
+	if strings.HasPrefix(id, "cabinet.inbox.mark_") || id == "cabinet.inbox.archive_or_hide" {
+		status = StatusRequiresImplementation
+		nextAction = "Bind Inbox preview/confirm/apply handlers before advertising this Inbox state-change skill as executable."
+		executable = false
+	}
+	if strings.HasPrefix(id, "cabinet.users.") && id != "cabinet.users.search" {
+		status = StatusRequiresImplementation
+		nextAction = "Bind Users admin preview/confirm/apply handlers and protected owner/admin enforcement before advertising this admin skill as executable."
 		executable = false
 	}
 	return deriveExecutionState(Skill{
@@ -161,8 +184,9 @@ func builtIn(id, displayName, description, category string, safety SafetyLevel, 
 		UITargets:       append([]string{}, uiTargets...),
 		Permissions: PermissionDeclaration{
 			LocalRead:       true,
-			LocalWrite:      safety == SafetyConfirmRequired,
-			RequiresConfirm: safety == SafetyConfirmRequired,
+			LocalWrite:      safety == SafetyConfirmRequired || safety == SafetyDestructive,
+			Destructive:     safety == SafetyDestructive,
+			RequiresConfirm: safety == SafetyConfirmRequired || safety == SafetyDestructive,
 		},
 		AuditBehavior: "thread_message_and_action_timeline",
 		Provenance:    "cabinet built-in agent capability registry",
