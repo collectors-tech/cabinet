@@ -5208,17 +5208,18 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"messages": messages})
 		case http.MethodPost:
 			var req struct {
-				ProfileID string         `json:"profile_id"`
-				ThreadID  string         `json:"thread_id"`
-				Role      string         `json:"role"`
-				Content   string         `json:"content"`
-				Context   map[string]any `json:"context"`
+				ProfileID     string         `json:"profile_id"`
+				ThreadID      string         `json:"thread_id"`
+				Role          string         `json:"role"`
+				Content       string         `json:"content"`
+				Context       map[string]any `json:"context"`
+				AttachmentIDs []string       `json:"attachment_ids"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			message, err := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, req.Context)
+			message, err := chatSvc.CreateMessageWithAttachments(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, req.Context, req.AttachmentIDs)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_chat_message"}`, http.StatusBadRequest)
 				return

@@ -108,6 +108,55 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if attachmentResp.Code != http.StatusCreated {
 		t.Fatalf("attachment status=%d body=%s", attachmentResp.Code, attachmentResp.Body.String())
 	}
+	var attachment struct {
+		ID        string `json:"id"`
+		ProfileID string `json:"profile_id"`
+		ThreadID  string `json:"thread_id"`
+		Filename  string `json:"filename"`
+		MimeType  string `json:"mime_type"`
+		SizeBytes int64  `json:"size_bytes"`
+		Path      string `json:"path"`
+	}
+	if err := json.NewDecoder(attachmentResp.Body).Decode(&attachment); err != nil {
+		t.Fatalf("decode attachment: %v", err)
+	}
+	if attachment.ID == "" || attachment.ProfileID != p.ID || attachment.ThreadID != thread.ID || attachment.Filename != "notes.txt" || attachment.SizeBytes != int64(len("sample attachment")) {
+		t.Fatalf("expected scoped attachment metadata, got %+v", attachment)
+	}
+
+	msgWithAttachment := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"use this explicit attachment","attachment_ids":["`+attachment.ID+`"],"context":{"route":{"pathname":"/chats/"},"profile":{"id":"`+p.ID+`"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if msgWithAttachment.Code != http.StatusCreated {
+		t.Fatalf("message with attachment status=%d body=%s", msgWithAttachment.Code, msgWithAttachment.Body.String())
+	}
+	if !strings.Contains(msgWithAttachment.Body.String(), `"attachments_json"`) ||
+		!strings.Contains(msgWithAttachment.Body.String(), attachment.ID) ||
+		!strings.Contains(msgWithAttachment.Body.String(), `explicit_user_upload`) ||
+		!strings.Contains(msgWithAttachment.Body.String(), `in_app_chat`) {
+		t.Fatalf("expected message to retain scoped attachment context, body=%s", msgWithAttachment.Body.String())
+	}
+
+	otherThreadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Other Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if otherThreadResp.Code != http.StatusCreated {
+		t.Fatalf("create other thread status=%d body=%s", otherThreadResp.Code, otherThreadResp.Body.String())
+	}
+	var otherThread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(otherThreadResp.Body).Decode(&otherThread); err != nil {
+		t.Fatalf("decode other thread: %v", err)
+	}
+	crossThreadAttachment := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+otherThread.ID+`","role":"user","content":"wrong thread attachment","attachment_ids":["`+attachment.ID+`"],"context":{"route":{"pathname":"/chats/"},"profile":{"id":"`+p.ID+`"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if crossThreadAttachment.Code != http.StatusBadRequest {
+		t.Fatalf("cross-thread attachment status=%d body=%s", crossThreadAttachment.Code, crossThreadAttachment.Body.String())
+	}
+
+	var badRecordCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM chat_attachments WHERE filename = 'C:\\secret.txt' OR stored_path LIKE '%secret.txt%'`).Scan(&badRecordCount); err != nil {
+		t.Fatalf("count bad attachment records: %v", err)
+	}
+	if badRecordCount != 0 {
+		t.Fatalf("unsupported local-path attachment request created %d records", badRecordCount)
+	}
 
 	previewResp := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","action":"create_item_stub","payload":{"part_number":"CHAT-001","title":"Chat Created Item","brand":"AFX","category":"General"}}`), map[string]string{"Content-Type": "application/json"})
 	if previewResp.Code != http.StatusOK {
