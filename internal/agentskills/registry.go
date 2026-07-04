@@ -81,10 +81,14 @@ type Registry struct {
 }
 
 type PreviewRequest struct {
-	SkillID    string         `json:"skill_id"`
-	ProfileID  string         `json:"profile_id"`
-	Confirm    bool           `json:"confirm"`
-	Parameters map[string]any `json:"parameters,omitempty"`
+	SkillID         string         `json:"skill_id"`
+	ProfileID       string         `json:"profile_id"`
+	Confirm         bool           `json:"confirm"`
+	SourceSurface   string         `json:"source_surface,omitempty"`
+	SourceChannel   string         `json:"source_channel,omitempty"`
+	SourceThreadID  string         `json:"source_thread_id,omitempty"`
+	SourceMessageID string         `json:"source_message_id,omitempty"`
+	Parameters      map[string]any `json:"parameters,omitempty"`
 }
 
 type PreviewResponse struct {
@@ -96,6 +100,10 @@ type PreviewResponse struct {
 	PreviewOnly          bool           `json:"preview_only"`
 	MutationApplied      bool           `json:"mutation_applied"`
 	ConfirmationRequired bool           `json:"confirmation_required"`
+	SourceSurface        string         `json:"source_surface,omitempty"`
+	SourceChannel        string         `json:"source_channel,omitempty"`
+	SourceThreadID       string         `json:"source_thread_id,omitempty"`
+	SourceMessageID      string         `json:"source_message_id,omitempty"`
 	Blocker              string         `json:"blocker,omitempty"`
 	NextAction           string         `json:"next_action,omitempty"`
 	Target               map[string]any `json:"target,omitempty"`
@@ -161,6 +169,10 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 		PreviewOnly:          true,
 		MutationApplied:      false,
 		ConfirmationRequired: skill.Permissions.RequiresConfirm,
+		SourceSurface:        strings.TrimSpace(req.SourceSurface),
+		SourceChannel:        strings.TrimSpace(req.SourceChannel),
+		SourceThreadID:       strings.TrimSpace(req.SourceThreadID),
+		SourceMessageID:      strings.TrimSpace(req.SourceMessageID),
 		NextAction:           skill.NextAction,
 	}
 	params := req.Parameters

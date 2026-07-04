@@ -147,6 +147,13 @@ Agent Skills SHALL never bypass the existing governed assistant execution model.
 - **AND** direct mutation SHALL be blocked unless the skill safety level and bound capability both permit a confirmed apply
 - **AND** execution evidence SHALL reference the skill id, lower-level binding id, profile/thread/context, confirmation state, and non-secret result or error evidence
 
+#### Scenario: Skill invocation preserves source context
+- **GIVEN** a supported in-app surface, Inbox review item, Chat thread, or authorized external channel invokes an Agent skill
+- **WHEN** Cabinet creates a skill preview or confirmed apply response
+- **THEN** the response SHALL preserve the non-secret source surface, source channel, source thread id, and source message id supplied by the invoking boundary
+- **AND** preview responses SHALL keep `mutation_applied=false` until a confirmed apply request is accepted
+- **AND** confirmed apply responses SHALL retain the same source context while reporting whether the mutation was applied or blocked
+
 ### Requirement: Marketplace behavior SHALL remain explicitly deferred
 Cabinet SHALL not treat local skill import support as a public marketplace implementation.
 
