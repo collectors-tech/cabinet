@@ -12,6 +12,7 @@ import {
   ExternalLink,
   GitBranchPlus,
   MessageSquarePlus,
+  Paperclip,
   ShieldAlert,
   Sparkles,
   VolumeX,
@@ -76,6 +77,17 @@ type Message = {
     assistant_handoff?: { status?: string; inbox_item_id?: string }
     app_control?: AppControlContext
   }
+}
+
+type ChatAttachment = {
+  id: string
+  profile_id: string
+  thread_id: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  path: string
+  created_at: string
 }
 
 type ActionPreview = {
@@ -252,6 +264,8 @@ export function AssistantWorkspacePanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
+  const [pendingAttachment, setPendingAttachment] = useState<File | null>(null)
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [provider, setProvider] = useState('openai')
   const [model, setModel] = useState('gpt-4o-mini')
   const manualProviderModelChangeRef = useRef(false)
@@ -467,6 +481,8 @@ export function AssistantWorkspacePanel() {
     if (selected?.metadata?.provider) setProvider(selected.metadata.provider)
     if (selected?.metadata?.model) setModel(selected.metadata.model)
     setMessages([])
+    setPendingAttachment(null)
+    setAttachments([])
     setActionPreview(null)
     setApplyResult(null)
     setExecutionState('idle')
@@ -696,6 +712,8 @@ export function AssistantWorkspacePanel() {
       setNavigationAction(null)
       setCommandEvents([])
       setMessages([])
+      setPendingAttachment(null)
+      setAttachments([])
       setExecutionState('idle')
       await loadMessages(activeProfileId, newThreadId)
     } catch (err) {
@@ -723,6 +741,7 @@ export function AssistantWorkspacePanel() {
             thread_id: threadId,
             role: 'user',
             content: normalizedDraft,
+            attachment_ids: attachments.map((attachment) => attachment.id),
             context: {
               route: routeContext,
               profile: { id: activeProfileId },
@@ -732,6 +751,7 @@ export function AssistantWorkspacePanel() {
           }),
         })
         if (!response.ok) throw new Error('failed_to_send_assistant_message')
+        setAttachments([])
         setNavigationAction(inferNavigationAction(normalizedDraft))
         await loadMessages(activeProfileId, threadId)
       } catch (err) {
@@ -744,8 +764,42 @@ export function AssistantWorkspacePanel() {
         setSending(false)
       }
     },
-    [activeProfileId, model, provider, routeContext, selectionContext, threadId]
+    [
+      activeProfileId,
+      attachments,
+      model,
+      provider,
+      routeContext,
+      selectionContext,
+      threadId,
+    ]
   )
+
+  const uploadAttachment = async () => {
+    if (!activeProfileId || !threadId || !pendingAttachment) {
+      return
+    }
+    setError('')
+    const form = new FormData()
+    form.set('profile_id', activeProfileId)
+    form.set('thread_id', threadId)
+    form.set('file', pendingAttachment)
+
+    try {
+      const response = await fetch('/api/chat/attachments', {
+        method: 'POST',
+        body: form,
+      })
+      if (!response.ok) throw new Error(`assistant_attachment_${response.status}`)
+      const attachment = (await response.json()) as ChatAttachment
+      setAttachments((current) => [attachment, ...current])
+      setPendingAttachment(null)
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'assistant_attachment_upload_failed'
+      )
+    }
+  }
 
   const appendCommandEvent = useCallback((event: ShellCommandEvent) => {
     setCommandEvents((current) => [...current.slice(-7), event])
@@ -1451,6 +1505,80 @@ export function AssistantWorkspacePanel() {
               ) : null}
 
               <div className='border-t border-slate-800 bg-slate-950 p-3'>
+                <div
+                  className='mb-3 space-y-2 rounded-lg border border-slate-800 bg-slate-900/70 p-2 text-xs text-slate-300'
+                  data-testid='shell-assistant-attachment-panel'
+                >
+                  <div className='flex items-center gap-2'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                      data-testid='shell-assistant-attachment-picker'
+                      onClick={() =>
+                        document
+                          .querySelector<HTMLInputElement>(
+                            '[data-testid="shell-assistant-attachment-input"]'
+                          )
+                          ?.click()
+                      }
+                      disabled={!threadId || loading || sending}
+                    >
+                      <Paperclip className='h-3.5 w-3.5' />
+                      Attach
+                    </Button>
+                    <Input
+                      data-testid='shell-assistant-attachment-input'
+                      type='file'
+                      className='hidden'
+                      onChange={(event) =>
+                        setPendingAttachment(event.target.files?.[0] ?? null)
+                      }
+                    />
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                      data-testid='shell-assistant-attachment-upload'
+                      onClick={() => void uploadAttachment()}
+                      disabled={!threadId || !pendingAttachment || sending}
+                    >
+                      Upload
+                    </Button>
+                    {pendingAttachment ? (
+                      <span
+                        className='min-w-0 truncate text-slate-400'
+                        data-testid='shell-assistant-pending-attachment'
+                      >
+                        {pendingAttachment.name}
+                      </span>
+                    ) : null}
+                  </div>
+                  {attachments.length > 0 ? (
+                    <div
+                      className='space-y-1'
+                      data-testid='shell-assistant-attachment-list'
+                    >
+                      {attachments.map((attachment) => (
+                        <div
+                          key={attachment.id}
+                          className='flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                          data-attachment-id={attachment.id}
+                        >
+                          <span className='min-w-0 truncate'>
+                            {attachment.filename}
+                          </span>
+                          <span className='shrink-0 text-[10px] text-slate-500'>
+                            {attachment.mime_type || 'file'} /{' '}
+                            {attachment.size_bytes} bytes
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <CabinetAssistantUiComposer
                   composer={{
                     disabled: !threadId || loading || sending,

@@ -39,6 +39,16 @@ type Message struct {
 	CreatedAt   string         `json:"created_at"`
 }
 
+type MessageAttachment struct {
+	ID         string `json:"id"`
+	Filename   string `json:"filename"`
+	MimeType   string `json:"mime_type"`
+	SizeBytes  int64  `json:"size_bytes"`
+	Provenance string `json:"provenance"`
+	Source     string `json:"source"`
+	CreatedAt  string `json:"created_at"`
+}
+
 type Attachment struct {
 	ID        string `json:"id"`
 	ProfileID string `json:"profile_id"`
@@ -226,6 +236,10 @@ func (s *Service) GetThread(ctx context.Context, profileID, threadID string) (Th
 }
 
 func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any) (Message, error) {
+	return s.CreateMessageWithAttachments(ctx, profileID, threadID, role, content, messageContext, nil)
+}
+
+func (s *Service) CreateMessageWithAttachments(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any, attachmentIDs []string) (Message, error) {
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
 	role = strings.TrimSpace(strings.ToLower(role))
@@ -242,16 +256,59 @@ func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, 
 	if _, err := s.GetThread(ctx, profileID, threadID); err != nil {
 		return Message{}, err
 	}
+	attachments, err := s.messageAttachments(ctx, profileID, threadID, attachmentIDs)
+	if err != nil {
+		return Message{}, err
+	}
+	attachmentsJSON, err := json.Marshal(attachments)
+	if err != nil {
+		return Message{}, fmt.Errorf("marshal attachments: %w", err)
+	}
 	id := uuid.NewString()
 	contextJSON := marshalContextJSON(messageContext)
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
-		VALUES (?, ?, ?, ?, ?, '[]', ?)
-	`, id, profileID, threadID, role, content, contextJSON); err != nil {
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, id, profileID, threadID, role, content, string(attachmentsJSON), contextJSON); err != nil {
 		return Message{}, fmt.Errorf("create message: %w", err)
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, threadID)
 	return s.getMessage(ctx, profileID, id)
+}
+
+func (s *Service) messageAttachments(ctx context.Context, profileID, threadID string, attachmentIDs []string) ([]MessageAttachment, error) {
+	if len(attachmentIDs) == 0 {
+		return []MessageAttachment{}, nil
+	}
+	out := make([]MessageAttachment, 0, len(attachmentIDs))
+	seen := map[string]struct{}{}
+	for _, attachmentID := range attachmentIDs {
+		attachmentID = strings.TrimSpace(attachmentID)
+		if attachmentID == "" {
+			return nil, fmt.Errorf("attachment_id is required")
+		}
+		if _, ok := seen[attachmentID]; ok {
+			continue
+		}
+		seen[attachmentID] = struct{}{}
+		attachment, err := s.getAttachment(ctx, profileID, attachmentID)
+		if err != nil {
+			return nil, err
+		}
+		if attachment.ThreadID != threadID {
+			return nil, fmt.Errorf("attachment does not belong to thread")
+		}
+		out = append(out, MessageAttachment{
+			ID:         attachment.ID,
+			Filename:   attachment.Filename,
+			MimeType:   attachment.MimeType,
+			SizeBytes:  attachment.SizeBytes,
+			Provenance: "explicit_user_upload",
+			Source:     "in_app_chat",
+			CreatedAt:  attachment.CreatedAt,
+		})
+	}
+	return out, nil
 }
 
 func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) ([]Message, error) {

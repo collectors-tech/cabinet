@@ -418,6 +418,7 @@ export function Chats() {
           thread_id: selectedThreadId,
           role: 'user',
           content,
+          attachment_ids: attachments.map((attachment) => attachment.id),
           context: {
             route: { pathname: '/chats/' },
             profile: { id: activeProfileId },
@@ -429,9 +430,10 @@ export function Chats() {
         setSendError(`chat_message_create_${response.status}`)
         return
       }
+      setAttachments([])
       await loadThreads(activeProfileId)
     },
-    [activeProfileId, assistantDefaults, loadThreads, selectedThreadId]
+    [activeProfileId, assistantDefaults, attachments, loadThreads, selectedThreadId]
   )
 
   const handleAssistantUiNewMessage = useCallback(
