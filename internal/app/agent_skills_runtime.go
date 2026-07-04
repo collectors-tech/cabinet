@@ -11,6 +11,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/ebay"
+	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
@@ -51,6 +52,13 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.purchases.reconcile_item",
 		"cabinet.purchases.review_purchase":
 		return applyAgentPurchasesSkill(ctx, conn, skillID, profileID, params)
+	case "cabinet.media.search",
+		"cabinet.media.upload_or_import",
+		"cabinet.media.attach_to_item",
+		"cabinet.media.review_unlinked",
+		"cabinet.media.update_notes",
+		"cabinet.media.detach_from_item":
+		return applyAgentMediaSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.settings.update_profile",
 		"cabinet.settings.update_account",
 		"cabinet.settings.update_appearance",
@@ -663,6 +671,236 @@ func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profil
 		result["reconciled_instance_id"] = arrival.ReconciledInstanceID
 	}
 	return result, "", nil
+}
+
+func applyAgentMediaSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+	if conn == nil {
+		return nil, "media_store_required", fmt.Errorf("database connection required")
+	}
+	svc := media.NewService(conn, "")
+	result := map[string]any{
+		"profile_id":             profileID,
+		"provenance_preserved":   false,
+		"external_write_claimed": false,
+	}
+	switch skillID {
+	case "cabinet.media.search", "cabinet.media.review_unlinked":
+		filter := "all"
+		if skillID == "cabinet.media.review_unlinked" {
+			filter = "unlinked"
+		}
+		list, err := svc.ListWorkspaceAssets(ctx, profileID, filter)
+		if err != nil {
+			return nil, "media_search_failed", err
+		}
+		assets := filterAgentMediaAssets(list.Assets, stringMapParam(params, "query"))
+		result["operation"] = map[bool]string{true: "media.review_unlinked", false: "media.search"}[skillID == "cabinet.media.review_unlinked"]
+		result["read_only"] = true
+		result["query"] = stringMapParam(params, "query")
+		result["assets"] = assets
+		result["total"] = len(assets)
+		result["summary"] = list.Summary
+		result["next_action"] = "Select media before applying attachment, metadata, or detachment changes."
+	case "cabinet.media.upload_or_import":
+		source := firstNonEmptyString(stringMapParam(params, "source_url"), stringMapParam(params, "file_path"))
+		if source == "" {
+			return nil, "media_source_required", fmt.Errorf("media source required")
+		}
+		assetID, err := persistAgentMediaImport(ctx, conn, profileID, source, params)
+		if err != nil {
+			return nil, "media_import_persist_failed", err
+		}
+		result["operation"] = "media.upload_or_import"
+		result["status"] = "confirmed"
+		result["media_id"] = assetID
+		result["source_url"] = source
+		result["filename"] = firstNonEmptyString(stringMapParam(params, "filename"), "agent-media-import")
+		result["media_persisted"] = true
+		result["provenance_preserved"] = true
+		result["next_action"] = "Review imported media before linking it to inventory or wishlist records."
+	case "cabinet.media.attach_to_item":
+		mediaID := firstNonEmptyString(stringMapParam(params, "media_id"), stringMapParam(params, "attachment_id"))
+		itemID := firstNonEmptyString(stringMapParam(params, "item_id"), stringMapParam(params, "target_item"))
+		if mediaID == "" {
+			return nil, "media_target_required", fmt.Errorf("media target required")
+		}
+		if itemID == "" {
+			return nil, "media_item_required", fmt.Errorf("media item required")
+		}
+		assignment, err := svc.ApplyAssignment(ctx, profileID, mediaID, "inventory", itemID)
+		if err != nil {
+			return nil, "media_attachment_persist_failed", err
+		}
+		result["operation"] = "media.attach_to_item"
+		result["status"] = "confirmed"
+		result["media_id"] = mediaID
+		result["item_id"] = itemID
+		result["attachment_persisted"] = true
+		result["provenance_preserved"] = true
+		result["assignment"] = assignment
+		result["next_action"] = "Open Media or the item detail surface to verify the persisted attachment."
+	case "cabinet.media.update_notes":
+		mediaID := firstNonEmptyString(stringMapParam(params, "media_id"), stringMapParam(params, "attachment_id"))
+		if mediaID == "" {
+			return nil, "media_target_required", fmt.Errorf("media target required")
+		}
+		updated, err := updateAgentMediaNotes(ctx, svc, profileID, mediaID, stringMapParam(params, "notes"))
+		if err != nil {
+			return nil, "media_metadata_persist_failed", err
+		}
+		result["operation"] = "media.update_notes"
+		result["status"] = "confirmed"
+		result["media_id"] = mediaID
+		result["notes"] = updated.Notes
+		result["metadata_persisted"] = true
+		result["provenance_preserved"] = true
+		result["asset"] = updated
+	case "cabinet.media.detach_from_item":
+		mediaID := firstNonEmptyString(stringMapParam(params, "media_id"), stringMapParam(params, "attachment_id"))
+		itemID := firstNonEmptyString(stringMapParam(params, "item_id"), stringMapParam(params, "target_item"))
+		if mediaID == "" {
+			return nil, "media_target_required", fmt.Errorf("media target required")
+		}
+		if itemID == "" {
+			return nil, "media_item_required", fmt.Errorf("media item required")
+		}
+		removed, err := detachAgentMediaFromItem(ctx, conn, profileID, mediaID, itemID)
+		if err != nil {
+			return nil, "media_detachment_persist_failed", err
+		}
+		result["operation"] = "media.detach_from_item"
+		result["status"] = "confirmed"
+		result["media_id"] = mediaID
+		result["item_id"] = itemID
+		result["detachment_persisted"] = removed
+		result["provenance_preserved"] = true
+		result["next_action"] = "Refresh Media or item detail to verify the attachment is no longer linked."
+	}
+	return result, "", nil
+}
+
+func filterAgentMediaAssets(assets []media.WorkspaceAsset, query string) []media.WorkspaceAsset {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return assets
+	}
+	out := make([]media.WorkspaceAsset, 0, len(assets))
+	for _, asset := range assets {
+		haystack := strings.ToLower(strings.Join([]string{
+			asset.ID,
+			asset.Title,
+			asset.Filename,
+			asset.Source,
+			asset.Notes,
+			asset.ItemID,
+			asset.WishlistID,
+		}, " "))
+		if strings.Contains(haystack, query) {
+			out = append(out, asset)
+		}
+	}
+	return out
+}
+
+func persistAgentMediaImport(ctx context.Context, conn *sql.DB, profileID, source string, params map[string]any) (string, error) {
+	threadID, err := ensureAgentMediaThread(ctx, conn, profileID)
+	if err != nil {
+		return "", err
+	}
+	assetID := uuid.NewString()
+	filename := firstNonEmptyString(stringMapParam(params, "filename"), stringMapParam(params, "title"), "agent-media-import")
+	mimeType := firstNonEmptyString(stringMapParam(params, "mime_type"), "application/octet-stream")
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO chat_attachments(id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, assetID, profileID, threadID, filename, mimeType, intMapParam(params, "size_bytes"), source); err != nil {
+		return "", fmt.Errorf("persist imported media attachment: %w", err)
+	}
+	contextJSON, err := json.Marshal(map[string]any{
+		"source":            "agent.media.upload_or_import",
+		"asset_id":          assetID,
+		"title":             firstNonEmptyString(stringMapParam(params, "title"), filename),
+		"origin":            source,
+		"filename":          filename,
+		"download_filename": firstNonEmptyString(stringMapParam(params, "download_filename"), filename),
+		"notes":             stringMapParam(params, "notes"),
+		"source_url":        source,
+		"provenance":        "agent media skill confirmed import",
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal media import metadata: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
+		VALUES (?, ?, ?, 'user', 'Media asset added from Media workspace.', '[]', ?)
+	`, uuid.NewString(), profileID, threadID, string(contextJSON)); err != nil {
+		return "", fmt.Errorf("persist media import metadata: %w", err)
+	}
+	return assetID, nil
+}
+
+func ensureAgentMediaThread(ctx context.Context, conn *sql.DB, profileID string) (string, error) {
+	var threadID string
+	err := conn.QueryRowContext(ctx, `
+		SELECT id
+		FROM chat_threads
+		WHERE profile_id = ? AND title = 'Agent Media Imports'
+		ORDER BY created_at ASC, id ASC
+		LIMIT 1
+	`, profileID).Scan(&threadID)
+	if err == nil {
+		return threadID, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("find agent media thread: %w", err)
+	}
+	threadID = uuid.NewString()
+	metadataJSON, err := json.Marshal(map[string]any{"source": "agent.media"})
+	if err != nil {
+		return "", fmt.Errorf("marshal agent media thread metadata: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO chat_threads(id, profile_id, title, metadata_json)
+		VALUES (?, ?, 'Agent Media Imports', ?)
+	`, threadID, profileID, string(metadataJSON)); err != nil {
+		return "", fmt.Errorf("create agent media thread: %w", err)
+	}
+	return threadID, nil
+}
+
+func updateAgentMediaNotes(ctx context.Context, svc *media.Service, profileID, mediaID, notes string) (media.WorkspaceAsset, error) {
+	list, err := svc.ListWorkspaceAssets(ctx, profileID, "all")
+	if err != nil {
+		return media.WorkspaceAsset{}, err
+	}
+	for _, asset := range list.Assets {
+		if asset.ID != mediaID {
+			continue
+		}
+		return svc.UpdateWorkspaceAssetMetadata(ctx, profileID, mediaID, media.WorkspaceAssetMetadataUpdate{
+			Title:            asset.Title,
+			Filename:         asset.Filename,
+			Source:           asset.Source,
+			DownloadFilename: asset.DownloadFilename,
+			Notes:            notes,
+		})
+	}
+	return media.WorkspaceAsset{}, fmt.Errorf("media asset not found")
+}
+
+func detachAgentMediaFromItem(ctx context.Context, conn *sql.DB, profileID, mediaID, itemID string) (bool, error) {
+	result, err := conn.ExecContext(ctx, `
+		DELETE FROM media_asset_links
+		WHERE profile_id = ? AND asset_id = ? AND target_type = 'inventory' AND target_id = ?
+	`, profileID, mediaID, itemID)
+	if err != nil {
+		return false, fmt.Errorf("detach media link: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("inspect detached media link: %w", err)
+	}
+	return affected > 0, nil
 }
 
 func agentMarketWatchQuerySet(providerID, query string, params map[string]any) scanner.QuerySet {

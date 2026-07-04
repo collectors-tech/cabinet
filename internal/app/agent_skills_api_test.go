@@ -326,6 +326,157 @@ func TestAgentSkillAPIPropagatesExternalChannelContextForMarketWatchAndPurchases
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesMediaSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Media"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status)
+		VALUES ('media-item-1', ?, 'AFX', 'Slot Cars', 'MEDIA-1', 'Agent media target item', 'active');
+		INSERT INTO chat_threads(id, profile_id, title)
+		VALUES ('media-thread-1', ?, 'Agent media uploads');
+		INSERT INTO chat_attachments(id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('media-attach-1', ?, 'media-thread-1', 'loose-reference.jpg', 'image/jpeg', 123, 'https://example.test/media/loose-reference.jpg');
+	`, p.ID, p.ID, p.ID); err != nil {
+		t.Fatalf("seed media skill data: %v", err)
+	}
+
+	search := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.media.search",
+		"parameters":{"query":"loose-reference"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if search.Code != http.StatusOK {
+		t.Fatalf("media search status=%d body=%s", search.Code, search.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":false`,
+		`"operation":"media.search"`,
+		`"read_only":true`,
+		`"filename":"loose-reference.jpg"`,
+	} {
+		if !strings.Contains(search.Body.String(), want) {
+			t.Fatalf("media search response missing %s: body=%s", want, search.Body.String())
+		}
+	}
+
+	upload := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.media.upload_or_import",
+		"confirm":true,
+		"source_surface":"telegram.media.upload",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-media-thread-1709",
+		"source_message_id":"tg-media-message-1709",
+		"parameters":{
+			"source_url":"https://example.test/media/imported-reference.jpg",
+			"filename":"imported-reference.jpg",
+			"title":"Imported agent reference",
+			"notes":"imported by agent skill"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if upload.Code != http.StatusOK {
+		t.Fatalf("media upload/import status=%d body=%s", upload.Code, upload.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"media.upload_or_import"`,
+		`"media_persisted":true`,
+		`"provenance_preserved":true`,
+		`"source_url":"https://example.test/media/imported-reference.jpg"`,
+		`"source_channel":"telegram"`,
+	} {
+		if !strings.Contains(upload.Body.String(), want) {
+			t.Fatalf("media upload response missing %s: body=%s", want, upload.Body.String())
+		}
+	}
+	var uploadPayload struct {
+		Target struct {
+			MediaID string `json:"media_id"`
+		} `json:"target"`
+	}
+	if err := json.NewDecoder(upload.Body).Decode(&uploadPayload); err != nil {
+		t.Fatalf("decode upload response: %v", err)
+	}
+	if uploadPayload.Target.MediaID == "" {
+		t.Fatalf("expected uploaded media id, body=%s", upload.Body.String())
+	}
+	var importedCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM chat_attachments WHERE profile_id = ? AND id = ? AND stored_path = 'https://example.test/media/imported-reference.jpg'`, p.ID, uploadPayload.Target.MediaID).Scan(&importedCount); err != nil {
+		t.Fatalf("count imported media attachment: %v", err)
+	}
+	if importedCount != 1 {
+		t.Fatalf("expected one persisted imported media attachment, got %d", importedCount)
+	}
+
+	attach := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.media.attach_to_item",
+		"confirm":true,
+		"parameters":{"media_id":"`+uploadPayload.Target.MediaID+`","item_id":"media-item-1"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if attach.Code != http.StatusOK {
+		t.Fatalf("media attach status=%d body=%s", attach.Code, attach.Body.String())
+	}
+	if !strings.Contains(attach.Body.String(), `"operation":"media.attach_to_item"`) ||
+		!strings.Contains(attach.Body.String(), `"attachment_persisted":true`) ||
+		!strings.Contains(attach.Body.String(), `"provenance_preserved":true`) {
+		t.Fatalf("expected media attach persistence evidence, body=%s", attach.Body.String())
+	}
+	var linkCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM media_asset_links WHERE profile_id = ? AND asset_id = ? AND target_type = 'inventory' AND target_id = 'media-item-1'`, p.ID, uploadPayload.Target.MediaID).Scan(&linkCount); err != nil {
+		t.Fatalf("count media attachment link: %v", err)
+	}
+	if linkCount != 1 {
+		t.Fatalf("expected one persisted media link, got %d", linkCount)
+	}
+
+	updateNotes := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.media.update_notes",
+		"confirm":true,
+		"parameters":{"media_id":"`+uploadPayload.Target.MediaID+`","notes":"agent skill updated notes"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateNotes.Code != http.StatusOK {
+		t.Fatalf("media update notes status=%d body=%s", updateNotes.Code, updateNotes.Body.String())
+	}
+	if !strings.Contains(updateNotes.Body.String(), `"operation":"media.update_notes"`) ||
+		!strings.Contains(updateNotes.Body.String(), `"metadata_persisted":true`) ||
+		!strings.Contains(updateNotes.Body.String(), `"notes":"agent skill updated notes"`) {
+		t.Fatalf("expected media notes persistence evidence, body=%s", updateNotes.Body.String())
+	}
+
+	detach := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.media.detach_from_item",
+		"confirm":true,
+		"parameters":{"media_id":"`+uploadPayload.Target.MediaID+`","item_id":"media-item-1"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if detach.Code != http.StatusOK {
+		t.Fatalf("media detach status=%d body=%s", detach.Code, detach.Body.String())
+	}
+	if !strings.Contains(detach.Body.String(), `"operation":"media.detach_from_item"`) ||
+		!strings.Contains(detach.Body.String(), `"detachment_persisted":true`) {
+		t.Fatalf("expected media detach persistence evidence, body=%s", detach.Body.String())
+	}
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM media_asset_links WHERE profile_id = ? AND asset_id = ? AND target_type = 'inventory' AND target_id = 'media-item-1'`, p.ID, uploadPayload.Target.MediaID).Scan(&linkCount); err != nil {
+		t.Fatalf("count media link after detach: %v", err)
+	}
+	if linkCount != 0 {
+		t.Fatalf("expected media link to be detached, got %d", linkCount)
+	}
+}
+
 func TestAgentSkillApplyAPIConfirmsInboxMutation(t *testing.T) {
 	t.Parallel()
 
