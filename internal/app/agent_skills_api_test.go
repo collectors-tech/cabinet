@@ -159,6 +159,10 @@ func TestAgentSkillApplyAPIConfirmsInboxMutation(t *testing.T) {
 			"local_history_id":"agent-skill-apply-1",
 			"title":"Agent skill handoff",
 			"summary":"Needs review"
+		},{
+			"local_history_id":"agent-skill-apply-2",
+			"title":"Agent skill archive",
+			"summary":"Can be archived"
 		}]
 	}`), map[string]string{"Content-Type": "application/json"})
 	if record.Code != http.StatusCreated {
@@ -173,8 +177,8 @@ func TestAgentSkillApplyAPIConfirmsInboxMutation(t *testing.T) {
 	if err := json.NewDecoder(record.Body).Decode(&recordPayload); err != nil {
 		t.Fatalf("decode inbox record: %v", err)
 	}
-	if len(recordPayload.Items) != 1 {
-		t.Fatalf("expected one inbox item, got %+v", recordPayload.Items)
+	if len(recordPayload.Items) != 2 {
+		t.Fatalf("expected two inbox items, got %+v", recordPayload.Items)
 	}
 
 	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
@@ -200,6 +204,19 @@ func TestAgentSkillApplyAPIConfirmsInboxMutation(t *testing.T) {
 	}
 	if !strings.Contains(apply.Body.String(), `"mutation_applied":true`) || !strings.Contains(apply.Body.String(), `"status":"read"`) {
 		t.Fatalf("expected confirmed apply to mark inbox item read, body=%s", apply.Body.String())
+	}
+
+	archive := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.archive_or_hide",
+		"confirm":true,
+		"parameters":{"notification_id":"`+recordPayload.Items[1].ID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if archive.Code != http.StatusOK {
+		t.Fatalf("archive inbox status=%d body=%s", archive.Code, archive.Body.String())
+	}
+	if !strings.Contains(archive.Body.String(), `"mutation_applied":true`) || !strings.Contains(archive.Body.String(), `"status":"archived"`) {
+		t.Fatalf("expected confirmed apply to archive inbox item, body=%s", archive.Body.String())
 	}
 }
 
@@ -243,6 +260,42 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 	if ownerID == "" {
 		t.Fatalf("expected seeded owner user, got %+v", users)
 	}
+	var invitedID string
+	for _, user := range users {
+		if user.Email == "agent_skill_invite@example.test" {
+			invitedID = user.ID
+		}
+	}
+	if invitedID == "" {
+		t.Fatalf("expected invited user, got %+v", users)
+	}
+
+	updateRole := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.users.update_role",
+		"confirm":true,
+		"parameters":{"target_user":"`+invitedID+`","target_role":"admin"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateRole.Code != http.StatusOK {
+		t.Fatalf("update role apply status=%d body=%s", updateRole.Code, updateRole.Body.String())
+	}
+	if !strings.Contains(updateRole.Body.String(), `"mutation_applied":true`) || !strings.Contains(updateRole.Body.String(), `"role":"admin"`) {
+		t.Fatalf("expected confirmed role update result, body=%s", updateRole.Body.String())
+	}
+
+	deactivate := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.users.activate_or_deactivate",
+		"confirm":true,
+		"parameters":{"target_user":"`+invitedID+`","target_status":"inactive"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if deactivate.Code != http.StatusOK {
+		t.Fatalf("deactivate apply status=%d body=%s", deactivate.Code, deactivate.Body.String())
+	}
+	if !strings.Contains(deactivate.Body.String(), `"mutation_applied":true`) || !strings.Contains(deactivate.Body.String(), `"status":"inactive"`) {
+		t.Fatalf("expected confirmed deactivate result, body=%s", deactivate.Body.String())
+	}
+
 	removeOwner := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.users.remove_user",
@@ -254,6 +307,78 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 	}
 	if !strings.Contains(removeOwner.Body.String(), `"mutation_applied":false`) || !strings.Contains(removeOwner.Body.String(), `"blocker":"users_admin_protected_owner_change_blocked"`) {
 		t.Fatalf("expected protected owner blocker, body=%s", removeOwner.Body.String())
+	}
+
+	removeInvited := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.users.remove_user",
+		"confirm":true,
+		"parameters":{"target_user":"`+invitedID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if removeInvited.Code != http.StatusOK {
+		t.Fatalf("remove invited user status=%d body=%s", removeInvited.Code, removeInvited.Body.String())
+	}
+	if !strings.Contains(removeInvited.Body.String(), `"mutation_applied":true`) || !strings.Contains(removeInvited.Body.String(), `"removed_user_id":"`+invitedID+`"`) {
+		t.Fatalf("expected confirmed remove user result, body=%s", removeInvited.Body.String())
+	}
+	users, err = listRuntimeUsers(context.Background(), a.db, p.ID)
+	if err != nil {
+		t.Fatalf("list users after remove: %v", err)
+	}
+	for _, user := range users {
+		if user.ID == invitedID {
+			t.Fatalf("expected invited user to be removed, got %+v", users)
+		}
+	}
+}
+
+func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Apply Guard"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	cancel := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.users.invite_user",
+		"confirm":false,
+		"parameters":{"target_email":"agent_skill_cancel@example.test","target_role":"view"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if cancel.Code != http.StatusConflict {
+		t.Fatalf("cancelled apply status=%d body=%s", cancel.Code, cancel.Body.String())
+	}
+	if !strings.Contains(cancel.Body.String(), `"error":"confirmation_required"`) {
+		t.Fatalf("expected confirmation_required on cancelled apply, body=%s", cancel.Body.String())
+	}
+	users, err := listRuntimeUsers(context.Background(), a.db, p.ID)
+	if err != nil {
+		t.Fatalf("list users after cancelled apply: %v", err)
+	}
+	for _, user := range users {
+		if user.Email == "agent_skill_cancel@example.test" {
+			t.Fatalf("cancelled apply must not create user, got %+v", users)
+		}
+	}
+
+	unknown := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.users.unsupported",
+		"confirm":true,
+		"parameters":{"target_user":"missing"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if unknown.Code != http.StatusNotFound {
+		t.Fatalf("unknown apply status=%d body=%s", unknown.Code, unknown.Body.String())
+	}
+	if !strings.Contains(unknown.Body.String(), `"error":"skill_not_found"`) {
+		t.Fatalf("expected skill_not_found on unknown skill, body=%s", unknown.Body.String())
 	}
 }
 
