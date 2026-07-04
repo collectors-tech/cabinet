@@ -470,6 +470,9 @@ func previewPurchasesBlocker(skillID string, params map[string]any) string {
 		if strings.TrimSpace(stringParam(params, "purchase_source")) == "" && strings.TrimSpace(stringParam(params, "source")) == "" {
 			return "purchases_source_required"
 		}
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" && strings.TrimSpace(stringParam(params, "title")) == "" {
+			return "purchases_item_required"
+		}
 	case "cabinet.purchases.add_line_item":
 		if strings.TrimSpace(stringParam(params, "order_id")) == "" {
 			return "purchases_order_required"

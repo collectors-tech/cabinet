@@ -939,6 +939,37 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 		t.Fatalf("seed purchase target item: %v", err)
 	}
 
+	createOrder := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.create_order",
+		"confirm":true,
+		"parameters":{
+			"purchase_source":"agent_manual",
+			"order_id":"agent-order-1",
+			"title":"Agent created purchase order item",
+			"part_number":"AGENT-CREATE-1",
+			"source_url":"https://example.test/order/1",
+			"quantity":1,
+			"amount":77,
+			"currency":"AUD"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createOrder.Code != http.StatusOK {
+		t.Fatalf("create order status=%d body=%s", createOrder.Code, createOrder.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.order.create"`,
+		`"order_id":"agent-order-1"`,
+		`"created_item":true`,
+		`"purchase_persisted":true`,
+		`"provenance_preserved":true`,
+		`"expected_arrival_id":"`,
+	} {
+		if !strings.Contains(createOrder.Body.String(), want) {
+			t.Fatalf("create order response missing %s: body=%s", want, createOrder.Body.String())
+		}
+	}
+
 	addLine := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.purchases.add_line_item",
@@ -1045,6 +1076,27 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 		!strings.Contains(searchReceived.Body.String(), `"received_count":1`) ||
 		!strings.Contains(searchReceived.Body.String(), `"status":"reconciled"`) {
 		t.Fatalf("expected received/reconciled purchase order search evidence, body=%s", searchReceived.Body.String())
+	}
+
+	receiveOrder := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.receive_order",
+		"confirm":true,
+		"parameters":{"order_id":"agent-order-1","delivered_on":"2026-07-06","notes":"bulk receive by agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if receiveOrder.Code != http.StatusOK {
+		t.Fatalf("receive order status=%d body=%s", receiveOrder.Code, receiveOrder.Body.String())
+	}
+	for _, want := range []string{
+		`"operation":"purchases.order.receive"`,
+		`"order_id":"agent-order-1"`,
+		`"purchase_persisted":true`,
+		`"received_count":1`,
+		`"status":"delivered"`,
+	} {
+		if !strings.Contains(receiveOrder.Body.String(), want) {
+			t.Fatalf("receive order response missing %s: body=%s", want, receiveOrder.Body.String())
+		}
 	}
 }
 

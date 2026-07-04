@@ -446,6 +446,9 @@ func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profil
 		result["order_id"] = stringMapParam(params, "order_id")
 		result["review_status"] = stringMapParam(params, "review_status")
 	case "cabinet.purchases.create_order":
+		if conn == nil {
+			return nil, "purchases_store_required", fmt.Errorf("database connection required")
+		}
 		source := stringMapParam(params, "purchase_source")
 		if source == "" {
 			source = stringMapParam(params, "source")
@@ -453,10 +456,42 @@ func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profil
 		if source == "" {
 			return nil, "purchases_source_required", fmt.Errorf("purchase source required")
 		}
+		itemID, itemCreated, err := ensureAgentPurchaseOrderItem(ctx, conn, profileID, params)
+		if err != nil {
+			return nil, "purchases_item_required", err
+		}
+		orderID := firstNonEmptyString(
+			stringMapParam(params, "order_id"),
+			stringMapParam(params, "external_ref"),
+			stringMapParam(params, "result_id"),
+			"agent-order-"+uuid.NewString(),
+		)
+		created, arrival, err := commerce.NewService(conn).CreateLifecycleForProfile(ctx, profileID, commerce.LifecycleEntry{
+			ItemID:      itemID,
+			State:       "purchase",
+			Source:      source,
+			ExternalRef: orderID,
+			Quantity:    intMapParam(params, "quantity"),
+			Amount:      floatMapParam(params, "amount"),
+			Currency:    stringMapParam(params, "currency"),
+			Notes:       purchaseAgentSkillNotes(params),
+		})
+		if err != nil {
+			return nil, "purchases_order_persist_failed", err
+		}
 		result["operation"] = "purchases.order.create"
 		result["purchase_source"] = source
-		result["status"] = "confirmed_preview"
+		result["order_id"] = orderID
+		result["item_id"] = itemID
+		result["created_item"] = itemCreated
+		result["status"] = "confirmed"
+		result["purchase_persisted"] = true
 		result["provenance_preserved"] = true
+		result["lifecycle_entry_id"] = created.ID
+		result["expected_arrival_id"] = created.ExpectedArrivalID
+		if arrival != nil {
+			result["arrival_status"] = arrival.Status
+		}
 	case "cabinet.purchases.add_line_item":
 		if conn == nil {
 			return nil, "purchases_store_required", fmt.Errorf("database connection required")
@@ -755,6 +790,41 @@ func findAgentPurchaseArrival(ctx context.Context, svc *commerce.Service, profil
 		}
 	}
 	return commerce.ExpectedArrival{}, fmt.Errorf("matching purchase line not found")
+}
+
+func ensureAgentPurchaseOrderItem(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (string, bool, error) {
+	itemID := stringMapParam(params, "item_id")
+	if itemID != "" {
+		return itemID, false, nil
+	}
+	title := firstNonEmptyString(
+		stringMapParam(params, "title"),
+		stringMapParam(params, "item_title"),
+		stringMapParam(params, "description"),
+	)
+	if title == "" {
+		return "", false, fmt.Errorf("item context required")
+	}
+	itemID = uuid.NewString()
+	partNumber := firstNonEmptyString(
+		stringMapParam(params, "part_number"),
+		strings.ToUpper("AGENT-PURCHASE-"+providerSettingSlug(firstNonEmptyString(stringMapParam(params, "order_id"), stringMapParam(params, "result_id"), itemID))),
+	)
+	sourceURL := stringMapParam(params, "source_url")
+	sourceURLs := "[]"
+	if sourceURL != "" {
+		encoded, _ := json.Marshal([]string{sourceURL})
+		sourceURLs = string(encoded)
+	}
+	_, err := conn.ExecContext(ctx, `
+		INSERT INTO canonical_items(
+			id, profile_id, brand, category, part_number, title, status, notes, source_urls_json, created_by, updated_by
+		) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, 'agent.purchases.create_order', 'agent.purchases.create_order')
+	`, itemID, strings.TrimSpace(profileID), firstNonEmptyString(stringMapParam(params, "brand"), stringMapParam(params, "purchase_source"), "Purchase"), firstNonEmptyString(stringMapParam(params, "category"), "Purchases"), partNumber, title, purchaseAgentSkillNotes(params), sourceURLs)
+	if err != nil {
+		return "", false, err
+	}
+	return itemID, true, nil
 }
 
 func purchaseAgentSkillNotes(params map[string]any) string {
