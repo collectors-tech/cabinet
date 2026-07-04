@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/chat"
+	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
@@ -43,7 +45,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.purchases.receive_line_item",
 		"cabinet.purchases.reconcile_item",
 		"cabinet.purchases.review_purchase":
-		return applyAgentPurchasesSkill(skillID, profileID, params)
+		return applyAgentPurchasesSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.settings.update_profile",
 		"cabinet.settings.update_account",
 		"cabinet.settings.update_appearance",
@@ -255,16 +257,25 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID strin
 	return result, "", nil
 }
 
-func applyAgentPurchasesSkill(skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+func applyAgentPurchasesSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
 	result := map[string]any{
 		"profile_id":           profileID,
 		"provenance_preserved": false,
 	}
 	switch skillID {
 	case "cabinet.purchases.search_orders":
+		if conn == nil {
+			return nil, "purchases_store_required", fmt.Errorf("database connection required")
+		}
+		orders, err := commerce.NewService(conn).ListPurchaseOrdersByProfile(ctx, profileID, stringMapParam(params, "status"), stringMapParam(params, "query"), intMapParam(params, "page"), intMapParam(params, "page_size"))
+		if err != nil {
+			return nil, "purchases_order_search_failed", err
+		}
 		result["operation"] = "purchases.orders.search"
 		result["read_only"] = true
 		result["query"] = stringMapParam(params, "query")
+		result["orders"] = orders.Orders
+		result["total"] = orders.Total
 		result["next_action"] = "Select an order or line item before applying purchase state."
 	case "cabinet.purchases.review_purchase":
 		result["operation"] = "purchases.order.review"
@@ -284,6 +295,9 @@ func applyAgentPurchasesSkill(skillID, profileID string, params map[string]any) 
 		result["status"] = "confirmed_preview"
 		result["provenance_preserved"] = true
 	case "cabinet.purchases.add_line_item":
+		if conn == nil {
+			return nil, "purchases_store_required", fmt.Errorf("database connection required")
+		}
 		orderID := stringMapParam(params, "order_id")
 		if orderID == "" {
 			return nil, "purchases_order_required", fmt.Errorf("order required")
@@ -295,13 +309,36 @@ func applyAgentPurchasesSkill(skillID, profileID string, params map[string]any) 
 		if itemID == "" {
 			return nil, "purchases_item_required", fmt.Errorf("item required")
 		}
+		source := stringMapParam(params, "source")
+		if source == "" {
+			source = "agent_skill"
+		}
+		created, arrival, err := commerce.NewService(conn).CreateLifecycleForProfile(ctx, profileID, commerce.LifecycleEntry{
+			ItemID:      itemID,
+			State:       "purchase",
+			Source:      source,
+			ExternalRef: orderID,
+			Quantity:    intMapParam(params, "quantity"),
+			Amount:      floatMapParam(params, "amount"),
+			Currency:    stringMapParam(params, "currency"),
+			Notes:       purchaseAgentSkillNotes(params),
+		})
+		if err != nil {
+			return nil, "purchases_line_item_persist_failed", err
+		}
 		result["operation"] = "purchases.order.add_line_item"
 		result["order_id"] = orderID
 		result["item_id"] = itemID
-		result["source"] = stringMapParam(params, "source")
+		result["source"] = source
 		result["result_id"] = stringMapParam(params, "result_id")
-		result["status"] = "confirmed_preview"
+		result["status"] = "confirmed"
+		result["purchase_persisted"] = true
 		result["provenance_preserved"] = true
+		result["lifecycle_entry_id"] = created.ID
+		result["expected_arrival_id"] = created.ExpectedArrivalID
+		if arrival != nil {
+			result["arrival_status"] = arrival.Status
+		}
 	case "cabinet.purchases.receive_order":
 		orderID := stringMapParam(params, "order_id")
 		if orderID == "" {
@@ -339,6 +376,26 @@ func applyAgentPurchasesSkill(skillID, profileID string, params map[string]any) 
 		result["provenance_preserved"] = true
 	}
 	return result, "", nil
+}
+
+func purchaseAgentSkillNotes(params map[string]any) string {
+	var notes []string
+	if sourceURL := stringMapParam(params, "source_url"); sourceURL != "" {
+		notes = append(notes, "source_url="+sourceURL)
+	}
+	if resultID := stringMapParam(params, "result_id"); resultID != "" {
+		notes = append(notes, "result_id="+resultID)
+	}
+	if seller := stringMapParam(params, "seller"); seller != "" {
+		notes = append(notes, "seller="+seller)
+	}
+	if tracking := stringMapParam(params, "tracking"); tracking != "" {
+		notes = append(notes, "tracking="+tracking)
+	}
+	if note := stringMapParam(params, "notes"); note != "" {
+		notes = append(notes, "notes="+note)
+	}
+	return strings.Join(notes, " ")
 }
 
 func agentSkillProviderHealthSnapshot(ctx context.Context, conn *sql.DB, providerID string) map[string]any {
@@ -594,4 +651,46 @@ func stringMapParam(params map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(text)
+}
+
+func intMapParam(params map[string]any, key string) int {
+	value, ok := params[key]
+	if !ok || value == nil {
+		return 0
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case string:
+		parsed, _ := strconv.Atoi(strings.TrimSpace(typed))
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func floatMapParam(params map[string]any, key string) float64 {
+	value, ok := params[key]
+	if !ok || value == nil {
+		return 0
+	}
+	switch typed := value.(type) {
+	case float64:
+		return typed
+	case float32:
+		return float64(typed)
+	case int:
+		return float64(typed)
+	case int64:
+		return float64(typed)
+	case string:
+		parsed, _ := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		return parsed
+	default:
+		return 0
+	}
 }

@@ -817,11 +817,26 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 		t.Fatalf("expected missing order blocker, body=%s", missingOrder.Body.String())
 	}
 
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status) VALUES ('item-99', ?, 'AFX', 'Slot Cars', 'AGENT-PURCHASE-99', 'Agent purchase line item', 'active')`, p.ID); err != nil {
+		t.Fatalf("seed purchase target item: %v", err)
+	}
+
 	addLine := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.purchases.add_line_item",
 		"confirm":true,
-		"parameters":{"order_id":"order-1","item_id":"item-99","source":"market_watch","result_id":"result-9"}
+		"parameters":{
+			"order_id":"order-1",
+			"item_id":"item-99",
+			"source":"market_watch",
+			"result_id":"result-9",
+			"source_url":"https://example.test/listing/9",
+			"seller":"seller-one",
+			"tracking":"TRACK-99",
+			"quantity":2,
+			"amount":42.5,
+			"currency":"AUD"
+		}
 	}`), map[string]string{"Content-Type": "application/json"})
 	if addLine.Code != http.StatusOK {
 		t.Fatalf("add line item status=%d body=%s", addLine.Code, addLine.Body.String())
@@ -829,8 +844,34 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 	if !strings.Contains(addLine.Body.String(), `"operation":"purchases.order.add_line_item"`) ||
 		!strings.Contains(addLine.Body.String(), `"order_id":"order-1"`) ||
 		!strings.Contains(addLine.Body.String(), `"item_id":"item-99"`) ||
-		!strings.Contains(addLine.Body.String(), `"provenance_preserved":true`) {
+		!strings.Contains(addLine.Body.String(), `"purchase_persisted":true`) ||
+		!strings.Contains(addLine.Body.String(), `"provenance_preserved":true`) ||
+		!strings.Contains(addLine.Body.String(), `"lifecycle_entry_id":"`) ||
+		!strings.Contains(addLine.Body.String(), `"expected_arrival_id":"`) {
 		t.Fatalf("expected purchase add line item preview/apply evidence, body=%s", addLine.Body.String())
+	}
+
+	searchOrders := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.purchases.search_orders",
+		"parameters":{"query":"order-1","status":"all"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchOrders.Code != http.StatusOK {
+		t.Fatalf("search purchase orders status=%d body=%s", searchOrders.Code, searchOrders.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":false`,
+		`"operation":"purchases.orders.search"`,
+		`"order_id":"order-1"`,
+		`"source":"market_watch"`,
+		`"seller":"seller-one"`,
+		`"tracking":"TRACK-99"`,
+		`"line_item_count":1`,
+		`"expected_arrival_id":"`,
+	} {
+		if !strings.Contains(searchOrders.Body.String(), want) {
+			t.Fatalf("purchase order search response missing %s: body=%s", want, searchOrders.Body.String())
+		}
 	}
 }
 
