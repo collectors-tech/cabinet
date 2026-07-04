@@ -44,6 +44,21 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 		"cabinet.users.update_role",
 		"cabinet.users.activate_or_deactivate",
 		"cabinet.users.remove_user",
+		"cabinet.integrations.search_providers",
+		"cabinet.integrations.configure_provider",
+		"cabinet.integrations.test_connection",
+		"cabinet.integrations.repair_provider",
+		"cabinet.integrations.disable_provider",
+		"cabinet.integrations.explain_required_setup",
+		"cabinet.settings.update_profile",
+		"cabinet.settings.update_account",
+		"cabinet.settings.update_appearance",
+		"cabinet.storage.show_status",
+		"cabinet.storage.configure_backup",
+		"cabinet.data.import_file",
+		"cabinet.data.export_bundle",
+		"cabinet.data.restore_backup",
+		"cabinet.maintenance.run_safe_check",
 		"local.archive.read_only",
 	} {
 		if !containsSkill(skills, id) {
@@ -63,6 +78,79 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 	}
 	if resolved.SafetyLevel != SafetyConfirmRequired || !resolved.Permissions.RequiresConfirm || !resolved.Permissions.LocalWrite {
 		t.Fatalf("expected confirm-required local write permission metadata, got %+v", resolved)
+	}
+}
+
+func TestIntegrationsAndSettingsSkillsExposeSetupPreviewBoundaries(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	searchProviders, ok := registry.Resolve("cabinet.integrations.search_providers")
+	if !ok {
+		t.Fatalf("expected integrations search providers skill")
+	}
+	if searchProviders.SafetyLevel != SafetyReadOnly || !searchProviders.Executable || searchProviders.Permissions.LocalWrite {
+		t.Fatalf("search providers should be executable read-only metadata, got %+v", searchProviders)
+	}
+	if !slices.Contains(searchProviders.RequiredProviders, "provider-registry") || !slices.Contains(searchProviders.IntegrationWorkflows, "integrations.provider.search") {
+		t.Fatalf("expected provider registry workflow bindings, got providers=%+v workflows=%+v", searchProviders.RequiredProviders, searchProviders.IntegrationWorkflows)
+	}
+
+	configure, ok := registry.Resolve("cabinet.integrations.configure_provider")
+	if !ok {
+		t.Fatalf("expected configure provider skill")
+	}
+	if configure.SafetyLevel != SafetyConfirmRequired || !configure.Permissions.RequiresConfirm || !configure.Permissions.ExternalWrite || !configure.Permissions.SecretAccess {
+		t.Fatalf("configure provider should declare confirm-required external/secret safety, got %+v", configure)
+	}
+
+	configurePreview, err := registry.Preview(PreviewRequest{
+		SkillID: "cabinet.integrations.configure_provider",
+		Parameters: map[string]any{
+			"provider_id": "ebay",
+			"api_key":     "secret-value",
+		},
+	})
+	if err != nil {
+		t.Fatalf("preview configure provider: %v", err)
+	}
+	if configurePreview.Allowed || configurePreview.MutationApplied || configurePreview.Blocker != "confirmation_required" {
+		t.Fatalf("expected non-mutating confirmation preview, got %+v", configurePreview)
+	}
+	if _, leaked := configurePreview.Target["api_key"]; leaked {
+		t.Fatalf("preview target must not echo secrets, got %+v", configurePreview.Target)
+	}
+
+	missingProvider, err := registry.Preview(PreviewRequest{SkillID: "cabinet.integrations.test_connection"})
+	if err != nil {
+		t.Fatalf("preview missing provider test connection: %v", err)
+	}
+	if missingProvider.Allowed || missingProvider.Blocker != "integrations_provider_required" {
+		t.Fatalf("expected provider selection blocker, got %+v", missingProvider)
+	}
+
+	showStorage, ok := registry.Resolve("cabinet.storage.show_status")
+	if !ok {
+		t.Fatalf("expected storage status skill")
+	}
+	if showStorage.SafetyLevel != SafetyReadOnly || !showStorage.Executable || showStorage.Permissions.LocalWrite {
+		t.Fatalf("storage status should be executable read-only metadata, got %+v", showStorage)
+	}
+
+	restoreBackup, ok := registry.Resolve("cabinet.data.restore_backup")
+	if !ok {
+		t.Fatalf("expected restore backup skill")
+	}
+	if restoreBackup.SafetyLevel != SafetyDestructive || !restoreBackup.Permissions.Destructive || !restoreBackup.Permissions.RequiresConfirm {
+		t.Fatalf("restore backup should be destructive and confirmation-gated, got %+v", restoreBackup)
+	}
+	restoreMissingTarget, err := registry.Preview(PreviewRequest{SkillID: "cabinet.data.restore_backup"})
+	if err != nil {
+		t.Fatalf("preview restore backup: %v", err)
+	}
+	if restoreMissingTarget.Allowed || restoreMissingTarget.Blocker != "data_backup_target_required" {
+		t.Fatalf("expected restore target blocker without mutation, got %+v", restoreMissingTarget)
 	}
 }
 
