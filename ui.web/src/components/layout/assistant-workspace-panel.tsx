@@ -118,6 +118,46 @@ type ApplyActionResult = {
   preview_id: string
 }
 
+type AgentSkillPreview = {
+  skill_id: string
+  status: string
+  safety_level: string
+  allowed: boolean
+  confirmation_required: boolean
+  blocker?: string
+  preview_target?: Record<string, string>
+  source_surface?: string
+  source_channel?: string
+}
+
+type AgentSkillApplyResult = {
+  skill_id: string
+  mutation_applied: boolean
+  target?: {
+    operation?: string
+    provider_id?: string
+    connection_status?: string
+    secret_redacted?: boolean
+    external_write_claimed?: boolean
+    next_action?: string
+  }
+  source_surface?: string
+  source_channel?: string
+  source_thread_id?: string
+  source_message_id?: string
+}
+
+const agentSkillOptions = [
+  {
+    id: 'cabinet.integrations.test_connection',
+    label: 'Test provider connection',
+  },
+  {
+    id: 'cabinet.integrations.configure_provider',
+    label: 'Configure provider',
+  },
+]
+
 type NavigationAction = {
   id: string
   label: string
@@ -272,6 +312,17 @@ export function AssistantWorkspacePanel() {
   const [actionPartNumber, setActionPartNumber] = useState('ASSIST-001')
   const [actionTitle, setActionTitle] = useState('Assistant Proposed Item')
   const [actionPreview, setActionPreview] = useState<ActionPreview | null>(null)
+  const [agentSkillID, setAgentSkillID] = useState(agentSkillOptions[0].id)
+  const [agentSkillProvider, setAgentSkillProvider] = useState('ebay')
+  const [agentSkillSetupStep, setAgentSkillSetupStep] = useState('oauth')
+  const [agentSkillSecret, setAgentSkillSecret] = useState('')
+  const [agentSkillPreview, setAgentSkillPreview] =
+    useState<AgentSkillPreview | null>(null)
+  const [agentSkillResult, setAgentSkillResult] =
+    useState<AgentSkillApplyResult | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<'action' | 'agent-skill'>(
+    'action'
+  )
   const [executionState, setExecutionState] = useState<
     'idle' | 'queued' | 'running' | 'success' | 'failure'
   >('idle')
@@ -935,6 +986,57 @@ export function AssistantWorkspacePanel() {
     }
   }
 
+  function agentSkillParameters() {
+    const params: Record<string, string> = {
+      provider_id: agentSkillProvider.trim(),
+    }
+    if (agentSkillSetupStep.trim()) {
+      params.setup_step = agentSkillSetupStep.trim()
+    }
+    if (agentSkillSecret.trim()) {
+      params.provider_secret = agentSkillSecret.trim()
+    }
+    return params
+  }
+
+  async function previewAgentSkill() {
+    if (!activeProfileId || !threadId) return
+    setExecutionState('queued')
+    setError('')
+    setAgentSkillResult(null)
+    setPermissionGuidance(
+      'Agent Skill work is preview-first and keeps provider secrets out of result text.'
+    )
+    try {
+      const response = await fetch('/api/agent/skills/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          skill_id: agentSkillID,
+          source_surface: 'settings.integrations.provider.card',
+          source_channel: 'in-app',
+          source_thread_id: threadId,
+          source_message_id: 'assistant-workspace-agent-skill',
+          parameters: agentSkillParameters(),
+        }),
+      })
+      if (!response.ok) throw new Error(`agent_skill_preview_${response.status}`)
+      const preview = (await response.json()) as AgentSkillPreview
+      setAgentSkillPreview(preview)
+      setExecutionState(preview.confirmation_required ? 'running' : 'success')
+    } catch (err) {
+      setExecutionState('failure')
+      setWorkflowRunsLoading(false)
+      setError(
+        err instanceof Error ? err.message : 'agent_skill_preview_failed'
+      )
+      setPermissionGuidance(
+        'Agent Skill preview could not be prepared under the current policy.'
+      )
+    }
+  }
+
   async function applyPreviewAction() {
     if (!activeProfileId || !threadId || !actionPreview?.id) return
     setExecutionState('running')
@@ -962,6 +1064,40 @@ export function AssistantWorkspacePanel() {
       setError(err instanceof Error ? err.message : 'assistant_apply_failed')
       setPermissionGuidance(
         'Apply is confirm-required. If apply remains blocked, the active policy may be preview-only for this action class.'
+      )
+    }
+  }
+
+  async function applyAgentSkillPreview() {
+    if (!activeProfileId || !threadId || !agentSkillPreview?.skill_id) return
+    setExecutionState('running')
+    setError('')
+    try {
+      const response = await fetch('/api/agent/skills/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          skill_id: agentSkillPreview.skill_id,
+          confirm: true,
+          source_surface: 'settings.integrations.provider.card',
+          source_channel: 'in-app',
+          source_thread_id: threadId,
+          source_message_id: 'assistant-workspace-agent-skill',
+          parameters: agentSkillParameters(),
+        }),
+      })
+      if (!response.ok) throw new Error(`agent_skill_apply_${response.status}`)
+      const result = (await response.json()) as AgentSkillApplyResult
+      setAgentSkillResult(result)
+      setExecutionState('success')
+      setConfirmApplyOpen(false)
+    } catch (err) {
+      setExecutionState('failure')
+      setWorkflowRunsLoading(false)
+      setError(err instanceof Error ? err.message : 'agent_skill_apply_failed')
+      setPermissionGuidance(
+        'Agent Skill apply is confirm-required and may stay blocked until setup targets are complete.'
       )
     }
   }
@@ -1392,6 +1528,120 @@ export function AssistantWorkspacePanel() {
                       </div>
                     ) : null}
                     <div
+                      className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3'
+                      data-testid='shell-assistant-agent-skill-panel'
+                    >
+                      <div className='flex items-center justify-between gap-2'>
+                        <p className='font-medium text-slate-100'>
+                          Integration Agent Skill
+                        </p>
+                        <Badge
+                          variant='outline'
+                          className='border-slate-700 bg-slate-900 text-slate-300'
+                          data-testid='shell-assistant-agent-skill-policy'
+                        >
+                          preview-first
+                        </Badge>
+                      </div>
+                      <div className='mt-3 grid gap-2'>
+                        <select
+                          data-testid='shell-assistant-agent-skill-select'
+                          className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-100'
+                          value={agentSkillID}
+                          onChange={(event) =>
+                            setAgentSkillID(event.target.value)
+                          }
+                          disabled={!threadId || sending}
+                        >
+                          {agentSkillOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Input
+                          data-testid='shell-assistant-agent-skill-provider'
+                          className='border-slate-700 bg-slate-900 text-slate-100'
+                          value={agentSkillProvider}
+                          onChange={(event) =>
+                            setAgentSkillProvider(event.target.value)
+                          }
+                          placeholder='Provider'
+                          disabled={!threadId || sending}
+                        />
+                        <Input
+                          data-testid='shell-assistant-agent-skill-setup-step'
+                          className='border-slate-700 bg-slate-900 text-slate-100'
+                          value={agentSkillSetupStep}
+                          onChange={(event) =>
+                            setAgentSkillSetupStep(event.target.value)
+                          }
+                          placeholder='Setup step'
+                          disabled={!threadId || sending}
+                        />
+                        <Input
+                          data-testid='shell-assistant-agent-skill-secret'
+                          className='border-slate-700 bg-slate-900 text-slate-100'
+                          value={agentSkillSecret}
+                          onChange={(event) =>
+                            setAgentSkillSecret(event.target.value)
+                          }
+                          placeholder='Secret input is redacted'
+                          disabled={!threadId || sending}
+                        />
+                      </div>
+                      <div className='mt-3 flex flex-wrap gap-2'>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid='shell-assistant-agent-skill-preview'
+                          onClick={() => void previewAgentSkill()}
+                          disabled={
+                            !threadId || !agentSkillProvider.trim() || sending
+                          }
+                        >
+                          Preview skill
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid='shell-assistant-agent-skill-apply'
+                          onClick={() => {
+                            setConfirmTarget('agent-skill')
+                            setConfirmApplyOpen(true)
+                          }}
+                          disabled={
+                            !agentSkillPreview?.confirmation_required || sending
+                          }
+                        >
+                          Apply skill
+                        </Button>
+                      </div>
+                      {agentSkillPreview ? (
+                        <div
+                          className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-2 text-slate-300'
+                          data-testid='shell-assistant-agent-skill-preview-card'
+                        >
+                          {agentSkillPreview.skill_id} /{' '}
+                          {agentSkillPreview.safety_level} /{' '}
+                          {agentSkillPreview.blocker || 'ready'}
+                        </div>
+                      ) : null}
+                      {agentSkillResult ? (
+                        <div
+                          className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-2 text-slate-300'
+                          data-testid='shell-assistant-agent-skill-result'
+                        >
+                          {agentSkillResult.target?.operation} / mutation:{' '}
+                          {String(agentSkillResult.mutation_applied)} / secret
+                          redacted:{' '}
+                          {String(agentSkillResult.target?.secret_redacted)}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div
                       className='mt-3 flex items-start gap-2 rounded-lg border border-dashed border-slate-700 p-2 text-slate-400'
                       data-testid='shell-assistant-permission-boundary'
                     >
@@ -1596,9 +1846,11 @@ export function AssistantWorkspacePanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Assistant Action</AlertDialogTitle>
             <AlertDialogDescription data-testid='shell-assistant-apply-confirm-summary'>
-              {actionPreview
-                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
-                : 'No action preview selected.'}
+              {confirmTarget === 'agent-skill' && agentSkillPreview
+                ? `Apply ${agentSkillPreview.skill_id} for provider=${agentSkillProvider.trim()} from settings.integrations.provider.card`
+                : actionPreview
+                  ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
+                  : 'No action preview selected.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1609,7 +1861,11 @@ export function AssistantWorkspacePanel() {
               data-testid='shell-assistant-apply-confirm'
               onClick={(event) => {
                 event.preventDefault()
-                void applyPreviewAction()
+                if (confirmTarget === 'agent-skill') {
+                  void applyAgentSkillPreview()
+                } else {
+                  void applyPreviewAction()
+                }
               }}
             >
               Confirm Apply
