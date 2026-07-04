@@ -56,6 +56,86 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 
 	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
 	allowed := map[string][]string{
+		"AGENT-SKILLS-REGISTRY-004": {
+			"| planned |",
+			"#1667/#1668",
+			"TestSkillInvocationReportsMissingContextAndPermissions",
+			"missing profile/route/selection/provider/attachment context",
+		},
+		"AGENT-SKILLS-REGISTRY-005": {
+			"| planned |",
+			"#1667/#1669/#1671",
+			"TestSkillArchiveValidationRejectsUnsafeArchiveAndInvalidManifest",
+			"no arbitrary executable/native code",
+		},
+		"AGENT-SKILLS-REGISTRY-006": {
+			"| planned |",
+			"#1667/#1669",
+			"TestSkillImportValidationAndInstallResultStates",
+			"dependency-blocked",
+		},
+		"AGENT-SKILLS-REGISTRY-007": {
+			"| partial |",
+			"#1667/#1668/#1669",
+			"TestProfileScopedInstalledSkillEnableDisableAndInvalidState",
+			"built-in manifest immutability",
+		},
+		"AGENT-SKILLS-REGISTRY-008": {
+			"| planned |",
+			"#1667/#1670",
+			"AGENT-SKILLS-REGISTRY-008 lists details imports and toggles skills safely",
+			"marketplace browsing is unavailable",
+		},
+		"AGENT-SKILLS-REGISTRY-009": {
+			"| partial |",
+			"#1667/#1668/#1672/#1715",
+			"TestAgentSkillAPIPropagatesInvocationSourceContext",
+			"broader skill execution timeline coverage remains planned",
+		},
+		"AGENT-SKILLS-REGISTRY-010": {
+			"| planned |",
+			"#1667/#1670/#1671",
+			"AGENT-SKILLS-REGISTRY-010 keeps marketplace behavior deferred",
+			"remote marketplace installs remain explicitly deferred",
+		},
+		"AGENT-SKILL-COVERAGE-001": {
+			"| partial |",
+			"#1701/#1702/#1666",
+			"openspec/traceability/agent-skill-coverage.md",
+			"TestAgentSkillCoverageMatrixCoversRequiredSurfacesAndFields",
+			"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
+		},
+		"AGENT-UNIVERSAL-CHANNELS-001": {
+			"| planned |",
+			"#1701/#1712/#1714",
+			"AGENT-UNIVERSAL-CHANNELS-001 opens Agent from supported surfaces with preserved context",
+			"preserve profile/route/thread/selection/source context",
+		},
+		"AGENT-UNIVERSAL-CHANNELS-002": {
+			"| planned |",
+			"#1701/#1712/#1708/#1709/#1710/#1711/#1715",
+			"TestAgentExplainsAvailableSkillsAndSetupStates",
+			"read-only, preview-only, confirm-required, external-write, blocked, and unavailable work",
+		},
+		"AGENT-UNIVERSAL-CHANNELS-004": {
+			"| planned |",
+			"#1701/#1712/#1704/#1705/#1706",
+			"TestTelegramAgentIntakeRequiresAuthorizationAndSetupProof",
+			"non-secret proof",
+		},
+		"AGENT-UNIVERSAL-CHANNELS-005": {
+			"| planned |",
+			"#1701/#1712/#1705/#1706",
+			"TestTelegramAgentIntakeRoutesTextMediaThroughPreviewConfirmApply",
+			"TELEGRAM-AGENT-REVIEW-001 opens external review thread",
+		},
+		"AGENT-ACCEPTANCE-SUITE-001": {
+			"| partial |",
+			"#1716/#1773",
+			"openspec/traceability/agent-acceptance-suite.md",
+			"TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope",
+			"fixture/proof-packet validation from live production-channel validation",
+		},
 		"ASSISTANT-EXECUTION-010": {
 			"| planned |",
 			"#1509/#1514",
