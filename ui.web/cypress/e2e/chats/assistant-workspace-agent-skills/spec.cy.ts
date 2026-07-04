@@ -208,4 +208,109 @@ describe('chats/assistant-workspace-agent-skills', () => {
       .should('contain', 'market_watch.watch.run')
       .and('contain', 'mutation: true')
   })
+
+  it('ASSISTANT-WORKSPACE-012/#1710 dispatches Purchases Agent Skills with in-app source context', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/agent/skills/preview', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.purchases.create_order')
+      expect(req.body.source_surface).to.eq('purchases.inbox.capture')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.source_thread_id).to.be.a('string').and.not.eq('')
+      expect(req.body.source_message_id).to.eq(
+        'assistant-workspace-agent-skill'
+      )
+      expect(req.body.parameters.purchase_source).to.eq('ebay')
+      expect(req.body.parameters.source).to.eq('ebay')
+      expect(req.body.parameters.item_id).to.eq('item-1710')
+      expect(req.body.parameters.tracking_number).to.eq(
+        'https://example.test/orders/1710'
+      )
+      expect(req.body.parameters.source_url).to.eq(
+        'https://example.test/orders/1710'
+      )
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.purchases.create_order',
+          status: 'available',
+          safety_level: 'confirm-required',
+          allowed: false,
+          preview_only: true,
+          mutation_applied: false,
+          confirmation_required: true,
+          blocker: 'confirmation_required',
+          source_surface: 'purchases.inbox.capture',
+          source_channel: 'in-app',
+        },
+      })
+    }).as('purchasesSkillPreview')
+    cy.intercept('POST', '/api/agent/skills/apply', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.purchases.create_order')
+      expect(req.body.confirm).to.eq(true)
+      expect(req.body.source_surface).to.eq('purchases.inbox.capture')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.parameters.purchase_source).to.eq('ebay')
+      expect(req.body.parameters.source).to.eq('ebay')
+      expect(req.body.parameters.item_id).to.eq('item-1710')
+      expect(req.body.parameters.source_url).to.eq(
+        'https://example.test/orders/1710'
+      )
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.purchases.create_order',
+          mutation_applied: true,
+          source_surface: 'purchases.inbox.capture',
+          source_channel: 'in-app',
+          target: {
+            operation: 'purchases.order.create',
+            purchase_persisted: true,
+            external_write_claimed: false,
+          },
+        },
+      })
+    }).as('purchasesSkillApply')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.purchases.create_order',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('ebay', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('item-1710', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-secret"]')
+      .clear()
+      .type('https://example.test/orders/1710', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@purchasesSkillPreview')
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.purchases.create_order')
+      .and('contain', 'confirm-required')
+      .and('contain', 'confirmation_required')
+
+    cy.get('[data-testid="shell-assistant-agent-skill-apply"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]')
+      .should('contain', 'cabinet.purchases.create_order')
+      .and('contain', 'purchases.inbox.capture')
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+    cy.wait('@purchasesSkillApply')
+    cy.get('[data-testid="shell-assistant-agent-skill-result"]')
+      .should('contain', 'purchases.order.create')
+      .and('contain', 'mutation: true')
+  })
 })
