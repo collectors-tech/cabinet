@@ -198,6 +198,38 @@ const agentSkillOptions = [
     secretLabel: 'Tracking or source URL',
   },
   {
+    id: 'cabinet.wishlist.create_entry',
+    label: 'Create wishlist entry',
+    surface: 'wishlist.intent.capture',
+    primaryLabel: 'Title',
+    contextLabel: 'Target price',
+    secretLabel: 'Source URL or note',
+  },
+  {
+    id: 'cabinet.wishlist.mark_purchased',
+    label: 'Mark wishlist purchased',
+    surface: 'wishlist.entry.row',
+    primaryLabel: 'Wishlist entry ID',
+    contextLabel: 'Quantity',
+    secretLabel: 'Purchase URL or note',
+  },
+  {
+    id: 'cabinet.collections.create',
+    label: 'Create collection',
+    surface: 'collections.workspace.create',
+    primaryLabel: 'Collection name',
+    contextLabel: 'Description',
+    secretLabel: 'Optional note',
+  },
+  {
+    id: 'cabinet.collections.assign_item',
+    label: 'Assign item to collection',
+    surface: 'collections.workspace.assignment',
+    primaryLabel: 'Collection ID or name',
+    contextLabel: 'Item ID',
+    secretLabel: 'Optional note',
+  },
+  {
     id: 'cabinet.media.search',
     label: 'Search media',
     surface: 'media.workspace.search',
@@ -1179,6 +1211,81 @@ export function AssistantWorkspacePanel() {
         params.tracking_number = secretOrTarget
         params.source_url = secretOrTarget
       }
+    }
+    if (agentSkillID.startsWith('cabinet.wishlist.')) {
+      if (agentSkillID === 'cabinet.wishlist.create_entry') {
+        if (primary) {
+          params.title = primary
+        }
+        if (context) {
+          params.target_price = context
+        }
+        if (secretOrTarget) {
+          params.source_url = secretOrTarget
+          params.notes = secretOrTarget
+        }
+      } else if (agentSkillID === 'cabinet.wishlist.mark_purchased') {
+        if (primary) {
+          params.entry_id = primary
+          params.wishlist_entry_id = primary
+        }
+        if (context) {
+          params.quantity = context
+        }
+        if (secretOrTarget) {
+          params.purchase_url = secretOrTarget
+          params.notes = secretOrTarget
+        }
+      } else {
+        if (primary) {
+          params.entry_id = primary
+          params.wishlist_entry_id = primary
+          params.query = primary
+        }
+        if (context) {
+          params.title = context
+        }
+        if (secretOrTarget) {
+          params.notes = secretOrTarget
+        }
+      }
+      return params
+    }
+    if (agentSkillID.startsWith('cabinet.collections.')) {
+      if (
+        agentSkillID === 'cabinet.collections.create' ||
+        agentSkillID === 'cabinet.collections.update_metadata'
+      ) {
+        if (primary) {
+          params.collection_name = primary
+          params.name = primary
+        }
+        if (context) {
+          params.description = context
+        }
+      } else if (agentSkillID === 'cabinet.collections.assign_item') {
+        if (primary) {
+          params.collection_id = primary
+          params.collection_name = primary
+        }
+        if (context) {
+          params.item_id = context
+        }
+      } else {
+        if (primary) {
+          params.collection_id = primary
+          params.collection_name = primary
+          params.query = primary
+        }
+        if (context) {
+          params.destination_collection_id = context
+          params.destination_collection_name = context
+        }
+      }
+      if (secretOrTarget) {
+        params.notes = secretOrTarget
+      }
+      return params
     }
     if (agentSkillID === 'cabinet.media.search') {
       if (primary) {
