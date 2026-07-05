@@ -477,6 +477,177 @@ func TestAgentSkillApplyAPIHandlesMediaSkills(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesDiscoveriesSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Discoveries"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status)
+		VALUES ('discoveries-item-1', ?, 'AFX', 'Slot Cars', 'DISC-ITEM-1', 'Agent discovery wishlist target', 'active');
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json)
+		VALUES ('discoveries-q1', ?, 'Agent discoveries saved search', '["afx"]', '[]', '["ebay"]');
+		INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count)
+		VALUES
+			('disc-review', ?, 'discoveries-q1', 'LIST-REVIEW', 'Agent review discovery', 14, 0, 'https://example.test/review', '', 'seller-review', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 3),
+			('disc-dismiss', ?, 'discoveries-q1', 'LIST-DISMISS', 'Agent dismiss discovery', 15, 0, 'https://example.test/dismiss', '', 'seller-dismiss', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 2),
+			('disc-wishlist', ?, 'discoveries-q1', 'LIST-WISH', 'Agent wishlist discovery', 16, 0, 'https://example.test/wish', '', 'seller-wish', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'low_stock', 1),
+			('disc-purchase', ?, 'discoveries-q1', 'LIST-PURCHASE', 'Agent purchase discovery', 17, 0, 'https://example.test/purchase', '', 'seller-purchase', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 5),
+			('disc-inventory', ?, 'discoveries-q1', 'LIST-INVENTORY', 'Agent inventory discovery', 18, 0, 'https://example.test/inventory', '', 'seller-inventory', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 6);
+		INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+		VALUES
+			('disc-review', '', 'not_in_collection', 0.8, 1, 'DISC-REVIEW', CURRENT_TIMESTAMP),
+			('disc-dismiss', '', 'not_in_collection', 0.8, 1, 'DISC-DISMISS', CURRENT_TIMESTAMP),
+			('disc-wishlist', 'discoveries-item-1', 'not_in_collection', 0.9, 0, 'DISC-WISH', CURRENT_TIMESTAMP),
+			('disc-purchase', '', 'not_in_collection', 0.9, 0, 'DISC-PURCHASE', CURRENT_TIMESTAMP),
+			('disc-inventory', '', 'not_in_collection', 0.9, 0, 'DISC-INVENTORY', CURRENT_TIMESTAMP);
+	`, p.ID, p.ID, p.ID, p.ID, p.ID, p.ID, p.ID, p.ID); err != nil {
+		t.Fatalf("seed discovery skill data: %v", err)
+	}
+
+	search := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.discoveries.search",
+		"parameters":{"provider_id":"ebay","query":"wishlist"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if search.Code != http.StatusOK {
+		t.Fatalf("discoveries search status=%d body=%s", search.Code, search.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":false`,
+		`"operation":"discoveries.search"`,
+		`"read_only":true`,
+		`"candidate_id":"disc-wishlist"`,
+	} {
+		if !strings.Contains(search.Body.String(), want) {
+			t.Fatalf("discoveries search response missing %s: body=%s", want, search.Body.String())
+		}
+	}
+
+	review := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.discoveries.review_result",
+		"parameters":{"provider_id":"ebay","result_id":"disc-review"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if review.Code != http.StatusOK {
+		t.Fatalf("discoveries review status=%d body=%s", review.Code, review.Body.String())
+	}
+	if !strings.Contains(review.Body.String(), `"operation":"discoveries.review_result"`) ||
+		!strings.Contains(review.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(review.Body.String(), `"source_result_url":"https://example.test/review"`) {
+		t.Fatalf("expected read-only discovery review evidence, body=%s", review.Body.String())
+	}
+
+	dismiss := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.discoveries.dismiss_result",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"disc-dismiss","notes":"not relevant for collection"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if dismiss.Code != http.StatusOK {
+		t.Fatalf("discoveries dismiss status=%d body=%s", dismiss.Code, dismiss.Body.String())
+	}
+	if !strings.Contains(dismiss.Body.String(), `"operation":"discoveries.dismiss_result"`) ||
+		!strings.Contains(dismiss.Body.String(), `"action":"ignore"`) ||
+		!strings.Contains(dismiss.Body.String(), `"discovery_persisted":true`) ||
+		!strings.Contains(dismiss.Body.String(), `"provenance_preserved":true`) {
+		t.Fatalf("expected discovery dismiss persistence evidence, body=%s", dismiss.Body.String())
+	}
+	var dismissedCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM ignored_candidates WHERE candidate_id = 'disc-dismiss'`).Scan(&dismissedCount); err != nil {
+		t.Fatalf("count dismissed discovery: %v", err)
+	}
+	if dismissedCount != 1 {
+		t.Fatalf("expected one ignored discovery marker, got %d", dismissedCount)
+	}
+
+	wishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.discoveries.send_to_wishlist",
+		"confirm":true,
+		"source_surface":"telegram.discoveries.result",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-discovery-thread-1709",
+		"source_message_id":"tg-discovery-message-1709",
+		"parameters":{"provider_id":"ebay","result_id":"disc-wishlist","notes":"promote from agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if wishlist.Code != http.StatusOK {
+		t.Fatalf("discoveries wishlist status=%d body=%s", wishlist.Code, wishlist.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"discoveries.send_to_wishlist"`,
+		`"action":"add_to_wishlist"`,
+		`"source_channel":"telegram"`,
+		`"discovery_persisted":true`,
+		`"provenance_preserved":true`,
+	} {
+		if !strings.Contains(wishlist.Body.String(), want) {
+			t.Fatalf("discoveries wishlist response missing %s: body=%s", want, wishlist.Body.String())
+		}
+	}
+	var wishlistCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM wishlist_entries WHERE profile_id = ? AND item_id = 'discoveries-item-1' AND highlight_hit = 1`, p.ID).Scan(&wishlistCount); err != nil {
+		t.Fatalf("count discovery wishlist handoff: %v", err)
+	}
+	if wishlistCount != 1 {
+		t.Fatalf("expected one persisted wishlist handoff, got %d", wishlistCount)
+	}
+
+	purchase := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.discoveries.create_purchase",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"disc-purchase","quantity":2,"notes":"purchase candidate from agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if purchase.Code != http.StatusOK {
+		t.Fatalf("discoveries purchase status=%d body=%s", purchase.Code, purchase.Body.String())
+	}
+	if !strings.Contains(purchase.Body.String(), `"operation":"discoveries.create_purchase"`) ||
+		!strings.Contains(purchase.Body.String(), `"action":"mark_purchased"`) ||
+		!strings.Contains(purchase.Body.String(), `"discovery_persisted":true`) {
+		t.Fatalf("expected discovery purchase persistence evidence, body=%s", purchase.Body.String())
+	}
+	var purchaseCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM commerce_lifecycle_entries WHERE profile_id = ? AND source = 'market_watch' AND external_ref = 'LIST-PURCHASE'`, p.ID).Scan(&purchaseCount); err != nil {
+		t.Fatalf("count discovery purchase handoff: %v", err)
+	}
+	if purchaseCount != 1 {
+		t.Fatalf("expected one persisted purchase handoff, got %d", purchaseCount)
+	}
+
+	inventory := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.discoveries.create_or_update_inventory_candidate",
+		"confirm":true,
+		"parameters":{"provider_id":"ebay","result_id":"disc-inventory","notes":"inventory candidate from agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if inventory.Code != http.StatusOK {
+		t.Fatalf("discoveries inventory status=%d body=%s", inventory.Code, inventory.Body.String())
+	}
+	if !strings.Contains(inventory.Body.String(), `"operation":"discoveries.create_or_update_inventory_candidate"`) ||
+		!strings.Contains(inventory.Body.String(), `"action":"create_item"`) ||
+		!strings.Contains(inventory.Body.String(), `"discovery_persisted":true`) {
+		t.Fatalf("expected discovery inventory persistence evidence, body=%s", inventory.Body.String())
+	}
+	var inventoryCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number = 'DISC-INVENTORY' AND title = 'Agent inventory discovery'`, p.ID).Scan(&inventoryCount); err != nil {
+		t.Fatalf("count discovery inventory candidate: %v", err)
+	}
+	if inventoryCount != 1 {
+		t.Fatalf("expected one persisted inventory candidate item, got %d", inventoryCount)
+	}
+}
+
 func TestAgentSkillApplyAPIConfirmsInboxMutation(t *testing.T) {
 	t.Parallel()
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/profile"
@@ -59,6 +60,13 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.media.update_notes",
 		"cabinet.media.detach_from_item":
 		return applyAgentMediaSkill(ctx, conn, skillID, profileID, params)
+	case "cabinet.discoveries.search",
+		"cabinet.discoveries.review_result",
+		"cabinet.discoveries.dismiss_result",
+		"cabinet.discoveries.send_to_wishlist",
+		"cabinet.discoveries.create_purchase",
+		"cabinet.discoveries.create_or_update_inventory_candidate":
+		return applyAgentDiscoveriesSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.settings.update_profile",
 		"cabinet.settings.update_account",
 		"cabinet.settings.update_appearance",
@@ -901,6 +909,153 @@ func detachAgentMediaFromItem(ctx context.Context, conn *sql.DB, profileID, medi
 		return false, fmt.Errorf("inspect detached media link: %w", err)
 	}
 	return affected > 0, nil
+}
+
+func applyAgentDiscoveriesSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+	if conn == nil {
+		return nil, "discoveries_store_required", fmt.Errorf("database connection required")
+	}
+	providerID := firstNonEmptyString(stringMapParam(params, "provider_id"), stringMapParam(params, "provider_name"))
+	if providerID == "" {
+		return nil, "discoveries_provider_required", fmt.Errorf("provider required")
+	}
+	svc := discovery.NewService(conn)
+	result := map[string]any{
+		"profile_id":             profileID,
+		"provider_id":            providerID,
+		"provenance_preserved":   false,
+		"external_write_claimed": false,
+	}
+	switch skillID {
+	case "cabinet.discoveries.search":
+		items, err := agentDiscoveryItems(ctx, svc, providerID, stringMapParam(params, "query"), false)
+		if err != nil {
+			return nil, "discoveries_search_failed", err
+		}
+		result["operation"] = "discoveries.search"
+		result["read_only"] = true
+		result["query"] = stringMapParam(params, "query")
+		result["items"] = items
+		result["total"] = len(items)
+		result["next_action"] = "Select a discovery result before dismissing, handing off, or creating destination state."
+	case "cabinet.discoveries.review_result":
+		resultID := firstNonEmptyString(stringMapParam(params, "result_id"), stringMapParam(params, "candidate_id"))
+		if resultID == "" {
+			return nil, "discoveries_result_required", fmt.Errorf("discovery result required")
+		}
+		item, err := findAgentDiscoveryItem(ctx, svc, providerID, resultID)
+		if err != nil {
+			return nil, "discoveries_result_required", err
+		}
+		result["operation"] = "discoveries.review_result"
+		result["read_only"] = true
+		result["result_id"] = resultID
+		result["item"] = item
+		result["provenance_preserved"] = true
+		result["next_action"] = "Confirm a discovery action only after reviewing provider, listing, and destination provenance."
+	case "cabinet.discoveries.dismiss_result",
+		"cabinet.discoveries.send_to_wishlist",
+		"cabinet.discoveries.create_purchase",
+		"cabinet.discoveries.create_or_update_inventory_candidate":
+		resultID := firstNonEmptyString(stringMapParam(params, "result_id"), stringMapParam(params, "candidate_id"))
+		if resultID == "" {
+			return nil, "discoveries_result_required", fmt.Errorf("discovery result required")
+		}
+		actionType := agentDiscoveryActionType(skillID)
+		actionResult, err := svc.ApplyActionWithResult(ctx, discovery.Action{
+			CandidateID: resultID,
+			Type:        actionType,
+			Payload:     agentDiscoveryActionPayload(params, providerID, skillID),
+		})
+		if err != nil {
+			return nil, "discoveries_action_persist_failed", err
+		}
+		result["operation"] = agentDiscoveryOperation(skillID)
+		result["status"] = "confirmed"
+		result["result_id"] = resultID
+		result["action"] = string(actionType)
+		result["action_result"] = actionResult
+		result["discovery_persisted"] = true
+		result["provenance_preserved"] = true
+		result["next_action"] = "Open Discoveries and the destination surface to verify the persisted handoff state."
+	}
+	return result, "", nil
+}
+
+func agentDiscoveryItems(ctx context.Context, svc *discovery.Service, providerID, query string, includeArchived bool) ([]discovery.Item, error) {
+	items, err := svc.ListNotInCollection(ctx, discovery.Filter{Query: query, IncludeArchived: includeArchived})
+	if err != nil {
+		return nil, err
+	}
+	providerID = strings.ToLower(strings.TrimSpace(providerID))
+	out := make([]discovery.Item, 0, len(items))
+	for _, item := range items {
+		if providerID != "" && strings.ToLower(strings.TrimSpace(item.SourceProvider)) != providerID {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func findAgentDiscoveryItem(ctx context.Context, svc *discovery.Service, providerID, resultID string) (discovery.Item, error) {
+	items, err := agentDiscoveryItems(ctx, svc, providerID, "", true)
+	if err != nil {
+		return discovery.Item{}, err
+	}
+	for _, item := range items {
+		if item.CandidateID == resultID || item.ListingID == resultID {
+			return item, nil
+		}
+	}
+	return discovery.Item{}, fmt.Errorf("discovery result not found")
+}
+
+func agentDiscoveryActionType(skillID string) discovery.ActionType {
+	switch skillID {
+	case "cabinet.discoveries.dismiss_result":
+		return discovery.ActionIgnore
+	case "cabinet.discoveries.send_to_wishlist":
+		return discovery.ActionAddWishlist
+	case "cabinet.discoveries.create_purchase":
+		return discovery.ActionMarkPurchased
+	case "cabinet.discoveries.create_or_update_inventory_candidate":
+		return discovery.ActionCreateItem
+	default:
+		return discovery.ActionReview
+	}
+}
+
+func agentDiscoveryOperation(skillID string) string {
+	switch skillID {
+	case "cabinet.discoveries.dismiss_result":
+		return "discoveries.dismiss_result"
+	case "cabinet.discoveries.send_to_wishlist":
+		return "discoveries.send_to_wishlist"
+	case "cabinet.discoveries.create_purchase":
+		return "discoveries.create_purchase"
+	case "cabinet.discoveries.create_or_update_inventory_candidate":
+		return "discoveries.create_or_update_inventory_candidate"
+	default:
+		return "discoveries.review_result"
+	}
+}
+
+func agentDiscoveryActionPayload(params map[string]any, providerID, skillID string) map[string]any {
+	payload := map[string]any{
+		"source":      "agent.discoveries",
+		"provider_id": providerID,
+		"notes":       stringMapParam(params, "notes"),
+	}
+	for _, key := range []string{"decision", "destination", "quantity", "target_price", "priority", "source_url"} {
+		if value, ok := params[key]; ok {
+			payload[key] = value
+		}
+	}
+	if skillID == "cabinet.discoveries.create_or_update_inventory_candidate" {
+		payload["ownership_confirmed"] = true
+	}
+	return payload
 }
 
 func agentMarketWatchQuerySet(providerID, query string, params map[string]any) scanner.QuerySet {
