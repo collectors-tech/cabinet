@@ -188,3 +188,12 @@ Cabinet SHALL maintain a durable per-surface Agent skill coverage matrix so broa
 - **AND** read-only search SHALL return matching Wishlist entries without mutating Cabinet state
 - **AND** mark-purchased SHALL report purchase lifecycle and inventory quantity sync evidence while preserving the Wishlist service rule that repeated confirmed applies do not duplicate inventory quantity increments
 - **AND** source surface, source channel, source thread id, and source message id SHALL remain visible in the preview/apply response when supplied by the invoking boundary
+
+#### Scenario: Collections skill confirmed apply persists governed workspace state
+- **GIVEN** a confirmed Collections Agent Skill apply request includes the required profile and collection or item context
+- **WHEN** Cabinet applies create, update-metadata, assign-item, soft-delete, move-items-on-delete, or read-only search Collections skills
+- **THEN** create/update/delete/move actions SHALL persist the profile-scoped Collections workspace state instead of returning preview-only claims
+- **AND** assign-item SHALL verify the target inventory item belongs to the active profile before adding workspace collection membership
+- **AND** read-only search SHALL return matching collections and workspace item memberships without mutating Cabinet state
+- **AND** `All Items` SHALL remain protected from deletion or unsafe rename during confirmed apply
+- **AND** source surface, source channel, source thread id, and source message id SHALL remain visible in the preview/apply response when supplied by the invoking boundary

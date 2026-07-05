@@ -61,6 +61,13 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.wishlist.soft_delete_entry",
 		"cabinet.wishlist.restore_entry":
 		return applyAgentWishlistSkill(ctx, conn, skillID, profileID, params)
+	case "cabinet.collections.search",
+		"cabinet.collections.create",
+		"cabinet.collections.update_metadata",
+		"cabinet.collections.assign_item",
+		"cabinet.collections.soft_delete",
+		"cabinet.collections.move_items_on_delete":
+		return applyAgentCollectionsSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.media.search",
 		"cabinet.media.upload_or_import",
 		"cabinet.media.attach_to_item",
@@ -1307,6 +1314,345 @@ func agentWishlistNotes(params map[string]any) string {
 		return "source_url=" + sourceURL
 	}
 	return notes + " source_url=" + sourceURL
+}
+
+const agentCollectionsWorkspaceKey = "collections.workspace.v1"
+
+type agentCollectionsWorkspaceState struct {
+	Collections      []string                        `json:"collections"`
+	ActiveCollection string                          `json:"activeCollection"`
+	Items            []agentCollectionsWorkspaceItem `json:"items"`
+}
+
+type agentCollectionsWorkspaceItem struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Detail         string `json:"detail"`
+	CollectionName string `json:"collectionName,omitempty"`
+}
+
+func applyAgentCollectionsSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+	if conn == nil {
+		return nil, "collections_store_required", fmt.Errorf("database connection required")
+	}
+	state, err := loadAgentCollectionsWorkspace(ctx, conn, profileID)
+	if err != nil {
+		return nil, "collections_workspace_load_failed", err
+	}
+	result := map[string]any{"profile_id": profileID}
+	switch skillID {
+	case "cabinet.collections.search":
+		filtered := filterAgentCollectionsWorkspace(state, stringMapParam(params, "query"))
+		result["operation"] = "collections.search"
+		result["read_only"] = true
+		result["query"] = stringMapParam(params, "query")
+		result["collections"] = filtered.Collections
+		result["items"] = filtered.Items
+		result["total"] = len(filtered.Collections)
+		result["next_action"] = "Select a collection before changing metadata, assigning items, or deleting it."
+	case "cabinet.collections.create":
+		collectionName := agentCollectionName(params)
+		if collectionName == "" {
+			return nil, "collections_name_required", fmt.Errorf("collection name required")
+		}
+		state.Collections = ensureAgentCollectionName(state.Collections, "All Items")
+		state.Collections = ensureAgentCollectionName(state.Collections, collectionName)
+		state.ActiveCollection = collectionName
+		if err := persistAgentCollectionsWorkspace(ctx, conn, profileID, state); err != nil {
+			return nil, "collections_workspace_persist_failed", err
+		}
+		result["operation"] = "collections.create"
+		result["status"] = "confirmed"
+		result["collection_name"] = collectionName
+		result["collection_persisted"] = true
+		result["workspace"] = state
+		result["next_action"] = "Open Collections to review the persisted workspace collection before assigning items."
+	case "cabinet.collections.update_metadata":
+		collectionName := agentCollectionName(params)
+		if collectionName == "" {
+			return nil, "collections_target_required", fmt.Errorf("collection target required")
+		}
+		if !agentCollectionExists(state.Collections, collectionName) {
+			return nil, "collections_target_required", fmt.Errorf("collection target not found")
+		}
+		nextName := firstNonEmptyString(stringMapParam(params, "new_collection_name"), stringMapParam(params, "new_name"), collectionName)
+		if strings.EqualFold(collectionName, "All Items") && !strings.EqualFold(nextName, "All Items") {
+			return nil, "collections_all_items_protected", fmt.Errorf("All Items cannot be renamed")
+		}
+		state = renameAgentCollection(state, collectionName, nextName)
+		state.ActiveCollection = nextName
+		if err := persistAgentCollectionsWorkspace(ctx, conn, profileID, state); err != nil {
+			return nil, "collections_workspace_persist_failed", err
+		}
+		result["operation"] = "collections.update_metadata"
+		result["status"] = "confirmed"
+		result["collection_name"] = nextName
+		result["previous_collection_name"] = collectionName
+		result["collection_persisted"] = true
+		result["workspace"] = state
+	case "cabinet.collections.assign_item":
+		collectionName := agentCollectionName(params)
+		itemID := stringMapParam(params, "item_id")
+		if itemID == "" {
+			return nil, "collections_item_required", fmt.Errorf("item required")
+		}
+		if collectionName == "" {
+			return nil, "collections_target_required", fmt.Errorf("collection target required")
+		}
+		item, err := collection.NewRepository(conn).GetItemByID(ctx, itemID)
+		if err != nil || strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.Status) == "deleted" || !agentCollectionItemBelongsToProfile(ctx, conn, profileID, itemID) {
+			return nil, "collections_item_required", fmt.Errorf("collection assignment target not found")
+		}
+		state.Collections = ensureAgentCollectionName(state.Collections, "All Items")
+		state.Collections = ensureAgentCollectionName(state.Collections, collectionName)
+		state.ActiveCollection = collectionName
+		state.Items = upsertAgentCollectionItem(state.Items, item, collectionName)
+		if err := persistAgentCollectionsWorkspace(ctx, conn, profileID, state); err != nil {
+			return nil, "collections_workspace_persist_failed", err
+		}
+		result["operation"] = "collections.item.assign"
+		result["status"] = "confirmed"
+		result["item_id"] = itemID
+		result["collection_name"] = collectionName
+		result["collection_persisted"] = true
+		result["workspace"] = state
+		result["next_action"] = "Open Collections to verify the item appears in the selected collection."
+	case "cabinet.collections.soft_delete", "cabinet.collections.move_items_on_delete":
+		collectionName := agentCollectionName(params)
+		if collectionName == "" {
+			return nil, "collections_target_required", fmt.Errorf("collection target required")
+		}
+		if strings.EqualFold(collectionName, "All Items") {
+			return nil, "collections_all_items_protected", fmt.Errorf("All Items cannot be deleted")
+		}
+		if !agentCollectionExists(state.Collections, collectionName) {
+			return nil, "collections_target_required", fmt.Errorf("collection target not found")
+		}
+		destination := stringMapParam(params, "destination_collection")
+		assignedCount := countAgentCollectionItems(state.Items, collectionName)
+		if skillID == "cabinet.collections.move_items_on_delete" && destination == "" {
+			return nil, "collections_destination_required", fmt.Errorf("destination collection required")
+		}
+		if skillID == "cabinet.collections.soft_delete" && assignedCount > 0 && destination == "" && !boolMapParam(params, "remove_items") {
+			return nil, "collections_delete_destination_required", fmt.Errorf("destination collection or remove_items required")
+		}
+		if destination != "" && strings.EqualFold(destination, collectionName) {
+			return nil, "collections_destination_required", fmt.Errorf("destination collection must differ from source")
+		}
+		movedCount := 0
+		if destination != "" {
+			movedCount = assignedCount
+		}
+		removedCount := 0
+		if destination == "" {
+			removedCount = assignedCount
+		}
+		state = removeAgentCollection(state, collectionName, destination, boolMapParam(params, "remove_items"))
+		if err := persistAgentCollectionsWorkspace(ctx, conn, profileID, state); err != nil {
+			return nil, "collections_workspace_persist_failed", err
+		}
+		result["operation"] = agentCollectionsDeleteOperation(skillID)
+		result["status"] = "confirmed"
+		result["collection_name"] = collectionName
+		result["destination_collection"] = destination
+		result["moved_item_count"] = movedCount
+		result["removed_item_count"] = removedCount
+		result["collection_deleted"] = true
+		result["collection_persisted"] = true
+		result["workspace"] = state
+	}
+	return result, "", nil
+}
+
+func loadAgentCollectionsWorkspace(ctx context.Context, conn *sql.DB, profileID string) (agentCollectionsWorkspaceState, error) {
+	state := agentCollectionsWorkspaceState{
+		Collections:      []string{"All Items"},
+		ActiveCollection: "All Items",
+		Items:            []agentCollectionsWorkspaceItem{},
+	}
+	var raw string
+	err := conn.QueryRowContext(ctx, `SELECT value FROM profile_settings WHERE profile_id = ? AND key = ?`, strings.TrimSpace(profileID), agentCollectionsWorkspaceKey).Scan(&raw)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return state, nil
+		}
+		return state, err
+	}
+	if strings.TrimSpace(raw) == "" {
+		return state, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		return agentCollectionsWorkspaceState{}, err
+	}
+	state.Collections = ensureAgentCollectionName(state.Collections, "All Items")
+	if strings.TrimSpace(state.ActiveCollection) == "" {
+		state.ActiveCollection = "All Items"
+	}
+	return state, nil
+}
+
+func persistAgentCollectionsWorkspace(ctx context.Context, conn *sql.DB, profileID string, state agentCollectionsWorkspaceState) error {
+	state.Collections = ensureAgentCollectionName(state.Collections, "All Items")
+	if strings.TrimSpace(state.ActiveCollection) == "" || !agentCollectionExists(state.Collections, state.ActiveCollection) {
+		state.ActiveCollection = "All Items"
+	}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	_, err = conn.ExecContext(ctx, `
+		INSERT INTO profile_settings(profile_id, key, value, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(profile_id, key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, strings.TrimSpace(profileID), agentCollectionsWorkspaceKey, string(raw))
+	return err
+}
+
+func filterAgentCollectionsWorkspace(state agentCollectionsWorkspaceState, query string) agentCollectionsWorkspaceState {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return state
+	}
+	out := agentCollectionsWorkspaceState{ActiveCollection: state.ActiveCollection}
+	for _, name := range state.Collections {
+		if strings.Contains(strings.ToLower(name), query) {
+			out.Collections = append(out.Collections, name)
+		}
+	}
+	for _, item := range state.Items {
+		haystack := strings.ToLower(strings.Join([]string{item.ID, item.Name, item.Detail, item.CollectionName}, " "))
+		if strings.Contains(haystack, query) {
+			out.Items = append(out.Items, item)
+			out.Collections = ensureAgentCollectionName(out.Collections, item.CollectionName)
+		}
+	}
+	return out
+}
+
+func agentCollectionName(params map[string]any) string {
+	return firstNonEmptyString(stringMapParam(params, "collection_name"), stringMapParam(params, "collection"))
+}
+
+func ensureAgentCollectionName(collections []string, name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return collections
+	}
+	for _, existing := range collections {
+		if strings.EqualFold(strings.TrimSpace(existing), name) {
+			return collections
+		}
+	}
+	return append(collections, name)
+}
+
+func agentCollectionExists(collections []string, name string) bool {
+	name = strings.TrimSpace(name)
+	for _, existing := range collections {
+		if strings.EqualFold(strings.TrimSpace(existing), name) {
+			return true
+		}
+	}
+	return false
+}
+
+func renameAgentCollection(state agentCollectionsWorkspaceState, oldName, newName string) agentCollectionsWorkspaceState {
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		newName = oldName
+	}
+	for i := range state.Collections {
+		if strings.EqualFold(strings.TrimSpace(state.Collections[i]), oldName) {
+			state.Collections[i] = newName
+		}
+	}
+	state.Collections = ensureAgentCollectionName(state.Collections, newName)
+	for i := range state.Items {
+		if strings.EqualFold(strings.TrimSpace(state.Items[i].CollectionName), oldName) {
+			state.Items[i].CollectionName = newName
+		}
+	}
+	return state
+}
+
+func upsertAgentCollectionItem(items []agentCollectionsWorkspaceItem, item collection.Item, collectionName string) []agentCollectionsWorkspaceItem {
+	detail := firstNonEmptyString(item.PartNumber, item.Category, "Assigned by Agent Skill")
+	for i := range items {
+		if strings.TrimSpace(items[i].ID) == item.ID {
+			items[i].CollectionName = collectionName
+			if strings.TrimSpace(items[i].Name) == "" {
+				items[i].Name = item.Title
+			}
+			if strings.TrimSpace(items[i].Detail) == "" {
+				items[i].Detail = detail
+			}
+			return items
+		}
+	}
+	return append(items, agentCollectionsWorkspaceItem{
+		ID:             item.ID,
+		Name:           item.Title,
+		Detail:         detail,
+		CollectionName: collectionName,
+	})
+}
+
+func agentCollectionItemBelongsToProfile(ctx context.Context, conn *sql.DB, profileID, itemID string) bool {
+	var count int
+	err := conn.QueryRowContext(ctx, `SELECT COUNT(1) FROM canonical_items WHERE id = ? AND profile_id = ?`, strings.TrimSpace(itemID), strings.TrimSpace(profileID)).Scan(&count)
+	return err == nil && count == 1
+}
+
+func removeAgentCollection(state agentCollectionsWorkspaceState, collectionName, destination string, removeItems bool) agentCollectionsWorkspaceState {
+	destination = strings.TrimSpace(destination)
+	nextCollections := make([]string, 0, len(state.Collections))
+	for _, existing := range state.Collections {
+		if strings.EqualFold(strings.TrimSpace(existing), collectionName) {
+			continue
+		}
+		nextCollections = ensureAgentCollectionName(nextCollections, existing)
+	}
+	if destination != "" {
+		nextCollections = ensureAgentCollectionName(nextCollections, destination)
+	}
+	state.Collections = ensureAgentCollectionName(nextCollections, "All Items")
+	for i := range state.Items {
+		if !strings.EqualFold(strings.TrimSpace(state.Items[i].CollectionName), collectionName) {
+			continue
+		}
+		switch {
+		case destination != "":
+			state.Items[i].CollectionName = destination
+		case removeItems:
+			state.Items[i].CollectionName = ""
+		default:
+			state.Items[i].CollectionName = "All Items"
+		}
+	}
+	if strings.EqualFold(state.ActiveCollection, collectionName) {
+		state.ActiveCollection = firstNonEmptyString(destination, "All Items")
+	}
+	return state
+}
+
+func countAgentCollectionItems(items []agentCollectionsWorkspaceItem, collectionName string) int {
+	if strings.TrimSpace(collectionName) == "" {
+		return 0
+	}
+	count := 0
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.CollectionName), collectionName) {
+			count++
+		}
+	}
+	return count
+}
+
+func agentCollectionsDeleteOperation(skillID string) string {
+	if skillID == "cabinet.collections.move_items_on_delete" {
+		return "collections.items.move_on_delete"
+	}
+	return "collections.soft_delete"
 }
 
 func agentMarketWatchQuerySet(providerID, query string, params map[string]any) scanner.QuerySet {

@@ -403,6 +403,135 @@ func TestAgentSkillApplyAPIHandlesWishlistSkills(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesCollectionsSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Collections"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status) VALUES ('agent-collection-item-1', ?, 'AFX', 'Slot Cars', 'COLL-1708', 'Agent Collections Item', 'active')`, p.ID); err != nil {
+		t.Fatalf("seed collection item: %v", err)
+	}
+
+	createCollection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.create",
+		"confirm":true,
+		"source_surface":"telegram.collections.intent",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-collections-thread-1708",
+		"source_message_id":"tg-collections-message-1708",
+		"parameters":{"collection_name":"Display Case"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createCollection.Code != http.StatusOK {
+		t.Fatalf("create collection skill status=%d body=%s", createCollection.Code, createCollection.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.collections.create"`,
+		`"source_channel":"telegram"`,
+		`"mutation_applied":true`,
+		`"operation":"collections.create"`,
+		`"collection_persisted":true`,
+		`"collection_name":"Display Case"`,
+	} {
+		if !strings.Contains(createCollection.Body.String(), want) {
+			t.Fatalf("create collection response missing %s: body=%s", want, createCollection.Body.String())
+		}
+	}
+
+	assignItem := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.assign_item",
+		"confirm":true,
+		"parameters":{"collection_name":"Display Case","item_id":"agent-collection-item-1"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if assignItem.Code != http.StatusOK {
+		t.Fatalf("assign collection item status=%d body=%s", assignItem.Code, assignItem.Body.String())
+	}
+	if !strings.Contains(assignItem.Body.String(), `"operation":"collections.item.assign"`) ||
+		!strings.Contains(assignItem.Body.String(), `"item_id":"agent-collection-item-1"`) ||
+		!strings.Contains(assignItem.Body.String(), `"collection_persisted":true`) {
+		t.Fatalf("expected collection assignment evidence, body=%s", assignItem.Body.String())
+	}
+
+	updateCollection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.update_metadata",
+		"confirm":true,
+		"parameters":{"collection_name":"Display Case","new_collection_name":"Showcase Shelf"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateCollection.Code != http.StatusOK {
+		t.Fatalf("update collection status=%d body=%s", updateCollection.Code, updateCollection.Body.String())
+	}
+	if !strings.Contains(updateCollection.Body.String(), `"operation":"collections.update_metadata"`) ||
+		!strings.Contains(updateCollection.Body.String(), `"collection_name":"Showcase Shelf"`) {
+		t.Fatalf("expected collection metadata update evidence, body=%s", updateCollection.Body.String())
+	}
+
+	searchCollections := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.search",
+		"parameters":{"query":"Showcase"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchCollections.Code != http.StatusOK {
+		t.Fatalf("search collections status=%d body=%s", searchCollections.Code, searchCollections.Body.String())
+	}
+	if !strings.Contains(searchCollections.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(searchCollections.Body.String(), `"operation":"collections.search"`) ||
+		!strings.Contains(searchCollections.Body.String(), `"Showcase Shelf"`) {
+		t.Fatalf("expected read-only collection search evidence, body=%s", searchCollections.Body.String())
+	}
+
+	moveOnDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.move_items_on_delete",
+		"confirm":true,
+		"parameters":{"collection_name":"Showcase Shelf","destination_collection":"Archive Shelf"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if moveOnDelete.Code != http.StatusOK {
+		t.Fatalf("move collection items status=%d body=%s", moveOnDelete.Code, moveOnDelete.Body.String())
+	}
+	if !strings.Contains(moveOnDelete.Body.String(), `"operation":"collections.items.move_on_delete"`) ||
+		!strings.Contains(moveOnDelete.Body.String(), `"collection_deleted":true`) ||
+		!strings.Contains(moveOnDelete.Body.String(), `"destination_collection":"Archive Shelf"`) ||
+		!strings.Contains(moveOnDelete.Body.String(), `"moved_item_count":1`) {
+		t.Fatalf("expected collection move-on-delete evidence, body=%s", moveOnDelete.Body.String())
+	}
+
+	var workspaceRaw string
+	if err := a.db.QueryRow(`SELECT value FROM profile_settings WHERE profile_id = ? AND key = 'collections.workspace.v1'`, p.ID).Scan(&workspaceRaw); err != nil {
+		t.Fatalf("load collection workspace setting: %v", err)
+	}
+	if !strings.Contains(workspaceRaw, "Archive Shelf") ||
+		strings.Contains(workspaceRaw, "Showcase Shelf") ||
+		!strings.Contains(workspaceRaw, `"collectionName":"Archive Shelf"`) {
+		t.Fatalf("expected persisted collection move state, got %s", workspaceRaw)
+	}
+
+	softDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.soft_delete",
+		"confirm":true,
+		"parameters":{"collection_name":"Archive Shelf","remove_items":true}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if softDelete.Code != http.StatusOK {
+		t.Fatalf("soft-delete collection status=%d body=%s", softDelete.Code, softDelete.Body.String())
+	}
+	if !strings.Contains(softDelete.Body.String(), `"operation":"collections.soft_delete"`) ||
+		!strings.Contains(softDelete.Body.String(), `"collection_deleted":true`) ||
+		!strings.Contains(softDelete.Body.String(), `"removed_item_count":1`) {
+		t.Fatalf("expected collection soft-delete evidence, body=%s", softDelete.Body.String())
+	}
+}
+
 func TestAgentSkillAPIPropagatesInvocationSourceContext(t *testing.T) {
 	t.Parallel()
 
