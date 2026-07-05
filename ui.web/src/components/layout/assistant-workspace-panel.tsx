@@ -197,6 +197,102 @@ const agentSkillOptions = [
     contextLabel: 'Item ID',
     secretLabel: 'Tracking or source URL',
   },
+  {
+    id: 'cabinet.media.search',
+    label: 'Search media',
+    surface: 'media.workspace.search',
+    primaryLabel: 'Search query',
+    contextLabel: 'Filter',
+    secretLabel: 'Optional note',
+  },
+  {
+    id: 'cabinet.media.upload_or_import',
+    label: 'Import media',
+    surface: 'media.workspace.import',
+    primaryLabel: 'Source URL or path',
+    contextLabel: 'Filename',
+    secretLabel: 'Notes',
+  },
+  {
+    id: 'cabinet.media.attach_to_item',
+    label: 'Attach media to item',
+    surface: 'media.workspace.assignment',
+    primaryLabel: 'Media ID',
+    contextLabel: 'Item ID',
+    secretLabel: 'Notes',
+  },
+  {
+    id: 'cabinet.media.review_unlinked',
+    label: 'Review unlinked media',
+    surface: 'media.workspace.unlinked',
+    primaryLabel: 'Search query',
+    contextLabel: 'Filter',
+    secretLabel: 'Optional note',
+  },
+  {
+    id: 'cabinet.media.update_notes',
+    label: 'Update media notes',
+    surface: 'media.workspace.metadata',
+    primaryLabel: 'Media ID',
+    contextLabel: 'Notes',
+    secretLabel: 'Additional notes',
+  },
+  {
+    id: 'cabinet.media.detach_from_item',
+    label: 'Detach media from item',
+    surface: 'media.workspace.assignment',
+    primaryLabel: 'Media ID',
+    contextLabel: 'Item ID',
+    secretLabel: 'Reason',
+  },
+  {
+    id: 'cabinet.discoveries.search',
+    label: 'Search discoveries',
+    surface: 'discoveries.result.list',
+    primaryLabel: 'Provider',
+    contextLabel: 'Search query',
+    secretLabel: 'Optional note',
+  },
+  {
+    id: 'cabinet.discoveries.review_result',
+    label: 'Review discovery result',
+    surface: 'discoveries.result.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Result ID',
+    secretLabel: 'Optional note',
+  },
+  {
+    id: 'cabinet.discoveries.dismiss_result',
+    label: 'Dismiss discovery result',
+    surface: 'discoveries.result.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Result ID',
+    secretLabel: 'Notes',
+  },
+  {
+    id: 'cabinet.discoveries.send_to_wishlist',
+    label: 'Send discovery to wishlist',
+    surface: 'discoveries.result.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Result ID',
+    secretLabel: 'Notes',
+  },
+  {
+    id: 'cabinet.discoveries.create_purchase',
+    label: 'Create purchase from discovery',
+    surface: 'discoveries.result.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Result ID',
+    secretLabel: 'Notes',
+  },
+  {
+    id: 'cabinet.discoveries.create_or_update_inventory_candidate',
+    label: 'Create inventory candidate',
+    surface: 'discoveries.result.card',
+    primaryLabel: 'Provider',
+    contextLabel: 'Result ID',
+    secretLabel: 'Notes',
+  },
 ] satisfies AgentSkillOption[]
 
 type NavigationAction = {
@@ -1083,6 +1179,82 @@ export function AssistantWorkspacePanel() {
         params.tracking_number = secretOrTarget
         params.source_url = secretOrTarget
       }
+    }
+    if (agentSkillID === 'cabinet.media.search') {
+      if (primary) {
+        params.query = primary
+      }
+      if (context) {
+        params.filter = context
+      }
+      if (secretOrTarget) {
+        params.notes = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.media.review_unlinked') {
+      if (primary) {
+        params.query = primary
+      }
+      params.filter = context || 'unlinked'
+      if (secretOrTarget) {
+        params.notes = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.media.upload_or_import') {
+      if (primary) {
+        params.source_url = primary
+        params.file_path = primary
+      }
+      if (context) {
+        params.filename = context
+      }
+      if (secretOrTarget) {
+        params.notes = secretOrTarget
+      }
+      return params
+    }
+    if (
+      agentSkillID === 'cabinet.media.attach_to_item' ||
+      agentSkillID === 'cabinet.media.detach_from_item'
+    ) {
+      if (primary) {
+        params.media_id = primary
+      }
+      if (context) {
+        params.item_id = context
+        params.target_item = context
+      }
+      if (secretOrTarget) {
+        params.notes = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.media.update_notes') {
+      if (primary) {
+        params.media_id = primary
+      }
+      params.notes = secretOrTarget || context
+      return params
+    }
+    if (agentSkillID.startsWith('cabinet.discoveries.')) {
+      if (primary) {
+        params.provider_id = primary
+      }
+      if (agentSkillID === 'cabinet.discoveries.search') {
+        if (context) {
+          params.query = context
+        }
+      } else if (context) {
+        params.result_id = context
+        params.candidate_id = context
+      }
+      if (secretOrTarget) {
+        params.notes = secretOrTarget
+        params.destination = secretOrTarget
+      }
+      return params
     }
     return params
   }

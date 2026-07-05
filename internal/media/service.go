@@ -586,7 +586,7 @@ func (s *Service) loadWorkspaceMetadata(ctx context.Context, profileID string) (
 			'Media asset added from Media workspace.',
 			'Media asset metadata updated from Media workspace.'
 		  )
-		ORDER BY created_at ASC, id ASC
+		ORDER BY created_at ASC, rowid ASC
 	`, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("list media metadata messages: %w", err)

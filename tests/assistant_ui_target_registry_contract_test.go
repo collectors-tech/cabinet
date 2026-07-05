@@ -157,3 +157,80 @@ func TestAssistantShellCommandBusTraceabilityIsImplemented(t *testing.T) {
 		}
 	}
 }
+
+func TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch(t *testing.T) {
+	t.Parallel()
+
+	panelPath := filepath.Join("..", "ui.web", "src", "components", "layout", "assistant-workspace-panel.tsx")
+	panelRaw, err := os.ReadFile(panelPath)
+	if err != nil {
+		t.Fatalf("read assistant workspace panel: %v", err)
+	}
+	panel := string(panelRaw)
+
+	for _, fragment := range []string{
+		"id: 'cabinet.media.search'",
+		"id: 'cabinet.media.upload_or_import'",
+		"id: 'cabinet.media.attach_to_item'",
+		"id: 'cabinet.media.review_unlinked'",
+		"id: 'cabinet.media.update_notes'",
+		"id: 'cabinet.media.detach_from_item'",
+		"id: 'cabinet.discoveries.search'",
+		"id: 'cabinet.discoveries.review_result'",
+		"id: 'cabinet.discoveries.dismiss_result'",
+		"id: 'cabinet.discoveries.send_to_wishlist'",
+		"id: 'cabinet.discoveries.create_purchase'",
+		"id: 'cabinet.discoveries.create_or_update_inventory_candidate'",
+		"surface: 'media.workspace.assignment'",
+		"surface: 'discoveries.result.card'",
+		"params.media_id = primary",
+		"params.item_id = context",
+		"params.provider_id = primary",
+		"params.result_id = context",
+		"source_channel: 'in-app'",
+		"source_message_id: 'assistant-workspace-agent-skill'",
+	} {
+		if !strings.Contains(panel, fragment) {
+			t.Fatalf("expected Assistant workspace Agent Skill panel to include %q", fragment)
+		}
+	}
+
+	specPath := filepath.Join("..", "ui.web", "cypress", "e2e", "chats", "assistant-workspace-agent-skills", "spec.cy.ts")
+	specRaw, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatalf("read assistant workspace Agent Skill Cypress spec: %v", err)
+	}
+	spec := string(specRaw)
+	for _, fragment := range []string{
+		"ASSISTANT-WORKSPACE-013/#1709 dispatches Media Agent Skills with in-app source context",
+		"ASSISTANT-WORKSPACE-013/#1709 dispatches Discoveries Agent Skills with in-app source context",
+		"cabinet.media.attach_to_item",
+		"cabinet.discoveries.send_to_wishlist",
+		"media.workspace.assignment",
+		"discoveries.result.card",
+		"source_channel).to.eq('in-app')",
+	} {
+		if !strings.Contains(spec, fragment) {
+			t.Fatalf("expected #1709 Agent Skill Cypress spec to include %q", fragment)
+		}
+	}
+
+	tracePath := filepath.Join("..", "openspec", "traceability.md")
+	traceRaw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+	trace := string(traceRaw)
+	for _, fragment := range []string{
+		"`ASSISTANT-WORKSPACE-013`",
+		"#1709",
+		"Media/Discoveries skills",
+		"source_channel=in-app",
+		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
+		"TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch",
+	} {
+		if !strings.Contains(trace, fragment) {
+			t.Fatalf("expected #1709 Assistant workspace traceability to include %q", fragment)
+		}
+	}
+}

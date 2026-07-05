@@ -313,4 +313,204 @@ describe('chats/assistant-workspace-agent-skills', () => {
       .should('contain', 'purchases.order.create')
       .and('contain', 'mutation: true')
   })
+
+  it('ASSISTANT-WORKSPACE-013/#1709 dispatches Media Agent Skills with in-app source context', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/agent/skills/preview', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.media.attach_to_item')
+      expect(req.body.source_surface).to.eq('media.workspace.assignment')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.source_thread_id).to.be.a('string').and.not.eq('')
+      expect(req.body.source_message_id).to.eq(
+        'assistant-workspace-agent-skill'
+      )
+      expect(req.body.parameters.media_id).to.eq('media-1709')
+      expect(req.body.parameters.item_id).to.eq('item-1709')
+      expect(req.body.parameters.target_item).to.eq('item-1709')
+      expect(req.body.parameters.notes).to.eq('preserve source note')
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.media.attach_to_item',
+          status: 'available',
+          safety_level: 'confirm-required',
+          allowed: false,
+          preview_only: true,
+          mutation_applied: false,
+          confirmation_required: true,
+          blocker: 'confirmation_required',
+          source_surface: 'media.workspace.assignment',
+          source_channel: 'in-app',
+        },
+      })
+    }).as('mediaSkillPreview')
+    cy.intercept('POST', '/api/agent/skills/apply', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.media.attach_to_item')
+      expect(req.body.confirm).to.eq(true)
+      expect(req.body.source_surface).to.eq('media.workspace.assignment')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.parameters.media_id).to.eq('media-1709')
+      expect(req.body.parameters.item_id).to.eq('item-1709')
+      expect(req.body.parameters.notes).to.eq('preserve source note')
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.media.attach_to_item',
+          mutation_applied: true,
+          source_surface: 'media.workspace.assignment',
+          source_channel: 'in-app',
+          target: {
+            operation: 'media.attach_to_item',
+            media_id: 'media-1709',
+            item_id: 'item-1709',
+            attachment_persisted: true,
+            provenance_preserved: true,
+            external_write_claimed: false,
+          },
+        },
+      })
+    }).as('mediaSkillApply')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.media.attach_to_item',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('media-1709', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('item-1709', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-secret"]')
+      .clear()
+      .type('preserve source note', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@mediaSkillPreview')
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.media.attach_to_item')
+      .and('contain', 'confirm-required')
+      .and('contain', 'confirmation_required')
+
+    cy.get('[data-testid="shell-assistant-agent-skill-apply"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]')
+      .should('contain', 'cabinet.media.attach_to_item')
+      .and('contain', 'media.workspace.assignment')
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+    cy.wait('@mediaSkillApply')
+    cy.get('[data-testid="shell-assistant-agent-skill-result"]')
+      .should('contain', 'media.attach_to_item')
+      .and('contain', 'mutation: true')
+  })
+
+  it('ASSISTANT-WORKSPACE-013/#1709 dispatches Discoveries Agent Skills with in-app source context', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/agent/skills/preview', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.discoveries.send_to_wishlist')
+      expect(req.body.source_surface).to.eq('discoveries.result.card')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.source_thread_id).to.be.a('string').and.not.eq('')
+      expect(req.body.source_message_id).to.eq(
+        'assistant-workspace-agent-skill'
+      )
+      expect(req.body.parameters.provider_id).to.eq('ebay')
+      expect(req.body.parameters.result_id).to.eq('disc-1709')
+      expect(req.body.parameters.candidate_id).to.eq('disc-1709')
+      expect(req.body.parameters.notes).to.eq('send to wishlist')
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.discoveries.send_to_wishlist',
+          status: 'available',
+          safety_level: 'confirm-required',
+          allowed: false,
+          preview_only: true,
+          mutation_applied: false,
+          confirmation_required: true,
+          blocker: 'confirmation_required',
+          source_surface: 'discoveries.result.card',
+          source_channel: 'in-app',
+        },
+      })
+    }).as('discoveriesSkillPreview')
+    cy.intercept('POST', '/api/agent/skills/apply', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.discoveries.send_to_wishlist')
+      expect(req.body.confirm).to.eq(true)
+      expect(req.body.source_surface).to.eq('discoveries.result.card')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.parameters.provider_id).to.eq('ebay')
+      expect(req.body.parameters.result_id).to.eq('disc-1709')
+      expect(req.body.parameters.notes).to.eq('send to wishlist')
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.discoveries.send_to_wishlist',
+          mutation_applied: true,
+          source_surface: 'discoveries.result.card',
+          source_channel: 'in-app',
+          target: {
+            operation: 'discoveries.send_to_wishlist',
+            provider_id: 'ebay',
+            result_id: 'disc-1709',
+            discovery_persisted: true,
+            provenance_preserved: true,
+            external_write_claimed: false,
+          },
+        },
+      })
+    }).as('discoveriesSkillApply')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.discoveries.send_to_wishlist',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('ebay', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('disc-1709', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-secret"]')
+      .clear()
+      .type('send to wishlist', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@discoveriesSkillPreview')
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.discoveries.send_to_wishlist')
+      .and('contain', 'confirm-required')
+      .and('contain', 'confirmation_required')
+
+    cy.get('[data-testid="shell-assistant-agent-skill-apply"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]')
+      .should('contain', 'cabinet.discoveries.send_to_wishlist')
+      .and('contain', 'discoveries.result.card')
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+    cy.wait('@discoveriesSkillApply')
+    cy.get('[data-testid="shell-assistant-agent-skill-result"]')
+      .should('contain', 'discoveries.send_to_wishlist')
+      .and('contain', 'mutation: true')
+  })
 })

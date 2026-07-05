@@ -233,6 +233,30 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 		}
 		return resp, nil
 	}
+	if strings.HasPrefix(skill.ID, "cabinet.media.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewMediaBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "media_id", "item_id", "source_url", "notes", "attachment_id")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select media and target item context, review provenance and notes, then confirm before Cabinet changes media attachment state."
+		}
+		return resp, nil
+	}
+	if strings.HasPrefix(skill.ID, "cabinet.discoveries.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewDiscoveriesBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "provider_id", "result_id", "candidate_id", "destination", "source_url", "review_status")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select a discovery result and destination, review provider provenance and confidence, then confirm before Cabinet changes destination state."
+		}
+		return resp, nil
+	}
 	if strings.HasPrefix(skill.ID, "cabinet.settings.") || strings.HasPrefix(skill.ID, "cabinet.storage.") || strings.HasPrefix(skill.ID, "cabinet.data.") || strings.HasPrefix(skill.ID, "cabinet.maintenance.") {
 		resp.Allowed = skill.SafetyLevel == SafetyReadOnly || skill.ID == "cabinet.data.export_bundle"
 		resp.Blocker = previewSettingsDataBlocker(skill.ID, params)
@@ -298,6 +322,18 @@ func builtInSkills() []Skill {
 		purchasesSkill("cabinet.purchases.receive_line_item", "Receive purchase line item", "Preview receiving a selected purchase line item before confirmed state change.", SafetyConfirmRequired, []string{"profile", "workspace", "target_order", "line_item"}, []string{"purchases.line_item.receive"}, []string{"order_id", "line_item_id"}),
 		purchasesSkill("cabinet.purchases.reconcile_item", "Reconcile purchased item", "Preview reconciling a purchased line with an inventory item while preserving source provenance.", SafetyConfirmRequired, []string{"profile", "workspace", "target_order", "target_item"}, []string{"purchases.item.reconcile"}, []string{"order_id", "item_id"}),
 		purchasesSkill("cabinet.purchases.review_purchase", "Review purchase", "Review purchase/order evidence and feedback state without changing records unless a confirmed review state is supplied.", SafetyReadOnly, []string{"profile", "workspace", "target_order"}, []string{"purchases.order.review"}, nil),
+		mediaSkill("cabinet.media.search", "Search media", "Search media assets, notes, and attachment state without mutating records.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"media.search"}, nil),
+		mediaSkill("cabinet.media.upload_or_import", "Upload or import media", "Preview a media upload or import source before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "media_source"}, []string{"media.upload_or_import"}, []string{"source_url"}),
+		mediaSkill("cabinet.media.attach_to_item", "Attach media to item", "Attach selected media to an item through preview and confirmation while preserving provenance.", SafetyConfirmRequired, []string{"profile", "workspace", "media", "target_item"}, []string{"media.attach_to_item"}, []string{"media_id", "item_id"}),
+		mediaSkill("cabinet.media.review_unlinked", "Review unlinked media", "Review unlinked media and provenance without mutating attachment state.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"media.review_unlinked"}, nil),
+		mediaSkill("cabinet.media.update_notes", "Update media notes", "Preview media note changes before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "media"}, []string{"media.update_notes"}, []string{"media_id"}),
+		mediaSkill("cabinet.media.detach_from_item", "Detach media from item", "Preview detaching selected media from an item before confirmed state change.", SafetyConfirmRequired, []string{"profile", "workspace", "media", "target_item"}, []string{"media.detach_from_item"}, []string{"media_id", "item_id"}),
+		discoveriesSkill("cabinet.discoveries.search", "Search discoveries", "Search discovery results and provider evidence without mutating review state.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"discoveries.search"}, nil),
+		discoveriesSkill("cabinet.discoveries.review_result", "Review discovery result", "Review discovery result details, confidence, and provenance without changing destination state.", SafetyReadOnly, []string{"profile", "workspace", "discovery_result"}, []string{"discoveries.review_result"}, nil),
+		discoveriesSkill("cabinet.discoveries.dismiss_result", "Dismiss discovery result", "Preview dismissing a selected discovery result before confirmed review-state change.", SafetyConfirmRequired, []string{"profile", "workspace", "discovery_result"}, []string{"discoveries.dismiss_result"}, []string{"result_id"}),
+		discoveriesSkill("cabinet.discoveries.send_to_wishlist", "Send discovery to wishlist", "Preview handing a discovery to Wishlist while preserving provider and listing provenance.", SafetyConfirmRequired, []string{"profile", "workspace", "discovery_result"}, []string{"discoveries.send_to_wishlist"}, []string{"result_id"}),
+		discoveriesSkill("cabinet.discoveries.create_purchase", "Create purchase from discovery", "Preview creating purchase state from a discovery while preserving provider provenance.", SafetyConfirmRequired, []string{"profile", "workspace", "discovery_result"}, []string{"discoveries.create_purchase"}, []string{"result_id"}),
+		discoveriesSkill("cabinet.discoveries.create_or_update_inventory_candidate", "Create or update inventory candidate", "Preview creating or updating an inventory candidate from a discovery before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "discovery_result"}, []string{"discoveries.create_or_update_inventory_candidate"}, []string{"result_id"}),
 	}
 }
 
@@ -386,6 +422,22 @@ func purchasesSkill(id, displayName, description string, safety SafetyLevel, con
 	skill := builtIn(id, displayName, description, "purchases", safety, context, []string{"purchases.workflow"}, nil, []string{"purchases.table", "purchases.order.detail"})
 	skill.IntegrationWorkflows = append([]string{}, workflows...)
 	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	return deriveExecutionState(skill)
+}
+
+func mediaSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "media", safety, context, []string{"media.workflow"}, nil, []string{"media.library", "media.attachment.review"})
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	return deriveExecutionState(skill)
+}
+
+func discoveriesSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "discoveries", safety, context, []string{"discoveries.workflow"}, nil, []string{"discoveries.results", "discoveries.result.review"})
+	skill.RequiredProviders = []string{"provider-registry"}
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	skill.Permissions.ExternalRead = true
 	return deriveExecutionState(skill)
 }
 
@@ -497,6 +549,52 @@ func previewPurchasesBlocker(skillID string, params map[string]any) string {
 		}
 		if strings.TrimSpace(stringParam(params, "item_id")) == "" {
 			return "purchases_item_required"
+		}
+	}
+	return "confirmation_required"
+}
+
+func previewMediaBlocker(skillID string, params map[string]any) string {
+	switch skillID {
+	case "cabinet.media.search", "cabinet.media.review_unlinked":
+		return ""
+	case "cabinet.media.upload_or_import":
+		if strings.TrimSpace(stringParam(params, "source_url")) == "" && strings.TrimSpace(stringParam(params, "file_path")) == "" {
+			return "media_source_required"
+		}
+	case "cabinet.media.attach_to_item", "cabinet.media.detach_from_item":
+		if strings.TrimSpace(stringParam(params, "media_id")) == "" && strings.TrimSpace(stringParam(params, "attachment_id")) == "" {
+			return "media_target_required"
+		}
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" && strings.TrimSpace(stringParam(params, "target_item")) == "" {
+			return "media_item_required"
+		}
+	case "cabinet.media.update_notes":
+		if strings.TrimSpace(stringParam(params, "media_id")) == "" && strings.TrimSpace(stringParam(params, "attachment_id")) == "" {
+			return "media_target_required"
+		}
+	}
+	return "confirmation_required"
+}
+
+func previewDiscoveriesBlocker(skillID string, params map[string]any) string {
+	if strings.TrimSpace(stringParam(params, "provider_id")) == "" && strings.TrimSpace(stringParam(params, "provider_name")) == "" {
+		return "discoveries_provider_required"
+	}
+	switch skillID {
+	case "cabinet.discoveries.search":
+		return ""
+	case "cabinet.discoveries.review_result":
+		if strings.TrimSpace(stringParam(params, "result_id")) == "" && strings.TrimSpace(stringParam(params, "candidate_id")) == "" {
+			return "discoveries_result_required"
+		}
+		return ""
+	case "cabinet.discoveries.dismiss_result",
+		"cabinet.discoveries.send_to_wishlist",
+		"cabinet.discoveries.create_purchase",
+		"cabinet.discoveries.create_or_update_inventory_candidate":
+		if strings.TrimSpace(stringParam(params, "result_id")) == "" && strings.TrimSpace(stringParam(params, "candidate_id")) == "" {
+			return "discoveries_result_required"
 		}
 	}
 	return "confirmation_required"
