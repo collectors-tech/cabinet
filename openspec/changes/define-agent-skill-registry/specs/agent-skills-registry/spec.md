@@ -172,3 +172,11 @@ Cabinet SHALL maintain a durable per-surface Agent skill coverage matrix so broa
 - **THEN** the coverage matrix SHALL list each major Cabinet surface with the expected skill ids, user-facing request examples, safety level, required context or selection, required integration/provider setup, bound capability ids, bound guided workflow ids, implementation status, missing issue or PR links, validation evidence, and blocked/deferred reason where applicable
 - **AND** the matrix SHALL distinguish in-app main Chat, side-panel Chat, Inbox review, and Telegram/external channels instead of treating all Agent entry points as equivalent
 - **AND** planned, blocked, and deferred entries SHALL stay explicit until their linked issues provide implementation, validation, and closure evidence
+
+#### Scenario: Wishlist and Collections skill surfaces expose governed preview boundaries
+- **GIVEN** Wishlist and Collections are registered as Cabinet Agent skill surfaces
+- **WHEN** Cabinet lists or previews their built-in skills
+- **THEN** Wishlist SHALL expose `cabinet.wishlist.search_entries`, `cabinet.wishlist.create_entry`, `cabinet.wishlist.update_entry`, `cabinet.wishlist.mark_purchased`, `cabinet.wishlist.soft_delete_entry`, and `cabinet.wishlist.restore_entry` with read-only search and confirmation-gated mutation safety
+- **AND** Collections SHALL expose `cabinet.collections.search`, `cabinet.collections.create`, `cabinet.collections.update_metadata`, `cabinet.collections.assign_item`, `cabinet.collections.soft_delete`, and `cabinet.collections.move_items_on_delete` with read-only search and confirmation-gated mutation safety
+- **AND** previews SHALL block missing wishlist item or entry context, missing collection item or destination context, and attempts to delete `All Items` before any mutation is applied
+- **AND** the Wishlist purchased preview contract SHALL identify purchase lifecycle and inventory quantity sync evidence as required before the runtime apply path can be treated as complete

@@ -121,6 +121,38 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	if addPurchaseLine.SafetyLevel != "confirm-required" || !addPurchaseLine.Permissions.RequiresConfirm || !slices.Contains(addPurchaseLine.RequiredContext, "target_order") {
 		t.Fatalf("expected confirmation-gated purchase line item metadata, got %+v", addPurchaseLine)
 	}
+
+	wishlistSearch := findAPISkill(payload.Skills, "cabinet.wishlist.search_entries")
+	if wishlistSearch == nil {
+		t.Fatalf("missing Wishlist search skill")
+	}
+	if wishlistSearch.SafetyLevel != "read-only" || wishlistSearch.Permissions.LocalWrite || !wishlistSearch.Executable {
+		t.Fatalf("expected executable read-only Wishlist search metadata, got %+v", wishlistSearch)
+	}
+
+	wishlistPurchased := findAPISkill(payload.Skills, "cabinet.wishlist.mark_purchased")
+	if wishlistPurchased == nil {
+		t.Fatalf("missing Wishlist mark purchased skill")
+	}
+	if wishlistPurchased.SafetyLevel != "confirm-required" || !wishlistPurchased.Permissions.RequiresConfirm || !slices.Contains(wishlistPurchased.RequiredContext, "purchase_details") {
+		t.Fatalf("expected confirmation-gated Wishlist purchased metadata, got %+v", wishlistPurchased)
+	}
+
+	collectionsSearch := findAPISkill(payload.Skills, "cabinet.collections.search")
+	if collectionsSearch == nil {
+		t.Fatalf("missing Collections search skill")
+	}
+	if collectionsSearch.SafetyLevel != "read-only" || collectionsSearch.Permissions.LocalWrite || !collectionsSearch.Executable {
+		t.Fatalf("expected executable read-only Collections search metadata, got %+v", collectionsSearch)
+	}
+
+	collectionDelete := findAPISkill(payload.Skills, "cabinet.collections.soft_delete")
+	if collectionDelete == nil {
+		t.Fatalf("missing Collections soft delete skill")
+	}
+	if collectionDelete.SafetyLevel != "confirm-required" || !collectionDelete.Permissions.RequiresConfirm || !slices.Contains(collectionDelete.RequiredContext, "collection") {
+		t.Fatalf("expected confirmation-gated Collections delete metadata, got %+v", collectionDelete)
+	}
 }
 
 func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
@@ -155,6 +187,50 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	}
 	if !payload.ConfirmationRequired || payload.Blocker != "users_admin_protected_owner_remove_blocked" {
 		t.Fatalf("expected protected owner confirmation blocker, got %+v", payload)
+	}
+}
+
+func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	wishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"test-profile",
+		"skill_id":"cabinet.wishlist.mark_purchased",
+		"parameters":{"purchase_url":"https://example.test/order"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if wishlist.Code != http.StatusOK {
+		t.Fatalf("wishlist preview status=%d body=%s", wishlist.Code, wishlist.Body.String())
+	}
+	if !strings.Contains(wishlist.Body.String(), `"blocker":"wishlist_entry_required"`) ||
+		!strings.Contains(wishlist.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected missing wishlist entry blocker, body=%s", wishlist.Body.String())
+	}
+
+	allItems := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"test-profile",
+		"skill_id":"cabinet.collections.soft_delete",
+		"parameters":{"collection_name":"All Items"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if allItems.Code != http.StatusOK {
+		t.Fatalf("collections All Items preview status=%d body=%s", allItems.Code, allItems.Body.String())
+	}
+	if !strings.Contains(allItems.Body.String(), `"blocker":"collections_all_items_protected"`) ||
+		!strings.Contains(allItems.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected protected All Items blocker, body=%s", allItems.Body.String())
+	}
+
+	nonEmptyDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"test-profile",
+		"skill_id":"cabinet.collections.soft_delete",
+		"parameters":{"collection_name":"Display Case","has_items":true}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if nonEmptyDelete.Code != http.StatusOK {
+		t.Fatalf("collections non-empty delete preview status=%d body=%s", nonEmptyDelete.Code, nonEmptyDelete.Body.String())
+	}
+	if !strings.Contains(nonEmptyDelete.Body.String(), `"blocker":"collections_delete_destination_required"`) {
+		t.Fatalf("expected missing destination blocker, body=%s", nonEmptyDelete.Body.String())
 	}
 }
 
