@@ -234,6 +234,175 @@ func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testin
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesWishlistSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Wishlist"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	createWishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.create_entry",
+		"confirm":true,
+		"source_surface":"telegram.wishlist.intent",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-wishlist-thread-1708",
+		"source_message_id":"tg-wishlist-message-1708",
+		"parameters":{
+			"part_number":"WISH-AGENT-1708",
+			"title":"Agent Wishlist Runtime Item",
+			"brand":"AFX",
+			"category":"Slot Cars",
+			"target_price":42,
+			"priority":"high",
+			"needed_quantity":3,
+			"notes":"agent wishlist runtime create",
+			"source_url":"https://example.test/wishlist/1708"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createWishlist.Code != http.StatusOK {
+		t.Fatalf("create wishlist skill status=%d body=%s", createWishlist.Code, createWishlist.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.wishlist.create_entry"`,
+		`"source_channel":"telegram"`,
+		`"mutation_applied":true`,
+		`"operation":"wishlist.entry.create"`,
+		`"wishlist_persisted":true`,
+		`"created_item":true`,
+	} {
+		if !strings.Contains(createWishlist.Body.String(), want) {
+			t.Fatalf("create wishlist response missing %s: body=%s", want, createWishlist.Body.String())
+		}
+	}
+	var created struct {
+		Target struct {
+			ItemID          string `json:"item_id"`
+			WishlistEntryID string `json:"wishlist_entry_id"`
+		} `json:"target"`
+	}
+	if err := json.NewDecoder(createWishlist.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created wishlist skill response: %v", err)
+	}
+	if created.Target.ItemID == "" || created.Target.WishlistEntryID == "" {
+		t.Fatalf("expected created item and wishlist ids, got %+v body=%s", created.Target, createWishlist.Body.String())
+	}
+	var wishlistCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM wishlist_entries WHERE profile_id = ? AND id = ? AND item_id = ? AND priority = 'high'`, p.ID, created.Target.WishlistEntryID, created.Target.ItemID).Scan(&wishlistCount); err != nil {
+		t.Fatalf("count created wishlist entry: %v", err)
+	}
+	if wishlistCount != 1 {
+		t.Fatalf("expected one persisted wishlist entry, got %d", wishlistCount)
+	}
+
+	searchWishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.search_entries",
+		"parameters":{"query":"runtime create"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchWishlist.Code != http.StatusOK {
+		t.Fatalf("search wishlist skill status=%d body=%s", searchWishlist.Code, searchWishlist.Body.String())
+	}
+	if !strings.Contains(searchWishlist.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(searchWishlist.Body.String(), `"operation":"wishlist.entry.search"`) ||
+		!strings.Contains(searchWishlist.Body.String(), `"id":"`+created.Target.WishlistEntryID+`"`) {
+		t.Fatalf("expected read-only wishlist search evidence, body=%s", searchWishlist.Body.String())
+	}
+
+	updateWishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.update_entry",
+		"confirm":true,
+		"parameters":{"wishlist_entry_id":"`+created.Target.WishlistEntryID+`","priority":"medium","notes":"agent wishlist runtime updated","target_price":37}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateWishlist.Code != http.StatusOK {
+		t.Fatalf("update wishlist skill status=%d body=%s", updateWishlist.Code, updateWishlist.Body.String())
+	}
+	if !strings.Contains(updateWishlist.Body.String(), `"operation":"wishlist.entry.update"`) ||
+		!strings.Contains(updateWishlist.Body.String(), `"wishlist_persisted":true`) ||
+		!strings.Contains(updateWishlist.Body.String(), `"priority":"medium"`) {
+		t.Fatalf("expected wishlist update persistence evidence, body=%s", updateWishlist.Body.String())
+	}
+
+	if _, err := a.db.Exec(`INSERT INTO instances(id, item_id, condition, status, quantity, notes) VALUES ('agent-wishlist-existing-instance', ?, 'loose', 'loose', 2, 'existing inventory')`, created.Target.ItemID); err != nil {
+		t.Fatalf("seed existing wishlist inventory: %v", err)
+	}
+	markPurchasedBody := `{
+		"profile_id":"` + p.ID + `",
+		"skill_id":"cabinet.wishlist.mark_purchased",
+		"confirm":true,
+		"parameters":{
+			"wishlist_entry_id":"` + created.Target.WishlistEntryID + `",
+			"price_paid":31.5,
+			"purchase_url":"https://example.test/order/1708",
+			"purchase_date":"2026-07-05",
+			"purchase_condition":"sealed",
+			"quantity":3
+		}
+	}`
+	markPurchased := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(markPurchasedBody), map[string]string{"Content-Type": "application/json"})
+	if markPurchased.Code != http.StatusOK {
+		t.Fatalf("mark purchased skill status=%d body=%s", markPurchased.Code, markPurchased.Body.String())
+	}
+	if !strings.Contains(markPurchased.Body.String(), `"operation":"wishlist.entry.mark_purchased"`) ||
+		!strings.Contains(markPurchased.Body.String(), `"purchase_sync_provenance":true`) ||
+		!strings.Contains(markPurchased.Body.String(), `"inventory_quantity_sync_safe":true`) {
+		t.Fatalf("expected wishlist purchase sync evidence, body=%s", markPurchased.Body.String())
+	}
+	repeatPurchased := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(markPurchasedBody), map[string]string{"Content-Type": "application/json"})
+	if repeatPurchased.Code != http.StatusOK {
+		t.Fatalf("repeat mark purchased skill status=%d body=%s", repeatPurchased.Code, repeatPurchased.Body.String())
+	}
+	var quantity int
+	var lifecycleCount int
+	if err := a.db.QueryRow(`SELECT quantity FROM instances WHERE id = 'agent-wishlist-existing-instance'`).Scan(&quantity); err != nil {
+		t.Fatalf("load synced wishlist inventory instance: %v", err)
+	}
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM commerce_lifecycle_entries WHERE profile_id = ? AND source = 'wishlist' AND external_ref = ?`, p.ID, created.Target.WishlistEntryID).Scan(&lifecycleCount); err != nil {
+		t.Fatalf("count wishlist purchase lifecycle: %v", err)
+	}
+	if quantity != 5 || lifecycleCount != 1 {
+		t.Fatalf("expected one quantity sync and one lifecycle after repeated purchase apply, quantity=%d lifecycle=%d", quantity, lifecycleCount)
+	}
+
+	softDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.soft_delete_entry",
+		"confirm":true,
+		"parameters":{"wishlist_entry_id":"`+created.Target.WishlistEntryID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if softDelete.Code != http.StatusOK {
+		t.Fatalf("soft-delete wishlist skill status=%d body=%s", softDelete.Code, softDelete.Body.String())
+	}
+	if !strings.Contains(softDelete.Body.String(), `"operation":"wishlist.entry.soft_delete"`) ||
+		!strings.Contains(softDelete.Body.String(), `"wishlist_deleted":true`) {
+		t.Fatalf("expected wishlist soft-delete evidence, body=%s", softDelete.Body.String())
+	}
+
+	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.restore_entry",
+		"confirm":true,
+		"parameters":{"wishlist_entry_id":"`+created.Target.WishlistEntryID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if restore.Code != http.StatusOK {
+		t.Fatalf("restore wishlist skill status=%d body=%s", restore.Code, restore.Body.String())
+	}
+	if !strings.Contains(restore.Body.String(), `"operation":"wishlist.entry.restore"`) ||
+		!strings.Contains(restore.Body.String(), `"wishlist_deleted":false`) {
+		t.Fatalf("expected wishlist restore evidence, body=%s", restore.Body.String())
+	}
+}
+
 func TestAgentSkillAPIPropagatesInvocationSourceContext(t *testing.T) {
 	t.Parallel()
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/chat"
+	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
@@ -53,6 +54,13 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.purchases.reconcile_item",
 		"cabinet.purchases.review_purchase":
 		return applyAgentPurchasesSkill(ctx, conn, skillID, profileID, params)
+	case "cabinet.wishlist.search_entries",
+		"cabinet.wishlist.create_entry",
+		"cabinet.wishlist.update_entry",
+		"cabinet.wishlist.mark_purchased",
+		"cabinet.wishlist.soft_delete_entry",
+		"cabinet.wishlist.restore_entry":
+		return applyAgentWishlistSkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.media.search",
 		"cabinet.media.upload_or_import",
 		"cabinet.media.attach_to_item",
@@ -1056,6 +1064,249 @@ func agentDiscoveryActionPayload(params map[string]any, providerID, skillID stri
 		payload["ownership_confirmed"] = true
 	}
 	return payload
+}
+
+func applyAgentWishlistSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+	if conn == nil {
+		return nil, "wishlist_store_required", fmt.Errorf("database connection required")
+	}
+	svc := wishlist.NewService(conn)
+	result := map[string]any{
+		"profile_id":                   profileID,
+		"purchase_sync_provenance":     false,
+		"inventory_quantity_sync_safe": false,
+	}
+	switch skillID {
+	case "cabinet.wishlist.search_entries":
+		entries, err := svc.ListByProfileDeleted(ctx, profileID, boolMapParam(params, "deleted"))
+		if err != nil {
+			return nil, "wishlist_search_failed", err
+		}
+		filtered := filterAgentWishlistEntries(entries, stringMapParam(params, "query"))
+		result["operation"] = "wishlist.entry.search"
+		result["read_only"] = true
+		result["query"] = stringMapParam(params, "query")
+		result["entries"] = filtered
+		result["total"] = len(filtered)
+		result["next_action"] = "Select a wishlist entry before applying updates, purchase state, delete, or restore."
+	case "cabinet.wishlist.create_entry":
+		itemID, createdItem, err := ensureAgentWishlistItem(ctx, conn, profileID, params)
+		if err != nil {
+			return nil, "wishlist_item_context_required", err
+		}
+		entry, err := svc.CreateForProfile(ctx, profileID, agentWishlistEntryFromParams(params, wishlist.Entry{ItemID: itemID}))
+		if err != nil {
+			return nil, "wishlist_entry_persist_failed", err
+		}
+		result["operation"] = "wishlist.entry.create"
+		result["status"] = "confirmed"
+		result["item_id"] = itemID
+		result["created_item"] = createdItem
+		result["wishlist_entry_id"] = entry.ID
+		result["wishlist_entry"] = entry
+		result["wishlist_persisted"] = true
+		result["next_action"] = "Open Wishlist to review the persisted entry before purchase or delete actions."
+	case "cabinet.wishlist.update_entry", "cabinet.wishlist.mark_purchased":
+		entryID := agentWishlistEntryID(params)
+		if entryID == "" {
+			return nil, "wishlist_entry_required", fmt.Errorf("wishlist entry required")
+		}
+		existing, err := svc.GetByIDForProfile(ctx, profileID, entryID)
+		if err != nil {
+			return nil, "wishlist_entry_required", err
+		}
+		updated := agentWishlistEntryFromParams(params, existing)
+		if skillID == "cabinet.wishlist.mark_purchased" {
+			updated.Owned = true
+			updated.Delivered = boolMapParam(params, "delivered")
+		}
+		if err := svc.UpdateForProfile(ctx, profileID, updated); err != nil {
+			return nil, "wishlist_entry_persist_failed", err
+		}
+		reloaded, err := svc.GetByIDForProfile(ctx, profileID, entryID)
+		if err != nil {
+			return nil, "wishlist_entry_required", err
+		}
+		result["operation"] = agentWishlistOperation(skillID)
+		result["status"] = "confirmed"
+		result["item_id"] = reloaded.ItemID
+		result["wishlist_entry_id"] = reloaded.ID
+		result["wishlist_entry"] = reloaded
+		result["wishlist_persisted"] = true
+		if skillID == "cabinet.wishlist.mark_purchased" {
+			result["purchase_sync_provenance"] = true
+			result["inventory_quantity_sync_safe"] = true
+			result["next_action"] = "Review Wishlist, Purchases, and Inventory evidence for the confirmed purchase sync."
+		}
+	case "cabinet.wishlist.soft_delete_entry":
+		entryID := agentWishlistEntryID(params)
+		if entryID == "" {
+			return nil, "wishlist_entry_required", fmt.Errorf("wishlist entry required")
+		}
+		if err := svc.DeleteForProfile(ctx, profileID, entryID); err != nil {
+			return nil, "wishlist_entry_persist_failed", err
+		}
+		deleted, err := svc.GetByIDForProfile(ctx, profileID, entryID)
+		if err != nil {
+			return nil, "wishlist_entry_required", err
+		}
+		result["operation"] = "wishlist.entry.soft_delete"
+		result["status"] = "confirmed"
+		result["wishlist_entry_id"] = entryID
+		result["wishlist_entry"] = deleted
+		result["wishlist_deleted"] = deleted.Deleted
+		result["wishlist_persisted"] = true
+		result["next_action"] = "Open deleted Wishlist entries to verify the hidden state before restoring or permanently deleting."
+	case "cabinet.wishlist.restore_entry":
+		entryID := agentWishlistEntryID(params)
+		if entryID == "" {
+			return nil, "wishlist_entry_required", fmt.Errorf("wishlist entry required")
+		}
+		if err := svc.RestoreForProfile(ctx, profileID, entryID); err != nil {
+			return nil, "wishlist_entry_persist_failed", err
+		}
+		restored, err := svc.GetByIDForProfile(ctx, profileID, entryID)
+		if err != nil {
+			return nil, "wishlist_entry_required", err
+		}
+		result["operation"] = "wishlist.entry.restore"
+		result["status"] = "confirmed"
+		result["wishlist_entry_id"] = entryID
+		result["wishlist_entry"] = restored
+		result["wishlist_deleted"] = restored.Deleted
+		result["wishlist_persisted"] = true
+	}
+	return result, "", nil
+}
+
+func filterAgentWishlistEntries(entries []wishlist.Entry, query string) []wishlist.Entry {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return entries
+	}
+	out := make([]wishlist.Entry, 0, len(entries))
+	for _, entry := range entries {
+		haystack := strings.ToLower(strings.Join([]string{
+			entry.ID,
+			entry.ItemID,
+			entry.Priority,
+			entry.Notes,
+			entry.PurchaseURL,
+			entry.PurchaseDate,
+			entry.PurchaseCondition,
+		}, " "))
+		if strings.Contains(haystack, query) {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func ensureAgentWishlistItem(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (string, bool, error) {
+	if itemID := stringMapParam(params, "item_id"); itemID != "" {
+		return itemID, false, nil
+	}
+	partNumber := stringMapParam(params, "part_number")
+	title := stringMapParam(params, "title")
+	if partNumber == "" || title == "" {
+		return "", false, fmt.Errorf("wishlist item context required")
+	}
+	sourceURL := stringMapParam(params, "source_url")
+	sourceURLs := []string{}
+	if sourceURL != "" {
+		sourceURLs = append(sourceURLs, sourceURL)
+	}
+	created, err := collection.NewRepository(conn).CreateItemForProfile(ctx, profileID, collection.Item{
+		Brand:      firstNonEmptyString(stringMapParam(params, "brand"), "Unknown"),
+		Category:   firstNonEmptyString(stringMapParam(params, "category"), "Wishlist"),
+		PartNumber: partNumber,
+		Title:      title,
+		Status:     "wishlist",
+		Priority:   stringMapParam(params, "priority"),
+		Notes:      agentWishlistNotes(params),
+		SourceURLs: sourceURLs,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return created.ID, true, nil
+}
+
+func agentWishlistEntryFromParams(params map[string]any, base wishlist.Entry) wishlist.Entry {
+	out := base
+	if id := agentWishlistEntryID(params); id != "" {
+		out.ID = id
+	}
+	if itemID := stringMapParam(params, "item_id"); itemID != "" {
+		out.ItemID = itemID
+	}
+	if value, ok := params["target_price"]; ok && value != nil {
+		out.TargetPrice = floatMapParam(params, "target_price")
+	}
+	if priority := stringMapParam(params, "priority"); priority != "" {
+		out.Priority = priority
+	}
+	if _, ok := params["notes"]; ok {
+		out.Notes = agentWishlistNotes(params)
+	}
+	if _, ok := params["highlight_hit"]; ok {
+		out.HighlightHit = boolMapParam(params, "highlight_hit")
+	}
+	if _, ok := params["below_target_now"]; ok {
+		out.BelowTargetNow = boolMapParam(params, "below_target_now")
+	}
+	if _, ok := params["owned"]; ok {
+		out.Owned = boolMapParam(params, "owned")
+	}
+	if _, ok := params["delivered"]; ok {
+		out.Delivered = boolMapParam(params, "delivered")
+	}
+	if value, ok := params["price_paid"]; ok && value != nil {
+		out.PricePaid = floatMapParam(params, "price_paid")
+	}
+	if purchaseURL := stringMapParam(params, "purchase_url"); purchaseURL != "" {
+		out.PurchaseURL = purchaseURL
+	}
+	if purchaseDate := stringMapParam(params, "purchase_date"); purchaseDate != "" {
+		out.PurchaseDate = purchaseDate
+	}
+	if condition := stringMapParam(params, "purchase_condition"); condition != "" {
+		out.PurchaseCondition = condition
+	}
+	if value, ok := params["quantity"]; ok && value != nil {
+		out.Quantity = intMapParam(params, "quantity")
+	}
+	if value, ok := params["needed_quantity"]; ok && value != nil {
+		out.NeededQuantity = intMapParam(params, "needed_quantity")
+	}
+	return out
+}
+
+func agentWishlistEntryID(params map[string]any) string {
+	return firstNonEmptyString(stringMapParam(params, "wishlist_entry_id"), stringMapParam(params, "entry_id"))
+}
+
+func agentWishlistOperation(skillID string) string {
+	switch skillID {
+	case "cabinet.wishlist.mark_purchased":
+		return "wishlist.entry.mark_purchased"
+	case "cabinet.wishlist.update_entry":
+		return "wishlist.entry.update"
+	default:
+		return "wishlist.entry.apply"
+	}
+}
+
+func agentWishlistNotes(params map[string]any) string {
+	notes := strings.TrimSpace(stringMapParam(params, "notes"))
+	sourceURL := strings.TrimSpace(stringMapParam(params, "source_url"))
+	if sourceURL == "" {
+		return notes
+	}
+	if notes == "" {
+		return "source_url=" + sourceURL
+	}
+	return notes + " source_url=" + sourceURL
 }
 
 func agentMarketWatchQuerySet(providerID, query string, params map[string]any) scanner.QuerySet {
