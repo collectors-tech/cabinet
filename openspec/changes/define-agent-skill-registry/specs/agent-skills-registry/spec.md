@@ -197,3 +197,19 @@ Cabinet SHALL maintain a durable per-surface Agent skill coverage matrix so broa
 - **AND** read-only search SHALL return matching collections and workspace item memberships without mutating Cabinet state
 - **AND** `All Items` SHALL remain protected from deletion or unsafe rename during confirmed apply
 - **AND** source surface, source channel, source thread id, and source message id SHALL remain visible in the preview/apply response when supplied by the invoking boundary
+
+#### Scenario: Inventory skill surfaces expose governed preview boundaries
+- **GIVEN** Inventory is registered as a Cabinet Agent skill surface
+- **WHEN** Cabinet lists or previews its built-in skills
+- **THEN** Inventory SHALL expose `cabinet.inventory.search_items`, `cabinet.inventory.create_item`, `cabinet.inventory.update_item`, `cabinet.inventory.attach_media`, and `cabinet.inventory.assign_to_collection` with read-only search and confirmation-gated mutation safety
+- **AND** previews SHALL block missing item details, missing selected item, missing explicit media, missing collection, and invalid deleted/trash collection targets before any mutation is applied
+- **AND** the guided `cabinet.guided.inventory.update_item` skill SHALL remain non-executable until the guided update walkthrough dependency is validated
+
+#### Scenario: Inventory skill confirmed apply persists governed state
+- **GIVEN** a confirmed Inventory Agent Skill apply request includes the required profile and target context
+- **WHEN** Cabinet applies create-item, update-item, attach-media, assign-to-collection, or read-only search Inventory skills
+- **THEN** create and update actions SHALL persist through the Inventory item repository instead of returning preview-only claims
+- **AND** read-only search SHALL return matching active-profile Inventory items without mutating Cabinet state
+- **AND** media attach SHALL require an explicit existing media asset and persist a profile-scoped inventory media link with provenance
+- **AND** collection assignment SHALL verify the item belongs to the active profile and persist the workspace collection membership
+- **AND** source surface, source channel, source thread id, and source message id SHALL remain visible in the preview/apply response when supplied by the invoking boundary

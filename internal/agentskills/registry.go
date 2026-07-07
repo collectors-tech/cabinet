@@ -197,6 +197,18 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 		}
 		return resp, nil
 	}
+	if strings.HasPrefix(skill.ID, "cabinet.inventory.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewInventoryBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "item_id", "title", "part_number", "brand", "category", "status", "collection_name", "media_id", "attachment_id", "source_url")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select the inventory item, collection, or explicit media target, review the preview, then confirm before Cabinet changes inventory state."
+		}
+		return resp, nil
+	}
 	if strings.HasPrefix(skill.ID, "cabinet.wishlist.") {
 		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
 		resp.Blocker = previewWishlistBlocker(skill.ID, params)
@@ -299,8 +311,11 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 func builtInSkills() []Skill {
 	return []Skill{
 		builtIn("cabinet.navigate.open_surface", "Open Cabinet surface", "Navigate to a known Cabinet surface without mutating records.", "navigation", SafetyPreviewOnly, []string{"profile", "workspace", "thread", "known_surface"}, []string{"navigate.open_surface"}, nil, nil),
-		builtIn("cabinet.inventory.create_item", "Create inventory item", "Draft an inventory item and require explicit confirmation before persistence.", "inventory", SafetyConfirmRequired, []string{"profile", "workspace", "thread"}, []string{"inventory.item.create"}, nil, nil),
-		builtIn("cabinet.inventory.update_item", "Update inventory item", "Preview edits to an existing inventory item before applying confirmed changes.", "inventory", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item"}, []string{"inventory.item.update", "update_open_item_title"}, nil, nil),
+		inventorySkill("cabinet.inventory.search_items", "Search inventory items", "Search profile inventory items and instance details without mutating records.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"inventory.item.search"}, nil),
+		inventorySkill("cabinet.inventory.create_item", "Create inventory item", "Draft an inventory item and require explicit confirmation before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "item_details"}, []string{"inventory.item.create"}, []string{"part_number", "title"}),
+		inventorySkill("cabinet.inventory.update_item", "Update inventory item", "Preview edits to an existing inventory item before applying confirmed changes.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item"}, []string{"inventory.item.update", "update_open_item_title"}, []string{"item_id"}),
+		inventorySkill("cabinet.inventory.attach_media", "Attach media to inventory item", "Attach explicit selected or uploaded media to an inventory item after confirmation.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "selected_media"}, []string{"inventory.media.attach"}, []string{"item_id", "media_id"}),
+		inventorySkill("cabinet.inventory.assign_to_collection", "Assign inventory item to collection", "Assign an inventory item to a valid collection after confirmation.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"inventory.collection.assign"}, []string{"item_id", "collection_name"}),
 		wishlistSkill("cabinet.wishlist.search_entries", "Search wishlist entries", "Search wishlist entries, planning notes, purchase state, and highlight status without mutating records.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"wishlist.entry.search"}, nil),
 		wishlistSkill("cabinet.wishlist.create_entry", "Create wishlist entry", "Draft a wishlist entry and require confirmation before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wanted_item_details"}, []string{"wishlist.entry.create"}, []string{"wishlist.entry.create"}),
 		wishlistSkill("cabinet.wishlist.update_entry", "Update wishlist entry", "Preview updates to target price, priority, notes, purchase details, and planning state before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry"}, []string{"wishlist.entry.update"}, []string{"wishlist_entry_id"}),
@@ -441,6 +456,13 @@ func settingsSkill(id, displayName, description string, safety SafetyLevel, cont
 	return deriveExecutionState(skill)
 }
 
+func inventorySkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "inventory", safety, context, workflows, nil, []string{"inventory.table", "inventory.item.detail", "inventory.item.editor"})
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	return deriveExecutionState(skill)
+}
+
 func marketWatchSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
 	skill := builtIn(id, displayName, description, "market-watch", safety, context, []string{"market-watch.workflow"}, nil, []string{"market-watch.table", "market-watch.result.review"})
 	skill.RequiredProviders = []string{"provider-registry"}
@@ -542,6 +564,40 @@ func previewWishlistBlocker(skillID string, params map[string]any) string {
 		"cabinet.wishlist.restore_entry":
 		if strings.TrimSpace(stringParam(params, "wishlist_entry_id")) == "" && strings.TrimSpace(stringParam(params, "entry_id")) == "" {
 			return "wishlist_entry_required"
+		}
+	}
+	return "confirmation_required"
+}
+
+func previewInventoryBlocker(skillID string, params map[string]any) string {
+	switch skillID {
+	case "cabinet.inventory.search_items":
+		return ""
+	case "cabinet.inventory.create_item":
+		if strings.TrimSpace(stringParam(params, "part_number")) == "" || strings.TrimSpace(stringParam(params, "title")) == "" {
+			return "inventory_item_context_required"
+		}
+	case "cabinet.inventory.update_item":
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" {
+			return "inventory_item_required"
+		}
+	case "cabinet.inventory.attach_media":
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" {
+			return "inventory_item_required"
+		}
+		if strings.TrimSpace(stringParam(params, "media_id")) == "" && strings.TrimSpace(stringParam(params, "attachment_id")) == "" {
+			return "inventory_media_required"
+		}
+	case "cabinet.inventory.assign_to_collection":
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" {
+			return "inventory_item_required"
+		}
+		collectionName := firstNonEmptyParam(params, "collection_name", "collection")
+		if collectionName == "" {
+			return "inventory_collection_required"
+		}
+		if strings.EqualFold(collectionName, "Deleted") || strings.EqualFold(collectionName, "Trash") {
+			return "inventory_collection_invalid"
 		}
 	}
 	return "confirmation_required"

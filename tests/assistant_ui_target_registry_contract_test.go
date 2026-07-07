@@ -234,3 +234,73 @@ func TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch(t *
 		}
 	}
 }
+
+func TestAssistantWorkspaceAgentSkillPanelExposesInventoryDispatch(t *testing.T) {
+	t.Parallel()
+
+	panelPath := filepath.Join("..", "ui.web", "src", "components", "layout", "assistant-workspace-panel.tsx")
+	panelRaw, err := os.ReadFile(panelPath)
+	if err != nil {
+		t.Fatalf("read assistant workspace panel: %v", err)
+	}
+	panel := string(panelRaw)
+
+	for _, fragment := range []string{
+		"id: 'cabinet.inventory.search_items'",
+		"id: 'cabinet.inventory.create_item'",
+		"id: 'cabinet.inventory.update_item'",
+		"id: 'cabinet.inventory.attach_media'",
+		"id: 'cabinet.inventory.assign_to_collection'",
+		"surface: 'inventory.quick-create'",
+		"surface: 'inventory.media.assignment'",
+		"surface: 'inventory.collection.assignment'",
+		"params.part_number = primary",
+		"params.title = context",
+		"params.item_id = primary",
+		"params.media_id = context",
+		"params.collection_name = context",
+		"source_channel: 'in-app'",
+		"source_message_id: 'assistant-workspace-agent-skill'",
+	} {
+		if !strings.Contains(panel, fragment) {
+			t.Fatalf("expected #1707 Assistant workspace Agent Skill panel to include %q", fragment)
+		}
+	}
+
+	specPath := filepath.Join("..", "ui.web", "cypress", "e2e", "chats", "assistant-workspace-agent-skills", "spec.cy.ts")
+	specRaw, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatalf("read assistant workspace Agent Skill Cypress spec: %v", err)
+	}
+	spec := string(specRaw)
+	for _, fragment := range []string{
+		"ASSISTANT-WORKSPACE-015/#1707 dispatches Inventory Agent Skills with in-app source context",
+		"cabinet.inventory.create_item",
+		"inventory.quick-create",
+		"part_number).to.eq('INV-1707-SP')",
+		"source_channel).to.eq('in-app')",
+	} {
+		if !strings.Contains(spec, fragment) {
+			t.Fatalf("expected #1707 Agent Skill Cypress spec to include %q", fragment)
+		}
+	}
+
+	tracePath := filepath.Join("..", "openspec", "traceability.md")
+	traceRaw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+	trace := string(traceRaw)
+	for _, fragment := range []string{
+		"`ASSISTANT-WORKSPACE-015`",
+		"#1707",
+		"Inventory Agent Skills",
+		"source_channel=in-app",
+		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
+		"TestAssistantWorkspaceAgentSkillPanelExposesInventoryDispatch",
+	} {
+		if !strings.Contains(trace, fragment) {
+			t.Fatalf("expected #1707 Assistant workspace traceability to include %q", fragment)
+		}
+	}
+}

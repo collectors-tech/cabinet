@@ -314,6 +314,115 @@ describe('chats/assistant-workspace-agent-skills', () => {
       .and('contain', 'mutation: true')
   })
 
+  it('ASSISTANT-WORKSPACE-015/#1707 dispatches Inventory Agent Skills with in-app source context', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/agent/skills/preview', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.inventory.create_item')
+      expect(req.body.source_surface).to.eq('inventory.quick-create')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.source_thread_id).to.be.a('string').and.not.eq('')
+      expect(req.body.source_message_id).to.eq(
+        'assistant-workspace-agent-skill'
+      )
+      expect(req.body.parameters.part_number).to.eq('INV-1707-SP')
+      expect(req.body.parameters.title).to.eq(
+        'Inventory side panel dispatch proof'
+      )
+      expect(req.body.parameters.source_url).to.eq(
+        'https://example.test/inventory/1707'
+      )
+      expect(req.body.parameters.notes).to.eq(
+        'https://example.test/inventory/1707'
+      )
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.inventory.create_item',
+          status: 'available',
+          safety_level: 'confirm-required',
+          allowed: false,
+          preview_only: true,
+          mutation_applied: false,
+          confirmation_required: true,
+          blocker: 'confirmation_required',
+          source_surface: 'inventory.quick-create',
+          source_channel: 'in-app',
+        },
+      })
+    }).as('inventorySkillPreview')
+    cy.intercept('POST', '/api/agent/skills/apply', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.inventory.create_item')
+      expect(req.body.confirm).to.eq(true)
+      expect(req.body.source_surface).to.eq('inventory.quick-create')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.parameters.part_number).to.eq('INV-1707-SP')
+      expect(req.body.parameters.title).to.eq(
+        'Inventory side panel dispatch proof'
+      )
+      expect(req.body.parameters.source_url).to.eq(
+        'https://example.test/inventory/1707'
+      )
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.inventory.create_item',
+          mutation_applied: true,
+          source_surface: 'inventory.quick-create',
+          source_channel: 'in-app',
+          target: {
+            operation: 'inventory.item.create',
+            item_id: 'item-inventory-1707',
+            part_number: 'INV-1707-SP',
+            inventory_persisted: true,
+            external_write_claimed: false,
+          },
+        },
+      })
+    }).as('inventorySkillApply')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.inventory.create_item',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('INV-1707-SP', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('Inventory side panel dispatch proof', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-secret"]')
+      .clear()
+      .type('https://example.test/inventory/1707', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@inventorySkillPreview')
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.inventory.create_item')
+      .and('contain', 'confirm-required')
+      .and('contain', 'confirmation_required')
+
+    cy.get('[data-testid="shell-assistant-agent-skill-apply"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]')
+      .should('contain', 'cabinet.inventory.create_item')
+      .and('contain', 'inventory.quick-create')
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+    cy.wait('@inventorySkillApply')
+    cy.get('[data-testid="shell-assistant-agent-skill-result"]')
+      .should('contain', 'inventory.item.create')
+      .and('contain', 'mutation: true')
+  })
+
   it('ASSISTANT-WORKSPACE-013/#1709 dispatches Media Agent Skills with in-app source context', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/agent/skills/preview', (req) => {

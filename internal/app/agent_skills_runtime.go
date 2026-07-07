@@ -31,6 +31,12 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		return applyAgentInboxSkill(ctx, chatSvc, profileID, params, "read")
 	case "cabinet.inbox.archive_or_hide":
 		return applyAgentInboxSkill(ctx, chatSvc, profileID, params, "archived")
+	case "cabinet.inventory.search_items",
+		"cabinet.inventory.create_item",
+		"cabinet.inventory.update_item",
+		"cabinet.inventory.attach_media",
+		"cabinet.inventory.assign_to_collection":
+		return applyAgentInventorySkill(ctx, conn, skillID, profileID, params)
 	case "cabinet.integrations.search_providers",
 		"cabinet.integrations.configure_provider",
 		"cabinet.integrations.test_connection",
@@ -142,6 +148,214 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 	default:
 		return nil, "skill_apply_not_supported", fmt.Errorf("skill apply not supported")
 	}
+}
+
+func applyAgentInventorySkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+	if conn == nil {
+		return nil, "inventory_store_required", fmt.Errorf("database connection required")
+	}
+	repo := collection.NewRepository(conn)
+	result := map[string]any{"profile_id": profileID}
+	switch skillID {
+	case "cabinet.inventory.search_items":
+		items, err := agentInventorySearch(ctx, conn, profileID, stringMapParam(params, "query"))
+		if err != nil {
+			return nil, "inventory_search_failed", err
+		}
+		result["operation"] = "inventory.item.search"
+		result["read_only"] = true
+		result["query"] = stringMapParam(params, "query")
+		result["items"] = items
+		result["total"] = len(items)
+		result["next_action"] = "Select an inventory item before applying update, media, or collection actions."
+	case "cabinet.inventory.create_item":
+		item, err := agentInventoryItemFromParams(params, collection.Item{
+			Brand:    firstNonEmptyString(stringMapParam(params, "brand"), "Unknown"),
+			Category: firstNonEmptyString(stringMapParam(params, "category"), "Inventory"),
+			Status:   firstNonEmptyString(stringMapParam(params, "status"), "active"),
+		})
+		if err != nil {
+			return nil, "inventory_item_context_required", err
+		}
+		created, err := repo.CreateItemForProfile(ctx, profileID, item)
+		if err != nil {
+			return nil, "inventory_item_persist_failed", err
+		}
+		result["operation"] = "inventory.item.create"
+		result["status"] = "confirmed"
+		result["item_id"] = created.ID
+		result["item"] = created
+		result["inventory_persisted"] = true
+		result["next_action"] = "Open Inventory to verify the new item and add instances or media if needed."
+	case "cabinet.inventory.update_item":
+		itemID := stringMapParam(params, "item_id")
+		if itemID == "" {
+			return nil, "inventory_item_required", fmt.Errorf("inventory item required")
+		}
+		existing, err := repo.GetItemByID(ctx, itemID)
+		if err != nil || strings.TrimSpace(existing.ID) == "" || !agentCollectionItemBelongsToProfile(ctx, conn, profileID, itemID) {
+			return nil, "inventory_item_required", fmt.Errorf("inventory item not found")
+		}
+		updated, err := agentInventoryItemFromParams(params, existing)
+		if err != nil {
+			return nil, "inventory_item_context_required", err
+		}
+		updated.ID = existing.ID
+		if _, err := repo.UpdateItem(ctx, updated.ID, updated); err != nil {
+			return nil, "inventory_item_persist_failed", err
+		}
+		reloaded, err := repo.GetItemByID(ctx, itemID)
+		if err != nil {
+			return nil, "inventory_item_required", err
+		}
+		result["operation"] = "inventory.item.update"
+		result["status"] = "confirmed"
+		result["item_id"] = reloaded.ID
+		result["item"] = reloaded
+		result["inventory_persisted"] = true
+		result["next_action"] = "Refresh Inventory or item detail to verify the confirmed field updates."
+	case "cabinet.inventory.attach_media":
+		itemID := stringMapParam(params, "item_id")
+		mediaID := firstNonEmptyString(stringMapParam(params, "media_id"), stringMapParam(params, "attachment_id"))
+		if itemID == "" {
+			return nil, "inventory_item_required", fmt.Errorf("inventory item required")
+		}
+		if mediaID == "" {
+			return nil, "inventory_media_required", fmt.Errorf("media required")
+		}
+		if !agentCollectionItemBelongsToProfile(ctx, conn, profileID, itemID) {
+			return nil, "inventory_item_required", fmt.Errorf("inventory item not found")
+		}
+		assignment, err := media.NewService(conn, "").ApplyAssignment(ctx, profileID, mediaID, "inventory", itemID)
+		if err != nil {
+			return nil, "inventory_media_attach_failed", err
+		}
+		result["operation"] = "inventory.media.attach"
+		result["status"] = "confirmed"
+		result["item_id"] = itemID
+		result["media_id"] = mediaID
+		result["attachment_persisted"] = assignment.Applied
+		result["provenance_preserved"] = true
+		result["assignment"] = assignment
+		result["next_action"] = "Open the Inventory item detail to verify the selected media is linked."
+	case "cabinet.inventory.assign_to_collection":
+		itemID := stringMapParam(params, "item_id")
+		collectionName := agentCollectionName(params)
+		if itemID == "" {
+			return nil, "inventory_item_required", fmt.Errorf("inventory item required")
+		}
+		if collectionName == "" {
+			return nil, "inventory_collection_required", fmt.Errorf("collection required")
+		}
+		if strings.EqualFold(collectionName, "Deleted") || strings.EqualFold(collectionName, "Trash") {
+			return nil, "inventory_collection_invalid", fmt.Errorf("collection invalid")
+		}
+		item, err := repo.GetItemByID(ctx, itemID)
+		if err != nil || strings.TrimSpace(item.ID) == "" || !agentCollectionItemBelongsToProfile(ctx, conn, profileID, itemID) || strings.TrimSpace(item.Status) == "deleted" {
+			return nil, "inventory_item_required", fmt.Errorf("inventory item not found")
+		}
+		state, err := loadAgentCollectionsWorkspace(ctx, conn, profileID)
+		if err != nil {
+			return nil, "collections_workspace_load_failed", err
+		}
+		state.Collections = ensureAgentCollectionName(state.Collections, "All Items")
+		state.Collections = ensureAgentCollectionName(state.Collections, collectionName)
+		state.ActiveCollection = collectionName
+		state.Items = upsertAgentCollectionItem(state.Items, item, collectionName)
+		if err := persistAgentCollectionsWorkspace(ctx, conn, profileID, state); err != nil {
+			return nil, "collections_workspace_persist_failed", err
+		}
+		result["operation"] = "inventory.collection.assign"
+		result["status"] = "confirmed"
+		result["item_id"] = itemID
+		result["collection_name"] = collectionName
+		result["collection_persisted"] = true
+		result["workspace"] = state
+		result["next_action"] = "Open Collections or Inventory to verify the item appears in the selected collection."
+	}
+	return result, "", nil
+}
+
+func agentInventorySearch(ctx context.Context, conn *sql.DB, profileID, query string) ([]collection.Item, error) {
+	rows, err := conn.QueryContext(ctx, `
+		SELECT id, brand, category, COALESCE(item_type,''), COALESCE((SELECT condition FROM instances WHERE item_id = canonical_items.id ORDER BY created_at ASC LIMIT 1), ''), part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, COALESCE(notes,''), tags_json, COALESCE(source_urls_json,'[]'), created_at, created_by, updated_at, updated_by, COALESCE(deleted_at,''), COALESCE(deleted_by,'')
+		FROM canonical_items
+		WHERE profile_id = ? AND COALESCE(deleted_at,'') = ''
+		ORDER BY updated_at DESC, created_at DESC, title ASC
+	`, strings.TrimSpace(profileID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	needle := strings.ToLower(strings.TrimSpace(query))
+	var items []collection.Item
+	for rows.Next() {
+		var item collection.Item
+		var tagsJSON, sourceURLsJSON string
+		if err := rows.Scan(&item.ID, &item.Brand, &item.Category, &item.ItemType, &item.Condition, &item.PartNumber, &item.Title, &item.Status, &item.Priority, &item.GradingStatus, &item.Grader, &item.GradeNumeric, &item.Slabbed, &item.CollectorClassification, &item.CarGradeType, &item.PackagingGradeType, &item.Make, &item.Model, &item.Year, &item.Scale, &item.Series, &item.Description, &item.Notes, &tagsJSON, &sourceURLsJSON, &item.CreatedAt, &item.CreatedBy, &item.UpdatedAt, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(tagsJSON), &item.Tags)
+		_ = json.Unmarshal([]byte(sourceURLsJSON), &item.SourceURLs)
+		if needle != "" && !agentInventoryItemMatches(item, needle) {
+			continue
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func agentInventoryItemMatches(item collection.Item, needle string) bool {
+	haystack := strings.ToLower(strings.Join([]string{
+		item.ID,
+		item.Brand,
+		item.Category,
+		item.PartNumber,
+		item.Title,
+		item.Status,
+		item.Priority,
+		item.Description,
+		item.Notes,
+		item.Make,
+		item.Model,
+		item.Series,
+	}, " "))
+	return strings.Contains(haystack, needle)
+}
+
+func agentInventoryItemFromParams(params map[string]any, base collection.Item) (collection.Item, error) {
+	out := base
+	if partNumber := stringMapParam(params, "part_number"); partNumber != "" {
+		out.PartNumber = partNumber
+	}
+	if title := stringMapParam(params, "title"); title != "" {
+		out.Title = title
+	}
+	if strings.TrimSpace(out.PartNumber) == "" || strings.TrimSpace(out.Title) == "" {
+		return collection.Item{}, fmt.Errorf("inventory item context required")
+	}
+	if brand := stringMapParam(params, "brand"); brand != "" {
+		out.Brand = brand
+	}
+	if category := stringMapParam(params, "category"); category != "" {
+		out.Category = category
+	}
+	if status := stringMapParam(params, "status"); status != "" {
+		out.Status = status
+	}
+	if priority := stringMapParam(params, "priority"); priority != "" {
+		out.Priority = priority
+	}
+	if notes := stringMapParam(params, "notes"); notes != "" {
+		out.Notes = notes
+	}
+	if description := stringMapParam(params, "description"); description != "" {
+		out.Description = description
+	}
+	if sourceURL := stringMapParam(params, "source_url"); sourceURL != "" && !stringSliceContainsFold(out.SourceURLs, sourceURL) {
+		out.SourceURLs = append(out.SourceURLs, sourceURL)
+	}
+	return out, nil
 }
 
 func applyAgentIntegrationSkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
