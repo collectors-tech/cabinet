@@ -200,7 +200,7 @@ describe('ui-screen-media', () => {
       .and('contain', 'slot-car-front-media-sl.jpg')
   })
 
-  it('UI-SCREEN-MEDIA-019 opens row detail panel and preserves checkbox/action boundaries', () => {
+  it('UI-SCREEN-MEDIA-019 selects rows on click and opens detail panel on double-click', () => {
     cy.intercept('GET', '/api/media/assets', {
       statusCode: 200,
       body: mediaResponse,
@@ -214,11 +214,18 @@ describe('ui-screen-media', () => {
       .should('be.visible')
       .click()
       .should('have.attr', 'data-state', 'selected')
+    cy.get('[data-testid="media-detail-panel"]').should('not.exist')
+    cy.get('[data-testid="media-edit-dialog"]').should('not.exist')
+
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
+      .dblclick()
+      .should('have.attr', 'data-state', 'selected')
     cy.get('[data-testid="media-detail-panel"]')
       .should('be.visible')
       .and('contain', 'AFX Mustang front view')
       .and('contain', 'slot-car-front.jpg')
       .and('contain', 'Initial intake note')
+    cy.get('[data-testid="media-edit-dialog"]').should('not.exist')
     cy.get('[data-testid="media-detail-previous"]').should('be.disabled')
     cy.get('[data-testid="media-detail-next"]').should('be.enabled').click()
     cy.get('[data-testid="media-detail-panel"]')
@@ -242,6 +249,7 @@ describe('ui-screen-media', () => {
 
     cy.get('[data-testid="media-row-select-media-slot-car-front"]').click()
     cy.get('[data-testid="media-detail-panel"]').should('not.exist')
+    cy.get('[data-testid="media-edit-dialog"]').should('not.exist')
     cy.get('[data-testid="media-download-selected-action"]').should(
       'be.enabled'
     )
@@ -499,7 +507,7 @@ describe('ui-screen-media', () => {
     )
   })
 
-  it('UI-SCREEN-MEDIA-016 opens double-click metadata modal and saves edits', () => {
+  it('UI-SCREEN-MEDIA-016 opens metadata modal from explicit row action and saves edits', () => {
     let saved = false
     cy.intercept('GET', '/api/media/assets', (req) => {
       req.reply({
@@ -553,7 +561,7 @@ describe('ui-screen-media', () => {
     cy.visit('/media/')
     cy.wait('@mediaAssets')
 
-    cy.get('[data-testid="media-row-media-slot-car-front"]').dblclick()
+    cy.get('[data-testid="media-row-open-media-slot-car-front"]').click()
     cy.get('[data-testid="media-edit-dialog"]')
       .should('be.visible')
       .and('contain', 'AFX Mustang front view')

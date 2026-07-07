@@ -446,6 +446,7 @@ export function Media() {
   const [editNotes, setEditNotes] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+  const [activeRowAssetId, setActiveRowAssetId] = useState<string | null>(null)
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
   const [isPageDragOver, setIsPageDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -463,6 +464,11 @@ export function Media() {
       }
       const payload = (await response.json()) as MediaListResponse
       setAssets(payload.assets ?? [])
+      setActiveRowAssetId((current) =>
+        current && (payload.assets ?? []).some((asset) => asset.id === current)
+          ? current
+          : null
+      )
       setSelectedAssetIds((current) =>
         current.filter((id) =>
           (payload.assets ?? []).some((asset) => asset.id === id)
@@ -830,14 +836,20 @@ export function Media() {
     detailIndex >= 0 && detailIndex < detailRows.length - 1
 
   const openDetailPanel = useCallback((asset: MediaAsset) => {
+    setActiveRowAssetId(asset.id)
     setDetailAssetId(asset.id)
     setAssignmentSuccess(null)
+  }, [])
+
+  const selectMediaRow = useCallback((asset: MediaAsset) => {
+    setActiveRowAssetId(asset.id)
   }, [])
 
   const navigateDetailPanel = (offset: number) => {
     if (detailIndex < 0) return
     const nextRow = detailRows[detailIndex + offset]
     if (!nextRow) return
+    setActiveRowAssetId(nextRow.original.id)
     setDetailAssetId(nextRow.original.id)
     const pageSize = table.getState().pagination.pageSize
     if (pageSize > 0) {
@@ -1381,20 +1393,18 @@ export function Media() {
                             key={row.id}
                             className='cursor-pointer'
                             data-state={
-                              row.original.id === detailAssetId
+                              row.original.id === activeRowAssetId
                                 ? 'selected'
                                 : undefined
                             }
                             data-testid={`media-row-${row.original.id}`}
-                            onClick={() => openDetailPanel(row.original)}
+                            onClick={() => selectMediaRow(row.original)}
                             onKeyDown={(event) => {
                               if (event.key !== 'Enter') return
                               event.preventDefault()
                               openDetailPanel(row.original)
                             }}
-                            onDoubleClick={() =>
-                              openMetadataEditor(row.original)
-                            }
+                            onDoubleClick={() => openDetailPanel(row.original)}
                             tabIndex={0}
                           >
                             {row.getVisibleCells().map((cell) => (
