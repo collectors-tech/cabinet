@@ -287,6 +287,104 @@ describe('purchases/purchase-inbox', () => {
       .should('include', 'page=1')
   })
 
+  it('COMMERCE-RECONCILIATION-017 keeps grouped Purchases table bounded and collapsible', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/commerce/purchase-orders*', {
+      statusCode: 200,
+      body: {
+        page: 1,
+        page_size: 10,
+        total: 2,
+        total_pages: 1,
+        orders: [
+          groupedPurchaseOrderFixture(),
+          ...Array.from({ length: 14 }, (_, index) => ({
+            ...secondActivePurchaseOrderFixture(),
+            order_id: `EBAY-ORDER-${101 + index}`,
+            tracking: `TRACK-${101 + index}`,
+            total_amount: 9.25 + index,
+            line_items: [
+              {
+                item_id: `po-line-extra-${index}`,
+                title: `Additional active purchase item ${index + 1}`,
+                quantity: 1,
+                amount: 9.25 + index,
+                status: 'expected',
+                lifecycle_entry_id: `life-po-extra-${index}`,
+                expected_arrival_id: `arrival-po-extra-${index}`,
+              },
+            ],
+          })),
+        ],
+      },
+    }).as('listPurchaseOrdersForBoundedTable')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.wait('@listPurchaseOrdersForBoundedTable')
+
+    cy.get('[data-testid="purchases-split-pane"]').should(
+      'have.attr',
+      'data-layout',
+      'full-height'
+    )
+    cy.get('[data-testid="purchases-table-shell"]').should(
+      'have.attr',
+      'data-scroll-shell',
+      'bounded'
+    )
+    cy.get('[data-testid="purchases-table-scroll-region"]')
+      .should('be.visible')
+      .and(($region) => {
+        expect($region[0].clientHeight).to.be.lessThan(
+          $region[0].scrollHeight
+        )
+      })
+    cy.get('[data-testid="purchases-table-header"]').should(
+      'have.attr',
+      'data-sticky',
+      'true'
+    )
+    cy.get('[data-testid="purchases-detail-pane"]').should('be.visible')
+    cy.get('[data-testid="purchases-table-pagination"]').should('be.visible')
+
+    cy.get('[data-testid="purchases-order-collapse-toggle"]')
+      .first()
+      .as('firstToggle')
+      .should('have.attr', 'aria-expanded', 'true')
+      .and('have.attr', 'aria-label', 'Collapse order EBAY-ORDER-100')
+
+    cy.get('@firstToggle').click()
+    cy.get('@firstToggle')
+      .should('have.attr', 'aria-expanded', 'false')
+      .and('have.attr', 'aria-label', 'Expand order EBAY-ORDER-100')
+    cy.contains('[data-testid="purchases-line-item-row"]', 'Accompanying Flute')
+      .should('not.exist')
+    cy.contains('[data-testid="purchases-table-row"]', 'EBAY-ORDER-100')
+      .should('contain', 'ebay / seller-one')
+      .and('contain', 'AUD 8.10')
+      .and('contain', '2 line items')
+      .and('contain', 'TRACK-100')
+
+    cy.contains('[data-testid="purchases-table-row"]', 'EBAY-ORDER-100')
+      .find('[data-testid="purchases-order-select"]')
+      .click()
+    cy.get('@firstToggle').should('have.attr', 'aria-expanded', 'false')
+    cy.get('[data-testid="purchases-detail-pane"]').should(
+      'contain',
+      'EBAY-ORDER-100'
+    )
+
+    cy.get('@firstToggle').click()
+    cy.get('@firstToggle').should('have.attr', 'aria-expanded', 'true')
+    cy.contains('[data-testid="purchases-line-item-row"]', 'Accompanying Flute')
+      .should('be.visible')
+  })
+
   it('COMMERCE-RECONCILIATION-014 selects order and item detail in split pane', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()

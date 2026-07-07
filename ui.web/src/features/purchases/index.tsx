@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  ChevronDown,
+  ChevronRight,
   Inbox,
   CheckCircle2,
   FileUp,
@@ -12,6 +14,7 @@ import {
   Star,
   Truck,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -726,6 +729,9 @@ export function Purchases() {
   const [purchaseOrdersTotalPages, setPurchaseOrdersTotalPages] = useState(0)
   const [selectedPurchase, setSelectedPurchase] =
     useState<PurchaseSelection | null>(null)
+  const [collapsedPurchaseOrderKeys, setCollapsedPurchaseOrderKeys] = useState<
+    Record<string, boolean>
+  >({})
   const [favoritePurchaseKeys, setFavoritePurchaseKeys] = useState<
     Record<string, boolean>
   >({})
@@ -1098,15 +1104,17 @@ export function Purchases() {
           targetType: 'order' as const,
           orderId: order.order_id,
         },
-        ...order.line_items.map((item) => ({
-          key: purchaseLineReviewKey(order, item),
-          targetType: 'line_item' as const,
-          orderId: order.order_id,
-          lineItemId: item.item_id,
-        })),
+        ...(collapsedPurchaseOrderKeys[row.key]
+          ? []
+          : order.line_items.map((item) => ({
+              key: purchaseLineReviewKey(order, item),
+              targetType: 'line_item' as const,
+              orderId: order.order_id,
+              lineItemId: item.item_id,
+            }))),
       ]
     })
-  }, [filteredPurchaseRows, purchaseOrdersByRowKey])
+  }, [collapsedPurchaseOrderKeys, filteredPurchaseRows, purchaseOrdersByRowKey])
 
   const updatePurchaseReviewDraft = (
     key: string,
@@ -1139,6 +1147,13 @@ export function Purchases() {
         },
       }
     })
+  }
+
+  const togglePurchaseOrderCollapse = (orderKey: string) => {
+    setCollapsedPurchaseOrderKeys((current) => ({
+      ...current,
+      [orderKey]: !current[orderKey],
+    }))
   }
 
   const updateSelectedPurchaseReviewComment = (comment: string) => {
@@ -2103,7 +2118,7 @@ export function Purchases() {
         </div>
       </Header>
 
-      <Main className='space-y-4'>
+      <Main className='min-h-[calc(100svh-4rem)] space-y-4 overflow-hidden'>
         {manualPurchaseResult ? (
           <div
             className='rounded-md border bg-muted/30 p-3 text-sm'
@@ -2114,12 +2129,14 @@ export function Purchases() {
         ) : null}
 
         <div
-          className='grid min-h-[34rem] gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]'
+          className='grid h-[calc(100svh-9rem)] min-h-[34rem] gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_24rem]'
           data-testid='purchases-split-pane'
+          data-layout='full-height'
         >
           <section
-            className='min-w-0 overflow-x-auto rounded-md border'
+            className='flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border'
             data-testid='purchases-table-shell'
+            data-scroll-shell='bounded'
           >
             <div
               className='flex flex-wrap items-center gap-2 border-b p-3'
@@ -2284,445 +2301,513 @@ export function Purchases() {
                 <p className='text-muted-foreground'>{purchaseOrdersError}</p>
               </div>
             ) : null}
-            <Table className='min-w-[112rem] table-fixed'>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className='w-[18rem]'>Purchase</TableHead>
-                  <TableHead className='w-[12rem]'>Source</TableHead>
-                  <TableHead className='w-[10rem]'>Price</TableHead>
-                  <TableHead className='w-[9rem]'>Purchase date</TableHead>
-                  <TableHead className='w-[12rem]'>Delivery</TableHead>
-                  <TableHead className='w-[12rem]'>Status</TableHead>
-                  <TableHead className='w-[14rem]'>Tracking</TableHead>
-                  <TableHead className='w-[9rem]'>Order link</TableHead>
-                  {reviewModeEnabled ? (
-                    <>
-                      <TableHead className='w-[11rem]'>Rating</TableHead>
-                      <TableHead className='w-[11rem]'>Quality</TableHead>
-                      <TableHead className='w-[11rem]'>Timeliness</TableHead>
-                      <TableHead className='w-[14rem]'>
-                        Review comment
-                      </TableHead>
-                    </>
-                  ) : null}
-                  <TableHead className='w-[10rem] text-right'>
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {purchaseOrdersLoading && filteredPurchaseRows.length === 0 ? (
-                  <TableRow data-testid='purchases-table-loading-row'>
-                    <TableCell
-                      colSpan={reviewModeEnabled ? 13 : 9}
-                      className='h-20 text-center text-sm text-muted-foreground'
-                    >
-                      Loading persisted purchase orders...
-                    </TableCell>
+            <div
+              className='min-h-0 flex-1 overflow-auto'
+              data-testid='purchases-table-scroll-region'
+            >
+              <Table className='min-w-[112rem] table-fixed'>
+                <TableHeader
+                  className='sticky top-0 z-10 bg-background shadow-sm'
+                  data-testid='purchases-table-header'
+                  data-sticky='true'
+                >
+                  <TableRow>
+                    <TableHead className='w-[18rem]'>Purchase</TableHead>
+                    <TableHead className='w-[12rem]'>Source</TableHead>
+                    <TableHead className='w-[10rem]'>Price</TableHead>
+                    <TableHead className='w-[9rem]'>Purchase date</TableHead>
+                    <TableHead className='w-[12rem]'>Delivery</TableHead>
+                    <TableHead className='w-[12rem]'>Status</TableHead>
+                    <TableHead className='w-[14rem]'>Tracking</TableHead>
+                    <TableHead className='w-[9rem]'>Order link</TableHead>
+                    {reviewModeEnabled ? (
+                      <>
+                        <TableHead className='w-[11rem]'>Rating</TableHead>
+                        <TableHead className='w-[11rem]'>Quality</TableHead>
+                        <TableHead className='w-[11rem]'>Timeliness</TableHead>
+                        <TableHead className='w-[14rem]'>
+                          Review comment
+                        </TableHead>
+                      </>
+                    ) : null}
+                    <TableHead className='w-[10rem] text-right'>
+                      Actions
+                    </TableHead>
                   </TableRow>
-                ) : null}
-                {filteredPurchaseRows.map((row) => {
-                  const order = purchaseOrdersByRowKey.get(row.key)
-
-                  return (
-                    <Fragment key={row.key}>
-                      <TableRow
-                        className={
-                          selectedPurchase?.type === 'order' &&
-                          selectedPurchase.orderKey === row.key
-                            ? 'border-l-4 border-l-primary bg-primary/10 ring-1 ring-primary/30'
-                            : 'hover:bg-muted/50'
-                        }
-                        tabIndex={order ? 0 : undefined}
-                        data-testid='purchases-table-row'
-                        data-selected={
-                          selectedPurchase?.type === 'order' &&
-                          selectedPurchase.orderKey === row.key
-                            ? 'true'
-                            : 'false'
-                        }
-                        onClick={() => {
-                          if (order) {
-                            setSelectedPurchase({
-                              type: 'order',
-                              orderKey: row.key,
-                            })
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (
-                            order &&
-                            (event.key === 'Enter' || event.key === ' ')
-                          ) {
-                            event.preventDefault()
-                            setSelectedPurchase({
-                              type: 'order',
-                              orderKey: row.key,
-                            })
-                          }
-                        }}
+                </TableHeader>
+                <TableBody>
+                  {purchaseOrdersLoading &&
+                  filteredPurchaseRows.length === 0 ? (
+                    <TableRow data-testid='purchases-table-loading-row'>
+                      <TableCell
+                        colSpan={reviewModeEnabled ? 13 : 9}
+                        className='h-20 text-center text-sm text-muted-foreground'
                       >
-                        <TableCell className='truncate font-medium'>
-                          <div className='min-w-0'>
-                            <p className='truncate'>{row.title}</p>
-                            {order ? (
-                              <Button
-                                type='button'
-                                variant='link'
-                                className='h-auto p-0 text-xs'
-                                data-testid='purchases-order-select'
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  setSelectedPurchase({
-                                    type: 'order',
-                                    orderKey: row.key,
-                                  })
-                                }}
-                              >
-                                View order detail
-                              </Button>
-                            ) : null}
-                            <p
-                              className='truncate text-xs font-normal text-muted-foreground'
-                              data-testid='purchases-row-persistence'
-                            >
-                              {row.persistence}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className='truncate'>{row.source}</TableCell>
-                        <TableCell>{row.price}</TableCell>
-                        <TableCell data-testid='purchases-row-purchase-date'>
-                          {row.purchaseDate}
-                        </TableCell>
-                        <TableCell
-                          className='text-muted-foreground'
-                          data-testid='purchases-row-delivery'
-                        >
-                          {row.delivery}
-                        </TableCell>
-                        <TableCell>{labelForStatus(row.status)}</TableCell>
-                        <TableCell className='text-muted-foreground'>
-                          {arrivedPurchaseKeys[row.key]
-                            ? 'Arrived'
-                            : row.tracking}
-                        </TableCell>
-                        <TableCell>
-                          {row.orderLink ? (
-                            <a
-                              className='text-sm font-medium text-primary underline-offset-4 hover:underline'
-                              data-testid='purchases-row-order-link'
-                              href={row.orderLink}
-                              target='_blank'
-                              rel='noreferrer'
-                            >
-                              Open order
-                            </a>
-                          ) : (
-                            <span
-                              className='text-sm text-muted-foreground'
-                              data-testid='purchases-row-order-link-empty'
-                            >
-                              Pending
-                            </span>
-                          )}
-                        </TableCell>
-                        {reviewModeEnabled ? (
-                          order ? (
-                            <>
-                              <TableCell>
-                                {renderReviewScoreButtons(
-                                  purchaseOrderReviewKey(order),
-                                  {
-                                    targetType: 'order',
-                                    orderId: order.order_id,
-                                  },
-                                  'rating'
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {renderReviewScoreButtons(
-                                  purchaseOrderReviewKey(order),
-                                  {
-                                    targetType: 'order',
-                                    orderId: order.order_id,
-                                  },
-                                  'quality'
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {renderReviewScoreButtons(
-                                  purchaseOrderReviewKey(order),
-                                  {
-                                    targetType: 'order',
-                                    orderId: order.order_id,
-                                  },
-                                  'timeliness'
-                                )}
-                              </TableCell>
-                              <TableCell
-                                className='truncate text-sm text-muted-foreground'
-                                data-testid='purchases-review-row-comment'
-                              >
-                                {purchaseReviewDrafts[
-                                  purchaseOrderReviewKey(order)
-                                ]?.comment || 'No draft comment'}
-                              </TableCell>
-                            </>
-                          ) : (
-                            <>
-                              <TableCell className='text-muted-foreground'>
-                                -
-                              </TableCell>
-                              <TableCell className='text-muted-foreground'>
-                                -
-                              </TableCell>
-                              <TableCell className='text-muted-foreground'>
-                                -
-                              </TableCell>
-                              <TableCell className='text-muted-foreground'>
-                                Persist row first
-                              </TableCell>
-                            </>
-                          )
-                        ) : null}
-                        <TableCell>
-                          <div className='flex flex-wrap justify-end gap-1'>
-                            <Button
-                              type='button'
-                              size='sm'
-                              variant={
-                                favoritePurchaseKeys[row.key]
-                                  ? 'default'
-                                  : 'outline'
-                              }
-                              aria-pressed={
-                                favoritePurchaseKeys[row.key] ?? false
-                              }
-                              data-testid='purchases-row-favorite'
-                              onClick={() =>
-                                setFavoritePurchaseKeys((current) => ({
-                                  ...current,
-                                  [row.key]: !current[row.key],
-                                }))
-                              }
-                            >
-                              <Star className='mr-1 h-3.5 w-3.5' />
-                              Favorite
-                            </Button>
-                            <Button
-                              type='button'
-                              size='sm'
-                              variant={
-                                arrivedPurchaseKeys[row.key]
-                                  ? 'default'
-                                  : 'outline'
-                              }
-                              aria-pressed={
-                                arrivedPurchaseKeys[row.key] ?? false
-                              }
-                              data-testid='purchases-row-arrived'
-                              onClick={() =>
-                                setArrivedPurchaseKeys((current) => ({
-                                  ...current,
-                                  [row.key]: !current[row.key],
-                                }))
-                              }
-                            >
-                              <CheckCircle2 className='mr-1 h-3.5 w-3.5' />
-                              Arrived
-                            </Button>
-                            <Button
-                              type='button'
-                              size='sm'
-                              variant={
-                                purchaseRatings[row.key] === 4
-                                  ? 'default'
-                                  : 'outline'
-                              }
-                              className={reviewModeEnabled ? 'hidden' : ''}
-                              data-testid='purchases-row-rating'
-                              onClick={() =>
-                                setPurchaseRatings((current) => ({
-                                  ...current,
-                                  [row.key]: current[row.key] === 4 ? 0 : 4,
-                                }))
-                              }
-                            >
-                              Rating {purchaseRatings[row.key] || '-'}
-                            </Button>
-                            <span
-                              className='self-center text-xs text-muted-foreground'
-                              data-testid='purchases-row-action-count'
-                            >
-                              {row.actionCount} action
-                              {row.actionCount === 1 ? '' : 's'}
-                            </span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      {order?.line_items.map((item) => (
+                        Loading persisted purchase orders...
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  {filteredPurchaseRows.map((row) => {
+                    const order = purchaseOrdersByRowKey.get(row.key)
+                    const orderCollapsed = Boolean(
+                      collapsedPurchaseOrderKeys[row.key]
+                    )
+
+                    return (
+                      <Fragment key={row.key}>
                         <TableRow
-                          key={row.key + ':' + item.lifecycle_entry_id}
-                          className={
-                            selectedPurchase?.type === 'line' &&
-                            selectedPurchase.orderKey === row.key &&
-                            selectedPurchase.lineItemId === item.item_id
+                          className={cn(
+                            selectedPurchase?.type === 'order' &&
+                              selectedPurchase.orderKey === row.key
                               ? 'border-l-4 border-l-primary bg-primary/10 ring-1 ring-primary/30'
-                              : 'bg-muted/20 hover:bg-muted/40'
-                          }
-                          tabIndex={0}
-                          data-testid='purchases-line-item-row'
+                              : 'hover:bg-muted/50'
+                          )}
+                          tabIndex={order ? 0 : undefined}
+                          data-testid='purchases-table-row'
                           data-selected={
-                            selectedPurchase?.type === 'line' &&
-                            selectedPurchase.orderKey === row.key &&
-                            selectedPurchase.lineItemId === item.item_id
+                            selectedPurchase?.type === 'order' &&
+                            selectedPurchase.orderKey === row.key
                               ? 'true'
                               : 'false'
                           }
-                          onClick={() =>
-                            setSelectedPurchase({
-                              type: 'line',
-                              orderKey: row.key,
-                              lineItemId: item.item_id,
-                            })
-                          }
+                          onClick={() => {
+                            if (order) {
+                              setSelectedPurchase({
+                                type: 'order',
+                                orderKey: row.key,
+                              })
+                            }
+                          }}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
+                            if (
+                              order &&
+                              (event.key === 'Enter' || event.key === ' ')
+                            ) {
                               event.preventDefault()
                               setSelectedPurchase({
-                                type: 'line',
+                                type: 'order',
                                 orderKey: row.key,
-                                lineItemId: item.item_id,
                               })
                             }
                           }}
                         >
-                          <TableCell className='pl-8'>
-                            <div className='min-w-0'>
-                              <p className='truncate text-sm font-medium'>
-                                {item.title}
-                              </p>
+                          <TableCell className='truncate font-medium'>
+                            <div className='flex min-w-0 items-start gap-2'>
+                              {order ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type='button'
+                                      size='icon'
+                                      variant='ghost'
+                                      className='mt-0.5 h-7 w-7 shrink-0'
+                                      data-testid='purchases-order-collapse-toggle'
+                                      aria-expanded={!orderCollapsed}
+                                      aria-label={
+                                        (orderCollapsed
+                                          ? 'Expand'
+                                          : 'Collapse') +
+                                        ' order ' +
+                                        (order.order_id || row.title)
+                                      }
+                                      title={
+                                        (orderCollapsed
+                                          ? 'Expand'
+                                          : 'Collapse') + ' order'
+                                      }
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        togglePurchaseOrderCollapse(row.key)
+                                      }}
+                                    >
+                                      {orderCollapsed ? (
+                                        <ChevronRight className='h-4 w-4' />
+                                      ) : (
+                                        <ChevronDown className='h-4 w-4' />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {orderCollapsed ? 'Expand' : 'Collapse'}{' '}
+                                    order
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : null}
+                              <div className='min-w-0'>
+                                <p className='truncate'>{row.title}</p>
+                                {order ? (
+                                  <Button
+                                    type='button'
+                                    variant='link'
+                                    className='h-auto p-0 text-xs'
+                                    data-testid='purchases-order-select'
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setSelectedPurchase({
+                                        type: 'order',
+                                        orderKey: row.key,
+                                      })
+                                    }}
+                                  >
+                                    View order detail
+                                  </Button>
+                                ) : null}
+                                <p
+                                  className='truncate text-xs font-normal text-muted-foreground'
+                                  data-testid='purchases-row-persistence'
+                                >
+                                  {row.persistence}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className='truncate'>
+                            {row.source}
+                          </TableCell>
+                          <TableCell>{row.price}</TableCell>
+                          <TableCell data-testid='purchases-row-purchase-date'>
+                            {row.purchaseDate}
+                          </TableCell>
+                          <TableCell
+                            className='text-muted-foreground'
+                            data-testid='purchases-row-delivery'
+                          >
+                            {row.delivery}
+                          </TableCell>
+                          <TableCell>{labelForStatus(row.status)}</TableCell>
+                          <TableCell className='text-muted-foreground'>
+                            {arrivedPurchaseKeys[row.key]
+                              ? 'Arrived'
+                              : row.tracking}
+                          </TableCell>
+                          <TableCell>
+                            {row.orderLink ? (
+                              <a
+                                className='text-sm font-medium text-primary underline-offset-4 hover:underline'
+                                data-testid='purchases-row-order-link'
+                                href={row.orderLink}
+                                target='_blank'
+                                rel='noreferrer'
+                              >
+                                Open order
+                              </a>
+                            ) : (
+                              <span
+                                className='text-sm text-muted-foreground'
+                                data-testid='purchases-row-order-link-empty'
+                              >
+                                Pending
+                              </span>
+                            )}
+                          </TableCell>
+                          {reviewModeEnabled ? (
+                            order ? (
+                              <>
+                                <TableCell>
+                                  {renderReviewScoreButtons(
+                                    purchaseOrderReviewKey(order),
+                                    {
+                                      targetType: 'order',
+                                      orderId: order.order_id,
+                                    },
+                                    'rating'
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {renderReviewScoreButtons(
+                                    purchaseOrderReviewKey(order),
+                                    {
+                                      targetType: 'order',
+                                      orderId: order.order_id,
+                                    },
+                                    'quality'
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {renderReviewScoreButtons(
+                                    purchaseOrderReviewKey(order),
+                                    {
+                                      targetType: 'order',
+                                      orderId: order.order_id,
+                                    },
+                                    'timeliness'
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  className='truncate text-sm text-muted-foreground'
+                                  data-testid='purchases-review-row-comment'
+                                >
+                                  {purchaseReviewDrafts[
+                                    purchaseOrderReviewKey(order)
+                                  ]?.comment || 'No draft comment'}
+                                </TableCell>
+                              </>
+                            ) : (
+                              <>
+                                <TableCell className='text-muted-foreground'>
+                                  -
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  -
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  -
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  Persist row first
+                                </TableCell>
+                              </>
+                            )
+                          ) : null}
+                          <TableCell>
+                            <div className='flex flex-wrap justify-end gap-1'>
                               <Button
                                 type='button'
-                                variant='link'
-                                className='h-auto p-0 text-xs'
-                                data-testid='purchases-line-item-select'
-                                onClick={(event) => {
-                                  event.stopPropagation()
+                                size='sm'
+                                variant={
+                                  favoritePurchaseKeys[row.key]
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                aria-pressed={
+                                  favoritePurchaseKeys[row.key] ?? false
+                                }
+                                data-testid='purchases-row-favorite'
+                                onClick={() =>
+                                  setFavoritePurchaseKeys((current) => ({
+                                    ...current,
+                                    [row.key]: !current[row.key],
+                                  }))
+                                }
+                              >
+                                <Star className='mr-1 h-3.5 w-3.5' />
+                                Favorite
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant={
+                                  arrivedPurchaseKeys[row.key]
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                aria-pressed={
+                                  arrivedPurchaseKeys[row.key] ?? false
+                                }
+                                data-testid='purchases-row-arrived'
+                                onClick={() =>
+                                  setArrivedPurchaseKeys((current) => ({
+                                    ...current,
+                                    [row.key]: !current[row.key],
+                                  }))
+                                }
+                              >
+                                <CheckCircle2 className='mr-1 h-3.5 w-3.5' />
+                                Arrived
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant={
+                                  purchaseRatings[row.key] === 4
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                className={reviewModeEnabled ? 'hidden' : ''}
+                                data-testid='purchases-row-rating'
+                                onClick={() =>
+                                  setPurchaseRatings((current) => ({
+                                    ...current,
+                                    [row.key]: current[row.key] === 4 ? 0 : 4,
+                                  }))
+                                }
+                              >
+                                Rating {purchaseRatings[row.key] || '-'}
+                              </Button>
+                              <span
+                                className='self-center text-xs text-muted-foreground'
+                                data-testid='purchases-row-action-count'
+                              >
+                                {row.actionCount} action
+                                {row.actionCount === 1 ? '' : 's'}
+                              </span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {order && !orderCollapsed
+                          ? order.line_items.map((item) => (
+                              <TableRow
+                                key={row.key + ':' + item.lifecycle_entry_id}
+                                className={
+                                  selectedPurchase?.type === 'line' &&
+                                  selectedPurchase.orderKey === row.key &&
+                                  selectedPurchase.lineItemId === item.item_id
+                                    ? 'border-l-4 border-l-primary bg-primary/10 ring-1 ring-primary/30'
+                                    : 'bg-muted/20 hover:bg-muted/40'
+                                }
+                                tabIndex={0}
+                                data-testid='purchases-line-item-row'
+                                data-selected={
+                                  selectedPurchase?.type === 'line' &&
+                                  selectedPurchase.orderKey === row.key &&
+                                  selectedPurchase.lineItemId === item.item_id
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                onClick={() =>
                                   setSelectedPurchase({
                                     type: 'line',
                                     orderKey: row.key,
                                     lineItemId: item.item_id,
                                   })
+                                }
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key === 'Enter' ||
+                                    event.key === ' '
+                                  ) {
+                                    event.preventDefault()
+                                    setSelectedPurchase({
+                                      type: 'line',
+                                      orderKey: row.key,
+                                      lineItemId: item.item_id,
+                                    })
+                                  }
                                 }}
                               >
-                                View item detail
-                              </Button>
-                              <p className='truncate text-xs text-muted-foreground'>
-                                Item {item.item_id}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell className='text-muted-foreground'>
-                            Qty {item.quantity}
-                          </TableCell>
-                          <TableCell>
-                            {formatPurchaseAmount(item.amount, order.currency)}
-                          </TableCell>
-                          <TableCell className='text-muted-foreground'>
-                            -
-                          </TableCell>
-                          <TableCell className='text-muted-foreground'>
-                            Arrival {item.expected_arrival_id || 'pending'}
-                          </TableCell>
-                          <TableCell>{labelForStatus(item.status)}</TableCell>
-                          <TableCell className='text-muted-foreground'>
-                            Lifecycle {item.lifecycle_entry_id}
-                          </TableCell>
-                          <TableCell className='text-muted-foreground'>
-                            Grouped item
-                          </TableCell>
-                          {reviewModeEnabled ? (
-                            <>
-                              <TableCell>
-                                {renderReviewScoreButtons(
-                                  purchaseLineReviewKey(order, item),
-                                  {
-                                    targetType: 'line_item',
-                                    orderId: order.order_id,
-                                    lineItemId: item.item_id,
-                                  },
-                                  'rating'
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {renderReviewScoreButtons(
-                                  purchaseLineReviewKey(order, item),
-                                  {
-                                    targetType: 'line_item',
-                                    orderId: order.order_id,
-                                    lineItemId: item.item_id,
-                                  },
-                                  'quality'
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {renderReviewScoreButtons(
-                                  purchaseLineReviewKey(order, item),
-                                  {
-                                    targetType: 'line_item',
-                                    orderId: order.order_id,
-                                    lineItemId: item.item_id,
-                                  },
-                                  'timeliness'
-                                )}
-                              </TableCell>
-                              <TableCell
-                                className='truncate text-sm text-muted-foreground'
-                                data-testid='purchases-review-row-comment'
-                              >
-                                {purchaseReviewDrafts[
-                                  purchaseLineReviewKey(order, item)
-                                ]?.comment || 'No draft comment'}
-                              </TableCell>
-                            </>
-                          ) : null}
-                          <TableCell className='text-right text-xs text-muted-foreground'>
-                            Persisted
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </Fragment>
-                  )
-                })}
-                {!purchaseOrdersLoading && purchaseRows.length === 0 ? (
-                  <TableRow data-testid='purchases-table-empty-row'>
-                    <TableCell
-                      colSpan={reviewModeEnabled ? 13 : 9}
-                      className='h-20 text-center text-sm text-muted-foreground'
-                    >
-                      No persisted purchases loaded. Add a purchase or change
-                      filters to show another workflow state.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-                {!purchaseOrdersLoading &&
-                purchaseRows.length > 0 &&
-                filteredPurchaseRows.length === 0 ? (
-                  <TableRow data-testid='purchases-table-filter-empty-row'>
-                    <TableCell
-                      colSpan={reviewModeEnabled ? 13 : 9}
-                      className='h-20 text-center text-sm text-muted-foreground'
-                    >
-                      No purchases match the current table filters.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
+                                <TableCell className='pl-8'>
+                                  <div className='min-w-0'>
+                                    <p className='truncate text-sm font-medium'>
+                                      {item.title}
+                                    </p>
+                                    <Button
+                                      type='button'
+                                      variant='link'
+                                      className='h-auto p-0 text-xs'
+                                      data-testid='purchases-line-item-select'
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        setSelectedPurchase({
+                                          type: 'line',
+                                          orderKey: row.key,
+                                          lineItemId: item.item_id,
+                                        })
+                                      }}
+                                    >
+                                      View item detail
+                                    </Button>
+                                    <p className='truncate text-xs text-muted-foreground'>
+                                      Item {item.item_id}
+                                    </p>
+                                  </div>
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  Qty {item.quantity}
+                                </TableCell>
+                                <TableCell>
+                                  {formatPurchaseAmount(
+                                    item.amount,
+                                    order.currency
+                                  )}
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  -
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  Arrival{' '}
+                                  {item.expected_arrival_id || 'pending'}
+                                </TableCell>
+                                <TableCell>
+                                  {labelForStatus(item.status)}
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  Lifecycle {item.lifecycle_entry_id}
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  Grouped item
+                                </TableCell>
+                                {reviewModeEnabled ? (
+                                  <>
+                                    <TableCell>
+                                      {renderReviewScoreButtons(
+                                        purchaseLineReviewKey(order, item),
+                                        {
+                                          targetType: 'line_item',
+                                          orderId: order.order_id,
+                                          lineItemId: item.item_id,
+                                        },
+                                        'rating'
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {renderReviewScoreButtons(
+                                        purchaseLineReviewKey(order, item),
+                                        {
+                                          targetType: 'line_item',
+                                          orderId: order.order_id,
+                                          lineItemId: item.item_id,
+                                        },
+                                        'quality'
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {renderReviewScoreButtons(
+                                        purchaseLineReviewKey(order, item),
+                                        {
+                                          targetType: 'line_item',
+                                          orderId: order.order_id,
+                                          lineItemId: item.item_id,
+                                        },
+                                        'timeliness'
+                                      )}
+                                    </TableCell>
+                                    <TableCell
+                                      className='truncate text-sm text-muted-foreground'
+                                      data-testid='purchases-review-row-comment'
+                                    >
+                                      {purchaseReviewDrafts[
+                                        purchaseLineReviewKey(order, item)
+                                      ]?.comment || 'No draft comment'}
+                                    </TableCell>
+                                  </>
+                                ) : null}
+                                <TableCell className='text-right text-xs text-muted-foreground'>
+                                  Persisted
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          : null}
+                      </Fragment>
+                    )
+                  })}
+                  {!purchaseOrdersLoading && purchaseRows.length === 0 ? (
+                    <TableRow data-testid='purchases-table-empty-row'>
+                      <TableCell
+                        colSpan={reviewModeEnabled ? 13 : 9}
+                        className='h-20 text-center text-sm text-muted-foreground'
+                      >
+                        No persisted purchases loaded. Add a purchase or change
+                        filters to show another workflow state.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  {!purchaseOrdersLoading &&
+                  purchaseRows.length > 0 &&
+                  filteredPurchaseRows.length === 0 ? (
+                    <TableRow data-testid='purchases-table-filter-empty-row'>
+                      <TableCell
+                        colSpan={reviewModeEnabled ? 13 : 9}
+                        className='h-20 text-center text-sm text-muted-foreground'
+                      >
+                        No purchases match the current table filters.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
             <div
-              className='flex flex-wrap items-center justify-between gap-3 border-t p-3 text-sm'
+              className='flex shrink-0 flex-wrap items-center justify-between gap-3 border-t p-3 text-sm'
               data-testid='purchases-table-pagination'
             >
               <div className='text-muted-foreground'>
@@ -2785,7 +2870,7 @@ export function Purchases() {
           </section>
 
           <aside
-            className='min-w-0 rounded-md border bg-background'
+            className='min-h-0 min-w-0 overflow-y-auto rounded-md border bg-background'
             data-testid='purchases-detail-pane'
           >
             {selectedPurchaseOrder ? (
