@@ -1,5 +1,5 @@
 describe("ui-screen-wishlist", () => {
-  function stubWishlistData() {
+  function stubWishlistData(options?: { includeCardMedia?: boolean }) {
     cy.intercept("GET", "/api/wishlist", {
       statusCode: 200,
       body: {
@@ -38,6 +38,9 @@ describe("ui-screen-wishlist", () => {
             status: "wishlist",
             category: "Slot Cars",
             priority: "medium",
+            ...(options?.includeCardMedia
+              ? { thumbnail_url: "/media/wishlist/sample-camaro.jpg" }
+              : {}),
           },
           {
             id: "item-collector-2",
@@ -109,9 +112,10 @@ describe("ui-screen-wishlist", () => {
   function signInToWishlist(options?: {
     skipStub?: boolean;
     useExistingIntercepts?: boolean;
+    includeCardMedia?: boolean;
   }) {
     if (!options?.skipStub) {
-      stubWishlistData();
+      stubWishlistData({ includeCardMedia: options?.includeCardMedia });
     } else if (!options.useExistingIntercepts) {
       cy.intercept("GET", "/api/wishlist").as("wishlistItems");
       cy.intercept("GET", "/api/wishlist?deleted=true").as(
@@ -258,6 +262,37 @@ describe("ui-screen-wishlist", () => {
       cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
       cy.contains("22073").should("not.exist");
     });
+  });
+
+  it("UI-SCREEN-WISHLIST-024 renders compact card thumbnails and placeholders", () => {
+    cy.viewport(1440, 1000);
+    signInToWishlist({ includeCardMedia: true });
+
+    cy.contains("button", "Cards").click();
+    cy.get('[data-testid="wishlist-card-thumbnail-item-collector-1"]')
+      .should("be.visible")
+      .and("have.attr", "src", "/media/wishlist/sample-camaro.jpg")
+      .and("have.attr", "data-thumbnail-key", "item-collector-1");
+    cy.get('[data-testid="wishlist-card-thumbnail-placeholder-item-collector-2"]')
+      .should("be.visible")
+      .and("contain.text", "No asset")
+      .and("have.attr", "data-thumbnail-key", "item-collector-2");
+
+    cy.get('[data-testid="wishlist-card-thumbnail-item-collector-1"]')
+      .parents(".grid")
+      .first()
+      .then(($grid) => {
+        const columns = getComputedStyle($grid[0]).gridTemplateColumns
+          .split(" ")
+          .filter(Boolean);
+        expect(columns.length).to.eq(4);
+      });
+    cy.contains("AFX Mega-G+ Camaro Wildfire")
+      .parents('[data-testid="inventory-item-row-item-collector-1"]')
+      .first()
+      .then(($card) => {
+        expect($card[0].getBoundingClientRect().height).to.be.lessThan(260);
+      });
   });
 
   it("UI-SCREEN-WISHLIST-003 supports multi-select with bulk action toolbar", () => {
