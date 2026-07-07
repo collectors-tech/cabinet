@@ -49,6 +49,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   DataTableColumnHeader,
   DataTablePagination,
   DataTableToolbar,
@@ -76,7 +81,7 @@ type CollectionMemberRow = WorkspaceCollectionItem
 const tableClassName = 'w-full table-fixed'
 const tableCellClassName = 'max-w-0 truncate'
 const tableHeaderClassName = 'max-w-0 truncate'
-const actionsCellClassName = 'w-[17rem] min-w-[17rem]'
+const actionsCellClassName = 'w-[8rem] min-w-[8rem]'
 
 function recordCollectionsStatusHistory({
   id,
@@ -226,46 +231,66 @@ function buildCollectionColumns({
       header: () => <div className='text-right'>Actions</div>,
       cell: ({ row }) => (
         <div className='flex items-center justify-end gap-2'>
-          <Button
-            type='button'
-            size='sm'
-            variant='outline'
-            data-testid={`collections-row-view-${row.original.key}`}
-            aria-label={`View ${row.original.name} in inventory`}
-            onClick={(event) => {
-              event.stopPropagation()
-              onView(row.original)
-            }}
-          >
-            <Eye className='mr-2 h-4 w-4' />
-            View
-          </Button>
-          <Button
-            type='button'
-            size='sm'
-            variant='outline'
-            data-testid={`collections-row-edit-${row.original.key}`}
-            onClick={(event) => {
-              event.stopPropagation()
-              onEdit(row.original)
-            }}
-          >
-            <Pencil className='mr-2 h-4 w-4' />
-            Edit
-          </Button>
-          <Button
-            type='button'
-            size='sm'
-            variant='outline'
-            data-testid={`collections-row-delete-${row.original.key}`}
-            onClick={(event) => {
-              event.stopPropagation()
-              onDelete(row.original)
-            }}
-          >
-            <Trash2 className='mr-2 h-4 w-4' />
-            Delete
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                size='icon'
+                variant='outline'
+                data-testid={`collections-row-view-${row.original.key}`}
+                aria-label={`View ${row.original.name} in inventory`}
+                title={`View ${row.original.name} in inventory`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onView(row.original)
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+              >
+                <Eye className='h-4 w-4' aria-hidden='true' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View in inventory</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                size='icon'
+                variant='outline'
+                data-testid={`collections-row-edit-${row.original.key}`}
+                aria-label={`Edit ${row.original.name}`}
+                title={`Edit ${row.original.name}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onEdit(row.original)
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+              >
+                <Pencil className='h-4 w-4' aria-hidden='true' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Edit collection</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                size='icon'
+                variant='outline'
+                data-testid={`collections-row-delete-${row.original.key}`}
+                aria-label={`Delete ${row.original.name}`}
+                title={`Delete ${row.original.name}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onDelete(row.original)
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+              >
+                <Trash2 className='h-4 w-4' aria-hidden='true' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete collection</TooltipContent>
+          </Tooltip>
         </div>
       ),
     },

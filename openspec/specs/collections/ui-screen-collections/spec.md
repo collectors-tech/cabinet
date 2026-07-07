@@ -421,6 +421,17 @@ Collections SHALL hide deleted collection rows from active views by default, ret
 - **THEN** the panel MUST expose persisted collection metadata fields for name, scope, status, and description
 - **AND** saving valid metadata MUST persist and render the updated row metadata
 
+### Requirement UI-SCREEN-COLLECTIONS-033: Collection row actions SHALL be icon-only and accessible
+Collections row action controls SHALL use compact icon-only buttons while preserving understandable labels, tooltips, and the existing row action behavior.
+
+#### Scenario: Render collection row actions
+- **GIVEN** collection rows are visible in the table
+- **WHEN** the row action cell renders
+- **THEN** View, Edit, and Delete controls MUST render as icon-only buttons without visible text labels
+- **AND** each action control MUST expose an accessible label and tooltip/title naming the action
+- **AND** activating a row action MUST keep the existing View, Edit, or Delete workflow behavior
+- **AND** double-clicking an explicit row action control MUST NOT trigger the row double-click side-panel handler
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -465,3 +476,4 @@ Collections SHALL hide deleted collection rows from active views by default, ret
 | UC-COL-30 | Protect All Items | Rename and delete attempts do not write profile settings, create replacement rows, or leave the active `All Items` context | `ui.web/cypress/e2e/collections/collections-protected-all-items/spec.cy.ts` `UI-SCREEN-COLLECTIONS-030 keeps All Items protected from row rename and delete actions` |
 | UC-COL-31 | Sort collections and members | Collection and member rows sort deterministically without saving settings or changing the active collection context | `ui.web/cypress/e2e/collections/collections-sorting-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-031 sorts collections and members without passive settings writes` |
 | UC-COL-32 | Soft-delete and reconcile collection items | Deleted rows are hidden by default, visible in the deleted filter, assigned items move to a chosen destination or become unassigned, and metadata edits persist | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-032 soft-deletes with deleted filter, reassignment choices, and editable metadata` |
+| UC-COL-33 | Icon-only row actions | Row View/Edit/Delete actions render as compact icon-only accessible controls without changing row workflows | `ui.web/cypress/e2e/collections/collections-row-side-panel/spec.cy.ts` `renders collection row actions as icon-only accessible controls` |
