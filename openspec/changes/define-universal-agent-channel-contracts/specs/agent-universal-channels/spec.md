@@ -81,6 +81,7 @@ Telegram and future approved external channels SHALL enter Cabinet Agent through
 - **WHEN** Cabinet normalizes and routes the intake
 - **THEN** Cabinet SHALL create or select a profile-scoped Agent thread/message for the source channel
 - **AND** it SHALL select a supported skill/capability or return a follow-up prompt when the intent, setup, or item identity is ambiguous
+- **AND** approved Telegram bot-adapter commands SHALL preserve non-secret update, sender, chat, message, skill, and parameter evidence when routing to Agent text endpoints
 - **AND** mutating work SHALL create a preview or Inbox review handoff before apply
 - **AND** Telegram-visible responses SHALL include safe reply copy, review links, or structured action descriptors without scraping human-readable text
 
@@ -88,6 +89,7 @@ Telegram and future approved external channels SHALL enter Cabinet Agent through
 - **GIVEN** an authorized external channel created a pending Agent preview
 - **WHEN** the same authorized sender/chat submits a confirm or cancel action
 - **THEN** Cabinet SHALL apply or cancel only that preview for the owning profile/thread
+- **AND** approved Telegram bot-adapter callbacks SHALL route Agent preview confirmations to the Agent text callback endpoint instead of catalog-capture callbacks
 - **AND** confirmation from a different sender/chat, stale preview, missing permission, or failed apply SHALL be rejected with retryable audit evidence
 - **AND** successful apply SHALL record the source channel, skill id, preview id, confirmation state, mutation result, and non-secret provider/runtime evidence
 
