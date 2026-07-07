@@ -158,7 +158,7 @@ export function CabinetAssistantUiComposer({
         data-testid={testIds?.input ?? 'shell-assistant-compose-input'}
         placeholder={placeholder}
         disabled={composer.disabled}
-        className='min-h-9 flex-1 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none focus-visible:ring-0'
+        className='max-h-32 min-h-9 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none focus-visible:ring-0'
       />
       <ComposerPrimitive.Send asChild>
         <Button

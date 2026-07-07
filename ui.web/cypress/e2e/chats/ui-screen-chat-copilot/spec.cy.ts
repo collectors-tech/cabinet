@@ -646,6 +646,39 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.viewport(390, 844)
     openChats()
     createThread('E2E Mobile Copilot Thread')
+    cy.intercept('POST', '/api/chat/attachments').as('chatAttachment')
+    cy.intercept('POST', '/api/chat/messages').as('chatMessage')
+
+    let removedAttachmentId = ''
+    let keptAttachmentId = ''
+
+    cy.get('[data-testid="chat-attachment-input"]').selectFile(
+      {
+        contents: Cypress.Buffer.from('remove before send'),
+        fileName: 'mobile-remove-me.txt',
+        mimeType: 'text/plain',
+      },
+      { force: true }
+    )
+    cy.get('[data-testid="chat-upload-attachment-button"]').click({
+      force: true,
+    })
+    cy.wait('@chatAttachment').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.filename).to.eq('mobile-remove-me.txt')
+      removedAttachmentId = String(response?.body.id)
+    })
+    cy.get('[data-testid="chat-attachment-list"]').should(
+      'contain',
+      'mobile-remove-me.txt'
+    )
+    cy.get('[data-testid="chat-remove-attachment-button"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="chat-attachment-list"]').should(
+      'not.contain',
+      'mobile-remove-me.txt'
+    )
 
     cy.get('[data-testid="chat-attachment-input"]').selectFile(
       {
@@ -655,10 +688,28 @@ describe('chats/ui-screen-chat-copilot', () => {
       },
       { force: true }
     )
-    cy.get('[data-testid="chat-upload-attachment-button"]').click()
-    cy.get('[data-testid="chat-attachment-list"]').should('contain', 'mobile-chat-photo.jpg')
-    cy.get('[data-testid="chat-compose-input"]').clear().type('Use the attached photo to create an item')
+    cy.get('[data-testid="chat-upload-attachment-button"]').click({
+      force: true,
+    })
+    cy.wait('@chatAttachment').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.filename).to.eq('mobile-chat-photo.jpg')
+      keptAttachmentId = String(response?.body.id)
+      expect(keptAttachmentId).not.to.eq(removedAttachmentId)
+    })
+    cy.get('[data-testid="chat-attachment-list"]').should(
+      'contain',
+      'mobile-chat-photo.jpg'
+    )
+    cy.get('[data-testid="chat-compose-input"]')
+      .clear()
+      .type('Use the attached photo to create an item')
     cy.get('[data-testid="chat-send-button"]').click()
+    cy.wait('@chatMessage').then(({ request, response }) => {
+      expect(request.body.attachment_ids).to.deep.eq([keptAttachmentId])
+      expect(request.body.attachment_ids).not.to.include(removedAttachmentId)
+      expect(response?.statusCode).to.eq(201)
+    })
     cy.get('[data-testid="chat-message-list"]').should(
       'contain',
       'Use the attached photo to create an item'

@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Share2,
   Sparkles,
+  X,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -489,7 +490,13 @@ export function Chats() {
       setAttachments([])
       await loadThreads(activeProfileId)
     },
-    [activeProfileId, assistantDefaults, attachments, loadThreads, selectedThreadId]
+    [
+      activeProfileId,
+      assistantDefaults,
+      attachments,
+      loadThreads,
+      selectedThreadId,
+    ]
   )
 
   const handleAssistantUiNewMessage = useCallback(
@@ -551,6 +558,12 @@ export function Chats() {
     const attachment = (await response.json()) as ChatAttachment
     setAttachments((current) => [attachment, ...current])
     setPendingAttachment(null)
+  }
+
+  const removeAttachment = (attachmentID: string) => {
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.id !== attachmentID)
+    )
   }
 
   const previewCreateItemAction = async () => {
@@ -1084,7 +1097,7 @@ export function Chats() {
                         <div className='mb-2 flex items-center justify-between gap-2'>
                           <p className='font-medium'>Action Timeline</p>
                           <span
-                            className='rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs uppercase text-slate-400'
+                            className='rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-400 uppercase'
                             data-testid='chat-action-timeline-count'
                           >
                             {workflowRuns.length} records
@@ -1126,7 +1139,7 @@ export function Chats() {
                                 <span className='font-medium text-slate-100'>
                                   {run.capability_id}
                                 </span>
-                                <span className='rounded border border-slate-700 px-2 py-0.5 text-[11px] uppercase text-cyan-200'>
+                                <span className='rounded border border-slate-700 px-2 py-0.5 text-[11px] text-cyan-200 uppercase'>
                                   {run.status}
                                 </span>
                               </div>
@@ -1260,7 +1273,26 @@ export function Chats() {
                       </p>
                     ) : (
                       attachments.map((attachment) => (
-                        <p key={attachment.id}>{attachment.filename}</p>
+                        <div
+                          key={attachment.id}
+                          className='flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-900 px-2 py-1'
+                          data-attachment-id={attachment.id}
+                        >
+                          <span className='min-w-0 truncate'>
+                            {attachment.filename}
+                          </span>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='ghost'
+                            className='h-7 w-7 shrink-0 text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                            data-testid='chat-remove-attachment-button'
+                            aria-label={`Remove ${attachment.filename}`}
+                            onClick={() => removeAttachment(attachment.id)}
+                          >
+                            <X className='h-3.5 w-3.5' />
+                          </Button>
+                        </div>
                       ))
                     )}
                   </div>

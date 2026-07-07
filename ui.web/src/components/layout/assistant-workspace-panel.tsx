@@ -1070,6 +1070,12 @@ export function AssistantWorkspacePanel() {
     }
   }
 
+  const removeAttachment = (attachmentID: string) => {
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.id !== attachmentID)
+    )
+  }
+
   const appendCommandEvent = useCallback((event: ShellCommandEvent) => {
     setCommandEvents((current) => [...current.slice(-7), event])
   }, [])
@@ -2287,6 +2293,17 @@ export function AssistantWorkspacePanel() {
                             {attachment.mime_type || 'file'} /{' '}
                             {attachment.size_bytes} bytes
                           </span>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='ghost'
+                            className='h-6 w-6 shrink-0 text-slate-500 hover:bg-slate-800 hover:text-slate-100'
+                            data-testid='shell-assistant-remove-attachment'
+                            aria-label={`Remove ${attachment.filename}`}
+                            onClick={() => removeAttachment(attachment.id)}
+                          >
+                            <X className='h-3.5 w-3.5' />
+                          </Button>
                         </div>
                       ))}
                     </div>

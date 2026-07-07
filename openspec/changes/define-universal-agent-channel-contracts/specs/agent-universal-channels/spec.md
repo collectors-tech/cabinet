@@ -41,6 +41,7 @@ Cabinet SHALL handle attachments consistently for main Chat, side-panel Chat, Te
 - **WHEN** the user selects a local file through an attachment control
 - **THEN** Cabinet SHALL persist the attachment only for the active profile, thread, and message context
 - **AND** attachment metadata SHALL include filename, byte size, MIME type, provenance, source surface, and created timestamp
+- **AND** a queued attachment removed before send SHALL NOT be included in the next message request or persisted message attachment list
 - **AND** local files SHALL NOT be attached from arbitrary paths without explicit user selection
 
 #### Scenario: Reject unsupported or unsafe attachment
