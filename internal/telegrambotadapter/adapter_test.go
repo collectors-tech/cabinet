@@ -92,6 +92,72 @@ func TestCabinetRequestFromUpdateRoutesCallbackQuery(t *testing.T) {
 	}
 }
 
+func TestCabinetRequestFromUpdateRoutesAgentTextCommand(t *testing.T) {
+	t.Parallel()
+
+	req, err := CabinetRequestFromUpdate(Update{
+		UpdateID: 9001,
+		Message: &WebhookMessage{
+			MessageID: 51,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Text:      "/agent cabinet.inventory.search_items query=AFX",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CabinetRequestFromUpdate() agent text error = %v", err)
+	}
+	if req.Path != AgentTextPath {
+		t.Fatalf("expected agent text path, got %q", req.Path)
+	}
+	body, ok := req.Body.(AgentTextRequest)
+	if !ok {
+		t.Fatalf("expected AgentTextRequest body, got %T", req.Body)
+	}
+	if body.SenderID != "12345" || body.ChatID != "-5235769556" || body.MessageID != "51" {
+		t.Fatalf("agent text body did not preserve Telegram source identifiers: %+v", body)
+	}
+	if body.Text != "cabinet.inventory.search_items query=AFX" || body.SkillID != "cabinet.inventory.search_items" || body.Parameters["query"] != "AFX" {
+		t.Fatalf("agent text body did not preserve command text/skill parameters: %+v", body)
+	}
+	if body.SourceMetadata["update_id"] != int64(9001) || body.SourceMetadata["command"] != "agent" {
+		t.Fatalf("agent text body did not include non-secret source metadata: %+v", body.SourceMetadata)
+	}
+}
+
+func TestCabinetRequestFromUpdateRoutesAgentTextCallbackQuery(t *testing.T) {
+	t.Parallel()
+
+	req, err := CabinetRequestFromUpdate(Update{
+		UpdateID: 9002,
+		CallbackQuery: &CallbackQuery{
+			ID:   "agent-callback-1",
+			From: WebhookUser{ID: 12345},
+			Message: &CallbackMessage{
+				MessageID: 52,
+				Chat:      WebhookChat{ID: -5235769556},
+			},
+			Data: "cabinet:agent_text:confirm:preview-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CabinetRequestFromUpdate() agent callback error = %v", err)
+	}
+	if req.Path != AgentTextCallbackPath {
+		t.Fatalf("expected agent text callback path, got %q", req.Path)
+	}
+	body, ok := req.Body.(AgentTextCallbackRequest)
+	if !ok {
+		t.Fatalf("expected AgentTextCallbackRequest body, got %T", req.Body)
+	}
+	if body.SenderID != "12345" || body.ChatID != "-5235769556" || body.MessageID != "52" || body.PreviewID != "preview-1" || body.Confirmation != "confirm" {
+		t.Fatalf("agent callback body did not preserve confirmation identifiers: %+v", body)
+	}
+	if body.CallbackData != "cabinet:agent_text:confirm:preview-1" {
+		t.Fatalf("agent callback body did not preserve callback data: %+v", body)
+	}
+}
+
 func TestSendMessageFromReplyRendersInlineButtons(t *testing.T) {
 	t.Parallel()
 
