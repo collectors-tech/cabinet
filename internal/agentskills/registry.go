@@ -197,6 +197,30 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 		}
 		return resp, nil
 	}
+	if strings.HasPrefix(skill.ID, "cabinet.wishlist.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewWishlistBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "wishlist_entry_id", "entry_id", "item_id", "title", "part_number", "priority", "owned", "delivered", "quantity", "needed_quantity")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select the wishlist entry or wanted item details, review purchase and inventory sync impact, then confirm before Cabinet changes wishlist state."
+		}
+		return resp, nil
+	}
+	if strings.HasPrefix(skill.ID, "cabinet.collections.") {
+		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
+		resp.Blocker = previewCollectionsBlocker(skill.ID, params)
+		resp.Target = previewTarget(params, "collection_name", "collection", "destination_collection", "item_id", "move_items", "remove_items", "has_items")
+		if resp.Blocker == "" && !resp.Allowed {
+			resp.Blocker = "confirmation_required"
+		}
+		if resp.NextAction == "" {
+			resp.NextAction = "Select the collection, item, and any destination collection, then confirm before Cabinet changes collection state."
+		}
+		return resp, nil
+	}
 	if strings.HasPrefix(skill.ID, "cabinet.integrations.") {
 		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
 		resp.Blocker = previewIntegrationBlocker(skill.ID, params)
@@ -277,7 +301,18 @@ func builtInSkills() []Skill {
 		builtIn("cabinet.navigate.open_surface", "Open Cabinet surface", "Navigate to a known Cabinet surface without mutating records.", "navigation", SafetyPreviewOnly, []string{"profile", "workspace", "thread", "known_surface"}, []string{"navigate.open_surface"}, nil, nil),
 		builtIn("cabinet.inventory.create_item", "Create inventory item", "Draft an inventory item and require explicit confirmation before persistence.", "inventory", SafetyConfirmRequired, []string{"profile", "workspace", "thread"}, []string{"inventory.item.create"}, nil, nil),
 		builtIn("cabinet.inventory.update_item", "Update inventory item", "Preview edits to an existing inventory item before applying confirmed changes.", "inventory", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item"}, []string{"inventory.item.update", "update_open_item_title"}, nil, nil),
-		builtIn("cabinet.wishlist.create_entry", "Create wishlist entry", "Draft a wishlist entry and require confirmation before persistence.", "wishlist", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wanted_item_details"}, []string{"wishlist.entry.create"}, []string{"wishlist.entry.create"}, []string{"wishlist.create.button", "wishlist.entry.form", "wishlist.entry.save"}),
+		wishlistSkill("cabinet.wishlist.search_entries", "Search wishlist entries", "Search wishlist entries, planning notes, purchase state, and highlight status without mutating records.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"wishlist.entry.search"}, nil),
+		wishlistSkill("cabinet.wishlist.create_entry", "Create wishlist entry", "Draft a wishlist entry and require confirmation before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wanted_item_details"}, []string{"wishlist.entry.create"}, []string{"wishlist.entry.create"}),
+		wishlistSkill("cabinet.wishlist.update_entry", "Update wishlist entry", "Preview updates to target price, priority, notes, purchase details, and planning state before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry"}, []string{"wishlist.entry.update"}, []string{"wishlist_entry_id"}),
+		wishlistSkill("cabinet.wishlist.mark_purchased", "Mark wishlist entry purchased", "Preview purchased wishlist state while preserving purchase lifecycle and inventory quantity sync rules.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry", "purchase_details"}, []string{"wishlist.entry.mark_purchased"}, []string{"wishlist_entry_id"}),
+		wishlistSkill("cabinet.wishlist.soft_delete_entry", "Soft-delete wishlist entry", "Preview hiding a wishlist entry without deleting owned inventory or purchase history.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry"}, []string{"wishlist.entry.soft_delete"}, []string{"wishlist_entry_id"}),
+		wishlistSkill("cabinet.wishlist.restore_entry", "Restore wishlist entry", "Preview restoring a hidden wishlist entry and its visible wishlist state.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry"}, []string{"wishlist.entry.restore"}, []string{"wishlist_entry_id"}),
+		collectionsSkill("cabinet.collections.search", "Search collections", "Search workspace collections and item membership without mutating collection state.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"collections.search"}, nil),
+		collectionsSkill("cabinet.collections.create", "Create collection", "Draft a workspace collection and require confirmation before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "collection_name"}, []string{"collections.create"}, []string{"collection_name"}),
+		collectionsSkill("cabinet.collections.update_metadata", "Update collection metadata", "Preview collection rename, description, and presentation metadata changes before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "collection"}, []string{"collections.update_metadata"}, []string{"collection_name"}),
+		collectionsSkill("cabinet.collections.assign_item", "Assign item to collection", "Prepare a collection assignment preview before collection membership changes.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"collections.item.assign"}, []string{"item_id", "collection_name"}),
+		collectionsSkill("cabinet.collections.soft_delete", "Soft-delete collection", "Preview collection deletion while protecting All Items and describing item move or remove outcomes.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "collection"}, []string{"collections.soft_delete"}, []string{"collection_name"}),
+		collectionsSkill("cabinet.collections.move_items_on_delete", "Move collection items on delete", "Preview reassignment for items that would otherwise lose collection context during deletion.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "collection", "destination_collection"}, []string{"collections.move_items_on_delete"}, []string{"collection_name", "destination_collection"}),
 		builtIn("cabinet.collection.assign_item", "Assign item to collection", "Prepare a collection assignment preview before collection membership changes.", "collections", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"collections.item.assign"}, nil, nil),
 		builtIn("cabinet.guided.inventory.update_item", "Guided inventory item update", "Guide an inventory item update through route focus, target highlight, preview, and confirmation.", "guided-workflows", SafetyConfirmRequired, []string{"profile", "thread", "target_inventory_item", "editable_field"}, []string{"inventory.item.update"}, []string{"inventory.item.update"}, []string{"inventory.item.row", "inventory.item.editor.title", "inventory.item.editor.save"}),
 		builtIn("cabinet.chat.action_timeline.view", "View chat Action Timeline", "Read assistant workflow and action timeline evidence for the active thread.", "chat", SafetyReadOnly, []string{"profile", "thread"}, nil, nil, nil),
@@ -425,6 +460,23 @@ func purchasesSkill(id, displayName, description string, safety SafetyLevel, con
 	return deriveExecutionState(skill)
 }
 
+func wishlistSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "wishlist", safety, context, []string{"wishlist.workflow"}, nil, []string{"wishlist.table", "wishlist.entry.detail"})
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	if id == "cabinet.wishlist.mark_purchased" {
+		skill.OutputSchemaRefs = []string{"wishlist_purchase_lifecycle", "inventory_quantity_sync"}
+	}
+	return deriveExecutionState(skill)
+}
+
+func collectionsSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
+	skill := builtIn(id, displayName, description, "collections", safety, context, []string{"collections.workflow"}, nil, []string{"collections.list", "collections.detail", "collections.item.assignment"})
+	skill.IntegrationWorkflows = append([]string{}, workflows...)
+	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	return deriveExecutionState(skill)
+}
+
 func mediaSkill(id, displayName, description string, safety SafetyLevel, context, workflows, schemaRefs []string) Skill {
 	skill := builtIn(id, displayName, description, "media", safety, context, []string{"media.workflow"}, nil, []string{"media.library", "media.attachment.review"})
 	skill.IntegrationWorkflows = append([]string{}, workflows...)
@@ -471,6 +523,64 @@ func previewUsersAdminBlocker(skillID string, params map[string]any) string {
 func previewInboxBlocker(params map[string]any) string {
 	if strings.TrimSpace(stringParam(params, "target_notification")) == "" && strings.TrimSpace(stringParam(params, "notification_id")) == "" {
 		return "inbox_notification_target_required"
+	}
+	return "confirmation_required"
+}
+
+func previewWishlistBlocker(skillID string, params map[string]any) string {
+	switch skillID {
+	case "cabinet.wishlist.search_entries":
+		return ""
+	case "cabinet.wishlist.create_entry":
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" &&
+			(strings.TrimSpace(stringParam(params, "title")) == "" || strings.TrimSpace(stringParam(params, "part_number")) == "") {
+			return "wishlist_item_context_required"
+		}
+	case "cabinet.wishlist.update_entry",
+		"cabinet.wishlist.mark_purchased",
+		"cabinet.wishlist.soft_delete_entry",
+		"cabinet.wishlist.restore_entry":
+		if strings.TrimSpace(stringParam(params, "wishlist_entry_id")) == "" && strings.TrimSpace(stringParam(params, "entry_id")) == "" {
+			return "wishlist_entry_required"
+		}
+	}
+	return "confirmation_required"
+}
+
+func previewCollectionsBlocker(skillID string, params map[string]any) string {
+	collectionName := firstNonEmptyParam(params, "collection_name", "collection")
+	switch skillID {
+	case "cabinet.collections.search":
+		return ""
+	case "cabinet.collections.create":
+		if collectionName == "" {
+			return "collections_name_required"
+		}
+	case "cabinet.collections.update_metadata",
+		"cabinet.collections.soft_delete",
+		"cabinet.collections.move_items_on_delete":
+		if collectionName == "" {
+			return "collections_target_required"
+		}
+		if strings.EqualFold(collectionName, "All Items") && skillID == "cabinet.collections.soft_delete" {
+			return "collections_all_items_protected"
+		}
+		if skillID == "cabinet.collections.soft_delete" &&
+			boolParam(params, "has_items") &&
+			strings.TrimSpace(stringParam(params, "destination_collection")) == "" &&
+			!boolParam(params, "remove_items") {
+			return "collections_delete_destination_required"
+		}
+		if skillID == "cabinet.collections.move_items_on_delete" && strings.TrimSpace(stringParam(params, "destination_collection")) == "" {
+			return "collections_destination_required"
+		}
+	case "cabinet.collections.assign_item":
+		if strings.TrimSpace(stringParam(params, "item_id")) == "" {
+			return "collections_item_required"
+		}
+		if collectionName == "" {
+			return "collections_target_required"
+		}
 	}
 	return "confirmation_required"
 }
@@ -664,6 +774,15 @@ func boolParam(params map[string]any, key string) bool {
 	}
 	flag, ok := value.(bool)
 	return ok && flag
+}
+
+func firstNonEmptyParam(params map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(stringParam(params, key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func normalizeImported(imported []Skill) []Skill {

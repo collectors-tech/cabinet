@@ -28,7 +28,18 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 		"cabinet.navigate.open_surface",
 		"cabinet.inventory.create_item",
 		"cabinet.inventory.update_item",
+		"cabinet.wishlist.search_entries",
 		"cabinet.wishlist.create_entry",
+		"cabinet.wishlist.update_entry",
+		"cabinet.wishlist.mark_purchased",
+		"cabinet.wishlist.soft_delete_entry",
+		"cabinet.wishlist.restore_entry",
+		"cabinet.collections.search",
+		"cabinet.collections.create",
+		"cabinet.collections.update_metadata",
+		"cabinet.collections.assign_item",
+		"cabinet.collections.soft_delete",
+		"cabinet.collections.move_items_on_delete",
 		"cabinet.collection.assign_item",
 		"cabinet.guided.inventory.update_item",
 		"cabinet.chat.action_timeline.view",
@@ -104,6 +115,97 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 	}
 	if resolved.SafetyLevel != SafetyConfirmRequired || !resolved.Permissions.RequiresConfirm || !resolved.Permissions.LocalWrite {
 		t.Fatalf("expected confirm-required local write permission metadata, got %+v", resolved)
+	}
+}
+
+func TestWishlistAndCollectionsSkillsExposePreviewBoundaries(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	searchWishlist, ok := registry.Resolve("cabinet.wishlist.search_entries")
+	if !ok {
+		t.Fatalf("expected Wishlist search skill")
+	}
+	if searchWishlist.SafetyLevel != SafetyReadOnly || !searchWishlist.Executable || searchWishlist.Permissions.LocalWrite {
+		t.Fatalf("Wishlist search should be executable read-only metadata, got %+v", searchWishlist)
+	}
+
+	markPurchased, ok := registry.Resolve("cabinet.wishlist.mark_purchased")
+	if !ok {
+		t.Fatalf("expected Wishlist mark purchased skill")
+	}
+	if markPurchased.SafetyLevel != SafetyConfirmRequired || !markPurchased.Permissions.RequiresConfirm || !slices.Contains(markPurchased.OutputSchemaRefs, "inventory_quantity_sync") {
+		t.Fatalf("mark purchased should expose confirm-required purchase/inventory sync metadata, got %+v", markPurchased)
+	}
+	missingEntry, err := registry.Preview(PreviewRequest{SkillID: "cabinet.wishlist.mark_purchased"})
+	if err != nil {
+		t.Fatalf("preview wishlist mark purchased: %v", err)
+	}
+	if missingEntry.Allowed || missingEntry.Blocker != "wishlist_entry_required" || missingEntry.MutationApplied {
+		t.Fatalf("expected Wishlist entry blocker without mutation, got %+v", missingEntry)
+	}
+
+	createEntry, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.wishlist.create_entry",
+		Parameters: map[string]any{"title": "Wanted slot car"},
+	})
+	if err != nil {
+		t.Fatalf("preview wishlist create entry: %v", err)
+	}
+	if createEntry.Allowed || createEntry.Blocker != "wishlist_item_context_required" {
+		t.Fatalf("expected Wishlist item context blocker, got %+v", createEntry)
+	}
+
+	searchCollections, ok := registry.Resolve("cabinet.collections.search")
+	if !ok {
+		t.Fatalf("expected Collections search skill")
+	}
+	if searchCollections.SafetyLevel != SafetyReadOnly || !searchCollections.Executable || searchCollections.Permissions.LocalWrite {
+		t.Fatalf("Collections search should be executable read-only metadata, got %+v", searchCollections)
+	}
+
+	assignItem, ok := registry.Resolve("cabinet.collections.assign_item")
+	if !ok {
+		t.Fatalf("expected Collections assign item skill")
+	}
+	if assignItem.SafetyLevel != SafetyConfirmRequired || !assignItem.Permissions.RequiresConfirm || !slices.Contains(assignItem.InputSchemaRefs, "item_id") {
+		t.Fatalf("assign item should require item context and confirmation, got %+v", assignItem)
+	}
+	missingItem, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.collections.assign_item",
+		Parameters: map[string]any{"collection_name": "Display Case"},
+	})
+	if err != nil {
+		t.Fatalf("preview collections assign item: %v", err)
+	}
+	if missingItem.Allowed || missingItem.Blocker != "collections_item_required" {
+		t.Fatalf("expected Collections item blocker, got %+v", missingItem)
+	}
+
+	protectedAllItems, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.collections.soft_delete",
+		Parameters: map[string]any{"collection_name": "All Items"},
+	})
+	if err != nil {
+		t.Fatalf("preview collections soft delete: %v", err)
+	}
+	if protectedAllItems.Allowed || protectedAllItems.Blocker != "collections_all_items_protected" {
+		t.Fatalf("expected All Items protection blocker, got %+v", protectedAllItems)
+	}
+
+	missingDestination, err := registry.Preview(PreviewRequest{
+		SkillID: "cabinet.collections.soft_delete",
+		Parameters: map[string]any{
+			"collection_name": "Display Case",
+			"has_items":       true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("preview collections soft delete with items: %v", err)
+	}
+	if missingDestination.Allowed || missingDestination.Blocker != "collections_delete_destination_required" {
+		t.Fatalf("expected missing destination blocker for non-empty collection delete, got %+v", missingDestination)
 	}
 }
 

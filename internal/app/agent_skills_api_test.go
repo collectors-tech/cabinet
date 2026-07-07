@@ -121,6 +121,38 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	if addPurchaseLine.SafetyLevel != "confirm-required" || !addPurchaseLine.Permissions.RequiresConfirm || !slices.Contains(addPurchaseLine.RequiredContext, "target_order") {
 		t.Fatalf("expected confirmation-gated purchase line item metadata, got %+v", addPurchaseLine)
 	}
+
+	wishlistSearch := findAPISkill(payload.Skills, "cabinet.wishlist.search_entries")
+	if wishlistSearch == nil {
+		t.Fatalf("missing Wishlist search skill")
+	}
+	if wishlistSearch.SafetyLevel != "read-only" || wishlistSearch.Permissions.LocalWrite || !wishlistSearch.Executable {
+		t.Fatalf("expected executable read-only Wishlist search metadata, got %+v", wishlistSearch)
+	}
+
+	wishlistPurchased := findAPISkill(payload.Skills, "cabinet.wishlist.mark_purchased")
+	if wishlistPurchased == nil {
+		t.Fatalf("missing Wishlist mark purchased skill")
+	}
+	if wishlistPurchased.SafetyLevel != "confirm-required" || !wishlistPurchased.Permissions.RequiresConfirm || !slices.Contains(wishlistPurchased.RequiredContext, "purchase_details") {
+		t.Fatalf("expected confirmation-gated Wishlist purchased metadata, got %+v", wishlistPurchased)
+	}
+
+	collectionsSearch := findAPISkill(payload.Skills, "cabinet.collections.search")
+	if collectionsSearch == nil {
+		t.Fatalf("missing Collections search skill")
+	}
+	if collectionsSearch.SafetyLevel != "read-only" || collectionsSearch.Permissions.LocalWrite || !collectionsSearch.Executable {
+		t.Fatalf("expected executable read-only Collections search metadata, got %+v", collectionsSearch)
+	}
+
+	collectionDelete := findAPISkill(payload.Skills, "cabinet.collections.soft_delete")
+	if collectionDelete == nil {
+		t.Fatalf("missing Collections soft delete skill")
+	}
+	if collectionDelete.SafetyLevel != "confirm-required" || !collectionDelete.Permissions.RequiresConfirm || !slices.Contains(collectionDelete.RequiredContext, "collection") {
+		t.Fatalf("expected confirmation-gated Collections delete metadata, got %+v", collectionDelete)
+	}
 }
 
 func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
@@ -155,6 +187,348 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	}
 	if !payload.ConfirmationRequired || payload.Blocker != "users_admin_protected_owner_remove_blocked" {
 		t.Fatalf("expected protected owner confirmation blocker, got %+v", payload)
+	}
+}
+
+func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	wishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"test-profile",
+		"skill_id":"cabinet.wishlist.mark_purchased",
+		"parameters":{"purchase_url":"https://example.test/order"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if wishlist.Code != http.StatusOK {
+		t.Fatalf("wishlist preview status=%d body=%s", wishlist.Code, wishlist.Body.String())
+	}
+	if !strings.Contains(wishlist.Body.String(), `"blocker":"wishlist_entry_required"`) ||
+		!strings.Contains(wishlist.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected missing wishlist entry blocker, body=%s", wishlist.Body.String())
+	}
+
+	allItems := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"test-profile",
+		"skill_id":"cabinet.collections.soft_delete",
+		"parameters":{"collection_name":"All Items"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if allItems.Code != http.StatusOK {
+		t.Fatalf("collections All Items preview status=%d body=%s", allItems.Code, allItems.Body.String())
+	}
+	if !strings.Contains(allItems.Body.String(), `"blocker":"collections_all_items_protected"`) ||
+		!strings.Contains(allItems.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected protected All Items blocker, body=%s", allItems.Body.String())
+	}
+
+	nonEmptyDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"test-profile",
+		"skill_id":"cabinet.collections.soft_delete",
+		"parameters":{"collection_name":"Display Case","has_items":true}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if nonEmptyDelete.Code != http.StatusOK {
+		t.Fatalf("collections non-empty delete preview status=%d body=%s", nonEmptyDelete.Code, nonEmptyDelete.Body.String())
+	}
+	if !strings.Contains(nonEmptyDelete.Body.String(), `"blocker":"collections_delete_destination_required"`) {
+		t.Fatalf("expected missing destination blocker, body=%s", nonEmptyDelete.Body.String())
+	}
+}
+
+func TestAgentSkillApplyAPIHandlesWishlistSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Wishlist"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	createWishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.create_entry",
+		"confirm":true,
+		"source_surface":"telegram.wishlist.intent",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-wishlist-thread-1708",
+		"source_message_id":"tg-wishlist-message-1708",
+		"parameters":{
+			"part_number":"WISH-AGENT-1708",
+			"title":"Agent Wishlist Runtime Item",
+			"brand":"AFX",
+			"category":"Slot Cars",
+			"target_price":42,
+			"priority":"high",
+			"needed_quantity":3,
+			"notes":"agent wishlist runtime create",
+			"source_url":"https://example.test/wishlist/1708"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createWishlist.Code != http.StatusOK {
+		t.Fatalf("create wishlist skill status=%d body=%s", createWishlist.Code, createWishlist.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.wishlist.create_entry"`,
+		`"source_channel":"telegram"`,
+		`"mutation_applied":true`,
+		`"operation":"wishlist.entry.create"`,
+		`"wishlist_persisted":true`,
+		`"created_item":true`,
+	} {
+		if !strings.Contains(createWishlist.Body.String(), want) {
+			t.Fatalf("create wishlist response missing %s: body=%s", want, createWishlist.Body.String())
+		}
+	}
+	var created struct {
+		Target struct {
+			ItemID          string `json:"item_id"`
+			WishlistEntryID string `json:"wishlist_entry_id"`
+		} `json:"target"`
+	}
+	if err := json.NewDecoder(createWishlist.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created wishlist skill response: %v", err)
+	}
+	if created.Target.ItemID == "" || created.Target.WishlistEntryID == "" {
+		t.Fatalf("expected created item and wishlist ids, got %+v body=%s", created.Target, createWishlist.Body.String())
+	}
+	var wishlistCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM wishlist_entries WHERE profile_id = ? AND id = ? AND item_id = ? AND priority = 'high'`, p.ID, created.Target.WishlistEntryID, created.Target.ItemID).Scan(&wishlistCount); err != nil {
+		t.Fatalf("count created wishlist entry: %v", err)
+	}
+	if wishlistCount != 1 {
+		t.Fatalf("expected one persisted wishlist entry, got %d", wishlistCount)
+	}
+
+	searchWishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.search_entries",
+		"parameters":{"query":"runtime create"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchWishlist.Code != http.StatusOK {
+		t.Fatalf("search wishlist skill status=%d body=%s", searchWishlist.Code, searchWishlist.Body.String())
+	}
+	if !strings.Contains(searchWishlist.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(searchWishlist.Body.String(), `"operation":"wishlist.entry.search"`) ||
+		!strings.Contains(searchWishlist.Body.String(), `"id":"`+created.Target.WishlistEntryID+`"`) {
+		t.Fatalf("expected read-only wishlist search evidence, body=%s", searchWishlist.Body.String())
+	}
+
+	updateWishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.update_entry",
+		"confirm":true,
+		"parameters":{"wishlist_entry_id":"`+created.Target.WishlistEntryID+`","priority":"medium","notes":"agent wishlist runtime updated","target_price":37}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateWishlist.Code != http.StatusOK {
+		t.Fatalf("update wishlist skill status=%d body=%s", updateWishlist.Code, updateWishlist.Body.String())
+	}
+	if !strings.Contains(updateWishlist.Body.String(), `"operation":"wishlist.entry.update"`) ||
+		!strings.Contains(updateWishlist.Body.String(), `"wishlist_persisted":true`) ||
+		!strings.Contains(updateWishlist.Body.String(), `"priority":"medium"`) {
+		t.Fatalf("expected wishlist update persistence evidence, body=%s", updateWishlist.Body.String())
+	}
+
+	if _, err := a.db.Exec(`INSERT INTO instances(id, item_id, condition, status, quantity, notes) VALUES ('agent-wishlist-existing-instance', ?, 'loose', 'loose', 2, 'existing inventory')`, created.Target.ItemID); err != nil {
+		t.Fatalf("seed existing wishlist inventory: %v", err)
+	}
+	markPurchasedBody := `{
+		"profile_id":"` + p.ID + `",
+		"skill_id":"cabinet.wishlist.mark_purchased",
+		"confirm":true,
+		"parameters":{
+			"wishlist_entry_id":"` + created.Target.WishlistEntryID + `",
+			"price_paid":31.5,
+			"purchase_url":"https://example.test/order/1708",
+			"purchase_date":"2026-07-05",
+			"purchase_condition":"sealed",
+			"quantity":3
+		}
+	}`
+	markPurchased := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(markPurchasedBody), map[string]string{"Content-Type": "application/json"})
+	if markPurchased.Code != http.StatusOK {
+		t.Fatalf("mark purchased skill status=%d body=%s", markPurchased.Code, markPurchased.Body.String())
+	}
+	if !strings.Contains(markPurchased.Body.String(), `"operation":"wishlist.entry.mark_purchased"`) ||
+		!strings.Contains(markPurchased.Body.String(), `"purchase_sync_provenance":true`) ||
+		!strings.Contains(markPurchased.Body.String(), `"inventory_quantity_sync_safe":true`) {
+		t.Fatalf("expected wishlist purchase sync evidence, body=%s", markPurchased.Body.String())
+	}
+	repeatPurchased := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(markPurchasedBody), map[string]string{"Content-Type": "application/json"})
+	if repeatPurchased.Code != http.StatusOK {
+		t.Fatalf("repeat mark purchased skill status=%d body=%s", repeatPurchased.Code, repeatPurchased.Body.String())
+	}
+	var quantity int
+	var lifecycleCount int
+	if err := a.db.QueryRow(`SELECT quantity FROM instances WHERE id = 'agent-wishlist-existing-instance'`).Scan(&quantity); err != nil {
+		t.Fatalf("load synced wishlist inventory instance: %v", err)
+	}
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM commerce_lifecycle_entries WHERE profile_id = ? AND source = 'wishlist' AND external_ref = ?`, p.ID, created.Target.WishlistEntryID).Scan(&lifecycleCount); err != nil {
+		t.Fatalf("count wishlist purchase lifecycle: %v", err)
+	}
+	if quantity != 5 || lifecycleCount != 1 {
+		t.Fatalf("expected one quantity sync and one lifecycle after repeated purchase apply, quantity=%d lifecycle=%d", quantity, lifecycleCount)
+	}
+
+	softDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.soft_delete_entry",
+		"confirm":true,
+		"parameters":{"wishlist_entry_id":"`+created.Target.WishlistEntryID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if softDelete.Code != http.StatusOK {
+		t.Fatalf("soft-delete wishlist skill status=%d body=%s", softDelete.Code, softDelete.Body.String())
+	}
+	if !strings.Contains(softDelete.Body.String(), `"operation":"wishlist.entry.soft_delete"`) ||
+		!strings.Contains(softDelete.Body.String(), `"wishlist_deleted":true`) {
+		t.Fatalf("expected wishlist soft-delete evidence, body=%s", softDelete.Body.String())
+	}
+
+	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.wishlist.restore_entry",
+		"confirm":true,
+		"parameters":{"wishlist_entry_id":"`+created.Target.WishlistEntryID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if restore.Code != http.StatusOK {
+		t.Fatalf("restore wishlist skill status=%d body=%s", restore.Code, restore.Body.String())
+	}
+	if !strings.Contains(restore.Body.String(), `"operation":"wishlist.entry.restore"`) ||
+		!strings.Contains(restore.Body.String(), `"wishlist_deleted":false`) {
+		t.Fatalf("expected wishlist restore evidence, body=%s", restore.Body.String())
+	}
+}
+
+func TestAgentSkillApplyAPIHandlesCollectionsSkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Collections"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status) VALUES ('agent-collection-item-1', ?, 'AFX', 'Slot Cars', 'COLL-1708', 'Agent Collections Item', 'active')`, p.ID); err != nil {
+		t.Fatalf("seed collection item: %v", err)
+	}
+
+	createCollection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.create",
+		"confirm":true,
+		"source_surface":"telegram.collections.intent",
+		"source_channel":"telegram",
+		"source_thread_id":"tg-collections-thread-1708",
+		"source_message_id":"tg-collections-message-1708",
+		"parameters":{"collection_name":"Display Case"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createCollection.Code != http.StatusOK {
+		t.Fatalf("create collection skill status=%d body=%s", createCollection.Code, createCollection.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.collections.create"`,
+		`"source_channel":"telegram"`,
+		`"mutation_applied":true`,
+		`"operation":"collections.create"`,
+		`"collection_persisted":true`,
+		`"collection_name":"Display Case"`,
+	} {
+		if !strings.Contains(createCollection.Body.String(), want) {
+			t.Fatalf("create collection response missing %s: body=%s", want, createCollection.Body.String())
+		}
+	}
+
+	assignItem := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.assign_item",
+		"confirm":true,
+		"parameters":{"collection_name":"Display Case","item_id":"agent-collection-item-1"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if assignItem.Code != http.StatusOK {
+		t.Fatalf("assign collection item status=%d body=%s", assignItem.Code, assignItem.Body.String())
+	}
+	if !strings.Contains(assignItem.Body.String(), `"operation":"collections.item.assign"`) ||
+		!strings.Contains(assignItem.Body.String(), `"item_id":"agent-collection-item-1"`) ||
+		!strings.Contains(assignItem.Body.String(), `"collection_persisted":true`) {
+		t.Fatalf("expected collection assignment evidence, body=%s", assignItem.Body.String())
+	}
+
+	updateCollection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.update_metadata",
+		"confirm":true,
+		"parameters":{"collection_name":"Display Case","new_collection_name":"Showcase Shelf"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateCollection.Code != http.StatusOK {
+		t.Fatalf("update collection status=%d body=%s", updateCollection.Code, updateCollection.Body.String())
+	}
+	if !strings.Contains(updateCollection.Body.String(), `"operation":"collections.update_metadata"`) ||
+		!strings.Contains(updateCollection.Body.String(), `"collection_name":"Showcase Shelf"`) {
+		t.Fatalf("expected collection metadata update evidence, body=%s", updateCollection.Body.String())
+	}
+
+	searchCollections := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.search",
+		"parameters":{"query":"Showcase"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchCollections.Code != http.StatusOK {
+		t.Fatalf("search collections status=%d body=%s", searchCollections.Code, searchCollections.Body.String())
+	}
+	if !strings.Contains(searchCollections.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(searchCollections.Body.String(), `"operation":"collections.search"`) ||
+		!strings.Contains(searchCollections.Body.String(), `"Showcase Shelf"`) {
+		t.Fatalf("expected read-only collection search evidence, body=%s", searchCollections.Body.String())
+	}
+
+	moveOnDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.move_items_on_delete",
+		"confirm":true,
+		"parameters":{"collection_name":"Showcase Shelf","destination_collection":"Archive Shelf"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if moveOnDelete.Code != http.StatusOK {
+		t.Fatalf("move collection items status=%d body=%s", moveOnDelete.Code, moveOnDelete.Body.String())
+	}
+	if !strings.Contains(moveOnDelete.Body.String(), `"operation":"collections.items.move_on_delete"`) ||
+		!strings.Contains(moveOnDelete.Body.String(), `"collection_deleted":true`) ||
+		!strings.Contains(moveOnDelete.Body.String(), `"destination_collection":"Archive Shelf"`) ||
+		!strings.Contains(moveOnDelete.Body.String(), `"moved_item_count":1`) {
+		t.Fatalf("expected collection move-on-delete evidence, body=%s", moveOnDelete.Body.String())
+	}
+
+	var workspaceRaw string
+	if err := a.db.QueryRow(`SELECT value FROM profile_settings WHERE profile_id = ? AND key = 'collections.workspace.v1'`, p.ID).Scan(&workspaceRaw); err != nil {
+		t.Fatalf("load collection workspace setting: %v", err)
+	}
+	if !strings.Contains(workspaceRaw, "Archive Shelf") ||
+		strings.Contains(workspaceRaw, "Showcase Shelf") ||
+		!strings.Contains(workspaceRaw, `"collectionName":"Archive Shelf"`) {
+		t.Fatalf("expected persisted collection move state, got %s", workspaceRaw)
+	}
+
+	softDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.collections.soft_delete",
+		"confirm":true,
+		"parameters":{"collection_name":"Archive Shelf","remove_items":true}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if softDelete.Code != http.StatusOK {
+		t.Fatalf("soft-delete collection status=%d body=%s", softDelete.Code, softDelete.Body.String())
+	}
+	if !strings.Contains(softDelete.Body.String(), `"operation":"collections.soft_delete"`) ||
+		!strings.Contains(softDelete.Body.String(), `"collection_deleted":true`) ||
+		!strings.Contains(softDelete.Body.String(), `"removed_item_count":1`) {
+		t.Fatalf("expected collection soft-delete evidence, body=%s", softDelete.Body.String())
 	}
 }
 
