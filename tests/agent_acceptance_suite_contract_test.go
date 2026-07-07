@@ -55,14 +55,12 @@ func TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope(t *testing.T) {
 func TestAgentLiveTelegramChecklistNamesNonSecretProofRequirements(t *testing.T) {
 	t.Parallel()
 
-	checklistPath := filepath.Join("..", "openspec", "traceability", "agent-live-telegram-channel-checklist.md")
-	raw, err := os.ReadFile(checklistPath)
-	if err != nil {
-		t.Fatalf("read live Telegram channel checklist: %v", err)
+	checklistPaths := []string{
+		filepath.Join("..", "openspec", "traceability", "agent-live-telegram-channel-checklist.md"),
+		filepath.Join("..", "docs", "validation", "agent-live-telegram-channel-checklist.md"),
 	}
-	content := string(raw)
 
-	for _, fragment := range []string{
+	requiredFragments := []string{
 		"Issue: #1773",
 		"Parent: #1716",
 		"non-secret evidence",
@@ -77,9 +75,19 @@ func TestAgentLiveTelegramChecklistNamesNonSecretProofRequirements(t *testing.T)
 		"Record absence check",
 		"Mutation absence check",
 		"linked issue/PR comment",
-	} {
-		if !strings.Contains(content, fragment) {
-			t.Fatalf("expected live Telegram checklist to include %q", fragment)
+	}
+
+	for _, checklistPath := range checklistPaths {
+		raw, err := os.ReadFile(checklistPath)
+		if err != nil {
+			t.Fatalf("read live Telegram channel checklist %s: %v", checklistPath, err)
+		}
+		content := string(raw)
+
+		for _, fragment := range requiredFragments {
+			if !strings.Contains(content, fragment) {
+				t.Fatalf("expected live Telegram checklist %s to include %q", checklistPath, fragment)
+			}
 		}
 	}
 }
@@ -104,6 +112,7 @@ func TestAgentAcceptanceSuiteTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		"AGENT-UNIVERSAL-CHANNELS-005",
 		"fixture/proof-packet validation from live production-channel validation",
 		"| partial |",
+		"docs/validation/agent-live-telegram-channel-checklist.md",
 	} {
 		if !strings.Contains(trace, fragment) {
 			t.Fatalf("expected #1716 acceptance traceability to include %q", fragment)

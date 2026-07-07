@@ -21,4 +21,6 @@ This map defines the first acceptance-suite slice for universal Agent work. It d
 - a manual live Telegram-channel checklist with non-secret sender/chat setup state, source message id, response/deep-link/review state, and runtime proof; or
 - an explicit blocker/follow-up issue explaining why production-channel validation is unavailable.
 
-Current live-channel follow-up: #1773 (`openspec/traceability/agent-live-telegram-channel-checklist.md`). #1716 must remain open or explicitly blocked until that checklist is completed or superseded by an approved blocker/follow-up.
+Current live-channel follow-up: #1773 (`openspec/traceability/agent-live-telegram-channel-checklist.md` and `docs/validation/agent-live-telegram-channel-checklist.md`). #1716 must remain open or explicitly blocked until that checklist is completed or superseded by an approved blocker/follow-up.
+
+Current #1773 precondition result: blocked by missing live Telegram sender/chat setup on demo2. The non-secret provider-health evidence is recorded in `.work-agent/logs/issue-1773/telegram-provider-health-precondition.json` and reports `TELEGRAM_SENDER_CHAT_REQUIRED`, `sender_chat_authorized=false`, `bot_token_present=false`, `webhook_configured=false`, and `credential_returned=false`.
