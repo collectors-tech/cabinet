@@ -218,6 +218,7 @@ export function Chats() {
   const [workflowRuns, setWorkflowRuns] = useState<ChatWorkflowRun[]>([])
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false)
   const [workflowRunsError, setWorkflowRunsError] = useState('')
+  const [externalReviewPreviewId, setExternalReviewPreviewId] = useState('')
 
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
@@ -347,6 +348,12 @@ export function Chats() {
         typeof window !== 'undefined'
           ? (new URLSearchParams(window.location.search).get('thread_id') ?? '')
           : ''
+      setExternalReviewPreviewId(
+        typeof window !== 'undefined'
+          ? (new URLSearchParams(window.location.search).get('preview_id') ??
+              '')
+          : ''
+      )
       await loadThreads(profileID, false, requestedThread)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'failed_to_bootstrap_chat')
@@ -378,8 +385,57 @@ export function Chats() {
       return
     }
     setActionPreview(null)
-    clearStoredActionPreview(selectedActionPreviewStorageKey)
-  }, [activeProfileId, selectedThreadId, selectedActionPreviewStorageKey])
+    if (!externalReviewPreviewId.trim()) {
+      clearStoredActionPreview(selectedActionPreviewStorageKey)
+    }
+  }, [
+    activeProfileId,
+    externalReviewPreviewId,
+    selectedActionPreviewStorageKey,
+    selectedThreadId,
+  ])
+
+  useEffect(() => {
+    const previewID = externalReviewPreviewId.trim()
+    if (!activeProfileId || !selectedThreadId || !previewID) {
+      return
+    }
+    const controller = new AbortController()
+    const loadReviewPreview = async () => {
+      try {
+        const response = await fetch(
+          `/api/chat/actions/preview?profile_id=${encodeURIComponent(activeProfileId)}&preview_id=${encodeURIComponent(previewID)}`,
+          { signal: controller.signal }
+        )
+        if (!response.ok) {
+          throw new Error(`chat_action_preview_${response.status}`)
+        }
+        const preview = (await response.json()) as ChatActionPreview
+        if (
+          preview.profile_id === activeProfileId &&
+          preview.thread_id === selectedThreadId
+        ) {
+          setActionPreview(preview)
+          writeStoredActionPreview(selectedActionPreviewStorageKey, preview)
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setSendError(
+            err instanceof Error
+              ? err.message
+              : 'failed_to_load_chat_action_preview'
+          )
+        }
+      }
+    }
+    void loadReviewPreview()
+    return () => controller.abort()
+  }, [
+    activeProfileId,
+    externalReviewPreviewId,
+    selectedActionPreviewStorageKey,
+    selectedThreadId,
+  ])
 
   const createThread = async () => {
     const title = threadTitle.trim()

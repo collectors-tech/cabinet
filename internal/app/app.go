@@ -5535,6 +5535,17 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/chat/actions/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			previewID := strings.TrimSpace(r.URL.Query().Get("preview_id"))
+			preview, err := chatSvc.GetActionPreview(r.Context(), profileID, previewID)
+			if err != nil {
+				http.Error(w, `{"error":"chat_action_preview_not_found"}`, http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
