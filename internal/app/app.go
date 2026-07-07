@@ -2351,6 +2351,9 @@ func New(cfg config.Config) (*App, error) {
 			if key, secretErr := profiles.GetSecret(r.Context(), strings.TrimSpace(active.ID), "openai_api_key"); secretErr == nil && strings.TrimSpace(key) != "" {
 				settings["openai.api_key_secret_present"] = "true"
 			}
+			if key, secretErr := profiles.GetSecret(r.Context(), strings.TrimSpace(active.ID), "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
+				settings["telegram.bot_token_secret_present"] = "true"
+			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
@@ -8338,6 +8341,9 @@ func telegramProviderHealth(ctx context.Context, profiles *profile.Repository) m
 	settings, err := profiles.GetSettings(ctx, strings.TrimSpace(active.ID))
 	if err != nil {
 		settings = map[string]string{}
+	}
+	if key, secretErr := profiles.GetSecret(ctx, strings.TrimSpace(active.ID), "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
+		settings["telegram.bot_token_secret_present"] = "true"
 	}
 	senderChatReady := telegramCatalogCaptureConfigured(settings)
 	botTokenPresent := telegramBotTokenPresent(settings)

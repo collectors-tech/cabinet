@@ -651,7 +651,11 @@ func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
 		t.Fatalf("expected non-secret Telegram diagnostics requiring bot token, body=%s", health.Body.String())
 	}
 
-	settings = doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.bot_token_secret_present":"true","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	secret := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/secrets", strings.NewReader(`{"key":"telegram_bot_token","value":"token-secret"}`), map[string]string{"Content-Type": "application/json"})
+	if secret.Code != http.StatusOK {
+		t.Fatalf("telegram secret status=%d body=%s", secret.Code, secret.Body.String())
+	}
+	settings = doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
 	if settings.Code != http.StatusOK {
 		t.Fatalf("full settings status=%d body=%s", settings.Code, settings.Body.String())
 	}
@@ -676,6 +680,15 @@ func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
 	}
 	if strings.Contains(registry.Body.String(), "token-secret") {
 		t.Fatalf("registry response must not leak Telegram token material: %s", registry.Body.String())
+	}
+	health = doRequest(t, a, http.MethodGet, "/api/provider/health?provider=telegram", nil, nil)
+	if health.Code != http.StatusOK {
+		t.Fatalf("telegram health after full setup status=%d body=%s", health.Code, health.Body.String())
+	}
+	if !strings.Contains(health.Body.String(), `"code":"TELEGRAM_CHANNEL_READY"`) ||
+		!strings.Contains(health.Body.String(), `"credential_returned":false`) ||
+		strings.Contains(health.Body.String(), "token-secret") {
+		t.Fatalf("expected ready non-secret Telegram health, body=%s", health.Body.String())
 	}
 }
 

@@ -1113,9 +1113,39 @@ describe('ui-screen-integrations', () => {
         settings: {
           'telegram.catalog_capture.sender_id': '12345',
           'telegram.catalog_capture.chat_id': '-5235769556',
+          'telegram.webhook_configured': 'false',
+          'integration.telegram.webhook_url': '',
         },
       },
     }).as('settings')
+    cy.intercept('PUT', '/api/profiles/profile-e2e-001/secrets', (req) => {
+      expect(req.body).to.deep.equal({
+        key: 'telegram_bot_token',
+        value: 'bot-token-replacement',
+      })
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('telegramSecretSave')
+    cy.intercept('PUT', '/api/profiles/profile-e2e-001/settings', (req) => {
+      expect(req.body.settings).to.include({
+        'telegram.catalog_capture.sender_id': '67890',
+        'telegram.catalog_capture.chat_id': '-100123',
+        'telegram.webhook_configured': 'true',
+        'telegram.webhook_url_set': 'true',
+        'integration.telegram.webhook_url':
+          'https://cabinet.example/api/telegram/webhook/catalog-captures',
+        'integration.telegram.enabled': 'true',
+        'telegram.bot_token_secret_present': 'true',
+      })
+      expect(JSON.stringify(req.body)).not.to.contain('bot-token-replacement')
+      req.reply({
+        statusCode: 200,
+        body: {
+          settings: {
+            ...req.body.settings,
+          },
+        },
+      })
+    }).as('telegramSettingsSave')
 
     signIn()
     cy.wait('@activeProfile')
@@ -1145,6 +1175,24 @@ describe('ui-screen-integrations', () => {
     cy.contains('configure_webhook').should('be.visible')
     cy.contains('production-channel validation').should('be.visible')
     cy.contains('preview-before-apply channel intake').should('be.visible')
+    cy.get('[data-testid="telegram-sender-id"]')
+      .should('have.value', '12345')
+      .clear()
+      .type('67890')
+    cy.get('[data-testid="telegram-chat-id"]')
+      .should('have.value', '-5235769556')
+      .clear()
+      .type('-100123')
+    cy.get('[data-testid="telegram-webhook-url"]').type(
+      'https://cabinet.example/api/telegram/webhook/catalog-captures'
+    )
+    cy.get('[data-testid="telegram-replace-token"]').click()
+    cy.get('[data-testid="telegram-bot-token"]').type('bot-token-replacement')
+    cy.get('[data-testid="telegram-webhook-configured"]').check()
+    cy.contains('button', 'Save Telegram').click()
+    cy.wait('@telegramSecretSave')
+    cy.wait('@telegramSettingsSave')
+    cy.contains('Telegram setup saved.').should('be.visible')
   })
 
   it('UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status', () => {
