@@ -168,6 +168,15 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if err := json.NewDecoder(previewResp.Body).Decode(&preview); err != nil {
 		t.Fatalf("decode preview: %v", err)
 	}
+	loadedPreviewResp := doRequest(t, a, http.MethodGet, "/api/chat/actions/preview?profile_id="+p.ID+"&preview_id="+preview.ID, nil, nil)
+	if loadedPreviewResp.Code != http.StatusOK {
+		t.Fatalf("load preview status=%d body=%s", loadedPreviewResp.Code, loadedPreviewResp.Body.String())
+	}
+	if !strings.Contains(loadedPreviewResp.Body.String(), `"id":"`+preview.ID+`"`) ||
+		!strings.Contains(loadedPreviewResp.Body.String(), `"thread_id":"`+thread.ID+`"`) ||
+		!strings.Contains(loadedPreviewResp.Body.String(), `"status":"previewed"`) {
+		t.Fatalf("expected GET preview to restore pending action preview for review URL, body=%s", loadedPreviewResp.Body.String())
+	}
 
 	itemsBefore := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
 	if itemsBefore.Code != http.StatusOK {
