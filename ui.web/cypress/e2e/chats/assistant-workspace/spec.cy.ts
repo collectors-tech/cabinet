@@ -280,6 +280,25 @@ describe('chats/assistant-workspace', () => {
     )
     cy.get('[data-testid="shell-assistant-attachment-input"]').selectFile(
       {
+        contents: Cypress.Buffer.from('remove before send'),
+        fileName: 'side-panel-remove-me.txt',
+        mimeType: 'text/plain',
+      },
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-attachment-upload"]').click()
+    cy.wait('@assistantAttachment')
+    cy.get('[data-testid="shell-assistant-attachment-list"]').should(
+      'contain',
+      'side-panel-remove-me.txt'
+    )
+    cy.get('[data-testid="shell-assistant-remove-attachment"]').click()
+    cy.get('[data-testid="shell-assistant-attachment-list"]').should(
+      'not.exist'
+    )
+
+    cy.get('[data-testid="shell-assistant-attachment-input"]').selectFile(
+      {
         contents: Cypress.Buffer.from('side panel attachment proof'),
         fileName: 'side-panel-proof.txt',
         mimeType: 'text/plain',
