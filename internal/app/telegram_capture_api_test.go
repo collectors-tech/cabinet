@@ -260,6 +260,53 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 	if strings.Contains(items.Body.String(), "AFX Telegram Truck") || strings.Contains(items.Body.String(), "TG-1705") {
 		t.Fatalf("telegram Agent text must not mutate inventory before confirmation, body=%s", items.Body.String())
 	}
+	wrongCallback := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text-callbacks", strings.NewReader(`{
+		"sender_id":"sender-agent",
+		"chat_id":"wrong-chat-agent",
+		"message_id":"agent-message-confirm-wrong",
+		"thread_id":"`+mutatePayload.Thread.ID+`",
+		"preview_id":"`+mutatePayload.ActionPreview.ID+`",
+		"confirmation":"confirm"
+	}`), map[string]string{"Content-Type": "application/json"})
+	if wrongCallback.Code != http.StatusForbidden {
+		t.Fatalf("wrong callback status=%d body=%s", wrongCallback.Code, wrongCallback.Body.String())
+	}
+	confirmed := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text-callbacks", strings.NewReader(`{
+		"sender_id":"sender-agent",
+		"chat_id":"chat-agent",
+		"message_id":"agent-message-confirm",
+		"thread_id":"`+mutatePayload.Thread.ID+`",
+		"preview_id":"`+mutatePayload.ActionPreview.ID+`",
+		"confirmation":"confirm",
+		"callback_data":"cabinet:agent_text:confirm:`+mutatePayload.ActionPreview.ID+`"
+	}`), map[string]string{"Content-Type": "application/json"})
+	if confirmed.Code != http.StatusOK {
+		t.Fatalf("confirmed callback status=%d body=%s", confirmed.Code, confirmed.Body.String())
+	}
+	confirmedBody := confirmed.Body.String()
+	if !strings.Contains(confirmedBody, `"confirmation_state":"confirmed"`) ||
+		!strings.Contains(confirmedBody, `"mutation_applied":true`) ||
+		!strings.Contains(confirmedBody, `"preview_id":"`+mutatePayload.ActionPreview.ID+`"`) ||
+		!strings.Contains(confirmedBody, `"source_channel":"telegram"`) ||
+		!strings.Contains(confirmedBody, `"workflow_id":"telegram-agent-text-callback"`) {
+		t.Fatalf("expected Telegram Agent callback confirmation proof, body=%s", confirmedBody)
+	}
+	items = doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items after confirm status=%d body=%s", items.Code, items.Body.String())
+	}
+	if !strings.Contains(items.Body.String(), "AFX Telegram Truck") || !strings.Contains(items.Body.String(), "TG-1705") {
+		t.Fatalf("confirmed Telegram Agent callback should apply inventory mutation, body=%s", items.Body.String())
+	}
+	runsAfterConfirm := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+mutatePayload.Thread.ID, nil, nil)
+	if runsAfterConfirm.Code != http.StatusOK {
+		t.Fatalf("workflow runs after confirm status=%d body=%s", runsAfterConfirm.Code, runsAfterConfirm.Body.String())
+	}
+	if !strings.Contains(runsAfterConfirm.Body.String(), `"workflow_id":"telegram-agent-text-callback"`) ||
+		!strings.Contains(runsAfterConfirm.Body.String(), `"confirmation_state":"confirmed"`) ||
+		!strings.Contains(runsAfterConfirm.Body.String(), `"source_message_id":"agent-message-confirm"`) {
+		t.Fatalf("expected queryable Telegram Agent callback workflow proof, body=%s", runsAfterConfirm.Body.String())
+	}
 }
 
 func TestTelegramExternalIntakeProofRequiresAuthorizedProviderEvidence(t *testing.T) {

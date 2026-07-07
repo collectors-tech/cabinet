@@ -4998,6 +4998,34 @@ func New(cfg config.Config) (*App, error) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/telegram/agent-text-callbacks", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramAgentTextCallbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		authorizer := allProfilesTelegramAuthorizer{profiles: profiles}
+		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := handleTelegramAgentTextCallback(r.Context(), chatSvc, authorized.ProfileID, req)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_handle_telegram_agent_text_callback"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/telegram/catalog-capture-callbacks", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -11567,6 +11595,17 @@ type telegramAgentTextRequest struct {
 	SourceMetadata map[string]any `json:"source_metadata"`
 }
 
+type telegramAgentTextCallbackRequest struct {
+	SenderID        string `json:"sender_id"`
+	ChatID          string `json:"chat_id"`
+	MessageID       string `json:"message_id"`
+	ThreadID        string `json:"thread_id"`
+	PreviewID       string `json:"preview_id"`
+	Confirmation    string `json:"confirmation"`
+	CallbackData    string `json:"callback_data"`
+	CallbackQueryID string `json:"callback_query_id"`
+}
+
 type telegramCatalogCaptureMediaRequest struct {
 	FileID        string `json:"file_id"`
 	Filename      string `json:"filename"`
@@ -11855,6 +11894,127 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 		"inbox_item":     inboxItem,
 		"telegram_reply": telegramAgentReply(preview, reviewURL),
 	}, nil
+}
+
+func handleTelegramAgentTextCallback(ctx context.Context, chatSvc *chat.Service, profileID string, req telegramAgentTextCallbackRequest) (map[string]any, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID := strings.TrimSpace(req.ThreadID)
+	previewID := strings.TrimSpace(req.PreviewID)
+	confirmation := strings.ToLower(strings.TrimSpace(req.Confirmation))
+	if confirmation == "" {
+		confirmation = telegramAgentConfirmationFromCallbackData(req.CallbackData)
+	}
+	if profileID == "" || threadID == "" || previewID == "" {
+		return nil, fmt.Errorf("profile_id, thread_id and preview_id are required")
+	}
+	preview, err := chatSvc.GetActionPreview(ctx, profileID, previewID)
+	if err != nil {
+		return nil, err
+	}
+	if preview.ThreadID != threadID {
+		return nil, fmt.Errorf("preview does not belong to source thread")
+	}
+	var actionResult chat.ApplyActionResult
+	switch confirmation {
+	case "confirm", "confirmed":
+		actionResult, err = chatSvc.ApplyAction(ctx, chat.ApplyActionInput{
+			ProfileID: profileID,
+			ThreadID:  threadID,
+			PreviewID: previewID,
+			Confirm:   true,
+		})
+	case "cancel", "cancelled", "canceled":
+		actionResult, err = chatSvc.CancelAction(ctx, chat.ApplyActionInput{
+			ProfileID: profileID,
+			ThreadID:  threadID,
+			PreviewID: previewID,
+		})
+	default:
+		err = fmt.Errorf("unsupported confirmation action")
+	}
+	if err != nil {
+		return nil, err
+	}
+	confirmationState := "cancelled"
+	if actionResult.Applied {
+		confirmationState = "confirmed"
+	}
+	proofRun, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         profileID,
+		WorkflowID:        "telegram-agent-text-callback",
+		CapabilityID:      preview.CapabilityID,
+		SourceChannel:     "telegram",
+		SourceThreadID:    threadID,
+		SourceMessageID:   strings.TrimSpace(req.MessageID),
+		ConfirmationState: confirmationState,
+		Input: map[string]any{
+			"sender_id":         strings.TrimSpace(req.SenderID),
+			"chat_id":           strings.TrimSpace(req.ChatID),
+			"preview_id":        previewID,
+			"callback_data":     strings.TrimSpace(req.CallbackData),
+			"callback_query_id": strings.TrimSpace(req.CallbackQueryID),
+		},
+		ProviderTrace: map[string]any{
+			"provider":       "telegram-agent-text-callback",
+			"source_channel": "telegram",
+			"mode":           "external_channel_preview_confirmation",
+			"live_provider":  false,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	proofRun, err = chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         profileID,
+		RunID:             proofRun.ID,
+		Status:            "completed",
+		ProviderTrace:     proofRun.ProviderTrace,
+		ConfirmationState: confirmationState,
+		Result: map[string]any{
+			"preview_id":         previewID,
+			"thread_id":          threadID,
+			"source_message_id":  strings.TrimSpace(req.MessageID),
+			"confirmation_state": confirmationState,
+			"mutation_applied":   actionResult.Applied,
+			"action":             actionResult.Action,
+			"item_id":            actionResult.ItemID,
+			"title":              actionResult.Title,
+			"part_number":        actionResult.PartNumber,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	reply := telegramcapture.TelegramReply{
+		Text:              "Cabinet recorded the Telegram Agent review decision.",
+		ReviewURL:         telegramAgentReviewURL(profileID, threadID, previewID),
+		ConfirmationState: confirmationState,
+		Actions:           []string{"open_cabinet_review"},
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: "Open Cabinet review", Kind: "url", Action: "open_cabinet_review", URL: telegramAgentReviewURL(profileID, threadID, previewID)},
+		},
+	}
+	return map[string]any{
+		"ok":                 true,
+		"profile_id":         profileID,
+		"thread_id":          threadID,
+		"preview_id":         previewID,
+		"confirmation_state": confirmationState,
+		"action_result":      actionResult,
+		"workflow_run":       proofRun,
+		"telegram_reply":     reply,
+	}, nil
+}
+
+func telegramAgentConfirmationFromCallbackData(callbackData string) string {
+	callbackData = strings.ToLower(strings.TrimSpace(callbackData))
+	if strings.Contains(callbackData, ":cancel:") || strings.HasSuffix(callbackData, ":cancel") {
+		return "cancel"
+	}
+	if strings.Contains(callbackData, ":confirm:") || strings.HasSuffix(callbackData, ":confirm") {
+		return "confirm"
+	}
+	return ""
 }
 
 func telegramAgentThreadTitle(text string) string {
