@@ -617,13 +617,65 @@ func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
 		t.Fatalf("decode registry payload after settings: %v", err)
 	}
 	telegram = findRegistryProvider(payload.Providers, "telegram")
-	if got := fmt.Sprintf("%v", telegram["state"]); got != "ready" {
-		t.Fatalf("expected Telegram ready state after sender/chat authorization, got %q", got)
+	if got := fmt.Sprintf("%v", telegram["state"]); got != "needs_config" {
+		t.Fatalf("expected Telegram to stay setup-needed until bot/webhook proof exists, got %q", got)
 	}
 	authMethods = telegram["auth_methods"].(map[string]any)
 	senderChat = authMethods["sender_chat"].(map[string]any)
 	if connected, _ := senderChat["connected"].(bool); !connected {
 		t.Fatalf("expected sender/chat method connected after settings, got %+v", senderChat)
+	}
+	setupStatus, ok := telegram["setup_status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected Telegram setup_status map, got %#v", telegram["setup_status"])
+	}
+	for key, want := range map[string]string{
+		"sender_chat_state": "authorized",
+		"bot_token_state":   "missing",
+		"webhook_state":     "pending",
+		"runtime_proof":     "pending_live_channel_check",
+		"next_action":       "store_bot_token_secret",
+	} {
+		if got := fmt.Sprintf("%v", setupStatus[key]); got != want {
+			t.Fatalf("setup_status[%s] got %q want %q; setup=%+v", key, got, want, setupStatus)
+		}
+	}
+
+	health := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=telegram", nil, nil)
+	if health.Code != http.StatusOK {
+		t.Fatalf("telegram health status=%d body=%s", health.Code, health.Body.String())
+	}
+	if !strings.Contains(health.Body.String(), `"credential_returned":false`) ||
+		!strings.Contains(health.Body.String(), `"code":"TELEGRAM_BOT_TOKEN_REQUIRED"`) ||
+		strings.Contains(strings.ToLower(health.Body.String()), "token-secret") {
+		t.Fatalf("expected non-secret Telegram diagnostics requiring bot token, body=%s", health.Body.String())
+	}
+
+	settings = doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.bot_token_secret_present":"true","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("full settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	registry = doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry after full setup status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	payload = struct {
+		Providers []map[string]any `json:"providers"`
+	}{}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload after full setup: %v", err)
+	}
+	telegram = findRegistryProvider(payload.Providers, "telegram")
+	if got := fmt.Sprintf("%v", telegram["state"]); got != "ready" {
+		t.Fatalf("expected Telegram ready state after full non-secret setup proof, got %q", got)
+	}
+	authMethods = telegram["auth_methods"].(map[string]any)
+	botToken, ok := authMethods["bot_token"].(map[string]any)
+	if !ok || botToken["credential_present"] != true {
+		t.Fatalf("expected Telegram bot token presence flag only, got %+v", authMethods["bot_token"])
+	}
+	if strings.Contains(registry.Body.String(), "token-secret") {
+		t.Fatalf("registry response must not leak Telegram token material: %s", registry.Body.String())
 	}
 }
 

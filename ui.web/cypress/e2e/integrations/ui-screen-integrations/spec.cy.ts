@@ -1050,20 +1050,33 @@ describe('ui-screen-integrations', () => {
             base_domain: 'telegram.org',
             api_family: 'messaging_channel',
             api_support_profile: 'bot_webhook_sender_chat_v1',
-            active_mode: 'authorized_sender_chat',
+            active_mode: 'webhook_pending',
             integration_mode: 'assistant_capture_channel',
             auth_mode: 'sender_chat',
-            state: 'ready',
+            state: 'needs_config',
             has_token: false,
             setup_instructions:
-              'Configure Telegram sender/chat authorization in Profile settings, then route bot messages through the governed preview-before-apply capture channel.',
+              'Configure Telegram sender/chat authorization, bot token secret, and webhook routing proof before running governed preview-before-apply channel intake.',
             auth_methods: {
               sender_chat: {
-                state: 'connected',
+                state: 'authorized',
                 connected: true,
                 credential_present: true,
                 setup_message:
                   'Store the Telegram sender id and chat id on the active profile before Cabinet accepts capture messages.',
+              },
+              bot_token: {
+                state: 'stored',
+                connected: true,
+                credential_present: true,
+                setup_message:
+                  'Store a Telegram bot token secret before Cabinet can dispatch channel replies.',
+              },
+              webhook: {
+                state: 'pending',
+                connected: false,
+                setup_message:
+                  'Configure webhook routing proof before Cabinet marks production-channel intake ready.',
               },
             },
             capabilities: {
@@ -1075,7 +1088,20 @@ describe('ui-screen-integrations', () => {
               media_capture: true,
               text_capture: true,
             },
-            health: { status: 'unknown', last_checked_at: null },
+            setup_status: {
+              sender_chat_state: 'authorized',
+              bot_token_state: 'stored',
+              webhook_state: 'pending',
+              runtime_proof: 'pending_live_channel_check',
+              next_action: 'configure_webhook',
+            },
+            health: {
+              status: 'needs_config',
+              state: 'webhook_pending',
+              message:
+                'Bot credential presence is recorded; configure webhook routing proof before production-channel validation.',
+              next_action: 'configure_webhook',
+            },
             last_run: { status: 'never', finished_at: null },
           },
         ],
@@ -1112,9 +1138,13 @@ describe('ui-screen-integrations', () => {
     )
     cy.contains('Mode: assistant_capture_channel').should('be.visible')
     cy.contains('Auth method: sender/chat authorization').should('be.visible')
-    cy.contains('Sender/chat state: connected').should('be.visible')
-    cy.contains('Profile settings: sender and chat authorized').should('be.visible')
-    cy.contains('preview-before-apply capture channel').should('be.visible')
+    cy.contains('Sender/chat state: authorized').should('be.visible')
+    cy.contains('Bot token state: stored').should('be.visible')
+    cy.contains('Webhook state: pending').should('be.visible')
+    cy.contains('Runtime proof: pending_live_channel_check').should('be.visible')
+    cy.contains('configure_webhook').should('be.visible')
+    cy.contains('production-channel validation').should('be.visible')
+    cy.contains('preview-before-apply channel intake').should('be.visible')
   })
 
   it('UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status', () => {

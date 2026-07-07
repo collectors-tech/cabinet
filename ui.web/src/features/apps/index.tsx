@@ -104,6 +104,17 @@ type ProviderRecord = {
       credential_present?: boolean
       setup_message?: string
     }
+    bot_token?: {
+      state?: string
+      connected?: boolean
+      credential_present?: boolean
+      setup_message?: string
+    }
+    webhook?: {
+      state?: string
+      connected?: boolean
+      setup_message?: string
+    }
   }
   model_options?: string[]
   health?: {
@@ -123,6 +134,10 @@ type ProviderRecord = {
     health_state?: string
     next_action?: string
     base_url_set?: boolean
+    sender_chat_state?: string
+    bot_token_state?: string
+    webhook_state?: string
+    runtime_proof?: string
   }
   last_run?: {
     status: 'idle' | 'running' | 'success' | 'failed' | 'never' | string
@@ -2372,9 +2387,11 @@ export function Apps({
                       className='rounded bg-muted px-2 py-1 text-muted-foreground'
                       data-testid='telegram-capture-next-action'
                     >
-                      {editingProvider.auth_methods?.sender_chat?.connected
-                        ? 'Profile settings: sender and chat authorized'
-                        : 'Profile settings: sender and chat required'}
+                      {editingProvider.health?.next_action ??
+                        editingProvider.setup_status?.next_action ??
+                        (editingProvider.auth_methods?.sender_chat?.connected
+                          ? 'run_live_channel_checklist'
+                          : 'authorize_sender_chat')}
                     </span>
                   </div>
                   <div className='mt-3 grid gap-2 sm:grid-cols-2'>
@@ -2396,6 +2413,29 @@ export function Apps({
                       Support profile:{' '}
                       {editingProvider.api_support_profile ??
                         'bot_webhook_sender_chat_v1'}
+                    </p>
+                    <p data-testid='telegram-capture-bot-token-state'>
+                      Bot token state:{' '}
+                      {editingProvider.auth_methods?.bot_token?.state ??
+                        editingProvider.setup_status?.bot_token_state ??
+                        'setup_needed'}
+                    </p>
+                    <p data-testid='telegram-capture-webhook-state'>
+                      Webhook state:{' '}
+                      {editingProvider.auth_methods?.webhook?.state ??
+                        editingProvider.setup_status?.webhook_state ??
+                        'pending'}
+                    </p>
+                    <p data-testid='telegram-capture-runtime-proof-state'>
+                      Runtime proof:{' '}
+                      {editingProvider.setup_status?.runtime_proof ??
+                        editingProvider.health?.state ??
+                        'pending_live_channel_check'}
+                    </p>
+                    <p data-testid='telegram-capture-health-message'>
+                      Diagnostics:{' '}
+                      {editingProvider.health?.message ??
+                        'Validate Telegram setup before live channel intake.'}
                     </p>
                   </div>
                 </section>
