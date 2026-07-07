@@ -20,6 +20,10 @@ describe('collections-row-side-panel', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-store-1"]').click()
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'Store 1'
+    )
     cy.get('[data-testid="collections-edit-panel"]').should('not.exist')
     cy.get('[data-testid="collections-edit-dialog"]').should('not.exist')
 
@@ -74,6 +78,26 @@ describe('collections-row-side-panel', () => {
       'contain.text',
       'Store 2 Panel'
     )
+  })
+
+  it('renders collection row actions as icon-only accessible controls', () => {
+    signInToCollections()
+
+    cy.get('[data-testid="collections-row-view-store-1"]')
+      .should('have.attr', 'aria-label', 'View Store 1 in inventory')
+      .should('have.attr', 'title', 'View Store 1 in inventory')
+      .invoke('text')
+      .should('eq', '')
+    cy.get('[data-testid="collections-row-edit-store-1"]')
+      .should('have.attr', 'aria-label', 'Edit Store 1')
+      .should('have.attr', 'title', 'Edit Store 1')
+      .invoke('text')
+      .should('eq', '')
+    cy.get('[data-testid="collections-row-delete-store-1"]')
+      .should('have.attr', 'aria-label', 'Delete Store 1')
+      .should('have.attr', 'title', 'Delete Store 1')
+      .invoke('text')
+      .should('eq', '')
   })
 
   it('keeps the side panel open and skips persistence on duplicate rename', () => {
