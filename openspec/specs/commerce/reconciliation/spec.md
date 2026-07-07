@@ -185,3 +185,23 @@ Cabinet SHALL let users add a new line item to the currently selected purchase o
 - **THEN** Cabinet MUST open the manual purchase flow in existing-order mode, name the selected order context, and prefill source/order evidence from the selected order.
 - **WHEN** the user saves the new line item
 - **THEN** Cabinet MUST persist the line item through the commerce lifecycle API using the selected order as the purchase order reference, refresh the grouped purchase-order list, keep the selected order context, and expose the added item as a child line row.
+
+### Requirement COMMERCE-RECONCILIATION-017: Purchases SHALL keep grouped order review bounded and collapsible
+Cabinet SHALL render grouped purchase orders in a full-height split-pane table workspace with fixed controls, a sticky visible table header, a scrollable table body, and accessible per-order collapse controls.
+
+#### Scenario: Review grouped orders in a bounded table body
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders beside the detail pane
+- **WHEN** the user scrolls through the grouped order table
+- **THEN** the Purchases table shell MUST fill the available workspace height without requiring normal desktop page-level scrolling for table browsing.
+- **AND** the table toolbar, review tools, pagination controls, and selected detail pane MUST remain visible outside the row scroll region.
+- **AND** the table header MUST remain visible while only the table body scrolls vertically inside the bounded table area.
+
+#### Scenario: Collapse and expand purchase order groups
+- **GIVEN** the Purchases table has loaded a grouped purchase order with line items
+- **WHEN** the user activates the order group collapse control
+- **THEN** Cabinet MUST hide that order's child line-item rows while preserving a useful order summary with source, total, purchase date, delivery, status, tracking or lifecycle evidence, and action count.
+- **AND** the collapse control MUST expose `aria-expanded=false` and a label that names the order.
+- **WHEN** the user activates the same control again
+- **THEN** Cabinet MUST restore the child line-item rows with the existing indentation and selection behavior.
+- **AND** selecting an order or line item MUST NOT reset the order's collapsed or expanded state.
+- **AND** filtering, searching, review mode changes, and pagination MUST keep collapse state safe for still-visible order ids.
