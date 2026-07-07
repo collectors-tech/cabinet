@@ -205,9 +205,53 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 	if !strings.Contains(mutateBody, `"confirmation_required":true`) ||
 		!strings.Contains(mutateBody, `"confirmation_state":"preview_required"`) ||
 		!strings.Contains(mutateBody, `"source":"telegram_agent_text"`) ||
-		!strings.Contains(mutateBody, `"review_url":"/chats?profile_id=`) ||
+		!strings.Contains(mutateBody, `"review_url":"/chats?`) ||
+		!strings.Contains(mutateBody, `preview_id`) ||
 		!strings.Contains(mutateBody, `"mutation_applied":false`) {
 		t.Fatalf("expected mutating Telegram Agent text to create reviewable preview without apply, body=%s", mutateBody)
+	}
+	var mutatePayload struct {
+		Thread struct {
+			ID string `json:"id"`
+		} `json:"thread"`
+		ActionPreview struct {
+			ID      string         `json:"id"`
+			Action  string         `json:"action"`
+			Status  string         `json:"status"`
+			Payload map[string]any `json:"payload"`
+		} `json:"action_preview"`
+		WorkflowRun struct {
+			Result map[string]any `json:"result"`
+		} `json:"workflow_run"`
+		InboxItem struct {
+			Metadata map[string]any `json:"metadata"`
+		} `json:"inbox_item"`
+		TelegramReply struct {
+			ReviewURL string `json:"review_url"`
+		} `json:"telegram_reply"`
+	}
+	if err := json.Unmarshal([]byte(mutateBody), &mutatePayload); err != nil {
+		t.Fatalf("decode mutating Telegram Agent text: %v", err)
+	}
+	if mutatePayload.ActionPreview.ID == "" ||
+		mutatePayload.ActionPreview.Action != "create_inventory_item" ||
+		mutatePayload.ActionPreview.Status != "previewed" ||
+		mutatePayload.ActionPreview.Payload["title"] != "AFX Telegram Truck" {
+		t.Fatalf("expected durable action preview for Telegram Agent review handoff, got %+v", mutatePayload.ActionPreview)
+	}
+	if !strings.Contains(mutatePayload.TelegramReply.ReviewURL, "preview_id="+mutatePayload.ActionPreview.ID) ||
+		mutatePayload.WorkflowRun.Result["preview_id"] != mutatePayload.ActionPreview.ID ||
+		mutatePayload.InboxItem.Metadata["preview_id"] != mutatePayload.ActionPreview.ID {
+		t.Fatalf("expected workflow, Inbox, and Telegram review URL to share preview id %q, workflow=%+v inbox=%+v reply=%+v", mutatePayload.ActionPreview.ID, mutatePayload.WorkflowRun.Result, mutatePayload.InboxItem.Metadata, mutatePayload.TelegramReply)
+	}
+	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+mutatePayload.Thread.ID, nil, nil)
+	if runs.Code != http.StatusOK {
+		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
+	}
+	if !strings.Contains(runs.Body.String(), mutatePayload.ActionPreview.ID) ||
+		!strings.Contains(runs.Body.String(), `"source_channel":"telegram"`) ||
+		!strings.Contains(runs.Body.String(), `"capability_id":"cabinet.inventory.create_item"`) {
+		t.Fatalf("expected queryable Telegram Agent workflow proof with preview id, body=%s", runs.Body.String())
 	}
 	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
 	if items.Code != http.StatusOK {

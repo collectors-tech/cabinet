@@ -11790,7 +11790,14 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 			preview.Target = skillResult
 		}
 	}
-	reviewURL := telegramAgentReviewURL(profileID, thread.ID)
+	var actionPreview chat.ActionPreview
+	if preview.ConfirmationRequired && !req.Confirm {
+		actionPreview, err = telegramAgentActionPreview(ctx, chatSvc, profileID, thread.ID, skillID, params)
+		if err != nil {
+			return nil, err
+		}
+	}
+	reviewURL := telegramAgentReviewURL(profileID, thread.ID, actionPreview.ID)
 	workflowRun, err = chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
 		ProfileID:         profileID,
 		RunID:             workflowRun.ID,
@@ -11802,6 +11809,7 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 			"allowed":             preview.Allowed,
 			"confirmation_state":  telegramAgentConfirmationState(preview, req.Confirm),
 			"review_url":          reviewURL,
+			"preview_id":          actionPreview.ID,
 			"mutation_applied":    preview.MutationApplied,
 			"telegram_reply_text": telegramAgentReplyText(preview),
 		},
@@ -11827,6 +11835,8 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 				"source_message_id":   strings.TrimSpace(req.MessageID),
 				"confirmation_state":  "preview_required",
 				"review_url":          reviewURL,
+				"preview_id":          actionPreview.ID,
+				"action_preview":      actionPreview,
 				"preview":             preview,
 				"telegram_reply_text": telegramAgentReplyText(preview),
 			},
@@ -11840,6 +11850,7 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 		"thread":         thread,
 		"message":        message,
 		"preview":        preview,
+		"action_preview": actionPreview,
 		"workflow_run":   workflowRun,
 		"inbox_item":     inboxItem,
 		"telegram_reply": telegramAgentReply(preview, reviewURL),
@@ -11857,11 +11868,44 @@ func telegramAgentThreadTitle(text string) string {
 	return "Telegram Agent: " + text
 }
 
-func telegramAgentReviewURL(profileID, threadID string) string {
+func telegramAgentReviewURL(profileID, threadID, previewID string) string {
 	values := url.Values{}
 	values.Set("profile_id", strings.TrimSpace(profileID))
 	values.Set("thread_id", strings.TrimSpace(threadID))
+	if previewID = strings.TrimSpace(previewID); previewID != "" {
+		values.Set("preview_id", previewID)
+	}
 	return "/chats?" + values.Encode()
+}
+
+func telegramAgentActionPreview(ctx context.Context, chatSvc *chat.Service, profileID, threadID, skillID string, params map[string]any) (chat.ActionPreview, error) {
+	capabilityID, payload, ok := telegramAgentActionPreviewPayload(skillID, params)
+	if !ok {
+		return chat.ActionPreview{}, nil
+	}
+	return chatSvc.PreviewAction(ctx, chat.PreviewActionInput{
+		ProfileID:    profileID,
+		ThreadID:     threadID,
+		CapabilityID: capabilityID,
+		Payload:      payload,
+	})
+}
+
+func telegramAgentActionPreviewPayload(skillID string, params map[string]any) (string, map[string]any, bool) {
+	payload := map[string]any{}
+	for key, value := range params {
+		payload[key] = value
+	}
+	switch strings.TrimSpace(skillID) {
+	case "cabinet.inventory.create_item":
+		return "inventory.item.create", payload, true
+	case "cabinet.inventory.update_item":
+		return "inventory.item.update", payload, true
+	case "cabinet.inventory.assign_to_collection":
+		return "collections.item.assign", payload, true
+	default:
+		return "", nil, false
+	}
 }
 
 func telegramAgentConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
