@@ -26,8 +26,11 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 	}
 	for _, id := range []string{
 		"cabinet.navigate.open_surface",
+		"cabinet.inventory.search_items",
 		"cabinet.inventory.create_item",
 		"cabinet.inventory.update_item",
+		"cabinet.inventory.attach_media",
+		"cabinet.inventory.assign_to_collection",
 		"cabinet.wishlist.search_entries",
 		"cabinet.wishlist.create_entry",
 		"cabinet.wishlist.update_entry",
@@ -115,6 +118,78 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 	}
 	if resolved.SafetyLevel != SafetyConfirmRequired || !resolved.Permissions.RequiresConfirm || !resolved.Permissions.LocalWrite {
 		t.Fatalf("expected confirm-required local write permission metadata, got %+v", resolved)
+	}
+}
+
+func TestInventorySkillsExposePreviewBoundaries(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	searchItems, ok := registry.Resolve("cabinet.inventory.search_items")
+	if !ok {
+		t.Fatalf("expected Inventory search skill")
+	}
+	if searchItems.SafetyLevel != SafetyReadOnly || !searchItems.Executable || searchItems.Permissions.LocalWrite {
+		t.Fatalf("Inventory search should be executable read-only metadata, got %+v", searchItems)
+	}
+	if !slices.Contains(searchItems.IntegrationWorkflows, "inventory.item.search") {
+		t.Fatalf("expected Inventory search workflow binding, got %+v", searchItems.IntegrationWorkflows)
+	}
+
+	createItem, ok := registry.Resolve("cabinet.inventory.create_item")
+	if !ok {
+		t.Fatalf("expected Inventory create skill")
+	}
+	if createItem.SafetyLevel != SafetyConfirmRequired || !createItem.Permissions.RequiresConfirm || !slices.Contains(createItem.InputSchemaRefs, "part_number") {
+		t.Fatalf("create item should require item context and confirmation, got %+v", createItem)
+	}
+	missingCreateContext, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.inventory.create_item",
+		Parameters: map[string]any{"title": "Agent inventory item"},
+	})
+	if err != nil {
+		t.Fatalf("preview inventory create item: %v", err)
+	}
+	if missingCreateContext.Allowed || missingCreateContext.Blocker != "inventory_item_context_required" || missingCreateContext.MutationApplied {
+		t.Fatalf("expected Inventory item context blocker without mutation, got %+v", missingCreateContext)
+	}
+
+	updateItem, ok := registry.Resolve("cabinet.inventory.update_item")
+	if !ok {
+		t.Fatalf("expected Inventory update skill")
+	}
+	if updateItem.SafetyLevel != SafetyConfirmRequired || !slices.Contains(updateItem.RequiredContext, "selected_item") {
+		t.Fatalf("update item should require selected item and confirmation, got %+v", updateItem)
+	}
+	missingItem, err := registry.Preview(PreviewRequest{SkillID: "cabinet.inventory.update_item"})
+	if err != nil {
+		t.Fatalf("preview inventory update item: %v", err)
+	}
+	if missingItem.Allowed || missingItem.Blocker != "inventory_item_required" {
+		t.Fatalf("expected Inventory item blocker, got %+v", missingItem)
+	}
+
+	missingMedia, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.inventory.attach_media",
+		Parameters: map[string]any{"item_id": "item-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview inventory attach media: %v", err)
+	}
+	if missingMedia.Allowed || missingMedia.Blocker != "inventory_media_required" {
+		t.Fatalf("expected Inventory media blocker, got %+v", missingMedia)
+	}
+
+	invalidCollection, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.inventory.assign_to_collection",
+		Parameters: map[string]any{"item_id": "item-1", "collection_name": "Deleted"},
+	})
+	if err != nil {
+		t.Fatalf("preview inventory assign collection: %v", err)
+	}
+	if invalidCollection.Allowed || invalidCollection.Blocker != "inventory_collection_invalid" {
+		t.Fatalf("expected invalid collection blocker, got %+v", invalidCollection)
 	}
 }
 

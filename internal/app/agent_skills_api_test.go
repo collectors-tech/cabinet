@@ -62,6 +62,27 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	if !slices.Contains(inventory.Capabilities, "inventory.item.update") {
 		t.Fatalf("expected capability binding, got %+v", inventory.Capabilities)
 	}
+	inventorySearch := findAPISkill(payload.Skills, "cabinet.inventory.search_items")
+	if inventorySearch == nil {
+		t.Fatalf("missing inventory search skill")
+	}
+	if inventorySearch.SafetyLevel != "read-only" || inventorySearch.Permissions.LocalWrite || !inventorySearch.Executable {
+		t.Fatalf("expected executable read-only Inventory search metadata, got %+v", inventorySearch)
+	}
+	inventoryAttach := findAPISkill(payload.Skills, "cabinet.inventory.attach_media")
+	if inventoryAttach == nil {
+		t.Fatalf("missing inventory attach media skill")
+	}
+	if inventoryAttach.SafetyLevel != "confirm-required" || !inventoryAttach.Permissions.RequiresConfirm || !slices.Contains(inventoryAttach.RequiredContext, "selected_media") {
+		t.Fatalf("expected confirmation-gated Inventory media metadata, got %+v", inventoryAttach)
+	}
+	inventoryAssign := findAPISkill(payload.Skills, "cabinet.inventory.assign_to_collection")
+	if inventoryAssign == nil {
+		t.Fatalf("missing inventory assign to collection skill")
+	}
+	if inventoryAssign.SafetyLevel != "confirm-required" || !inventoryAssign.Permissions.RequiresConfirm || !slices.Contains(inventoryAssign.RequiredContext, "collection") {
+		t.Fatalf("expected confirmation-gated Inventory collection metadata, got %+v", inventoryAssign)
+	}
 
 	guided := findAPISkill(payload.Skills, "cabinet.guided.inventory.update_item")
 	if guided == nil {
@@ -231,6 +252,160 @@ func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testin
 	}
 	if !strings.Contains(nonEmptyDelete.Body.String(), `"blocker":"collections_delete_destination_required"`) {
 		t.Fatalf("expected missing destination blocker, body=%s", nonEmptyDelete.Body.String())
+	}
+}
+
+func TestAgentSkillApplyAPIHandlesInventorySkills(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Inventory"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	createItem := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-inventory-1707",
+		"source_message_id":"message-inventory-1707",
+		"parameters":{
+			"part_number":"INV-AGENT-1707",
+			"title":"Agent Inventory Runtime Item",
+			"brand":"AFX",
+			"category":"Slot Cars",
+			"notes":"created by inventory agent skill",
+			"source_url":"https://example.test/inventory/1707"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createItem.Code != http.StatusOK {
+		t.Fatalf("create inventory skill status=%d body=%s", createItem.Code, createItem.Body.String())
+	}
+	for _, want := range []string{
+		`"skill_id":"cabinet.inventory.create_item"`,
+		`"source_channel":"in-app"`,
+		`"mutation_applied":true`,
+		`"operation":"inventory.item.create"`,
+		`"inventory_persisted":true`,
+		`"part_number":"INV-AGENT-1707"`,
+	} {
+		if !strings.Contains(createItem.Body.String(), want) {
+			t.Fatalf("create inventory response missing %s: body=%s", want, createItem.Body.String())
+		}
+	}
+	var created struct {
+		Target struct {
+			ItemID string `json:"item_id"`
+		} `json:"target"`
+	}
+	if err := json.NewDecoder(createItem.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created inventory response: %v", err)
+	}
+	if created.Target.ItemID == "" {
+		t.Fatalf("expected created item id, body=%s", createItem.Body.String())
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND id = ? AND part_number = 'INV-AGENT-1707'`, p.ID, created.Target.ItemID).Scan(&itemCount); err != nil {
+		t.Fatalf("count created inventory item: %v", err)
+	}
+	if itemCount != 1 {
+		t.Fatalf("expected one persisted inventory item, got %d", itemCount)
+	}
+
+	searchItems := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"Runtime Item"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if searchItems.Code != http.StatusOK {
+		t.Fatalf("search inventory skill status=%d body=%s", searchItems.Code, searchItems.Body.String())
+	}
+	if !strings.Contains(searchItems.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(searchItems.Body.String(), `"operation":"inventory.item.search"`) ||
+		!strings.Contains(searchItems.Body.String(), `"id":"`+created.Target.ItemID+`"`) {
+		t.Fatalf("expected read-only inventory search evidence, body=%s", searchItems.Body.String())
+	}
+
+	updateItem := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.update_item",
+		"confirm":true,
+		"parameters":{"item_id":"`+created.Target.ItemID+`","title":"Agent Inventory Runtime Item Updated","status":"active","priority":"high","notes":"updated by inventory agent skill"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateItem.Code != http.StatusOK {
+		t.Fatalf("update inventory skill status=%d body=%s", updateItem.Code, updateItem.Body.String())
+	}
+	if !strings.Contains(updateItem.Body.String(), `"operation":"inventory.item.update"`) ||
+		!strings.Contains(updateItem.Body.String(), `"inventory_persisted":true`) ||
+		!strings.Contains(updateItem.Body.String(), `"title":"Agent Inventory Runtime Item Updated"`) {
+		t.Fatalf("expected inventory update persistence evidence, body=%s", updateItem.Body.String())
+	}
+
+	assignCollection := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.assign_to_collection",
+		"confirm":true,
+		"parameters":{"item_id":"`+created.Target.ItemID+`","collection_name":"Display Case"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if assignCollection.Code != http.StatusOK {
+		t.Fatalf("assign collection status=%d body=%s", assignCollection.Code, assignCollection.Body.String())
+	}
+	if !strings.Contains(assignCollection.Body.String(), `"operation":"inventory.collection.assign"`) ||
+		!strings.Contains(assignCollection.Body.String(), `"collection_persisted":true`) ||
+		!strings.Contains(assignCollection.Body.String(), `"collection_name":"Display Case"`) {
+		t.Fatalf("expected inventory collection assignment evidence, body=%s", assignCollection.Body.String())
+	}
+
+	importMedia := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.media.upload_or_import",
+		"confirm":true,
+		"parameters":{"source_url":"https://example.test/media/1707.jpg","filename":"inventory-1707.jpg","title":"Inventory 1707 media"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importMedia.Code != http.StatusOK {
+		t.Fatalf("import media status=%d body=%s", importMedia.Code, importMedia.Body.String())
+	}
+	var imported struct {
+		Target struct {
+			MediaID string `json:"media_id"`
+		} `json:"target"`
+	}
+	if err := json.NewDecoder(importMedia.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode imported media response: %v", err)
+	}
+	if imported.Target.MediaID == "" {
+		t.Fatalf("expected imported media id, body=%s", importMedia.Body.String())
+	}
+
+	attachMedia := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.attach_media",
+		"confirm":true,
+		"parameters":{"item_id":"`+created.Target.ItemID+`","media_id":"`+imported.Target.MediaID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if attachMedia.Code != http.StatusOK {
+		t.Fatalf("attach media status=%d body=%s", attachMedia.Code, attachMedia.Body.String())
+	}
+	if !strings.Contains(attachMedia.Body.String(), `"operation":"inventory.media.attach"`) ||
+		!strings.Contains(attachMedia.Body.String(), `"attachment_persisted":true`) ||
+		!strings.Contains(attachMedia.Body.String(), `"provenance_preserved":true`) {
+		t.Fatalf("expected inventory media attachment evidence, body=%s", attachMedia.Body.String())
+	}
+	var linkCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM media_asset_links WHERE profile_id = ? AND asset_id = ? AND target_type = 'inventory' AND target_id = ?`, p.ID, imported.Target.MediaID, created.Target.ItemID).Scan(&linkCount); err != nil {
+		t.Fatalf("count inventory media link: %v", err)
+	}
+	if linkCount != 1 {
+		t.Fatalf("expected one persisted inventory media link, got %d", linkCount)
 	}
 }
 
