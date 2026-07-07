@@ -325,17 +325,20 @@ Cabinet SHALL render `/media` as a compact table-first workspace where persisten
 - **THEN** Cabinet MUST keep using the `/api/media/assets?filter=unlinked` contract and update visible table or card results to unlinked media only.
 - **AND** Cards and Rows controls MUST stay adjacent to the table `View` control and share the same search, linkage filter, and pagination state.
 
-### Requirement UI-SCREEN-MEDIA-019: Media rows SHALL use the shared table detail-panel navigation pattern
-Cabinet SHALL make Media table rows follow the shared primary table detail-panel pattern so row activation opens a right-side details panel, keeps the active row highlighted, and reserves checkboxes plus row action buttons for their own commands.
+### Requirement UI-SCREEN-MEDIA-019: Media rows SHALL separate selection from detail-panel activation
+Cabinet SHALL make Media table rows follow Cabinet's row selection and double-click detail-panel pattern so single-clicking a row only selects/highlights it, double-clicking a row opens the right-side details panel, and checkboxes plus row action buttons remain reserved for their own commands.
 
 #### Scenario: Open and navigate Media details from rows
 - **GIVEN** the Media workspace renders profile-scoped assets in Rows mode
-- **WHEN** user clicks a non-interactive row surface or presses Enter on the focused row
+- **WHEN** user single-clicks a non-interactive row surface
+- **THEN** Cabinet MUST select and highlight that row without opening the right-side details panel or any modal.
+- **WHEN** user double-clicks a non-interactive row surface or presses Enter on the focused row
 - **THEN** Cabinet MUST open a right-side details panel for that exact media asset with thumbnail/preview, filename, source, linkage state, analysis status, uploaded date, notes, and relevant actions.
-- **AND** the active row MUST stay highlighted while the details panel is open.
+- **AND** the active row MUST stay highlighted when selected and while the details panel is open.
 - **WHEN** user activates Previous or Next in the panel
 - **THEN** Cabinet MUST move the details panel and active row highlight through the current filtered and sorted table order.
 - **AND** checkbox selection and row action buttons MUST NOT accidentally open or change the details panel.
+- **AND** row single-click or row double-click MUST NOT open the metadata edit modal.
 
 ### Requirement UI-SCREEN-MEDIA-014: Media workspace SHALL support page-wide image drop and add-media metadata dialog
 Cabinet SHALL let authenticated users add unlinked media assets from the Media workspace by dragging supported image files anywhere over the page or by opening an explicit add-media dialog from a `+` action.
@@ -360,12 +363,12 @@ Cabinet SHALL let authenticated users add unlinked media assets from the Media w
 - **WHEN** `/api/media/assets` rejects the save
 - **THEN** Cabinet MUST keep the dialog open, preserve the selected file and metadata values, and show an actionable error.
 
-### Requirement UI-SCREEN-MEDIA-016: Media assets SHALL open a double-click metadata edit modal
-Cabinet SHALL let authenticated users double-click any Media workspace asset row or card to edit asset metadata and review thumbnail variants in one place.
+### Requirement UI-SCREEN-MEDIA-016: Media assets SHALL expose metadata editing without overriding row detail activation
+Cabinet SHALL let authenticated users edit asset metadata and review thumbnail variants in one place from explicit edit/open actions and non-row asset surfaces, while Rows mode double-click remains reserved for the right-side detail panel.
 
-#### Scenario: Edit media asset metadata from double-click modal
+#### Scenario: Edit media asset metadata from explicit metadata action
 - **GIVEN** the Media workspace has returned profile-scoped media assets
-- **WHEN** the user double-clicks a media row or card
+- **WHEN** the user opens the media metadata editor from an explicit row/card edit action or a card edit surface
 - **THEN** Cabinet MUST open an edit modal for that asset with a thumbnail preview, visible thumbnail variation options, and editable metadata fields for title, filename, source, download filename, and notes.
 - **WHEN** the user saves the modal
 - **THEN** the UI MUST submit the edited metadata through the Media asset update API, refresh `/api/media/assets`, and show the updated asset metadata without requiring a page reload.
