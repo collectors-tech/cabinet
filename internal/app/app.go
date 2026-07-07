@@ -2282,6 +2282,11 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(health)
 			return
 		}
+		if strings.EqualFold(provider, "telegram") {
+			health := telegramProviderHealth(r.Context(), profiles)
+			_ = json.NewEncoder(w).Encode(health)
+			return
+		}
 		health, err := scannerSvc.ProviderHealth(r.Context(), provider)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_provider_health"}`, http.StatusInternalServerError)
@@ -2345,6 +2350,9 @@ func New(cfg config.Config) (*App, error) {
 			}
 			if key, secretErr := profiles.GetSecret(r.Context(), strings.TrimSpace(active.ID), "openai_api_key"); secretErr == nil && strings.TrimSpace(key) != "" {
 				settings["openai.api_key_secret_present"] = "true"
+			}
+			if key, secretErr := profiles.GetSecret(r.Context(), strings.TrimSpace(active.ID), "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
+				settings["telegram.bot_token_secret_present"] = "true"
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -8309,6 +8317,72 @@ func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map
 	}
 }
 
+func telegramProviderHealth(ctx context.Context, profiles *profile.Repository) map[string]any {
+	base := map[string]any{
+		"provider": "telegram",
+	}
+	if profiles == nil {
+		base["status"] = "needs_config"
+		base["state"] = "disabled"
+		base["code"] = "TELEGRAM_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating Telegram channel setup."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	active, err := profiles.GetActiveProfile(ctx)
+	if err != nil || strings.TrimSpace(active.ID) == "" {
+		base["status"] = "needs_config"
+		base["state"] = "disabled"
+		base["code"] = "TELEGRAM_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating Telegram channel setup."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	settings, err := profiles.GetSettings(ctx, strings.TrimSpace(active.ID))
+	if err != nil {
+		settings = map[string]string{}
+	}
+	if key, secretErr := profiles.GetSecret(ctx, strings.TrimSpace(active.ID), "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
+		settings["telegram.bot_token_secret_present"] = "true"
+	}
+	senderChatReady := telegramCatalogCaptureConfigured(settings)
+	botTokenPresent := telegramBotTokenPresent(settings)
+	webhookConfigured := telegramWebhookConfigured(settings)
+
+	base["sender_chat_authorized"] = senderChatReady
+	base["bot_token_present"] = botTokenPresent
+	base["webhook_configured"] = webhookConfigured
+	base["credential_returned"] = false
+
+	switch {
+	case !senderChatReady:
+		base["status"] = "needs_config"
+		base["state"] = "disabled"
+		base["code"] = "TELEGRAM_SENDER_CHAT_REQUIRED"
+		base["message"] = "Telegram requires sender/chat authorization on the active profile before Cabinet accepts channel messages."
+		base["next_action"] = "authorize_sender_chat"
+	case !botTokenPresent:
+		base["status"] = "needs_config"
+		base["state"] = "degraded"
+		base["code"] = "TELEGRAM_BOT_TOKEN_REQUIRED"
+		base["message"] = "Sender/chat authorization is stored, but Telegram bot credentials still need to be configured."
+		base["next_action"] = "store_bot_token_secret"
+	case !webhookConfigured:
+		base["status"] = "needs_config"
+		base["state"] = "degraded"
+		base["code"] = "TELEGRAM_WEBHOOK_REQUIRED"
+		base["message"] = "Telegram bot credentials are present, but webhook routing proof is still pending."
+		base["next_action"] = "configure_webhook"
+	default:
+		base["status"] = "ok"
+		base["state"] = "ready"
+		base["code"] = "TELEGRAM_CHANNEL_READY"
+		base["message"] = "Telegram sender/chat authorization, bot credential presence, and webhook setup proof are present for the active profile."
+		base["next_action"] = "run_live_channel_checklist"
+	}
+	return base
+}
+
 func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc *ai.Service, profileID string) (map[string]any, int) {
 	base := map[string]any{
 		"provider":             "openai",
@@ -8550,6 +8624,11 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	openAIBrowserProofState, openAIBrowserProofArtifactID, _, openAIBrowserProviderTestPassed := openAIBrowserAuthProviderTestProof(settings)
 	openAIBrowserReady := openAIActiveMethod == "browser_auth" && strings.EqualFold(openAIBrowserState, "connected") && openAIBrowserCredentialPresent && openAIBrowserProviderTestPassed
 	openAIReady := openAIAPIKeyPresent || openAIBrowserReady
+	telegramSenderChatReady := telegramCatalogCaptureConfigured(settings)
+	telegramBotReady := telegramBotTokenPresent(settings)
+	telegramWebhookReady := telegramWebhookConfigured(settings)
+	telegramReady := telegramSenderChatReady && telegramBotReady && telegramWebhookReady
+	telegramConnectionState := telegramChannelConnectionState(telegramSenderChatReady, telegramBotReady, telegramWebhookReady)
 	base := []map[string]any{
 		{
 			"provider_id":         "openai",
@@ -8598,17 +8677,28 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			"base_domain":         "telegram.org",
 			"api_family":          "messaging_channel",
 			"api_support_profile": "bot_webhook_sender_chat_v1",
-			"active_mode":         map[bool]string{true: "authorized_sender_chat", false: "setup_needed"}[telegramCatalogCaptureConfigured(settings)],
+			"active_mode":         telegramConnectionState,
 			"integration_mode":    "assistant_capture_channel",
 			"api_available":       true,
 			"auth_requirement":    "sender_chat_authorization",
 			"auth_mode":           "sender_chat",
 			"auth_methods": map[string]any{
 				"sender_chat": map[string]any{
-					"state":              map[bool]string{true: "connected", false: "setup_needed"}[telegramCatalogCaptureConfigured(settings)],
-					"connected":          telegramCatalogCaptureConfigured(settings),
-					"credential_present": telegramCatalogCaptureConfigured(settings),
+					"state":              map[bool]string{true: "authorized", false: "setup_needed"}[telegramSenderChatReady],
+					"connected":          telegramSenderChatReady,
+					"credential_present": telegramSenderChatReady,
 					"setup_message":      "Store the Telegram sender id and chat id on the active profile before Cabinet accepts capture messages.",
+				},
+				"bot_token": map[string]any{
+					"state":              map[bool]string{true: "stored", false: "setup_needed"}[telegramBotReady],
+					"connected":          telegramBotReady,
+					"credential_present": telegramBotReady,
+					"setup_message":      "Store a Telegram bot token secret before Cabinet can dispatch channel replies.",
+				},
+				"webhook": map[string]any{
+					"state":         map[bool]string{true: "configured", false: "pending"}[telegramWebhookReady],
+					"connected":     telegramWebhookReady,
+					"setup_message": "Configure webhook routing proof before Cabinet marks production-channel intake ready.",
 				},
 			},
 			"capabilities": map[string]bool{
@@ -8618,8 +8708,21 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"media_capture": true,
 				"text_capture":  true,
 			},
-			"state":              map[bool]string{true: "ready", false: "needs_config"}[telegramCatalogCaptureConfigured(settings)],
-			"setup_instructions": "Configure Telegram sender/chat authorization in Profile settings, then route bot messages through the governed preview-before-apply capture channel.",
+			"state": map[bool]string{true: "ready", false: "needs_config"}[telegramReady],
+			"health": map[string]any{
+				"status":      map[bool]string{true: "ok", false: "needs_config"}[telegramReady],
+				"state":       telegramConnectionState,
+				"message":     telegramSetupMessage(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+				"next_action": telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+			},
+			"setup_status": map[string]any{
+				"sender_chat_state": map[bool]string{true: "authorized", false: "missing"}[telegramSenderChatReady],
+				"bot_token_state":   map[bool]string{true: "stored", false: "missing"}[telegramBotReady],
+				"webhook_state":     map[bool]string{true: "configured", false: "pending"}[telegramWebhookReady],
+				"runtime_proof":     map[bool]string{true: "ready", false: "pending_live_channel_check"}[telegramReady],
+				"next_action":       telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+			},
+			"setup_instructions": "Configure Telegram sender/chat authorization, bot token secret, and webhook routing proof before running governed preview-before-apply channel intake.",
 		},
 		{
 			"provider_id":         "ebay",
@@ -8830,6 +8933,55 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 func telegramCatalogCaptureConfigured(settings map[string]string) bool {
 	return strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != "" &&
 		strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != ""
+}
+
+func telegramBotTokenPresent(settings map[string]string) bool {
+	return strings.EqualFold(strings.TrimSpace(settings["telegram.bot_token_secret_present"]), "true") ||
+		strings.EqualFold(strings.TrimSpace(settings["telegram.bot_token_present"]), "true")
+}
+
+func telegramWebhookConfigured(settings map[string]string) bool {
+	return strings.EqualFold(strings.TrimSpace(settings["telegram.webhook_configured"]), "true") ||
+		strings.EqualFold(strings.TrimSpace(settings["telegram.webhook_url_set"]), "true")
+}
+
+func telegramChannelConnectionState(senderChatReady, botTokenReady, webhookReady bool) string {
+	switch {
+	case !senderChatReady:
+		return "setup_needed"
+	case !botTokenReady:
+		return "bot_token_required"
+	case !webhookReady:
+		return "webhook_pending"
+	default:
+		return "connected"
+	}
+}
+
+func telegramSetupNextAction(senderChatReady, botTokenReady, webhookReady bool) string {
+	switch {
+	case !senderChatReady:
+		return "authorize_sender_chat"
+	case !botTokenReady:
+		return "store_bot_token_secret"
+	case !webhookReady:
+		return "configure_webhook"
+	default:
+		return "run_live_channel_checklist"
+	}
+}
+
+func telegramSetupMessage(senderChatReady, botTokenReady, webhookReady bool) string {
+	switch telegramSetupNextAction(senderChatReady, botTokenReady, webhookReady) {
+	case "authorize_sender_chat":
+		return "Telegram requires active-profile sender/chat authorization before accepting channel messages."
+	case "store_bot_token_secret":
+		return "Sender/chat authorization is stored; add the Telegram bot token secret without exposing it back to the UI."
+	case "configure_webhook":
+		return "Bot credential presence is recorded; configure webhook routing proof before production-channel validation."
+	default:
+		return "Telegram channel setup is ready for live-channel checklist validation."
+	}
 }
 
 func defaultAUWebshopDomains() []string {
