@@ -365,7 +365,13 @@ function hashWishlistThumbnailKey(value: string) {
   }, 23)
 }
 
-function WishlistThumbnail({ task }: { task: Task }) {
+export function WishlistThumbnail({
+  task,
+  variant = 'row',
+}: {
+  task: Task
+  variant?: 'row' | 'card'
+}) {
   const key = task.itemID?.trim() || task.id.trim() || task.title.trim()
   const hue = hashWishlistThumbnailKey(key)
   const accentHue = (hue + 46) % 360
@@ -383,10 +389,32 @@ function WishlistThumbnail({ task }: { task: Task }) {
         src={task.thumbnailUrl}
         alt=''
         aria-hidden='true'
-        data-testid={`wishlist-thumbnail-${task.id}`}
+        data-testid={
+          variant === 'card'
+            ? `wishlist-card-thumbnail-${task.id}`
+            : `wishlist-thumbnail-${task.id}`
+        }
         data-thumbnail-key={key}
-        className='h-8 w-8 shrink-0 rounded-md border object-cover'
+        className={
+          variant === 'card'
+            ? 'h-20 w-full rounded-md border object-cover'
+            : 'h-8 w-8 shrink-0 rounded-md border object-cover'
+        }
       />
+    )
+  }
+
+  if (variant === 'card') {
+    return (
+      <div
+        aria-hidden='true'
+        data-testid={`wishlist-card-thumbnail-placeholder-${task.id}`}
+        data-thumbnail-key={key}
+        className='flex h-20 w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/40 text-muted-foreground'
+      >
+        <ImageIcon className='size-5' />
+        <span className='text-xs font-medium'>No asset</span>
+      </div>
     )
   }
 

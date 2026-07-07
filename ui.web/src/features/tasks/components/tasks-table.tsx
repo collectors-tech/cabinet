@@ -47,7 +47,7 @@ import { useProfileSettings } from '@/features/settings/use-profile-settings'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { getTasksColumns } from './tasks-columns'
+import { WishlistThumbnail, getTasksColumns } from './tasks-columns'
 
 type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 
@@ -1240,7 +1240,7 @@ export function TasksTable({
           </Table>
         </div>
       ) : (
-        <div className='grid min-h-0 flex-1 gap-3 overflow-auto sm:grid-cols-2 xl:grid-cols-3'>
+        <div className='grid min-h-0 flex-1 auto-rows-max gap-3 overflow-auto sm:grid-cols-2 lg:grid-cols-4'>
           {table.getRowModel().rows?.length ? (
             table.getRowModel().rows.map((row) => (
               <div
@@ -1251,7 +1251,8 @@ export function TasksTable({
                   Boolean(row.original.itemID)
                 }
                 className={cn(
-                  'space-y-2 rounded-md border p-4',
+                  'space-y-2 rounded-md border',
+                  routePath === '/_authenticated/wishlist/' ? 'p-3' : 'p-4',
                   currentRecordID === (row.original.itemID ?? row.original.id)
                     ? 'border-primary/60 bg-primary/5'
                     : 'cursor-pointer'
@@ -1271,12 +1272,17 @@ export function TasksTable({
                   handleRowDoubleClick(row.original.id, event)
                 }
               >
+                {routePath === '/_authenticated/wishlist/' ? (
+                  <WishlistThumbnail task={row.original} variant='card' />
+                ) : null}
                 <div className='flex items-start justify-between gap-2'>
-                  <div className='space-y-1'>
-                    <p className='text-xs text-muted-foreground'>
+                  <div className='min-w-0 space-y-1'>
+                    <p className='truncate text-xs text-muted-foreground'>
                       {row.original.id}
                     </p>
-                    <p className='font-medium'>{row.original.title}</p>
+                    <p className='line-clamp-2 text-sm leading-snug font-medium'>
+                      {row.original.title}
+                    </p>
                   </div>
                   <Checkbox
                     checked={row.getIsSelected()}
@@ -1286,7 +1292,7 @@ export function TasksTable({
                     aria-label={`Select ${row.original.title}`}
                   />
                 </div>
-                <div className='flex flex-wrap gap-2 text-xs text-muted-foreground'>
+                <div className='flex flex-wrap gap-1.5 text-xs text-muted-foreground'>
                   <span>
                     Status:{' '}
                     {routePath === '/_authenticated/wishlist/'
@@ -1329,7 +1335,7 @@ export function TasksTable({
                   routePath === '/_authenticated/inventory/') &&
                 row.original.notes ? (
                   <p
-                    className='text-xs text-muted-foreground'
+                    className='line-clamp-2 text-xs text-muted-foreground'
                     data-testid={
                       routePath === '/_authenticated/inventory/'
                         ? `inventory-card-notes-${row.original.itemID ?? row.original.id}`
