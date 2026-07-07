@@ -4960,6 +4960,44 @@ func New(cfg config.Config) (*App, error) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/telegram/agent-text", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramAgentTextRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		authorizer := allProfilesTelegramAuthorizer{profiles: profiles}
+		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		req.ProfileID = strings.TrimSpace(authorized.ProfileID)
+		result, err := handleTelegramAgentText(r.Context(), chatSvc, conn, req)
+		if err != nil {
+			if errors.Is(err, errTelegramAgentTextNeedsClarification) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_agent_text_needs_clarification",
+					"telegram_reply": telegramAgentClarificationReply(),
+				})
+				return
+			}
+			http.Error(w, `{"error":"failed_to_route_telegram_agent_text"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/telegram/catalog-capture-callbacks", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -11517,6 +11555,18 @@ type telegramCatalogCaptureRequest struct {
 	SourceMetadata map[string]any                       `json:"source_metadata"`
 }
 
+type telegramAgentTextRequest struct {
+	ProfileID      string         `json:"profile_id"`
+	SenderID       string         `json:"sender_id"`
+	ChatID         string         `json:"chat_id"`
+	MessageID      string         `json:"message_id"`
+	Text           string         `json:"text"`
+	SkillID        string         `json:"skill_id"`
+	Confirm        bool           `json:"confirm"`
+	Parameters     map[string]any `json:"parameters"`
+	SourceMetadata map[string]any `json:"source_metadata"`
+}
+
 type telegramCatalogCaptureMediaRequest struct {
 	FileID        string `json:"file_id"`
 	Filename      string `json:"filename"`
@@ -11646,6 +11696,218 @@ func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]
 		})
 	}
 	return out, nil
+}
+
+var errTelegramAgentTextNeedsClarification = errors.New("telegram agent text needs clarification")
+
+func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *sql.DB, req telegramAgentTextRequest) (map[string]any, error) {
+	profileID := strings.TrimSpace(req.ProfileID)
+	skillID := strings.TrimSpace(req.SkillID)
+	text := strings.TrimSpace(req.Text)
+	if profileID == "" || strings.TrimSpace(req.SenderID) == "" || strings.TrimSpace(req.ChatID) == "" {
+		return nil, telegramcapture.ErrUnauthorizedSender
+	}
+	if skillID == "" || text == "" {
+		return nil, errTelegramAgentTextNeedsClarification
+	}
+	params := req.Parameters
+	if params == nil {
+		params = map[string]any{}
+	}
+	thread, err := chatSvc.CreateThread(ctx, profileID, telegramAgentThreadTitle(text), map[string]any{
+		"source_channel":    "telegram",
+		"source_surface":    "telegram.agent.text",
+		"source_chat_id":    strings.TrimSpace(req.ChatID),
+		"source_sender_id":  strings.TrimSpace(req.SenderID),
+		"source_message_id": strings.TrimSpace(req.MessageID),
+		"skill_id":          skillID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	messageContext := map[string]any{
+		"source_channel":    "telegram",
+		"source_surface":    "telegram.agent.text",
+		"source_chat_id":    strings.TrimSpace(req.ChatID),
+		"source_sender_id":  strings.TrimSpace(req.SenderID),
+		"source_message_id": strings.TrimSpace(req.MessageID),
+		"skill_id":          skillID,
+	}
+	if len(req.SourceMetadata) > 0 {
+		messageContext["source_metadata"] = req.SourceMetadata
+	}
+	message, err := chatSvc.CreateMessage(ctx, profileID, thread.ID, "user", text, messageContext)
+	if err != nil {
+		return nil, err
+	}
+	previewReq := agentskills.PreviewRequest{
+		SkillID:         skillID,
+		ProfileID:       profileID,
+		Confirm:         req.Confirm,
+		SourceSurface:   "telegram.agent.text",
+		SourceChannel:   "telegram",
+		SourceThreadID:  thread.ID,
+		SourceMessageID: strings.TrimSpace(req.MessageID),
+		Parameters:      params,
+	}
+	registry := agentskills.NewRegistry(nil)
+	preview, err := registry.Preview(previewReq)
+	if err != nil {
+		return nil, err
+	}
+	workflowRun, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         profileID,
+		WorkflowID:        "telegram-agent-skill-text",
+		CapabilityID:      skillID,
+		SourceChannel:     "telegram",
+		SourceThreadID:    thread.ID,
+		SourceMessageID:   strings.TrimSpace(req.MessageID),
+		ConfirmationState: telegramAgentConfirmationState(preview, req.Confirm),
+		Input: map[string]any{
+			"text":       text,
+			"skill_id":   skillID,
+			"parameters": params,
+		},
+		ProviderTrace: map[string]any{
+			"provider":       "cabinet-agent-skill-registry",
+			"source_channel": "telegram",
+			"mode":           "governed_skill_preview_before_apply",
+			"live_provider":  false,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var skillResult map[string]any
+	if preview.Allowed || (preview.ConfirmationRequired && req.Confirm) {
+		skillResult, _, err = applyAgentSkill(ctx, conn, chatSvc, skillID, profileID, params)
+		if err != nil {
+			preview.Allowed = false
+			preview.Blocker = "skill_apply_failed"
+		} else {
+			preview.PreviewOnly = false
+			preview.MutationApplied = preview.ConfirmationRequired
+			preview.Target = skillResult
+		}
+	}
+	reviewURL := telegramAgentReviewURL(profileID, thread.ID)
+	workflowRun, err = chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         profileID,
+		RunID:             workflowRun.ID,
+		Status:            "completed",
+		ConfirmationState: telegramAgentConfirmationState(preview, req.Confirm),
+		ProviderTrace:     workflowRun.ProviderTrace,
+		Result: map[string]any{
+			"skill_id":            skillID,
+			"allowed":             preview.Allowed,
+			"confirmation_state":  telegramAgentConfirmationState(preview, req.Confirm),
+			"review_url":          reviewURL,
+			"mutation_applied":    preview.MutationApplied,
+			"telegram_reply_text": telegramAgentReplyText(preview),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var inboxItem chat.InboxItem
+	if preview.ConfirmationRequired && !req.Confirm {
+		inboxItem, err = chatSvc.CreateInboxItem(ctx, chat.InboxItem{
+			ProfileID: profileID,
+			ThreadID:  thread.ID,
+			Source:    "telegram_agent_text",
+			Status:    "queued",
+			Title:     "Telegram Agent request needs review",
+			Summary:   "Review and confirm the Telegram Agent skill request before Cabinet mutates state.",
+			Metadata: map[string]any{
+				"skill_id":            skillID,
+				"workflow_run_id":     workflowRun.ID,
+				"source_channel":      "telegram",
+				"source_chat_id":      strings.TrimSpace(req.ChatID),
+				"source_sender_id":    strings.TrimSpace(req.SenderID),
+				"source_message_id":   strings.TrimSpace(req.MessageID),
+				"confirmation_state":  "preview_required",
+				"review_url":          reviewURL,
+				"preview":             preview,
+				"telegram_reply_text": telegramAgentReplyText(preview),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return map[string]any{
+		"profile_id":     profileID,
+		"thread":         thread,
+		"message":        message,
+		"preview":        preview,
+		"workflow_run":   workflowRun,
+		"inbox_item":     inboxItem,
+		"telegram_reply": telegramAgentReply(preview, reviewURL),
+	}, nil
+}
+
+func telegramAgentThreadTitle(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "Telegram Agent request"
+	}
+	if len(text) > 64 {
+		text = text[:64]
+	}
+	return "Telegram Agent: " + text
+}
+
+func telegramAgentReviewURL(profileID, threadID string) string {
+	values := url.Values{}
+	values.Set("profile_id", strings.TrimSpace(profileID))
+	values.Set("thread_id", strings.TrimSpace(threadID))
+	return "/chats?" + values.Encode()
+}
+
+func telegramAgentConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
+	if preview.ConfirmationRequired {
+		if confirmed && preview.MutationApplied {
+			return "confirmed"
+		}
+		return "pending"
+	}
+	return "not_required"
+}
+
+func telegramAgentReply(preview agentskills.PreviewResponse, reviewURL string) telegramcapture.TelegramReply {
+	state := "completed"
+	actions := []string{"open_cabinet_review"}
+	if preview.ConfirmationRequired && !preview.MutationApplied {
+		state = "preview_required"
+		actions = append(actions, "confirm_in_cabinet")
+	}
+	return telegramcapture.TelegramReply{
+		Text:              telegramAgentReplyText(preview),
+		ReviewURL:         reviewURL,
+		ConfirmationState: state,
+		Actions:           actions,
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: "Open Cabinet review", Kind: "url", Action: "open_cabinet_review", URL: reviewURL},
+		},
+	}
+}
+
+func telegramAgentReplyText(preview agentskills.PreviewResponse) string {
+	if preview.ConfirmationRequired && !preview.MutationApplied {
+		return "Cabinet prepared a reviewable Agent preview. Open Cabinet to confirm or cancel before anything changes."
+	}
+	if preview.Allowed {
+		return "Cabinet processed the authorized Agent request and recorded the source evidence."
+	}
+	return "Cabinet needs more context before it can safely run that Agent skill."
+}
+
+func telegramAgentClarificationReply() telegramcapture.TelegramReply {
+	return telegramcapture.TelegramReply{
+		Text:              "Cabinet needs a supported Agent skill and enough context before it can route this Telegram request.",
+		ConfirmationState: "clarification_required",
+		Actions:           []string{"provide_skill_or_context"},
+	}
 }
 
 func missingTelegramExternalIntakeProofFields(req telegramExternalIntakeProofRequest) []string {

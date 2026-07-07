@@ -21,7 +21,7 @@ Safety levels are `read-only`, `preview-only`, `confirm-required`, `external-wri
 | Main Chat `/chats` | Profile, thread, user intent, attachments, preview/apply state | partial | #1703, #1716 | `internal/app/chat_api_test.go`; `openspec/traceability/agent-acceptance-suite.md` |
 | Side-panel Chat | Profile, route, active thread, selected surface context, attachments | partial | #1703, #1714, #1716 | `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts`; #1714 planned context envelope |
 | Inbox review | Notification/review item, source surface/channel/thread/message context, preview handoff | partial | #1715 | `internal/agentskills/registry_test.go` and `internal/app/agent_skills_api_test.go` cover Inbox skill registry metadata, confirmed Inbox apply, and source context propagation |
-| Telegram/external channel | Authorized sender/chat, source message/media, profile mapping, review link | partial | #1704, #1705, #1706, #1773 | Fixture/proof-packet evidence in #1716; live-channel checklist remains #1773 |
+| Telegram/external channel | Authorized sender/chat, source message/media, profile mapping, review link | partial | #1704, #1705, #1706, #1773 | #1705 adds direct authorized Telegram Agent text routing through skill preview/apply boundaries for read-only Inventory search and preview-required Inventory create; fixture/proof-packet evidence in #1716; live-channel checklist remains #1773 |
 | Skills page detail/actions | Skill id, source, status, safety, enable/disable/import context | planned | #1670 | Planned Cypress: `ui.web/cypress/e2e/settings/agent-skills/spec.cy.ts` |
 
 ## Surface Matrix

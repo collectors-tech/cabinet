@@ -131,6 +131,93 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 }
 
+func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Agent Text"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	unauthorized := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
+		"sender_id":"sender-agent",
+		"chat_id":"chat-agent",
+		"message_id":"agent-message-unauthorized",
+		"text":"show me my inventory",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"AFX"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if unauthorized.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized status=%d body=%s", unauthorized.Code, unauthorized.Body.String())
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"sender-agent",
+			"telegram.catalog_capture.chat_id":"chat-agent"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	readOnly := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
+		"sender_id":"sender-agent",
+		"chat_id":"chat-agent",
+		"message_id":"agent-message-read",
+		"text":"show me my AFX inventory",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"AFX"},
+		"source_metadata":{"update_id":1705}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if readOnly.Code != http.StatusCreated {
+		t.Fatalf("read-only status=%d body=%s", readOnly.Code, readOnly.Body.String())
+	}
+	readBody := readOnly.Body.String()
+	if !strings.Contains(readBody, `"source_channel":"telegram"`) ||
+		!strings.Contains(readBody, `"source_surface":"telegram.agent.text"`) ||
+		!strings.Contains(readBody, `"source_message_id":"agent-message-read"`) ||
+		!strings.Contains(readBody, `"skill_id":"cabinet.inventory.search_items"`) ||
+		!strings.Contains(readBody, `"read_only":true`) ||
+		!strings.Contains(readBody, `"confirmation_state":"not_required"`) {
+		t.Fatalf("expected authorized read-only Telegram Agent text to preserve source and execute read-only skill, body=%s", readBody)
+	}
+
+	mutating := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
+		"sender_id":"sender-agent",
+		"chat_id":"chat-agent",
+		"message_id":"agent-message-create",
+		"text":"create an inventory item for AFX truck",
+		"skill_id":"cabinet.inventory.create_item",
+		"parameters":{"title":"AFX Telegram Truck","part_number":"TG-1705","brand":"AFX","category":"Slot Cars"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if mutating.Code != http.StatusCreated {
+		t.Fatalf("mutating status=%d body=%s", mutating.Code, mutating.Body.String())
+	}
+	mutateBody := mutating.Body.String()
+	if !strings.Contains(mutateBody, `"confirmation_required":true`) ||
+		!strings.Contains(mutateBody, `"confirmation_state":"preview_required"`) ||
+		!strings.Contains(mutateBody, `"source":"telegram_agent_text"`) ||
+		!strings.Contains(mutateBody, `"review_url":"/chats?profile_id=`) ||
+		!strings.Contains(mutateBody, `"mutation_applied":false`) {
+		t.Fatalf("expected mutating Telegram Agent text to create reviewable preview without apply, body=%s", mutateBody)
+	}
+	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if strings.Contains(items.Body.String(), "AFX Telegram Truck") || strings.Contains(items.Body.String(), "TG-1705") {
+		t.Fatalf("telegram Agent text must not mutate inventory before confirmation, body=%s", items.Body.String())
+	}
+}
+
 func TestTelegramExternalIntakeProofRequiresAuthorizedProviderEvidence(t *testing.T) {
 	t.Parallel()
 
