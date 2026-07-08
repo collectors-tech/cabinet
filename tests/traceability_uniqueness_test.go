@@ -56,24 +56,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 
 	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
 	allowed := map[string][]string{
-		"AGENT-SKILLS-REGISTRY-005": {
-			"| partial |",
-			"#1667/#1669/#1671",
-			"TestSkillArchiveValidationRejectsInvalidManifestAndUnsafeArchive",
-			"no arbitrary executable/native code",
-		},
-		"AGENT-SKILLS-REGISTRY-006": {
-			"| partial |",
-			"#1667/#1669",
-			"TestSkillArchiveValidationAcceptsValidFolderAndInstallsDisabledByDefault",
-			"dependency-blocked",
-		},
-		"AGENT-SKILLS-REGISTRY-007": {
-			"| partial |",
-			"#1667/#1668/#1669",
-			"TestProfileScopedInstalledSkillEnableDisableAndInvalidState",
-			"built-in manifest immutability",
-		},
 		"AGENT-SKILLS-REGISTRY-008": {
 			"| planned |",
 			"#1667/#1670",
