@@ -647,6 +647,34 @@ func TestMarketWatchProviderControlsUseProviderRegistryContract(t *testing.T) {
 	}
 }
 
+func TestIntegrationsProviderDetailActionsUseProviderRegistryContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"provider_category?: string",
+		"provider_type?: string",
+		"config_schema_ref?: string",
+		"workflow_refs?: string[]",
+		"providerManifestActions",
+		"data-testid='provider-detail-category'",
+		"data-testid='provider-detail-config-schema'",
+		"data-testid='provider-detail-workflows'",
+		"data-testid='provider-detail-manifest-actions'",
+		"data-testid='integrations-row-details-provider-contract'",
+		"data-testid='integrations-row-details-provider-actions'",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations provider detail/action registry contract missing token: %s", token)
+		}
+	}
+}
+
 func TestIntegrationsEbaySetupStatusPanelContract(t *testing.T) {
 	t.Parallel()
 

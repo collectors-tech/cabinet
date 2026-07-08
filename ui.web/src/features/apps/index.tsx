@@ -67,8 +67,12 @@ type ProviderRecord = {
   provider_id: string
   display_name: string
   base_domain: string
+  provider_category?: string
+  provider_type?: string
   api_family?: string
   api_support_profile?: string
+  config_schema_ref?: string
+  workflow_refs?: string[]
   integration_mode: 'official_api' | 'web_ingestion' | 'program_api' | string
   auth_mode: 'none' | 'oauth' | 'api_key' | 'hybrid' | string
   state: 'ready' | 'degraded' | 'disabled' | string
@@ -168,6 +172,14 @@ const formatEbaySetupBaseURLState = (baseURLSet?: boolean) =>
   baseURLSet
     ? 'Base URL override configured'
     : 'Using default eBay Browse API base URL'
+
+const providerManifestActions = (provider: ProviderRecord) =>
+  [
+    ...(provider.workflow_refs ?? []),
+    ...Object.entries(provider.capabilities ?? {})
+      .filter(([, enabled]) => enabled)
+      .map(([capability]) => `capability:${capability}`),
+  ].filter(Boolean)
 
 type IntegrationForm = {
   baseURL: string
@@ -2473,12 +2485,32 @@ export function Apps({
             <div className='space-y-4'>
               <div className='rounded-md border bg-muted/20 p-3 text-xs'>
                 <p>Mode: {editingProvider.integration_mode}</p>
+                <p data-testid='provider-detail-category'>
+                  Category: {editingProvider.provider_category ?? 'uncategorized'}
+                  {' / '}
+                  Type: {editingProvider.provider_type ?? 'unknown'}
+                </p>
                 <p data-testid='provider-detail-api-family'>
                   API Family: {editingProvider.api_family ?? 'custom'}
                 </p>
                 <p data-testid='provider-detail-api-support-profile'>
                   Support Profile:{' '}
                   {editingProvider.api_support_profile ?? 'unknown'}
+                </p>
+                <p data-testid='provider-detail-config-schema'>
+                  Config Schema:{' '}
+                  {editingProvider.config_schema_ref ?? 'provider-specific'}
+                </p>
+                <p data-testid='provider-detail-workflows'>
+                  Workflows:{' '}
+                  {editingProvider.workflow_refs?.length
+                    ? editingProvider.workflow_refs.join(', ')
+                    : 'none'}
+                </p>
+                <p data-testid='provider-detail-manifest-actions'>
+                  Manifest Actions:{' '}
+                  {providerManifestActions(editingProvider).join(', ') ||
+                    'none'}
                 </p>
                 <p>
                   Readiness:{' '}
@@ -3928,6 +3960,19 @@ export function Apps({
               <p>
                 <strong>Health:</strong>{' '}
                 {rowDetailsProvider.health?.status ?? 'unknown'}
+              </p>
+              <p data-testid='integrations-row-details-provider-contract'>
+                <strong>Registry contract:</strong>{' '}
+                {rowDetailsProvider.provider_category ?? 'uncategorized'}
+                {' / '}
+                {rowDetailsProvider.provider_type ?? 'unknown'}
+                {' / '}
+                {rowDetailsProvider.config_schema_ref ?? 'provider-specific'}
+              </p>
+              <p data-testid='integrations-row-details-provider-actions'>
+                <strong>Actions:</strong>{' '}
+                {providerManifestActions(rowDetailsProvider).join(', ') ||
+                  'none'}
               </p>
             </div>
           ) : null}
