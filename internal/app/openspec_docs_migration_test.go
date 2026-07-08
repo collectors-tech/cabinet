@@ -18,6 +18,8 @@ func TestDocsFolderContainsNoMarkdownAfterMigration(t *testing.T) {
 		"../../docs/auth/exploration-auth-setup.md":                                {},
 		"../../docs/backlog/reviews/chat-app-control-issue-plan-2026-06-25.md":     {},
 		"../../docs/backlog/reviews/chat-application-control-review-2026-06-25.md": {},
+		"../../docs/integrations/provider-authoring.md":                            {},
+		"../../docs/validation/agent-live-telegram-channel-checklist.md":           {},
 	}
 
 	var markdownFiles []string
