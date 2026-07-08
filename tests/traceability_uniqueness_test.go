@@ -56,22 +56,16 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 
 	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
 	allowed := map[string][]string{
-		"AGENT-SKILLS-REGISTRY-004": {
-			"| planned |",
-			"#1667/#1668",
-			"TestSkillInvocationReportsMissingContextAndPermissions",
-			"missing profile/route/selection/provider/attachment context",
-		},
 		"AGENT-SKILLS-REGISTRY-005": {
-			"| planned |",
+			"| partial |",
 			"#1667/#1669/#1671",
-			"TestSkillArchiveValidationRejectsUnsafeArchiveAndInvalidManifest",
+			"TestSkillArchiveValidationRejectsInvalidManifestAndUnsafeArchive",
 			"no arbitrary executable/native code",
 		},
 		"AGENT-SKILLS-REGISTRY-006": {
-			"| planned |",
+			"| partial |",
 			"#1667/#1669",
-			"TestSkillImportValidationAndInstallResultStates",
+			"TestSkillArchiveValidationAcceptsValidFolderAndInstallsDisabledByDefault",
 			"dependency-blocked",
 		},
 		"AGENT-SKILLS-REGISTRY-007": {
@@ -93,10 +87,10 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"broader skill execution timeline coverage remains planned",
 		},
 		"AGENT-SKILLS-REGISTRY-010": {
-			"| planned |",
+			"| partial |",
 			"#1667/#1670/#1671",
 			"AGENT-SKILLS-REGISTRY-010 keeps marketplace behavior deferred",
-			"remote marketplace installs remain explicitly deferred",
+			"remote marketplace installs",
 		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",

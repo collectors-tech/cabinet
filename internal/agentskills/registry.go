@@ -32,6 +32,7 @@ const (
 	SafetyReadOnly        SafetyLevel = "read-only"
 	SafetyPreviewOnly     SafetyLevel = "preview-only"
 	SafetyConfirmRequired SafetyLevel = "confirm-required"
+	SafetyExternalWrite   SafetyLevel = "external-write"
 	SafetyDestructive     SafetyLevel = "destructive"
 )
 
