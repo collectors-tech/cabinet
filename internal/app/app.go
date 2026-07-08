@@ -5196,6 +5196,15 @@ func New(cfg config.Config) (*App, error) {
 			"confirm_apply":    true,
 		})
 	})
+	var agentSkillMu sync.RWMutex
+	agentImportedSkills := []agentskills.Skill{}
+	agentSkillStore := agentskills.NewInstalledSkillStore(nil)
+	agentSkillRegistry := func(profileID string) agentskills.Registry {
+		agentSkillMu.RLock()
+		imported := append([]agentskills.Skill{}, agentImportedSkills...)
+		agentSkillMu.RUnlock()
+		return agentskills.NewProfileRegistry(profileID, imported, agentSkillStore.List(profileID))
+	}
 	mux.HandleFunc("/api/agent/skills", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -5207,11 +5216,78 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
-		registry := agentskills.NewRegistry(nil)
+		registry := agentSkillRegistry(profileID)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"profile_id": profileID,
 			"skills":     registry.List(),
 		})
+	})
+	mux.HandleFunc("/api/agent/skills/import", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID  string `json:"profile_id"`
+			SourceType string `json:"source_type"`
+			Path       string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(req.ProfileID)
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		sourceType := strings.ToLower(strings.TrimSpace(req.SourceType))
+		sourcePath := strings.TrimSpace(req.Path)
+		if sourcePath == "" {
+			http.Error(w, `{"error":"path_required"}`, http.StatusBadRequest)
+			return
+		}
+		if sourceType == "" {
+			if strings.HasSuffix(strings.ToLower(sourcePath), ".cabinet-skill.zip") || strings.HasSuffix(strings.ToLower(sourcePath), ".zip") {
+				sourceType = "zip"
+			} else {
+				sourceType = "folder"
+			}
+		}
+		importer := agentskills.SkillImporter{
+			Registry: agentSkillRegistry(profileID),
+			Store:    agentSkillStore,
+		}
+		var result agentskills.SkillImportResult
+		switch sourceType {
+		case "folder", "directory":
+			result = importer.ImportSkillFolder(profileID, sourcePath, agentskills.ArchiveValidationOptions{})
+		case "zip", "archive":
+			result = importer.ImportSkillZipArchive(profileID, sourcePath, agentskills.ArchiveValidationOptions{})
+		default:
+			http.Error(w, `{"error":"unsupported_source_type"}`, http.StatusBadRequest)
+			return
+		}
+		if result.State == agentskills.ImportInstalledDisabled || result.State == agentskills.ImportInstalledEnabled {
+			agentSkillMu.Lock()
+			replaced := false
+			for i, skill := range agentImportedSkills {
+				if skill.ID == result.Skill.ID {
+					agentImportedSkills[i] = result.Skill
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				agentImportedSkills = append(agentImportedSkills, result.Skill)
+			}
+			agentSkillMu.Unlock()
+			_ = json.NewEncoder(w).Encode(result)
+			return
+		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/agent/skills/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -5228,7 +5304,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
-		registry := agentskills.NewRegistry(nil)
+		registry := agentSkillRegistry(req.ProfileID)
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
@@ -5251,7 +5327,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
-		registry := agentskills.NewRegistry(nil)
+		registry := agentSkillRegistry(req.ProfileID)
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
