@@ -153,6 +153,54 @@ func TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract(t *testing.T
 	}
 }
 
+func TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow(t *testing.T) {
+	t.Parallel()
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+
+	requiredGuideTokens := []string{
+		"internal/app/provider_registry_manifest.go",
+		"stable `provider_id`",
+		"`config_schema_ref`",
+		"`workflow_refs`",
+		"`capability_flags`",
+		"GET /api/providers/registry",
+		"GET /api/providers/:id/*",
+		"Add Integration provider list and details",
+		"Market Watch provider projection",
+		"schema-driven setup form rendering and field persistence",
+		"profile-scoped integration instances and secret storage",
+		"provider validation and health snapshots",
+		"Inbox-visible failure and required-action events",
+		"TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract",
+	}
+	for _, token := range requiredGuideTokens {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1463 workflow token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+
+	requiredTraceabilityTokens := []string{
+		"docs/integrations/provider-authoring.md",
+		"TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow",
+	}
+	for _, token := range requiredTraceabilityTokens {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1463 authoring guide token: %s", token)
+		}
+	}
+}
+
 func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing.T) {
 	t.Parallel()
 
