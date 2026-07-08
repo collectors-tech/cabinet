@@ -671,6 +671,63 @@ func TestSkillStatusAndSafetyDerivation(t *testing.T) {
 	}
 }
 
+func TestSkillInvocationReportsMissingContextAndPermissions(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	missing, err := registry.ReviewRequirements(PreviewRequest{SkillID: "cabinet.inventory.attach_media"})
+	if err != nil {
+		t.Fatalf("review inventory attach requirements: %v", err)
+	}
+	for _, context := range []string{"profile", "workspace", "thread", "selected_item", "selected_media"} {
+		if !slices.Contains(missing.MissingContext, context) {
+			t.Fatalf("expected missing context %q, got %+v", context, missing.MissingContext)
+		}
+	}
+	if missing.Allowed || missing.Blocker != "missing_context" || !missing.ConfirmationRequired {
+		t.Fatalf("expected missing-context blocker before inventory mutation, got %+v", missing)
+	}
+	if !missing.Permissions.LocalWrite || !missing.Permissions.RequiresConfirm || missing.Permissions.SecretAccess {
+		t.Fatalf("expected explicit non-secret local write permission boundary, got %+v", missing.Permissions)
+	}
+	if missing.AuditBehavior == "" {
+		t.Fatalf("expected audit behavior to be exposed")
+	}
+
+	ready, err := registry.ReviewRequirements(PreviewRequest{
+		SkillID:        "cabinet.inventory.attach_media",
+		ProfileID:      "profile-a",
+		SourceThreadID: "thread-a",
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+			"item_id":      "item-1",
+			"media_id":     "media-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("review ready inventory attach requirements: %v", err)
+	}
+	if len(ready.MissingContext) != 0 || ready.Blocker != "confirmation_required" || ready.Allowed {
+		t.Fatalf("expected complete context to advance to confirmation requirement, got %+v", ready)
+	}
+
+	readOnly, err := registry.ReviewRequirements(PreviewRequest{
+		SkillID:   "cabinet.storage.show_status",
+		ProfileID: "profile-a",
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+			"storage":      "local",
+		},
+	})
+	if err != nil {
+		t.Fatalf("review storage status requirements: %v", err)
+	}
+	if !readOnly.Allowed || readOnly.Blocker != "" || readOnly.ConfirmationRequired || readOnly.Permissions.LocalWrite {
+		t.Fatalf("expected read-only storage skill to be allowed with context, got %+v", readOnly)
+	}
+}
+
 func TestProfileScopedInstalledSkillEnableDisableAndInvalidState(t *testing.T) {
 	t.Parallel()
 
