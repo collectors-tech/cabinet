@@ -153,6 +153,17 @@ Cabinet SHALL surface integration failures and required user actions through dur
 - **AND** repeated failures for the same provider/action/root cause SHOULD coalesce into an updated event rather than flooding duplicate notifications
 - **AND** resolving the provider issue MUST allow the inbox event to be marked resolved/read without deleting the durable provider-status history
 
+### Requirement INTEGRATION-031: Provider registry MUST be the canonical integration source for app consumers
+Cabinet SHALL treat `/api/providers/registry`, `/api/providers/:id/*`, the Add Integration UI list, and the Market Watch provider projection as consumers of one canonical registry definition rather than independent provider catalogs.
+
+#### Scenario: Registry consumers preserve provider category and capability boundaries
+- **GIVEN** the canonical registry definition contains providers across marketplace, storefront/source matcher, browser-auth, chat/AI, notification, and workflow/local categories
+- **WHEN** Cabinet builds provider registry, provider detail/action, Add Integration, or Market Watch provider projection payloads
+- **THEN** each consumer MUST derive provider identity, category, auth mode, setup status, and capability metadata from the same manifest-backed registry source
+- **AND** provider categories MUST remain distinct so hobby shop storefront/source matcher providers are not collapsed into one generic provider when platform-specific adapters or discovery evidence exist
+- **AND** capability flags MUST preserve config form requirements, health/diagnostics, matching/import/export support, and browser-auth/external-login behavior for each provider
+- **AND** consumer-specific payloads MAY project only the fields they need but MUST NOT invent provider identity, category, setup, or capability state outside the canonical registry definition
+
 ## Validation Coverage Required By Issue #1469
 - Provider registry entries and manifest fields: Go registry/OpenAPI contract tests.
 - Provider setup schemas and Add Integration form rendering: Go template contract tests plus targeted Cypress for registry-driven field rendering.
