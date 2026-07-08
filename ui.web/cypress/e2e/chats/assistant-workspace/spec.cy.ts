@@ -624,10 +624,15 @@ describe('chats/assistant-workspace', () => {
     )
   })
 
-  it('ASSISTANT-WORKSPACE-005 keeps the compact Assistant panel dark, icon-only, and operational', () => {
+  it('ASSISTANT-WORKSPACE-005/#1458 keeps the compact Chat workspace panel dark, icon-only, and operational', () => {
     bootstrapInventory()
     openAssistantWorkspace()
 
+    cy.get('[data-testid="shell-workspace-assistant"]').should(
+      'have.attr',
+      'data-active',
+      'true'
+    )
     cy.get('[data-testid="shell-assistant-modal-content"]')
       .should('be.visible')
       .and('have.class', 'bg-slate-950')
@@ -639,20 +644,21 @@ describe('chats/assistant-workspace', () => {
     cy.get('[data-testid="shell-assistant-identity-card"]').within(() => {
       cy.get('[data-testid="shell-assistant-agent-name"]').should(
         'contain',
-        'Cabinet Assistant'
+        'Cabinet Agent'
       )
       cy.get('[data-testid="shell-assistant-agent-role"]').should(
         'contain',
-        'Route-aware workspace aide'
+        'Single app-control agent'
       )
       cy.get('[data-testid="shell-assistant-runtime-state"]').should(
         'contain',
-        'Connected'
+        'Agent runtime connected'
       )
     })
     cy.get('[data-testid="shell-assistant-thread-select"]').should(
       'be.visible'
     )
+    cy.get('[data-testid="shell-assistant-message-list"]').should('exist')
     ;[
       ['shell-assistant-new-thread', 'New assistant thread'],
       ['shell-assistant-mute-toggle', 'Mute assistant workspace updates'],

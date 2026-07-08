@@ -1599,7 +1599,7 @@ export function AssistantWorkspacePanel() {
             align='start'
             sideOffset={8}
             collisionPadding={12}
-            className='z-[100] flex h-[min(44rem,calc(100vh-7rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
+            className='z-[100] flex h-[min(46rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
             data-testid='shell-assistant-modal-content'
           >
             <section
@@ -1612,10 +1612,9 @@ export function AssistantWorkspacePanel() {
               >
                 <div className='flex items-center justify-between gap-2'>
                   <h2
-                    className='flex min-w-0 items-center gap-2 text-sm font-semibold tracking-normal text-slate-100'
+                    className='min-w-0 text-xl font-semibold tracking-normal text-slate-100'
                     data-testid='shell-assistant-panel-title'
                   >
-                    <Sparkles className='h-4 w-4 text-cyan-300' />
                     <span>Chat</span>
                   </h2>
                   <div className='flex items-center gap-1'>
@@ -1671,20 +1670,20 @@ export function AssistantWorkspacePanel() {
                         className='truncate text-sm font-medium text-slate-100'
                         data-testid='shell-assistant-agent-name'
                       >
-                        Cabinet Assistant
+                        Cabinet Agent
                       </p>
                       <p
                         className='text-xs text-slate-400'
                         data-testid='shell-assistant-agent-role'
                       >
-                        Route-aware workspace aide
+                        Single app-control agent
                       </p>
                       <p
                         className='mt-1 flex items-center gap-1 text-[11px] text-emerald-300'
                         data-testid='shell-assistant-runtime-state'
                       >
                         <span className='h-1.5 w-1.5 rounded-full bg-emerald-300' />
-                        {activeProfileId ? 'Connected' : 'Waiting for profile'}
+                        {activeProfileId ? 'Agent runtime connected' : 'Waiting for profile'}
                       </p>
                     </div>
                   </div>
@@ -1794,8 +1793,8 @@ export function AssistantWorkspacePanel() {
                   <span data-testid='shell-assistant-thread-id'>
                     {threadId || 'bootstrapping'}
                   </span>
-                  <span data-testid='shell-assistant-selected-thread-title'>
-                    Chat: {selectedThreadTitle}
+                    <span data-testid='shell-assistant-selected-thread-title'>
+                      Conversation: {selectedThreadTitle}
                   </span>
                   <span data-testid='shell-assistant-boundary-note'>
                     Thread continuity persists across authenticated route
@@ -2127,90 +2126,6 @@ export function AssistantWorkspacePanel() {
                       </div>
                     </div>
                   </div>
-                  <details
-                    className='rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300'
-                    data-testid='shell-assistant-action-timeline'
-                  >
-                    <summary className='cursor-pointer list-none font-medium'>
-                      Action Timeline
-                    </summary>
-                    <div
-                      className='mt-2 space-y-2 text-slate-400'
-                      data-testid='shell-assistant-command-timeline'
-                    >
-                      {workflowRunsLoading ? (
-                        <p>Loading durable workflow records...</p>
-                      ) : null}
-                      {!workflowRunsLoading &&
-                      workflowRuns.length === 0 &&
-                      commandEvents.length === 0 ? (
-                        <p>
-                          Durable workflow records appear here after Cabinet
-                          plans, previews, applies, cancels, or fails an
-                          assistant action.
-                        </p>
-                      ) : null}
-                      {workflowRunsError && workflowRuns.length === 0 ? (
-                        <p
-                          className='text-red-300'
-                          data-testid='shell-assistant-action-timeline-error'
-                        >
-                          {workflowRunsError}
-                        </p>
-                      ) : null}
-                      {workflowRuns.map((run) => (
-                        <div
-                          key={run.id}
-                          className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
-                          data-testid='shell-assistant-workflow-run'
-                          data-workflow-status={run.status}
-                          data-capability-id={run.capability_id}
-                        >
-                          <div className='flex items-center justify-between gap-2'>
-                            <span className='font-medium text-slate-200'>
-                              {run.status}
-                            </span>
-                            <span className='text-[10px] text-slate-500 uppercase'>
-                              {run.confirmation_state}
-                            </span>
-                          </div>
-                          <p>{run.capability_id}</p>
-                          <p className='text-slate-500'>
-                            {workflowRunResultSummary(run)}
-                          </p>
-                          <p className='text-[10px] text-slate-600'>
-                            {workflowRunTimestamp(run)}
-                          </p>
-                        </div>
-                      ))}
-                      {commandEvents.map((event, index) => (
-                        <div
-                          key={`${event.id}-${event.status}-${index}`}
-                          className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
-                          data-testid='shell-assistant-command-event'
-                          data-command-type={event.type}
-                          data-command-status={event.status}
-                        >
-                          <span className='font-medium text-slate-200'>
-                            {event.status}
-                          </span>{' '}
-                          {event.type}: {event.message}
-                        </div>
-                      ))}
-                    </div>
-                    {commandEvents.length > 0 ? (
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                        data-testid='shell-assistant-command-cancel'
-                        onClick={() => void cancelGuidance()}
-                      >
-                        Cancel guidance
-                      </Button>
-                    ) : null}
-                  </details>
                 </div>
               </ScrollArea>
 
@@ -2315,6 +2230,90 @@ export function AssistantWorkspacePanel() {
                     sending,
                   }}
                 />
+                <details
+                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300'
+                  data-testid='shell-assistant-action-timeline'
+                >
+                  <summary className='cursor-pointer list-none font-medium'>
+                    Action Timeline
+                  </summary>
+                  <div
+                    className='mt-2 max-h-36 space-y-2 overflow-y-auto text-slate-400'
+                    data-testid='shell-assistant-command-timeline'
+                  >
+                    {workflowRunsLoading ? (
+                      <p>Loading durable workflow records...</p>
+                    ) : null}
+                    {!workflowRunsLoading &&
+                    workflowRuns.length === 0 &&
+                    commandEvents.length === 0 ? (
+                      <p>
+                        Durable workflow records appear here after Cabinet
+                        plans, previews, applies, cancels, or fails an
+                        assistant action.
+                      </p>
+                    ) : null}
+                    {workflowRunsError && workflowRuns.length === 0 ? (
+                      <p
+                        className='text-red-300'
+                        data-testid='shell-assistant-action-timeline-error'
+                      >
+                        {workflowRunsError}
+                      </p>
+                    ) : null}
+                    {workflowRuns.map((run) => (
+                      <div
+                        key={run.id}
+                        className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                        data-testid='shell-assistant-workflow-run'
+                        data-workflow-status={run.status}
+                        data-capability-id={run.capability_id}
+                      >
+                        <div className='flex items-center justify-between gap-2'>
+                          <span className='font-medium text-slate-200'>
+                            {run.status}
+                          </span>
+                          <span className='text-[10px] text-slate-500 uppercase'>
+                            {run.confirmation_state}
+                          </span>
+                        </div>
+                        <p>{run.capability_id}</p>
+                        <p className='text-slate-500'>
+                          {workflowRunResultSummary(run)}
+                        </p>
+                        <p className='text-[10px] text-slate-600'>
+                          {workflowRunTimestamp(run)}
+                        </p>
+                      </div>
+                    ))}
+                    {commandEvents.map((event, index) => (
+                      <div
+                        key={`${event.id}-${event.status}-${index}`}
+                        className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                        data-testid='shell-assistant-command-event'
+                        data-command-type={event.type}
+                        data-command-status={event.status}
+                      >
+                        <span className='font-medium text-slate-200'>
+                          {event.status}
+                        </span>{' '}
+                        {event.type}: {event.message}
+                      </div>
+                    ))}
+                  </div>
+                  {commandEvents.length > 0 ? (
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                      data-testid='shell-assistant-command-cancel'
+                      onClick={() => void cancelGuidance()}
+                    >
+                      Cancel guidance
+                    </Button>
+                  ) : null}
+                </details>
               </div>
             </section>
           </AssistantModalPrimitive.Content>
