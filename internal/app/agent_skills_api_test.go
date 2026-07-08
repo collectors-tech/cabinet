@@ -12,7 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/profile"
+	"github.com/collectors-tech/cabinet/internal/update"
 )
 
 type apiSkillPayload struct {
@@ -254,6 +256,74 @@ func TestAgentSkillImportAPIInstallsLocalFolderDisabledAndListsMetadata(t *testi
 	}
 	if imported.Provenance != root || imported.NextAction == "" {
 		t.Fatalf("expected provenance and next action, got %+v", imported)
+	}
+}
+
+func TestAgentSkillImportAPIPersistsInstalledMetadataAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	cfg := config.Config{
+		Addr:           "127.0.0.1:0",
+		DataDir:        base,
+		DBPath:         filepath.Join(base, "cabinet.db"),
+		UpdateChannel:  update.ChannelStable,
+		WebAuthnRPID:   "127.0.0.1",
+		WebAuthnOrigin: "http://127.0.0.1:8080",
+		WebAuthnName:   "Cabinet Test",
+		BackupInterval: 60,
+	}
+	a := newTestAppWithConfig(t, cfg)
+	root := writeAgentSkillImportFixture(t, validAgentSkillImportManifest(`{
+		"id": "cabinet.example.api_imported_restart",
+		"safetyLevel": "confirm-required",
+		"status": "preview-only",
+		"capabilities": ["inventory.item.update"],
+		"guidedWorkflows": ["inventory.item.update"],
+		"uiTargets": ["inventory.item.editor.title"],
+		"permissions": {
+			"cabinetReads": ["inventory.item"],
+			"cabinetWrites": ["inventory.item"],
+			"externalReads": [],
+			"externalWrites": [],
+			"secretAccess": false,
+			"destructive": false
+		},
+		"audit": {
+			"actionTimeline": "records restart-safe local import metadata",
+			"requiresConfirmation": true
+		}
+	}`))
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("import status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	if err := a.close(); err != nil {
+		t.Fatalf("close app before restart: %v", err)
+	}
+
+	restarted := newTestAppWithConfig(t, cfg)
+	listResp := doRequest(t, restarted, http.MethodGet, "/api/agent/skills?profile_id=profile-a", nil, nil)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list after restart status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var listPayload struct {
+		Skills []apiSkillPayload `json:"skills"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode restarted list: %v", err)
+	}
+	imported := findAPISkill(listPayload.Skills, "cabinet.example.api_imported_restart")
+	if imported == nil {
+		t.Fatalf("expected imported skill after app restart")
+	}
+	if imported.Status != "disabled" || imported.Executable || imported.Enabled || imported.Provenance != root {
+		t.Fatalf("expected durable disabled archive metadata after restart, got %+v", imported)
 	}
 }
 

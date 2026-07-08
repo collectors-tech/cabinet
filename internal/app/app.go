@@ -96,6 +96,11 @@ type App struct {
 	startupIsTTY  func() bool
 }
 
+const (
+	agentSkillImportedStateKey  = "agent.skills.imported"
+	agentSkillInstalledStateKey = "agent.skills.installed_state"
+)
+
 func New(cfg config.Config) (*App, error) {
 	if strings.TrimSpace(cfg.ValidationError) != "" {
 		return nil, fmt.Errorf("invalid runtime config: %s", strings.TrimSpace(cfg.ValidationError))
@@ -5197,8 +5202,8 @@ func New(cfg config.Config) (*App, error) {
 		})
 	})
 	var agentSkillMu sync.RWMutex
-	agentImportedSkills := []agentskills.Skill{}
-	agentSkillStore := agentskills.NewInstalledSkillStore(nil)
+	agentImportedSkills := loadAgentSkillImportedSkills(ctx, conn)
+	agentSkillStore := agentskills.NewInstalledSkillStore(loadAgentSkillInstalledStates(ctx, conn))
 	agentSkillRegistry := func(profileID string) agentskills.Registry {
 		agentSkillMu.RLock()
 		imported := append([]agentskills.Skill{}, agentImportedSkills...)
@@ -5281,6 +5286,11 @@ func New(cfg config.Config) (*App, error) {
 			}
 			if !replaced {
 				agentImportedSkills = append(agentImportedSkills, result.Skill)
+			}
+			if err := persistAgentSkillState(r.Context(), conn, agentImportedSkills, agentSkillStore.ListAll()); err != nil {
+				agentSkillMu.Unlock()
+				http.Error(w, `{"error":"failed_to_persist_imported_skill"}`, http.StatusInternalServerError)
+				return
 			}
 			agentSkillMu.Unlock()
 			_ = json.NewEncoder(w).Encode(result)
@@ -12223,6 +12233,61 @@ func nonSecretProviderTrace(in map[string]any) map[string]any {
 	out["credential_returned"] = false
 	out["proof_packet"] = "authorized_telegram_openai_external_intake"
 	return out
+}
+
+func loadAgentSkillImportedSkills(ctx context.Context, conn *sql.DB) []agentskills.Skill {
+	var raw string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, agentSkillImportedStateKey).Scan(&raw); err != nil {
+		return nil
+	}
+	var skills []agentskills.Skill
+	if err := json.Unmarshal([]byte(raw), &skills); err != nil {
+		return nil
+	}
+	return skills
+}
+
+func loadAgentSkillInstalledStates(ctx context.Context, conn *sql.DB) []agentskills.InstalledSkillState {
+	var raw string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, agentSkillInstalledStateKey).Scan(&raw); err != nil {
+		return nil
+	}
+	var states []agentskills.InstalledSkillState
+	if err := json.Unmarshal([]byte(raw), &states); err != nil {
+		return nil
+	}
+	return states
+}
+
+func persistAgentSkillState(ctx context.Context, conn *sql.DB, imported []agentskills.Skill, installed []agentskills.InstalledSkillState) error {
+	importedJSON, err := json.Marshal(imported)
+	if err != nil {
+		return fmt.Errorf("encode imported skills: %w", err)
+	}
+	installedJSON, err := json.Marshal(installed)
+	if err != nil {
+		return fmt.Errorf("encode installed skill states: %w", err)
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, agentSkillImportedStateKey, string(importedJSON)); err != nil {
+		return fmt.Errorf("persist imported skills: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, agentSkillInstalledStateKey, string(installedJSON)); err != nil {
+		return fmt.Errorf("persist installed skill states: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (a *App) close() error {
