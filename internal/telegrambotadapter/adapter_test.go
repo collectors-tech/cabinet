@@ -125,6 +125,49 @@ func TestCabinetRequestFromUpdateRoutesAgentTextCommand(t *testing.T) {
 	}
 }
 
+func TestCabinetRequestFromUpdateRoutesAgentCaptionMediaCommand(t *testing.T) {
+	t.Parallel()
+
+	req, err := CabinetRequestFromUpdate(Update{
+		UpdateID: 9003,
+		Message: &WebhookMessage{
+			MessageID: 53,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Caption:   "/agent cabinet.inventory.attach_media item_id=item-1 media_id=telegram-photo-large",
+			Photo: []telegramcapture.WebhookPhotoSize{
+				{FileID: "telegram-photo-small", FileUniqueID: "photo-small", Width: 90, Height: 90, FileSize: 1024},
+				{FileID: "telegram-photo-large", FileUniqueID: "photo-large", Width: 1280, Height: 720, FileSize: 4096},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CabinetRequestFromUpdate() agent media caption error = %v", err)
+	}
+	if req.Path != AgentTextPath {
+		t.Fatalf("expected agent text path, got %q", req.Path)
+	}
+	body, ok := req.Body.(AgentTextRequest)
+	if !ok {
+		t.Fatalf("expected AgentTextRequest body, got %T", req.Body)
+	}
+	if body.Text != "cabinet.inventory.attach_media item_id=item-1 media_id=telegram-photo-large" || body.SkillID != "cabinet.inventory.attach_media" {
+		t.Fatalf("agent caption body did not preserve command text/skill: %+v", body)
+	}
+	if body.Parameters["item_id"] != "item-1" || body.Parameters["media_id"] != "telegram-photo-large" {
+		t.Fatalf("agent caption body did not preserve parameters: %+v", body.Parameters)
+	}
+	if len(body.Media) != 1 ||
+		body.Media[0].FileID != "telegram-photo-large" ||
+		body.Media[0].FileUniqueID != "photo-large" ||
+		body.Media[0].FileSize != 4096 ||
+		body.Media[0].Filename != "photo-large.jpg" ||
+		body.Media[0].MIMEType != "image/jpeg" ||
+		body.Media[0].Kind != "photo" {
+		t.Fatalf("agent caption body did not preserve non-secret Telegram media evidence: %+v", body.Media)
+	}
+}
+
 func TestCabinetRequestFromUpdateRoutesAgentTextCallbackQuery(t *testing.T) {
 	t.Parallel()
 

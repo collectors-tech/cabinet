@@ -11478,15 +11478,16 @@ type telegramCatalogCaptureRequest struct {
 }
 
 type telegramAgentTextRequest struct {
-	ProfileID      string         `json:"profile_id"`
-	SenderID       string         `json:"sender_id"`
-	ChatID         string         `json:"chat_id"`
-	MessageID      string         `json:"message_id"`
-	Text           string         `json:"text"`
-	SkillID        string         `json:"skill_id"`
-	Confirm        bool           `json:"confirm"`
-	Parameters     map[string]any `json:"parameters"`
-	SourceMetadata map[string]any `json:"source_metadata"`
+	ProfileID      string                               `json:"profile_id"`
+	SenderID       string                               `json:"sender_id"`
+	ChatID         string                               `json:"chat_id"`
+	MessageID      string                               `json:"message_id"`
+	Text           string                               `json:"text"`
+	SkillID        string                               `json:"skill_id"`
+	Confirm        bool                                 `json:"confirm"`
+	Parameters     map[string]any                       `json:"parameters"`
+	Media          []telegramCatalogCaptureMediaRequest `json:"media"`
+	SourceMetadata map[string]any                       `json:"source_metadata"`
 }
 
 type telegramAgentTextCallbackRequest struct {
@@ -11502,6 +11503,8 @@ type telegramAgentTextCallbackRequest struct {
 
 type telegramCatalogCaptureMediaRequest struct {
 	FileID        string `json:"file_id"`
+	FileUniqueID  string `json:"file_unique_id"`
+	FileSize      int    `json:"file_size"`
 	Filename      string `json:"filename"`
 	MIMEType      string `json:"mime_type"`
 	Kind          string `json:"kind"`
@@ -11621,11 +11624,13 @@ func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]
 			reader = bytes.NewReader(decoded)
 		}
 		out = append(out, telegramcapture.MediaInput{
-			FileID:   strings.TrimSpace(item.FileID),
-			Filename: strings.TrimSpace(item.Filename),
-			MIMEType: strings.TrimSpace(item.MIMEType),
-			Kind:     strings.TrimSpace(item.Kind),
-			Reader:   reader,
+			FileID:       strings.TrimSpace(item.FileID),
+			FileUniqueID: strings.TrimSpace(item.FileUniqueID),
+			FileSize:     item.FileSize,
+			Filename:     strings.TrimSpace(item.Filename),
+			MIMEType:     strings.TrimSpace(item.MIMEType),
+			Kind:         strings.TrimSpace(item.Kind),
+			Reader:       reader,
 		})
 	}
 	return out, nil
@@ -11647,14 +11652,20 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 	if params == nil {
 		params = map[string]any{}
 	}
-	thread, err := chatSvc.CreateThread(ctx, profileID, telegramAgentThreadTitle(text), map[string]any{
+	mediaContext := telegramAgentMediaContext(req.Media)
+	threadMetadata := map[string]any{
 		"source_channel":    "telegram",
 		"source_surface":    "telegram.agent.text",
 		"source_chat_id":    strings.TrimSpace(req.ChatID),
 		"source_sender_id":  strings.TrimSpace(req.SenderID),
 		"source_message_id": strings.TrimSpace(req.MessageID),
 		"skill_id":          skillID,
-	})
+	}
+	if len(mediaContext) > 0 {
+		threadMetadata["media"] = mediaContext
+		threadMetadata["media_count"] = len(mediaContext)
+	}
+	thread, err := chatSvc.CreateThread(ctx, profileID, telegramAgentThreadTitle(text), threadMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -11668,6 +11679,10 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 	}
 	if len(req.SourceMetadata) > 0 {
 		messageContext["source_metadata"] = req.SourceMetadata
+	}
+	if len(mediaContext) > 0 {
+		messageContext["media"] = mediaContext
+		messageContext["media_count"] = len(mediaContext)
 	}
 	message, err := chatSvc.CreateMessage(ctx, profileID, thread.ID, "user", text, messageContext)
 	if err != nil {
@@ -11700,6 +11715,7 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 			"text":       text,
 			"skill_id":   skillID,
 			"parameters": params,
+			"media":      mediaContext,
 		},
 		ProviderTrace: map[string]any{
 			"provider":       "cabinet-agent-skill-registry",
@@ -11745,6 +11761,8 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 			"preview_id":          actionPreview.ID,
 			"mutation_applied":    preview.MutationApplied,
 			"telegram_reply_text": telegramAgentReplyText(preview),
+			"media":               mediaContext,
+			"media_count":         len(mediaContext),
 		},
 	})
 	if err != nil {
@@ -11771,6 +11789,8 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 				"preview_id":          actionPreview.ID,
 				"action_preview":      actionPreview,
 				"preview":             preview,
+				"media":               mediaContext,
+				"media_count":         len(mediaContext),
 				"telegram_reply_text": telegramAgentReplyText(preview),
 			},
 		})
@@ -11788,6 +11808,29 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 		"inbox_item":     inboxItem,
 		"telegram_reply": telegramAgentReply(preview, reviewURL),
 	}, nil
+}
+
+func telegramAgentMediaContext(media []telegramCatalogCaptureMediaRequest) []map[string]any {
+	out := make([]map[string]any, 0, len(media))
+	for _, item := range media {
+		fileID := strings.TrimSpace(item.FileID)
+		filename := strings.TrimSpace(item.Filename)
+		fileUniqueID := strings.TrimSpace(item.FileUniqueID)
+		mimeType := strings.TrimSpace(item.MIMEType)
+		kind := strings.TrimSpace(item.Kind)
+		if fileID == "" && filename == "" && fileUniqueID == "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"file_id":        fileID,
+			"file_unique_id": fileUniqueID,
+			"file_size":      item.FileSize,
+			"filename":       filename,
+			"mime_type":      mimeType,
+			"kind":           kind,
+		})
+	}
+	return out
 }
 
 func handleTelegramAgentTextCallback(ctx context.Context, chatSvc *chat.Service, profileID string, req telegramAgentTextCallbackRequest) (map[string]any, error) {

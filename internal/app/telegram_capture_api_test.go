@@ -196,7 +196,15 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 		"message_id":"agent-message-create",
 		"text":"create an inventory item for AFX truck",
 		"skill_id":"cabinet.inventory.create_item",
-		"parameters":{"title":"AFX Telegram Truck","part_number":"TG-1705","brand":"AFX","category":"Slot Cars"}
+		"parameters":{"title":"AFX Telegram Truck","part_number":"TG-1705","brand":"AFX","category":"Slot Cars"},
+		"media":[{
+			"file_id":"telegram-agent-photo-1",
+			"file_unique_id":"telegram-agent-unique-1",
+			"file_size":4096,
+			"filename":"telegram-agent-front.jpg",
+			"mime_type":"image/jpeg",
+			"kind":"photo"
+		}]
 	}`), map[string]string{"Content-Type": "application/json"})
 	if mutating.Code != http.StatusCreated {
 		t.Fatalf("mutating status=%d body=%s", mutating.Code, mutating.Body.String())
@@ -207,6 +215,9 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 		!strings.Contains(mutateBody, `"source":"telegram_agent_text"`) ||
 		!strings.Contains(mutateBody, `"review_url":"/chats?`) ||
 		!strings.Contains(mutateBody, `preview_id`) ||
+		!strings.Contains(mutateBody, `"file_id":"telegram-agent-photo-1"`) ||
+		!strings.Contains(mutateBody, `"file_unique_id":"telegram-agent-unique-1"`) ||
+		!strings.Contains(mutateBody, `"media_count":1`) ||
 		!strings.Contains(mutateBody, `"mutation_applied":false`) {
 		t.Fatalf("expected mutating Telegram Agent text to create reviewable preview without apply, body=%s", mutateBody)
 	}
@@ -250,7 +261,8 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 	}
 	if !strings.Contains(runs.Body.String(), mutatePayload.ActionPreview.ID) ||
 		!strings.Contains(runs.Body.String(), `"source_channel":"telegram"`) ||
-		!strings.Contains(runs.Body.String(), `"capability_id":"cabinet.inventory.create_item"`) {
+		!strings.Contains(runs.Body.String(), `"capability_id":"cabinet.inventory.create_item"`) ||
+		!strings.Contains(runs.Body.String(), `"file_id":"telegram-agent-photo-1"`) {
 		t.Fatalf("expected queryable Telegram Agent workflow proof with preview id, body=%s", runs.Body.String())
 	}
 	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)

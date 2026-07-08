@@ -136,6 +136,13 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope",
 			"fixture/proof-packet validation from live production-channel validation",
 		},
+		"INTEGRATION-063": {
+			"| partial |",
+			"#1463",
+			"docs/integrations/provider-authoring.md",
+			"TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow",
+			"provider-authoring workflow",
+		},
 		"ASSISTANT-EXECUTION-010": {
 			"| planned |",
 			"#1509/#1514",
