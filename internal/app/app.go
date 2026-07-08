@@ -8706,20 +8706,14 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	telegramWebhookReady := telegramWebhookConfigured(settings)
 	telegramReady := telegramSenderChatReady && telegramBotReady && telegramWebhookReady
 	telegramConnectionState := telegramChannelConnectionState(telegramSenderChatReady, telegramBotReady, telegramWebhookReady)
-	base := []map[string]any{
-		{
-			"provider_id":         "openai",
-			"display_name":        "OpenAI / ChatGPT",
-			"base_domain":         "platform.openai.com",
-			"api_family":          "ai_provider",
-			"api_support_profile": "browser_auth_or_api_key",
-			"active_mode":         openAIActiveMethod,
-			"integration_mode":    "assistant_workflows",
-			"api_available":       true,
-			"auth_requirement":    "browser_auth_or_api_key",
-			"auth_mode":           "hybrid",
-			"active_auth_method":  openAIActiveMethod,
-			"auth_methods": map[string]any{
+	base := []map[string]any{}
+	for _, manifest := range coreIntegrationProviderManifests(amazonMode) {
+		provider := manifest.payload()
+		switch manifest.ProviderID {
+		case "openai":
+			provider["active_mode"] = openAIActiveMethod
+			provider["active_auth_method"] = openAIActiveMethod
+			provider["auth_methods"] = map[string]any{
 				"api_key": map[string]any{
 					"state":              map[bool]string{true: "connected", false: "setup_needed"}[openAIAPIKeyPresent],
 					"connected":          openAIAPIKeyPresent,
@@ -8734,32 +8728,12 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 					"provider_test_artifact_id": openAIBrowserProofArtifactID,
 					"setup_message":             "Browser Auth requires a verifiable callback/artifact and provider-test proof before Cabinet marks OpenAI connected.",
 				},
-			},
-			"model_options": []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"},
-			"capabilities": map[string]bool{
-				"search":             false,
-				"stock_observation":  false,
-				"pricing":            false,
-				"health":             true,
-				"assistant":          true,
-				"image_help":         true,
-				"content_generation": true,
-			},
-			"state":              map[bool]string{true: "ready", false: "needs_config"}[openAIReady],
-			"setup_instructions": "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
-		},
-		{
-			"provider_id":         "telegram",
-			"display_name":        "Telegram",
-			"base_domain":         "telegram.org",
-			"api_family":          "messaging_channel",
-			"api_support_profile": "bot_webhook_sender_chat_v1",
-			"active_mode":         telegramConnectionState,
-			"integration_mode":    "assistant_capture_channel",
-			"api_available":       true,
-			"auth_requirement":    "sender_chat_authorization",
-			"auth_mode":           "sender_chat",
-			"auth_methods": map[string]any{
+			}
+			provider["model_options"] = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
+			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
+		case "telegram":
+			provider["active_mode"] = telegramConnectionState
+			provider["auth_methods"] = map[string]any{
 				"sender_chat": map[string]any{
 					"state":              map[bool]string{true: "authorized", false: "setup_needed"}[telegramSenderChatReady],
 					"connected":          telegramSenderChatReady,
@@ -8777,130 +8751,39 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 					"connected":     telegramWebhookReady,
 					"setup_message": "Configure webhook routing proof before Cabinet marks production-channel intake ready.",
 				},
-			},
-			"capabilities": map[string]bool{
-				"search":        false,
-				"health":        true,
-				"assistant":     true,
-				"media_capture": true,
-				"text_capture":  true,
-			},
-			"state": map[bool]string{true: "ready", false: "needs_config"}[telegramReady],
-			"health": map[string]any{
+			}
+			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[telegramReady]
+			provider["health"] = map[string]any{
 				"status":      map[bool]string{true: "ok", false: "needs_config"}[telegramReady],
 				"state":       telegramConnectionState,
 				"message":     telegramSetupMessage(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
 				"next_action": telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
-			},
-			"setup_status": map[string]any{
+			}
+			provider["setup_status"] = map[string]any{
 				"sender_chat_state": map[bool]string{true: "authorized", false: "missing"}[telegramSenderChatReady],
 				"bot_token_state":   map[bool]string{true: "stored", false: "missing"}[telegramBotReady],
 				"webhook_state":     map[bool]string{true: "configured", false: "pending"}[telegramWebhookReady],
 				"runtime_proof":     map[bool]string{true: "ready", false: "pending_live_channel_check"}[telegramReady],
 				"next_action":       telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
-			},
-			"setup_instructions": "Configure Telegram sender/chat authorization, bot token secret, and webhook routing proof before running governed preview-before-apply channel intake.",
-		},
-		{
-			"provider_id":         "ebay",
-			"display_name":        "eBay",
-			"base_domain":         "ebay.com",
-			"api_family":          "official_api",
-			"api_support_profile": "rest_v1",
-			"active_mode":         "official_api",
-			"integration_mode":    "official_api",
-			"api_available":       true,
-			"auth_requirement":    "api_key",
-			"auth_mode":           "api_key",
-			"capabilities": map[string]bool{
-				"search":            true,
-				"stock_observation": false,
-				"pricing":           true,
-				"health":            true,
-			},
-			"has_token":          strings.TrimSpace(settings["ebay_bearer_token"]) != "",
-			"setup_status":       ebaySetupStatus(settings, ""),
-			"seller_operations":  ebay.SellerOperationStatuses(nil),
-			"state":              "ready",
-			"setup_instructions": "Add eBay API token and marketplace, validate health, then run scanner query sets.",
-		},
-		{
-			"provider_id":          "amazon",
-			"display_name":         "Amazon",
-			"base_domain":          "amazon.com",
-			"api_family":           "official_api",
-			"api_support_profile":  "program_api_v1",
-			"active_mode":          map[bool]string{true: "program_api", false: "disabled"}[amazonMode == "program_api"],
-			"integration_mode":     amazonMode,
-			"api_available":        amazonMode == "program_api",
-			"auth_requirement":     "oauth",
-			"auth_mode":            "hybrid",
-			"eligibility_required": true,
-			"policy_scope_note":    "Program API access eligibility controls availability.",
-			"capabilities": map[string]bool{
-				"search":            amazonMode == "program_api",
-				"stock_observation": false,
-				"pricing":           amazonMode == "program_api",
-				"health":            true,
-			},
-			"state":              map[bool]string{true: "ready", false: "disabled"}[amazonMode == "program_api"],
-			"setup_instructions": "Configure Amazon credentials and eligibility mode before running provider scans.",
-		},
+			}
+		case "ebay":
+			provider["has_token"] = strings.TrimSpace(settings["ebay_bearer_token"]) != ""
+			provider["setup_status"] = ebaySetupStatus(settings, "")
+			provider["seller_operations"] = ebay.SellerOperationStatuses(nil)
+			provider["state"] = "ready"
+		case "amazon":
+			provider["eligibility_required"] = true
+			provider["policy_scope_note"] = "Program API access eligibility controls availability."
+			provider["state"] = map[bool]string{true: "ready", false: "disabled"}[amazonMode == "program_api"]
+		}
+		base = append(base, provider)
 	}
 
 	auDomains := resolveAUWebshopDomains(settings)
 	for _, d := range auDomains {
-		apiFamily := "web_ingestion"
-		activeMode := "web_ingestion"
-		integrationMode := "web_ingestion"
-		supportProfile := "html_fallback"
-		if d == "voglers.com.au" {
-			apiFamily = "bigcommerce"
-			activeMode = "storefront_public"
-			integrationMode = "storefront_access"
-			supportProfile = "bigcommerce_storefront_v1"
-		}
-		if d == "mrtoys.com.au" {
-			apiFamily = "doofinder"
-			activeMode = "hashid_search"
-			integrationMode = "api_family_search"
-			supportProfile = "doofinder_hashid_v1"
-		}
-		if d == "bonzaslotcars.com.au" {
-			apiFamily = "woo_store_api"
-			activeMode = "store_api_first"
-			supportProfile = "store_v1"
-		}
-		if d == "frontlinehobbies.com.au" {
-			apiFamily = "algolia"
-			activeMode = "algolia_runtime"
-			supportProfile = "algolia_runtime_v1"
-		}
-		if d == "hobbytechtoys.com.au" {
-			apiFamily = "boost_shopify"
-			activeMode = "boost_api"
-			supportProfile = "boost_v2"
-		}
-		base = append(base, map[string]any{
-			"provider_id":         "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
-			"display_name":        d,
-			"base_domain":         d,
-			"api_family":          apiFamily,
-			"api_support_profile": supportProfile,
-			"active_mode":         activeMode,
-			"integration_mode":    integrationMode,
-			"api_available":       d == "voglers.com.au" || d == "mrtoys.com.au",
-			"auth_requirement":    "none",
-			"auth_mode":           "none",
-			"capabilities": map[string]bool{
-				"search":            true,
-				"stock_observation": true,
-				"pricing":           true,
-				"health":            true,
-			},
-			"state":              "ready",
-			"setup_instructions": "Webshop ingestion uses crawl parsing and does not require API credentials.",
-		})
+		provider := auWebshopProviderManifest(d).payload()
+		provider["state"] = "ready"
+		base = append(base, provider)
 	}
 
 	for _, provider := range base {
