@@ -80,6 +80,15 @@ type Registry struct {
 	imported []Skill
 }
 
+type InstalledSkillState struct {
+	ProfileID          string   `json:"profile_id"`
+	SkillID            string   `json:"skill_id"`
+	Enabled            bool     `json:"enabled"`
+	Status             Status   `json:"status,omitempty"`
+	ValidationWarnings []string `json:"validation_warnings,omitempty"`
+	ValidationErrors   []string `json:"validation_errors,omitempty"`
+}
+
 type PreviewRequest struct {
 	SkillID         string         `json:"skill_id"`
 	ProfileID       string         `json:"profile_id"`
@@ -114,6 +123,12 @@ func NewRegistry(imported []Skill) Registry {
 		builtIns: builtInSkills(),
 		imported: normalizeImported(imported),
 	}
+}
+
+func NewProfileRegistry(profileID string, imported []Skill, installed []InstalledSkillState) Registry {
+	registry := NewRegistry(imported)
+	registry.imported = applyInstalledSkillState(profileID, registry.imported, installed)
+	return registry
 }
 
 func (r Registry) List() []Skill {
@@ -854,6 +869,49 @@ func normalizeImported(imported []Skill) []Skill {
 		if !skill.Enabled && skill.Status == StatusAvailable {
 			skill.Status = StatusDisabled
 		}
+		out = append(out, skill)
+	}
+	return out
+}
+
+func applyInstalledSkillState(profileID string, imported []Skill, installed []InstalledSkillState) []Skill {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" || len(installed) == 0 {
+		return imported
+	}
+
+	states := map[string]InstalledSkillState{}
+	for _, state := range installed {
+		if strings.TrimSpace(state.ProfileID) != profileID {
+			continue
+		}
+		skillID := strings.TrimSpace(state.SkillID)
+		if skillID == "" {
+			continue
+		}
+		states[skillID] = state
+	}
+	if len(states) == 0 {
+		return imported
+	}
+
+	out := make([]Skill, 0, len(imported))
+	for _, skill := range imported {
+		state, ok := states[skill.ID]
+		if !ok {
+			out = append(out, skill)
+			continue
+		}
+		skill.Enabled = state.Enabled
+		if state.Status != "" {
+			skill.Status = state.Status
+		} else if state.Enabled && skill.Status == StatusDisabled {
+			skill.Status = StatusAvailable
+		} else if !state.Enabled && (skill.Status == "" || skill.Status == StatusAvailable || skill.Status == StatusPreviewOnly) {
+			skill.Status = StatusDisabled
+		}
+		skill.ValidationWarnings = append([]string{}, state.ValidationWarnings...)
+		skill.ValidationErrors = append([]string{}, state.ValidationErrors...)
 		out = append(out, skill)
 	}
 	return out
