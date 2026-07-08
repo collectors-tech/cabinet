@@ -674,23 +674,37 @@ func TestSkillStatusAndSafetyDerivation(t *testing.T) {
 func TestProfileScopedInstalledSkillEnableDisableAndInvalidState(t *testing.T) {
 	t.Parallel()
 
-	registry := NewRegistry([]Skill{
+	imported := []Skill{
 		{
 			ID:          "local.archive.disabled_writer",
 			Version:     "0.1.0",
 			DisplayName: "Disabled writer",
 			Status:      StatusAvailable,
 			SafetyLevel: SafetyConfirmRequired,
-			Enabled:     false,
+			Enabled:     true,
 		},
 		{
 			ID:          "local.archive.invalid_reader",
 			Version:     "0.1.0",
 			DisplayName: "Invalid reader",
-			Status:      StatusInvalid,
+			Status:      StatusAvailable,
 			SafetyLevel: SafetyReadOnly,
 			Enabled:     true,
 		},
+	}
+
+	registry := NewProfileRegistry("profile-a", imported, []InstalledSkillState{
+		{ProfileID: "profile-a", SkillID: "local.archive.disabled_writer", Enabled: false},
+		{
+			ProfileID:          "profile-a",
+			SkillID:            "local.archive.invalid_reader",
+			Enabled:            true,
+			Status:             StatusInvalid,
+			ValidationErrors:   []string{"missing capability: local.reader"},
+			ValidationWarnings: []string{"schema version is deprecated"},
+		},
+		{ProfileID: "profile-b", SkillID: "local.archive.disabled_writer", Enabled: true},
+		{ProfileID: "profile-a", SkillID: "cabinet.navigate.open_surface", Enabled: false, Status: StatusDisabled},
 	})
 
 	disabled, ok := registry.Resolve("local.archive.disabled_writer")
@@ -710,6 +724,30 @@ func TestProfileScopedInstalledSkillEnableDisableAndInvalidState(t *testing.T) {
 	}
 	if invalid.Status != StatusInvalid || invalid.Executable {
 		t.Fatalf("invalid imported skill should not be executable, got %+v", invalid)
+	}
+	if !slices.Contains(invalid.ValidationErrors, "missing capability: local.reader") ||
+		!slices.Contains(invalid.ValidationWarnings, "schema version is deprecated") {
+		t.Fatalf("expected profile-scoped validation details on invalid skill, got %+v", invalid)
+	}
+
+	builtIn, ok := registry.Resolve("cabinet.navigate.open_surface")
+	if !ok {
+		t.Fatalf("expected built-in navigation skill")
+	}
+	if builtIn.Status == StatusDisabled || !builtIn.Enabled || !builtIn.BuiltIn || builtIn.Removable {
+		t.Fatalf("profile installed state must not disable or remove built-ins, got %+v", builtIn)
+	}
+
+	otherProfile := NewProfileRegistry("profile-b", imported, []InstalledSkillState{
+		{ProfileID: "profile-a", SkillID: "local.archive.disabled_writer", Enabled: false},
+		{ProfileID: "profile-b", SkillID: "local.archive.disabled_writer", Enabled: true},
+	})
+	enabledForOtherProfile, ok := otherProfile.Resolve("local.archive.disabled_writer")
+	if !ok {
+		t.Fatalf("expected imported writer for second profile")
+	}
+	if enabledForOtherProfile.Status != StatusAvailable || !enabledForOtherProfile.Executable {
+		t.Fatalf("expected installed state to remain profile scoped, got %+v", enabledForOtherProfile)
 	}
 }
 
