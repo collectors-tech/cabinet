@@ -1,6 +1,7 @@
 package agentskills
 
 import (
+	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -142,6 +143,86 @@ func TestSkillArchiveValidationVerifiesChecksums(t *testing.T) {
 	}
 }
 
+func TestSkillZipArchiveValidationAcceptsValidArchive(t *testing.T) {
+	t.Parallel()
+
+	archivePath := writeSkillZipArchive(t, map[string]string{
+		SkillManifestFile: validSkillManifest(`{
+			"id": "cabinet.example.zipped_reader",
+			"safetyLevel": "read-only",
+			"status": "available"
+		}`),
+		"README.md": "# Zipped skill\n",
+	})
+
+	result := NewRegistry(nil).ValidateSkillZipArchive(archivePath, ArchiveValidationOptions{})
+	if result.State != ImportValidReadyToInstall || result.Skill.ID != "cabinet.example.zipped_reader" {
+		t.Fatalf("expected valid zipped archive, got %+v", result)
+	}
+	if result.Provenance != archivePath || result.Skill.Provenance != archivePath {
+		t.Fatalf("expected zip path provenance, got result=%q skill=%q", result.Provenance, result.Skill.Provenance)
+	}
+}
+
+func TestSkillZipArchiveValidationRejectsUnsafePaths(t *testing.T) {
+	t.Parallel()
+
+	archivePath := writeSkillZipArchive(t, map[string]string{
+		SkillManifestFile: validSkillManifest(`{
+			"id": "cabinet.example.zipped_unsafe",
+			"safetyLevel": "read-only",
+			"status": "available"
+		}`),
+		"../escape.md": "escape",
+	})
+
+	result := NewRegistry(nil).ValidateSkillZipArchive(archivePath, ArchiveValidationOptions{})
+	if result.State != ImportBlockedUnsafeArchive || !containsFragment(result.Errors, "unsafe archive path") {
+		t.Fatalf("expected unsafe zip path to block, got %+v", result)
+	}
+}
+
+func TestSkillImporterPersistsDisabledInstallAndRegistryMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := writeSkillArchiveFixture(t, validSkillManifest(`{
+		"id": "cabinet.example.imported_writer",
+		"safetyLevel": "confirm-required",
+		"status": "preview-only",
+		"capabilities": ["inventory.item.update"],
+		"guidedWorkflows": ["inventory.item.update"],
+		"uiTargets": ["inventory.item.editor.title"],
+		"permissions": {
+			"cabinetReads": ["inventory.item"],
+			"cabinetWrites": ["inventory.item"],
+			"externalReads": [],
+			"externalWrites": [],
+			"secretAccess": false,
+			"destructive": false
+		},
+		"audit": {
+			"actionTimeline": "records selected inventory item",
+			"requiresConfirmation": true
+		}
+	}`))
+	store := NewInstalledSkillStore(nil)
+	importer := SkillImporter{Registry: NewRegistry(nil), Store: store}
+
+	result := importer.ImportSkillFolder("profile-a", root, ArchiveValidationOptions{})
+	if result.State != ImportInstalledDisabled || result.InstalledState.Status != StatusDisabled || result.InstalledState.Enabled {
+		t.Fatalf("expected disabled import state, got %+v", result)
+	}
+
+	profileRegistry := NewProfileRegistry("profile-a", []Skill{result.Skill}, store.List("profile-a"))
+	skill, ok := profileRegistry.Resolve("cabinet.example.imported_writer")
+	if !ok {
+		t.Fatalf("expected imported skill to resolve through profile registry")
+	}
+	if skill.Provenance != root || skill.Status != StatusDisabled || skill.Executable {
+		t.Fatalf("expected disabled imported metadata with provenance, got %+v", skill)
+	}
+}
+
 func validSkillManifest(overrides string) string {
 	base := `{
 		"schema": "https://collectors.tech/cabinet/schemas/agent-skill.v1.json",
@@ -195,6 +276,32 @@ func writeArchiveFile(t *testing.T, root, path, content string) {
 	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write fixture file %s: %v", path, err)
 	}
+}
+
+func writeSkillZipArchive(t *testing.T, files map[string]string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "skill.cabinet-skill.zip")
+	archive, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create zip archive: %v", err)
+	}
+	writer := zip.NewWriter(archive)
+	for name, content := range files {
+		file, err := writer.Create(name)
+		if err != nil {
+			t.Fatalf("create zip file %s: %v", name, err)
+		}
+		if _, err := file.Write([]byte(content)); err != nil {
+			t.Fatalf("write zip file %s: %v", name, err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatalf("close zip archive: %v", err)
+	}
+	return path
 }
 
 func containsFragment(values []string, fragment string) bool {

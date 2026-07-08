@@ -1,6 +1,7 @@
 package agentskills
 
 import (
+	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -38,6 +39,20 @@ type ArchiveValidationResult struct {
 	Errors     []string          `json:"errors,omitempty"`
 	Warnings   []string          `json:"warnings,omitempty"`
 	Provenance string            `json:"provenance,omitempty"`
+}
+
+type SkillImporter struct {
+	Registry Registry
+	Store    *InstalledSkillStore
+}
+
+type SkillImportResult struct {
+	State          ImportResultState   `json:"state"`
+	Skill          Skill               `json:"skill,omitempty"`
+	InstalledState InstalledSkillState `json:"installed_state,omitempty"`
+	Errors         []string            `json:"errors,omitempty"`
+	Warnings       []string            `json:"warnings,omitempty"`
+	Provenance     string              `json:"provenance,omitempty"`
 }
 
 type skillManifest struct {
@@ -179,6 +194,117 @@ func (r Registry) ValidateSkillFolder(root string, opts ArchiveValidationOptions
 	}
 	result := r.validateSkillManifest(root, manifest)
 	result.Provenance = root
+	return result
+}
+
+func (r Registry) ValidateSkillZipArchive(path string, opts ArchiveValidationOptions) ArchiveValidationResult {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return invalidManifestResult("archive path is required")
+	}
+	reader, err := zip.OpenReader(path)
+	if err != nil {
+		return invalidManifestResult(fmt.Sprintf("skill archive is not readable: %v", err))
+	}
+	defer reader.Close()
+	if opts.MaxFiles <= 0 {
+		opts.MaxFiles = 100
+	}
+	if opts.MaxBytes <= 0 {
+		opts.MaxBytes = 10 << 20
+	}
+
+	tmp, err := os.MkdirTemp("", "cabinet-skill-archive-*")
+	if err != nil {
+		return unsafeArchiveResult(fmt.Sprintf("cannot prepare archive validation folder: %v", err))
+	}
+	defer os.RemoveAll(tmp)
+
+	fileCount := 0
+	totalBytes := int64(0)
+	var errorsOut []string
+	for _, file := range reader.File {
+		rel := filepath.ToSlash(file.Name)
+		if strings.HasSuffix(rel, "/") {
+			if unsafeArchivePath(strings.TrimSuffix(rel, "/")) {
+				errorsOut = append(errorsOut, "unsafe archive path: "+rel)
+			}
+			continue
+		}
+		if unsafeArchivePath(rel) {
+			errorsOut = append(errorsOut, "unsafe archive path: "+rel)
+			continue
+		}
+		fileCount++
+		if fileCount > opts.MaxFiles {
+			errorsOut = append(errorsOut, "archive file count exceeds Cabinet limit")
+			continue
+		}
+		totalBytes += int64(file.UncompressedSize64)
+		if totalBytes > opts.MaxBytes {
+			errorsOut = append(errorsOut, "archive size exceeds Cabinet limit")
+			continue
+		}
+		if unsupportedSkillArchiveFile(rel) {
+			errorsOut = append(errorsOut, "unsupported executable or native file: "+rel)
+			continue
+		}
+		if file.FileInfo().Mode()&os.ModeSymlink != 0 {
+			errorsOut = append(errorsOut, "symlink paths are not supported: "+rel)
+			continue
+		}
+		if err := extractZipFile(tmp, file, rel); err != nil {
+			errorsOut = append(errorsOut, err.Error())
+		}
+	}
+	if len(errorsOut) > 0 {
+		return ArchiveValidationResult{State: ImportBlockedUnsafeArchive, Errors: errorsOut, Provenance: path}
+	}
+	result := r.ValidateSkillFolder(tmp, opts)
+	result.Provenance = path
+	result.Skill.Provenance = path
+	return result
+}
+
+func (i SkillImporter) ImportSkillFolder(profileID, root string, opts ArchiveValidationOptions) SkillImportResult {
+	return i.importValidation(profileID, i.Registry.ValidateSkillFolder(root, opts))
+}
+
+func (i SkillImporter) ImportSkillZipArchive(profileID, path string, opts ArchiveValidationOptions) SkillImportResult {
+	return i.importValidation(profileID, i.Registry.ValidateSkillZipArchive(path, opts))
+}
+
+func (i SkillImporter) importValidation(profileID string, validation ArchiveValidationResult) SkillImportResult {
+	result := SkillImportResult{
+		State:      validation.State,
+		Skill:      validation.Skill,
+		Errors:     append([]string{}, validation.Errors...),
+		Warnings:   append([]string{}, validation.Warnings...),
+		Provenance: validation.Provenance,
+	}
+	if validation.State != ImportValidReadyToInstall && validation.State != ImportValidWithWarnings {
+		return result
+	}
+	if i.Store == nil {
+		result.State = ImportBlockedInvalidManifest
+		result.Errors = append(result.Errors, "installed skill store is required")
+		return result
+	}
+	installed, state, err := i.Registry.InstalledStateFromValidation(profileID, validation)
+	if err != nil {
+		result.State = ImportBlockedInvalidManifest
+		result.Errors = append(result.Errors, err.Error())
+		return result
+	}
+	saved, err := i.Store.Save(installed)
+	if err != nil {
+		result.State = ImportBlockedInvalidManifest
+		result.Errors = append(result.Errors, err.Error())
+		return result
+	}
+	result.State = state
+	result.InstalledState = saved
+	result.Skill.Provenance = validation.Provenance
 	return result
 }
 
@@ -355,6 +481,38 @@ func unsupportedSkillArchiveFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	unsupported := []string{".bat", ".cmd", ".dll", ".dylib", ".exe", ".go", ".js", ".ps1", ".py", ".sh", ".so", ".ts"}
 	return slices.Contains(unsupported, ext)
+}
+
+func extractZipFile(root string, file *zip.File, rel string) error {
+	target := filepath.Join(root, filepath.FromSlash(rel))
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("cannot resolve extraction root: %v", err)
+	}
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("cannot resolve archive path %s: %v", rel, err)
+	}
+	if targetAbs != rootAbs && !strings.HasPrefix(targetAbs, rootAbs+string(os.PathSeparator)) {
+		return fmt.Errorf("unsafe archive path: %s", rel)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("cannot create archive path %s: %v", rel, err)
+	}
+	source, err := file.Open()
+	if err != nil {
+		return fmt.Errorf("cannot read archive file %s: %v", rel, err)
+	}
+	defer source.Close()
+	destination, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("cannot extract archive file %s: %v", rel, err)
+	}
+	defer destination.Close()
+	if _, err := io.Copy(destination, source); err != nil {
+		return fmt.Errorf("cannot extract archive file %s: %v", rel, err)
+	}
+	return nil
 }
 
 func manifestPermissionsExplicit(permissions manifestPermissions) bool {
