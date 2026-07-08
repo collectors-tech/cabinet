@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/profile"
+	"github.com/collectors-tech/cabinet/internal/update"
 )
 
 type apiSkillPayload struct {
@@ -22,8 +27,10 @@ type apiSkillPayload struct {
 	GuidedWorkflows []string `json:"guided_workflows"`
 	BuiltIn         bool     `json:"built_in"`
 	Removable       bool     `json:"removable"`
+	Enabled         bool     `json:"enabled"`
 	Executable      bool     `json:"executable"`
 	NextAction      string   `json:"next_action"`
+	Provenance      string   `json:"provenance"`
 	Permissions     struct {
 		LocalWrite      bool `json:"local_write"`
 		Destructive     bool `json:"destructive"`
@@ -173,6 +180,195 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	}
 	if collectionDelete.SafetyLevel != "confirm-required" || !collectionDelete.Permissions.RequiresConfirm || !slices.Contains(collectionDelete.RequiredContext, "collection") {
 		t.Fatalf("expected confirmation-gated Collections delete metadata, got %+v", collectionDelete)
+	}
+}
+
+func TestAgentSkillImportAPIInstallsLocalFolderDisabledAndListsMetadata(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	root := writeAgentSkillImportFixture(t, validAgentSkillImportManifest(`{
+		"id": "cabinet.example.api_imported_writer",
+		"safetyLevel": "confirm-required",
+		"status": "preview-only",
+		"capabilities": ["inventory.item.update"],
+		"guidedWorkflows": ["inventory.item.update"],
+		"uiTargets": ["inventory.item.editor.title"],
+		"permissions": {
+			"cabinetReads": ["inventory.item"],
+			"cabinetWrites": ["inventory.item"],
+			"externalReads": [],
+			"externalWrites": [],
+			"secretAccess": false,
+			"destructive": false
+		},
+		"audit": {
+			"actionTimeline": "records selected inventory item",
+			"requiresConfirmation": true
+		}
+	}`))
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("import status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var importPayload struct {
+		State          string `json:"state"`
+		Provenance     string `json:"provenance"`
+		InstalledState struct {
+			ProfileID string `json:"profile_id"`
+			SkillID   string `json:"skill_id"`
+			Status    string `json:"status"`
+			Enabled   bool   `json:"enabled"`
+		} `json:"installed_state"`
+		Skill apiSkillPayload `json:"skill"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&importPayload); err != nil {
+		t.Fatalf("decode import: %v", err)
+	}
+	if importPayload.State != "installed-disabled" || importPayload.InstalledState.Enabled || importPayload.InstalledState.Status != "disabled" {
+		t.Fatalf("expected disabled import result, got %+v", importPayload)
+	}
+	if importPayload.Provenance != root || importPayload.Skill.Provenance != root {
+		t.Fatalf("expected source provenance, got result=%q skill=%q", importPayload.Provenance, importPayload.Skill.Provenance)
+	}
+
+	listResp := doRequest(t, a, http.MethodGet, "/api/agent/skills?profile_id=profile-a", nil, nil)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var listPayload struct {
+		Skills []apiSkillPayload `json:"skills"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	imported := findAPISkill(listPayload.Skills, "cabinet.example.api_imported_writer")
+	if imported == nil {
+		t.Fatalf("expected imported skill in profile registry")
+	}
+	if imported.Source != "archive" || imported.Status != "disabled" || imported.Executable || imported.Enabled || !imported.Removable || imported.BuiltIn {
+		t.Fatalf("expected disabled removable archive metadata, got %+v", imported)
+	}
+	if imported.Provenance != root || imported.NextAction == "" {
+		t.Fatalf("expected provenance and next action, got %+v", imported)
+	}
+}
+
+func TestAgentSkillImportAPIPersistsInstalledMetadataAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	cfg := config.Config{
+		Addr:           "127.0.0.1:0",
+		DataDir:        base,
+		DBPath:         filepath.Join(base, "cabinet.db"),
+		UpdateChannel:  update.ChannelStable,
+		WebAuthnRPID:   "127.0.0.1",
+		WebAuthnOrigin: "http://127.0.0.1:8080",
+		WebAuthnName:   "Cabinet Test",
+		BackupInterval: 60,
+	}
+	a := newTestAppWithConfig(t, cfg)
+	root := writeAgentSkillImportFixture(t, validAgentSkillImportManifest(`{
+		"id": "cabinet.example.api_imported_restart",
+		"safetyLevel": "confirm-required",
+		"status": "preview-only",
+		"capabilities": ["inventory.item.update"],
+		"guidedWorkflows": ["inventory.item.update"],
+		"uiTargets": ["inventory.item.editor.title"],
+		"permissions": {
+			"cabinetReads": ["inventory.item"],
+			"cabinetWrites": ["inventory.item"],
+			"externalReads": [],
+			"externalWrites": [],
+			"secretAccess": false,
+			"destructive": false
+		},
+		"audit": {
+			"actionTimeline": "records restart-safe local import metadata",
+			"requiresConfirmation": true
+		}
+	}`))
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("import status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	if err := a.close(); err != nil {
+		t.Fatalf("close app before restart: %v", err)
+	}
+
+	restarted := newTestAppWithConfig(t, cfg)
+	listResp := doRequest(t, restarted, http.MethodGet, "/api/agent/skills?profile_id=profile-a", nil, nil)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list after restart status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var listPayload struct {
+		Skills []apiSkillPayload `json:"skills"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode restarted list: %v", err)
+	}
+	imported := findAPISkill(listPayload.Skills, "cabinet.example.api_imported_restart")
+	if imported == nil {
+		t.Fatalf("expected imported skill after app restart")
+	}
+	if imported.Status != "disabled" || imported.Executable || imported.Enabled || imported.Provenance != root {
+		t.Fatalf("expected durable disabled archive metadata after restart, got %+v", imported)
+	}
+}
+
+func TestAgentSkillImportAPIRejectsInvalidFolderWithoutListingSkill(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# missing manifest\n"), 0o644); err != nil {
+		t.Fatalf("write invalid fixture: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid import status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var importPayload struct {
+		State  string   `json:"state"`
+		Errors []string `json:"errors"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&importPayload); err != nil {
+		t.Fatalf("decode invalid import: %v", err)
+	}
+	if importPayload.State != "blocked-invalid-manifest" || !slices.ContainsFunc(importPayload.Errors, func(value string) bool {
+		return strings.Contains(value, "manifest")
+	}) {
+		t.Fatalf("expected manifest validation errors, got %+v", importPayload)
+	}
+
+	listResp := doRequest(t, a, http.MethodGet, "/api/agent/skills?profile_id=profile-a", nil, nil)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var listPayload struct {
+		Skills []apiSkillPayload `json:"skills"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if imported := findAPISkill(listPayload.Skills, "cabinet.example.invalid_import"); imported != nil {
+		t.Fatalf("invalid import must not be listed, got %+v", imported)
 	}
 }
 
@@ -2190,4 +2386,59 @@ func requireBodyOmitsSecret(t *testing.T, body, secret string) {
 	if strings.Contains(body, secret) {
 		t.Fatalf("response leaked secret %q: body=%s", secret, body)
 	}
+}
+
+func writeAgentSkillImportFixture(t *testing.T, manifest string) string {
+	t.Helper()
+	root := t.TempDir()
+	writeAgentSkillImportFile(t, root, "cabinet.skill.json", manifest)
+	writeAgentSkillImportFile(t, root, "README.md", "# Test skill\n")
+	return root
+}
+
+func writeAgentSkillImportFile(t *testing.T, root, path, content string) {
+	t.Helper()
+	fullPath := filepath.Join(root, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("mkdir fixture path: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write fixture file %s: %v", path, err)
+	}
+}
+
+func validAgentSkillImportManifest(overrides string) string {
+	base := `{
+		"schema": "https://collectors.tech/cabinet/schemas/agent-skill.v1.json",
+		"id": "cabinet.example.api_imported_reader",
+		"version": "1.0.0",
+		"displayName": "API imported reader",
+		"description": "Reads Cabinet data without changing state.",
+		"category": "inventory",
+		"source": {"type": "archive"},
+		"safetyLevel": "read-only",
+		"status": "available",
+		"modes": ["in-app", "assistant"],
+		"capabilities": ["navigate.open_surface"],
+		"guidedWorkflows": [],
+		"uiTargets": ["inventory.item.editor.title"],
+		"integrationRequirements": [],
+		"permissions": {
+			"cabinetReads": ["inventory.help"],
+			"cabinetWrites": [],
+			"externalReads": [],
+			"externalWrites": [],
+			"secretAccess": false,
+			"destructive": false
+		},
+		"compatibility": {"cabinetMinVersion": "0.1.0", "schemaVersion": "v1"},
+		"audit": {
+			"actionTimeline": "records local import metadata",
+			"requiresConfirmation": false
+		}
+	}`
+	if strings.TrimSpace(overrides) == "" {
+		return base
+	}
+	return strings.TrimSuffix(strings.TrimSpace(base), "}") + "," + strings.TrimPrefix(strings.TrimSpace(overrides), "{")
 }

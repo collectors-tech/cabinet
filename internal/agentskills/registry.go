@@ -32,6 +32,7 @@ const (
 	SafetyReadOnly        SafetyLevel = "read-only"
 	SafetyPreviewOnly     SafetyLevel = "preview-only"
 	SafetyConfirmRequired SafetyLevel = "confirm-required"
+	SafetyExternalWrite   SafetyLevel = "external-write"
 	SafetyDestructive     SafetyLevel = "destructive"
 )
 
@@ -181,6 +182,29 @@ func (s *InstalledSkillStore) List(profileID string) []InstalledSkillState {
 		out = append(out, cloneInstalledSkillState(state))
 	}
 	slices.SortFunc(out, func(a, b InstalledSkillState) int {
+		return strings.Compare(a.SkillID, b.SkillID)
+	})
+	return out
+}
+
+func (s *InstalledSkillStore) ListAll() []InstalledSkillState {
+	if s == nil {
+		return nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	out := make([]InstalledSkillState, 0)
+	for _, profileStates := range s.states {
+		for _, state := range profileStates {
+			out = append(out, cloneInstalledSkillState(state))
+		}
+	}
+	slices.SortFunc(out, func(a, b InstalledSkillState) int {
+		if cmp := strings.Compare(a.ProfileID, b.ProfileID); cmp != 0 {
+			return cmp
+		}
 		return strings.Compare(a.SkillID, b.SkillID)
 	})
 	return out

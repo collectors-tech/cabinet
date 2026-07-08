@@ -96,6 +96,11 @@ type App struct {
 	startupIsTTY  func() bool
 }
 
+const (
+	agentSkillImportedStateKey  = "agent.skills.imported"
+	agentSkillInstalledStateKey = "agent.skills.installed_state"
+)
+
 func New(cfg config.Config) (*App, error) {
 	if strings.TrimSpace(cfg.ValidationError) != "" {
 		return nil, fmt.Errorf("invalid runtime config: %s", strings.TrimSpace(cfg.ValidationError))
@@ -5196,6 +5201,15 @@ func New(cfg config.Config) (*App, error) {
 			"confirm_apply":    true,
 		})
 	})
+	var agentSkillMu sync.RWMutex
+	agentImportedSkills := loadAgentSkillImportedSkills(ctx, conn)
+	agentSkillStore := agentskills.NewInstalledSkillStore(loadAgentSkillInstalledStates(ctx, conn))
+	agentSkillRegistry := func(profileID string) agentskills.Registry {
+		agentSkillMu.RLock()
+		imported := append([]agentskills.Skill{}, agentImportedSkills...)
+		agentSkillMu.RUnlock()
+		return agentskills.NewProfileRegistry(profileID, imported, agentSkillStore.List(profileID))
+	}
 	mux.HandleFunc("/api/agent/skills", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -5207,11 +5221,83 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
-		registry := agentskills.NewRegistry(nil)
+		registry := agentSkillRegistry(profileID)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"profile_id": profileID,
 			"skills":     registry.List(),
 		})
+	})
+	mux.HandleFunc("/api/agent/skills/import", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID  string `json:"profile_id"`
+			SourceType string `json:"source_type"`
+			Path       string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(req.ProfileID)
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		sourceType := strings.ToLower(strings.TrimSpace(req.SourceType))
+		sourcePath := strings.TrimSpace(req.Path)
+		if sourcePath == "" {
+			http.Error(w, `{"error":"path_required"}`, http.StatusBadRequest)
+			return
+		}
+		if sourceType == "" {
+			if strings.HasSuffix(strings.ToLower(sourcePath), ".cabinet-skill.zip") || strings.HasSuffix(strings.ToLower(sourcePath), ".zip") {
+				sourceType = "zip"
+			} else {
+				sourceType = "folder"
+			}
+		}
+		importer := agentskills.SkillImporter{
+			Registry: agentSkillRegistry(profileID),
+			Store:    agentSkillStore,
+		}
+		var result agentskills.SkillImportResult
+		switch sourceType {
+		case "folder", "directory":
+			result = importer.ImportSkillFolder(profileID, sourcePath, agentskills.ArchiveValidationOptions{})
+		case "zip", "archive":
+			result = importer.ImportSkillZipArchive(profileID, sourcePath, agentskills.ArchiveValidationOptions{})
+		default:
+			http.Error(w, `{"error":"unsupported_source_type"}`, http.StatusBadRequest)
+			return
+		}
+		if result.State == agentskills.ImportInstalledDisabled || result.State == agentskills.ImportInstalledEnabled {
+			agentSkillMu.Lock()
+			replaced := false
+			for i, skill := range agentImportedSkills {
+				if skill.ID == result.Skill.ID {
+					agentImportedSkills[i] = result.Skill
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				agentImportedSkills = append(agentImportedSkills, result.Skill)
+			}
+			if err := persistAgentSkillState(r.Context(), conn, agentImportedSkills, agentSkillStore.ListAll()); err != nil {
+				agentSkillMu.Unlock()
+				http.Error(w, `{"error":"failed_to_persist_imported_skill"}`, http.StatusInternalServerError)
+				return
+			}
+			agentSkillMu.Unlock()
+			_ = json.NewEncoder(w).Encode(result)
+			return
+		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/agent/skills/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -5228,7 +5314,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
-		registry := agentskills.NewRegistry(nil)
+		registry := agentSkillRegistry(req.ProfileID)
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
@@ -5251,7 +5337,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
-		registry := agentskills.NewRegistry(nil)
+		registry := agentSkillRegistry(req.ProfileID)
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
@@ -12147,6 +12233,61 @@ func nonSecretProviderTrace(in map[string]any) map[string]any {
 	out["credential_returned"] = false
 	out["proof_packet"] = "authorized_telegram_openai_external_intake"
 	return out
+}
+
+func loadAgentSkillImportedSkills(ctx context.Context, conn *sql.DB) []agentskills.Skill {
+	var raw string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, agentSkillImportedStateKey).Scan(&raw); err != nil {
+		return nil
+	}
+	var skills []agentskills.Skill
+	if err := json.Unmarshal([]byte(raw), &skills); err != nil {
+		return nil
+	}
+	return skills
+}
+
+func loadAgentSkillInstalledStates(ctx context.Context, conn *sql.DB) []agentskills.InstalledSkillState {
+	var raw string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, agentSkillInstalledStateKey).Scan(&raw); err != nil {
+		return nil
+	}
+	var states []agentskills.InstalledSkillState
+	if err := json.Unmarshal([]byte(raw), &states); err != nil {
+		return nil
+	}
+	return states
+}
+
+func persistAgentSkillState(ctx context.Context, conn *sql.DB, imported []agentskills.Skill, installed []agentskills.InstalledSkillState) error {
+	importedJSON, err := json.Marshal(imported)
+	if err != nil {
+		return fmt.Errorf("encode imported skills: %w", err)
+	}
+	installedJSON, err := json.Marshal(installed)
+	if err != nil {
+		return fmt.Errorf("encode installed skill states: %w", err)
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, agentSkillImportedStateKey, string(importedJSON)); err != nil {
+		return fmt.Errorf("persist imported skills: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, agentSkillInstalledStateKey, string(installedJSON)); err != nil {
+		return fmt.Errorf("persist installed skill states: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (a *App) close() error {

@@ -836,6 +836,14 @@ func TestInstalledSkillStorePersistsProfileScopedState(t *testing.T) {
 	if again[0].ValidationErrors[0] != "missing capability: local.writer" {
 		t.Fatalf("installed skill store must protect validation slices from caller mutation, got %+v", again[0])
 	}
+	allStates := store.ListAll()
+	if len(allStates) != 3 || allStates[0].ProfileID != "profile-a" || allStates[0].SkillID != "local.archive.invalid" || allStates[2].ProfileID != "profile-b" {
+		t.Fatalf("expected deterministic full installed state snapshot, got %+v", allStates)
+	}
+	allStates[0].ValidationErrors[0] = "mutated again"
+	if store.List("profile-a")[0].ValidationErrors[0] != "missing capability: local.writer" {
+		t.Fatalf("installed skill full snapshot must protect validation slices")
+	}
 
 	disabled, err := store.SetEnabled("profile-a", "local.archive.writer", false)
 	if err != nil {
