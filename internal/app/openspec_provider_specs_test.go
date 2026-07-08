@@ -110,7 +110,7 @@ func TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract(t *testing.T
 	registry := string(registryBytes)
 
 	requiredSpecTokens := []string{
-		"INTEGRATION-031",
+		"INTEGRATION-063",
 		"canonical registry definition",
 		"/api/providers/registry",
 		"/api/providers/:id/*",
@@ -140,7 +140,7 @@ func TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract(t *testing.T
 	traceability := string(traceabilityBytes)
 
 	requiredTraceabilityTokens := []string{
-		"`INTEGRATION-031`",
+		"`INTEGRATION-063`",
 		"#1463",
 		"canonical provider registry consumers",
 		"marketplace, storefront/source matcher, browser-auth, chat/AI, notification, and workflow/local provider categories",

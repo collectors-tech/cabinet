@@ -153,7 +153,7 @@ Cabinet SHALL surface integration failures and required user actions through dur
 - **AND** repeated failures for the same provider/action/root cause SHOULD coalesce into an updated event rather than flooding duplicate notifications
 - **AND** resolving the provider issue MUST allow the inbox event to be marked resolved/read without deleting the durable provider-status history
 
-### Requirement INTEGRATION-031: Provider registry MUST be the canonical integration source for app consumers
+### Requirement INTEGRATION-063: Provider registry MUST be the canonical integration source for app consumers
 Cabinet SHALL treat `/api/providers/registry`, `/api/providers/:id/*`, the Add Integration UI list, and the Market Watch provider projection as consumers of one canonical registry definition rather than independent provider catalogs.
 
 #### Scenario: Registry consumers preserve provider category and capability boundaries
