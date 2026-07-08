@@ -50,6 +50,24 @@ type ProviderHealth = {
   updated_at?: string | null
 }
 
+type MarketWatchProviderOption = {
+  value: string
+  label: string
+  category?: string
+  state?: string
+}
+
+type ProviderRegistryEntry = {
+  provider_id?: string
+  display_name?: string
+  provider_category?: string
+  provider_type?: string
+  market_watch_scope?: string
+  state?: string
+  capabilities?: Record<string, boolean>
+  workflow_refs?: string[]
+}
+
 type RunHistoryRecord = {
   id: string
   query_set_id: string
@@ -192,17 +210,81 @@ type ScannerReviewApplyResult = {
   }
 }
 
-const MARKET_WATCH_PROVIDER_OPTIONS = [
-  'ebay',
-  'amazon',
-  'bonzaslotcars',
-  'frontlinehobbies',
-  'hobbytechtoys',
-  'andrewshobbies',
-  'voglers',
-  'acercmodels',
-  'mrtoys',
+const FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS: MarketWatchProviderOption[] = [
+  { value: 'ebay', label: 'eBay', category: 'marketplace' },
+  { value: 'amazon', label: 'Amazon', category: 'marketplace' },
+  {
+    value: 'bonzaslotcars',
+    label: 'bonzaslotcars.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'frontlinehobbies',
+    label: 'frontlinehobbies.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'hobbytechtoys',
+    label: 'hobbytechtoys.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'andrewshobbies',
+    label: 'andrewshobbies.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'voglers',
+    label: 'voglers.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'acercmodels',
+    label: 'acercmodels.com',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'mrtoys',
+    label: 'mrtoys.com.au',
+    category: 'storefront/source matcher',
+  },
 ]
+
+const normalizeProviderOptionValue = (value: string) =>
+  value.trim().toLowerCase()
+
+const marketWatchProviderOptionsFromRegistry = (
+  providers: ProviderRegistryEntry[] | undefined
+) => {
+  const seen = new Set<string>()
+  const options: MarketWatchProviderOption[] = []
+  for (const provider of providers ?? []) {
+    const workflowRefs = provider.workflow_refs ?? []
+    const capabilities = provider.capabilities ?? {}
+    const hasMarketWatchWorkflow = workflowRefs.includes('market_watch.run')
+    const hasMarketWatchCapability =
+      capabilities.search ||
+      capabilities.pricing ||
+      capabilities.stock_observation
+    const value = normalizeProviderOptionValue(
+      provider.market_watch_scope ?? ''
+    )
+    if (!value || !hasMarketWatchWorkflow || !hasMarketWatchCapability) {
+      continue
+    }
+    if (seen.has(value)) {
+      continue
+    }
+    seen.add(value)
+    options.push({
+      value,
+      label: provider.display_name?.trim() || value,
+      category: provider.provider_category,
+      state: provider.state,
+    })
+  }
+  return options.length > 0 ? options : FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS
+}
 
 type ProviderMode = 'single' | 'multi'
 type MarketWatchStatusFilter =
@@ -456,6 +538,9 @@ export function Scanner() {
     'ebay',
     'amazon',
   ])
+  const [marketWatchProviderOptions, setMarketWatchProviderOptions] = useState<
+    MarketWatchProviderOption[]
+  >(FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS)
   const [providerValidation, setProviderValidation] = useState<string | null>(
     null
   )
@@ -511,14 +596,14 @@ export function Scanner() {
     setLoading(true)
     setError(null)
     try {
-      const [querySetsRes, failuresRes, healthRes, runsRes] = await Promise.all(
-        [
+      const [querySetsRes, failuresRes, healthRes, runsRes, registryRes] =
+        await Promise.all([
           fetch('/api/scanner/query-sets'),
           fetch('/api/scanner/failures'),
           fetch('/api/provider/health?provider=ebay'),
           fetch('/api/scanner/runs?limit=25'),
-        ]
-      )
+          fetch('/api/providers/registry'),
+        ])
       if (!querySetsRes.ok) {
         throw new Error(`query_sets_${querySetsRes.status}`)
       }
@@ -541,8 +626,39 @@ export function Scanner() {
             runs?: RunHistoryRecord[]
           })
         : { runs: [] }
+      const registryPayload = registryRes.ok
+        ? ((await registryRes.json()) as {
+            providers?: ProviderRegistryEntry[]
+          })
+        : { providers: undefined }
+      const registryProviderOptions = marketWatchProviderOptionsFromRegistry(
+        registryPayload.providers
+      )
 
       setQuerySets(querySetPayload.query_sets ?? [])
+      setMarketWatchProviderOptions(registryProviderOptions)
+      setSingleProvider((current) => {
+        const currentValue = normalizeProviderOptionValue(current)
+        return registryProviderOptions.some(
+          (option) => option.value === currentValue
+        )
+          ? currentValue
+          : registryProviderOptions[0]?.value || 'ebay'
+      })
+      setMultiProviders((current) => {
+        const registryValues = new Set(
+          registryProviderOptions.map((option) => option.value)
+        )
+        const next = current
+          .map(normalizeProviderOptionValue)
+          .filter((provider) => registryValues.has(provider))
+        return next.length > 0
+          ? Array.from(new Set(next))
+          : registryProviderOptions
+              .slice(0, 2)
+              .map((provider) => provider.value)
+              .filter(Boolean)
+      })
       setFailures(failuresPayload.failures ?? [])
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
@@ -583,6 +699,7 @@ export function Scanner() {
         status: 'unknown',
         state: 'disabled',
       })
+      setMarketWatchProviderOptions(FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS)
       setRunHistory([])
     } finally {
       setLoading(false)
@@ -1975,36 +2092,39 @@ export function Scanner() {
               }}
               data-testid='market-watch-provider-single'
             >
-              {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider}
+              {marketWatchProviderOptions.map((provider) => (
+                <option key={provider.value} value={provider.value}>
+                  {provider.label}
+                  {provider.state === 'disabled' ? ' (disabled)' : ''}
                 </option>
               ))}
             </select>
           ) : (
             <div className='flex flex-wrap gap-2 md:col-span-2'>
-              {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
+              {marketWatchProviderOptions.map((provider) => (
                 <label
-                  key={provider}
+                  key={provider.value}
                   className='inline-flex items-center gap-2 text-sm'
                 >
                   <input
                     type='checkbox'
-                    checked={multiProviders.includes(provider)}
+                    checked={multiProviders.includes(provider.value)}
                     onChange={(event) => {
                       setProviderValidation(null)
                       setMultiProviders((current) => {
                         if (event.target.checked) {
-                          return current.includes(provider)
+                          return current.includes(provider.value)
                             ? current
-                            : [...current, provider]
+                            : [...current, provider.value]
                         }
-                        return current.filter((value) => value !== provider)
+                        return current.filter(
+                          (value) => value !== provider.value
+                        )
                       })
                     }}
-                    data-testid={`market-watch-provider-checkbox-${provider}`}
+                    data-testid={`market-watch-provider-checkbox-${provider.value}`}
                   />
-                  <span>{provider}</span>
+                  <span>{provider.label}</span>
                 </label>
               ))}
             </div>
@@ -2134,9 +2254,9 @@ export function Scanner() {
                   }
                 >
                   <option value='all'>All providers</option>
-                  {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
-                    <option key={provider} value={provider}>
-                      {provider}
+                  {marketWatchProviderOptions.map((provider) => (
+                    <option key={provider.value} value={provider.value}>
+                      {provider.label}
                     </option>
                   ))}
                 </select>
@@ -2876,9 +2996,7 @@ export function Scanner() {
                       aria-label={`Open Market Watch output details for ${querySet.name}`}
                       className='cursor-pointer border-t align-top hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
                       data-testid={`market-watch-query-row-${querySet.id}`}
-                      onDoubleClick={() =>
-                        void openOutputDetails(querySet)
-                      }
+                      onDoubleClick={() => void openOutputDetails(querySet)}
                       onKeyDown={(event) => {
                         if (
                           event.target !== event.currentTarget ||
@@ -2948,9 +3066,7 @@ export function Scanner() {
                             size='sm'
                             variant='outline'
                             data-testid={`market-watch-open-output-${querySet.id}`}
-                            onClick={() =>
-                              void openOutputDetails(querySet)
-                            }
+                            onClick={() => void openOutputDetails(querySet)}
                           >
                             Inspect Output
                           </Button>
