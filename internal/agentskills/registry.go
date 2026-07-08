@@ -124,6 +124,21 @@ type PreviewResponse struct {
 	Target               map[string]any `json:"target,omitempty"`
 }
 
+type RequirementReview struct {
+	SkillID              string                `json:"skill_id"`
+	Status               Status                `json:"status"`
+	SafetyLevel          SafetyLevel           `json:"safety_level"`
+	Executable           bool                  `json:"executable"`
+	Allowed              bool                  `json:"allowed"`
+	ConfirmationRequired bool                  `json:"confirmation_required"`
+	RequiredContext      []string              `json:"required_context"`
+	MissingContext       []string              `json:"missing_context,omitempty"`
+	Permissions          PermissionDeclaration `json:"permissions"`
+	AuditBehavior        string                `json:"audit_behavior"`
+	Blocker              string                `json:"blocker,omitempty"`
+	NextAction           string                `json:"next_action,omitempty"`
+}
+
 func NewRegistry(imported []Skill) Registry {
 	return Registry{
 		builtIns: builtInSkills(),
@@ -295,6 +310,52 @@ func (r Registry) ValidateImportedSkill(skill Skill) error {
 		}
 	}
 	return nil
+}
+
+func (r Registry) ReviewRequirements(req PreviewRequest) (RequirementReview, error) {
+	skill, ok := r.Resolve(strings.TrimSpace(req.SkillID))
+	if !ok {
+		return RequirementReview{}, errors.New("skill_not_found")
+	}
+	params := req.Parameters
+	if params == nil {
+		params = map[string]any{}
+	}
+	missingContext := missingSkillContext(skill.RequiredContext, req, params)
+	review := RequirementReview{
+		SkillID:              skill.ID,
+		Status:               skill.Status,
+		SafetyLevel:          skill.SafetyLevel,
+		Executable:           skill.Executable,
+		Allowed:              skill.Executable && len(missingContext) == 0 && !skill.Permissions.RequiresConfirm,
+		ConfirmationRequired: skill.Permissions.RequiresConfirm,
+		RequiredContext:      append([]string(nil), skill.RequiredContext...),
+		MissingContext:       missingContext,
+		Permissions:          skill.Permissions,
+		AuditBehavior:        skill.AuditBehavior,
+		NextAction:           skill.NextAction,
+	}
+	if len(missingContext) > 0 {
+		review.Blocker = "missing_context"
+		review.Allowed = false
+		if review.NextAction == "" {
+			review.NextAction = "Provide the missing Cabinet context before invoking this skill."
+		}
+		return review, nil
+	}
+	if !skill.Executable {
+		review.Blocker = "skill_not_executable"
+		review.Allowed = false
+		return review, nil
+	}
+	if skill.Permissions.RequiresConfirm {
+		review.Blocker = "confirmation_required"
+		review.Allowed = false
+		if review.NextAction == "" {
+			review.NextAction = "Review the preview and confirm before Cabinet applies this skill."
+		}
+	}
+	return review, nil
 }
 
 func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
@@ -952,6 +1013,73 @@ func previewTarget(params map[string]any, keys ...string) map[string]any {
 		return nil
 	}
 	return target
+}
+
+func missingSkillContext(required []string, req PreviewRequest, params map[string]any) []string {
+	missing := []string{}
+	for _, context := range required {
+		context = strings.TrimSpace(context)
+		if context == "" || contextProvided(context, req, params) {
+			continue
+		}
+		missing = append(missing, context)
+	}
+	return missing
+}
+
+func contextProvided(context string, req PreviewRequest, params map[string]any) bool {
+	switch context {
+	case "profile":
+		return strings.TrimSpace(req.ProfileID) != "" || hasAnyParam(params, "profile_id")
+	case "workspace":
+		return hasAnyParam(params, "workspace_id", "workspace")
+	case "thread":
+		return strings.TrimSpace(req.SourceThreadID) != "" || hasAnyParam(params, "thread_id")
+	case "provider":
+		return hasAnyParam(params, "provider_id", "provider_name", "provider")
+	case "selected_item", "target_item", "item_details", "wanted_item_details":
+		return hasAnyParam(params, "item_id", "selected_item", "target_item", "title", "part_number")
+	case "selected_media":
+		return hasAnyParam(params, "media_id", "selected_media", "attachment_id", "source_url")
+	case "collection":
+		return hasAnyParam(params, "collection_name", "collection")
+	case "wishlist_entry":
+		return hasAnyParam(params, "wishlist_entry_id", "entry_id", "wishlist_entry")
+	case "purchase_details", "purchase_source":
+		return hasAnyParam(params, "purchase_source", "purchase_details", "order_id", "line_item_id")
+	case "target_order":
+		return hasAnyParam(params, "order_id", "target_order")
+	case "discovery_result":
+		return hasAnyParam(params, "result_id", "discovery_result", "candidate_id")
+	case "media":
+		return hasAnyParam(params, "media_id", "media")
+	case "settings.profile":
+		return hasAnyParam(params, "profile_id", "setting_key", "settings_profile")
+	case "settings.appearance":
+		return hasAnyParam(params, "setting_key", "appearance")
+	case "account":
+		return hasAnyParam(params, "account_id", "account")
+	case "storage":
+		return hasAnyParam(params, "storage", "backup_path", "file_path")
+	case "admin_session":
+		return hasAnyParam(params, "admin_session", "admin", "target_user", "target_email")
+	default:
+		return hasAnyParam(params, context)
+	}
+}
+
+func hasAnyParam(params map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		value, ok := params[key]
+		if !ok || value == nil {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func stringParam(params map[string]any, key string) string {
