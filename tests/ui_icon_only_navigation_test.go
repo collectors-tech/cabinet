@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestPrimaryNavigationLinksExposeVisibleLabelsAndAccessibleCollapsedState(t *testing.T) {
+func TestPrimaryNavigationLinksDefaultToCompactAccessibleIconRail(t *testing.T) {
 	root := repoRoot(t)
 	navGroupPath := filepath.Join(root, "ui.web", "src", "components", "layout", "nav-group.tsx")
 	sourceBytes, err := os.ReadFile(navGroupPath)
@@ -20,13 +20,23 @@ func TestPrimaryNavigationLinksExposeVisibleLabelsAndAccessibleCollapsedState(t 
 		t.Fatalf("primary nav links must expose item.title as a stable aria-label")
 	}
 	if !strings.Contains(source, "data-testid={`sidebar-nav-label-${itemKey}`}") {
-		t.Fatalf("expanded primary nav links must render the visible sidebar-nav-label span")
+		t.Fatalf("primary nav links must keep a testable visible-label branch when users expand the sidebar")
 	}
 	if !strings.Contains(source, "!isIconOnly ?") {
 		t.Fatalf("primary nav links must still hide labels in collapsed desktop icon-only state")
 	}
 	if !strings.Contains(source, "justify-center") {
 		t.Fatalf("primary nav links must center icon-only controls in their row")
+	}
+
+	layoutPath := filepath.Join(root, "ui.web", "src", "components", "layout", "authenticated-layout.tsx")
+	layoutBytes, err := os.ReadFile(layoutPath)
+	if err != nil {
+		t.Fatalf("read authenticated layout source: %v", err)
+	}
+	layoutSource := string(layoutBytes)
+	if !strings.Contains(layoutSource, "getCookie('sidebar_state') === 'true'") {
+		t.Fatalf("authenticated shell must default to compact icon rail unless the user explicitly saved expanded sidebar state")
 	}
 }
 

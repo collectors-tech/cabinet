@@ -16,7 +16,7 @@ type AuthenticatedLayoutProps = {
 }
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
-  const defaultOpen = getCookie('sidebar_state') !== 'false'
+  const defaultOpen = getCookie('sidebar_state') === 'true'
   const location = useLocation()
 
   useEffect(() => {
