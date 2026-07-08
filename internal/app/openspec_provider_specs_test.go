@@ -134,3 +134,43 @@ func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing
 		}
 	}
 }
+
+func TestBigCommerceVoglersIssue1497Traceability(t *testing.T) {
+	t.Parallel()
+
+	familySpecBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-api-families/spec.md")
+	if err != nil {
+		t.Fatalf("read provider family spec: %v", err)
+	}
+	familySpec := string(familySpecBytes)
+	for _, token := range []string{
+		"PROVIDER-FAMILY-006",
+		"BigCommerce public/storefront-access run",
+		"BigCommerce token-enabled run",
+		"storefront-accessible endpoints/content paths",
+		"capability limits",
+	} {
+		if !strings.Contains(familySpec, token) {
+			t.Fatalf("provider family spec missing #1497 BigCommerce token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"`PROVIDER-FAMILY-006`",
+		"#1497",
+		"Voglers",
+		"bigcommerce_storefront_success.json",
+		"bigcommerce_graphql_stock_success.json",
+		"TestShoppingProviderFixturesNormalizeSharedCandidateShape",
+		"TestShoppingProviderFixturesPreserveAvailabilitySignals",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1497 BigCommerce coverage token: %s", token)
+		}
+	}
+}
