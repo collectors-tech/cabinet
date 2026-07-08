@@ -419,6 +419,9 @@ export function NotificationInbox() {
     const active = allItems.filter(
       (item) => normalizeStatus(item.status) !== 'archived'
     )
+    const hidden = allItems.filter(
+      (item) => normalizeStatus(item.status) === 'archived'
+    )
     return {
       all: active.length,
       unread: active.filter((item) => normalizeStatus(item.status) === 'unread')
@@ -427,6 +430,7 @@ export function NotificationInbox() {
         .length,
       system: active.filter((item) => categoryForItem(item) === 'system')
         .length,
+      hidden: hidden.length,
     }
   }, [allItems])
 
@@ -531,46 +535,31 @@ export function NotificationInbox() {
         </div>
       </Header>
       <main
-        className='flex h-[calc(100svh-4rem)] min-h-0 flex-col gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:px-8'
+        className='flex h-[calc(100svh-4rem)] min-h-0 flex-col overflow-hidden bg-slate-950 px-4 py-4 text-slate-100 sm:px-6 lg:px-8'
         data-testid='notification-inbox-page'
         data-layout='dense-two-pane'
       >
-        <section className='space-y-3'>
-          <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-            {(['all', 'unread', 'assistant', 'system'] as InboxFilter[]).map(
-              (key) => (
-                <div
-                  key={key}
-                  className='rounded-md border bg-card px-3 py-2'
-                  data-testid={`notification-inbox-count-${key}`}
-                >
-                  <p className='text-xs font-medium text-muted-foreground'>
-                    {filterLabels[key]}
-                  </p>
-                  <p className='text-2xl font-semibold'>{counts[key]}</p>
-                </div>
-              )
-            )}
-          </div>
-        </section>
-
         <section className='flex min-h-0 flex-1 flex-col gap-3'>
-          <div className='flex flex-col gap-3 rounded-md border bg-card p-3 xl:flex-row xl:items-center xl:justify-between'>
+          <div className='flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900 p-3 xl:flex-row xl:items-center xl:justify-between'>
             <Tabs
               value={filter}
               onValueChange={(value) => setFilter(value as InboxFilter)}
             >
-              <TabsList data-testid='notification-inbox-filters'>
+              <TabsList
+                className='bg-slate-950 text-slate-300'
+                data-testid='notification-inbox-filters'
+              >
                 {(
                   ['all', 'unread', 'assistant', 'system'] as InboxFilter[]
                 ).map((key) => (
                   <TabsTrigger
                     key={key}
                     value={key}
+                    className='data-[state=active]:bg-slate-800 data-[state=active]:text-slate-50'
                     data-testid={`notification-inbox-filter-${key}`}
                   >
                     <span>{filterLabels[key]}</span>
-                    <span className='ml-1 text-xs text-muted-foreground'>
+                    <span className='ml-1 text-xs text-slate-400'>
                       {counts[key]}
                     </span>
                   </TabsTrigger>
@@ -583,11 +572,11 @@ export function NotificationInbox() {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder='Search notifications'
-                className='pl-9'
+                className='border-slate-700 bg-slate-950 pl-9 text-slate-100 placeholder:text-slate-500'
                 data-testid='notification-inbox-search'
               />
             </div>
-            <div className='flex flex-wrap items-center gap-2'>
+            <div className='flex flex-wrap items-center gap-2 text-slate-200'>
               <label
                 className='flex items-center gap-2 text-sm'
                 data-testid='notification-inbox-select-all'
@@ -689,12 +678,33 @@ export function NotificationInbox() {
 
           <div className='grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]'>
             <div
-              className='min-h-0 overflow-y-auto pr-1'
+              className='flex min-h-0 flex-col overflow-hidden rounded-md border border-slate-800 bg-slate-900'
               data-testid='notification-inbox-list-pane'
             >
+              <div className='grid grid-cols-2 border-b border-slate-800 sm:grid-cols-4'>
+                {[
+                  ['visible', counts.all],
+                  ['unread', counts.unread],
+                  ['system', counts.system],
+                  ['hidden', counts.hidden],
+                ].map(([key, value]) => (
+                  <div
+                    key={key}
+                    className='border-r border-slate-800 px-3 py-2 last:border-r-0'
+                    data-testid={`notification-inbox-stat-${key}`}
+                  >
+                    <p className='text-[11px] font-medium uppercase text-slate-500'>
+                      {key}
+                    </p>
+                    <p className='text-lg font-semibold text-slate-100'>
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
               {loading ? (
                 <div
-                  className='rounded-md border bg-card p-6 text-sm text-muted-foreground'
+                  className='m-3 rounded-md border border-slate-800 bg-slate-950 p-6 text-sm text-slate-400'
                   data-testid='notification-inbox-loading-state'
                 >
                   Loading Notification Inbox...
@@ -703,10 +713,10 @@ export function NotificationInbox() {
 
               {!loading && visibleItems.length === 0 ? (
                 <div
-                  className='rounded-md border bg-card p-6 text-sm text-muted-foreground'
+                  className='m-3 rounded-md border border-slate-800 bg-slate-950 p-6 text-sm text-slate-400'
                   data-testid='notification-inbox-empty-state'
                 >
-                  <p className='font-medium text-foreground'>
+                  <p className='font-medium text-slate-100'>
                     {filterLabels[filter]} is clear.
                   </p>
                   <p>{emptyStateByFilter[filter]}</p>
@@ -715,7 +725,7 @@ export function NotificationInbox() {
 
               {!loading && visibleItems.length > 0 ? (
                 <div
-                  className='min-h-[520px] space-y-2'
+                  className='min-h-0 flex-1 overflow-y-auto'
                   data-testid='notification-inbox-list'
                 >
                   {visibleItems.map((item) => {
@@ -728,55 +738,43 @@ export function NotificationInbox() {
                       <article
                         key={item.id}
                         className={cn(
-                          'rounded-md border bg-card p-3 transition-colors',
-                          !read && 'border-primary/40 bg-primary/5',
+                          'border-b border-slate-800 px-3 py-2 transition-colors last:border-b-0 hover:bg-slate-800/70',
+                          !read && 'bg-cyan-950/30',
                           status === 'archived' &&
-                            'border-dashed bg-muted/40 text-muted-foreground',
+                            'border-dashed bg-slate-950/70 text-slate-500',
                           selectedItem?.id === item.id &&
-                            'ring-2 ring-primary/30'
+                            'bg-slate-800 ring-1 ring-cyan-500/60'
                         )}
                         onClick={() => setSelectedItemId(item.id)}
                         data-testid='notification-inbox-row'
                         data-status={status}
                         data-category={categoryForItem(item)}
                       >
-                        <div className='grid gap-3 md:grid-cols-[auto_1fr_auto] md:items-start'>
+                        <div className='grid gap-2 md:grid-cols-[auto_minmax(0,1.4fr)_auto] md:items-center'>
                           <Checkbox
                             checked={selected}
                             aria-label={`Select ${item.title}`}
                             onCheckedChange={() => toggleSelection(item.id)}
                             data-testid='notification-inbox-row-select'
                           />
-                          <div className='min-w-0 space-y-2'>
-                            <div className='flex flex-wrap items-center gap-2'>
+                          <div className='min-w-0 space-y-1'>
+                            <div className='flex min-w-0 items-center gap-2'>
                               {read ? (
-                                <MailOpen className='h-4 w-4 text-muted-foreground' />
+                                <MailOpen className='h-4 w-4 shrink-0 text-slate-500' />
                               ) : (
-                                <Mail className='h-4 w-4 text-primary' />
+                                <Mail className='h-4 w-4 shrink-0 text-cyan-300' />
                               )}
                               <h3
-                                className='font-semibold'
+                                className='truncate text-sm font-semibold text-slate-100'
                                 data-testid='notification-inbox-row-title'
                               >
                                 {item.title}
                               </h3>
-                              <Badge
-                                variant={read ? 'outline' : 'secondary'}
-                                data-testid='notification-inbox-row-status'
-                              >
-                                {status}
-                              </Badge>
-                              <Badge
-                                variant='outline'
-                                data-testid='notification-inbox-row-category'
-                              >
-                                {categoryForItem(item)}
-                              </Badge>
                             </div>
-                            <p className='text-sm text-muted-foreground'>
+                            <p className='truncate text-xs text-slate-400'>
                               {item.summary}
                             </p>
-                            <div className='flex flex-wrap gap-3 text-xs text-muted-foreground'>
+                            <div className='flex flex-wrap gap-3 text-[11px] text-slate-500'>
                               <span data-testid='notification-inbox-row-source'>
                                 {item.metadata?.source_label ??
                                   sourceLabel(item.source)}
@@ -794,11 +792,25 @@ export function NotificationInbox() {
                               ) : null}
                             </div>
                           </div>
-                          <div className='flex flex-wrap justify-start gap-2 md:justify-end'>
+                          <div className='flex flex-wrap items-center justify-start gap-2 md:justify-end'>
+                            <Badge
+                              variant={read ? 'outline' : 'secondary'}
+                              className='capitalize'
+                              data-testid='notification-inbox-row-status'
+                            >
+                              {status}
+                            </Badge>
+                            <Badge
+                              variant='outline'
+                              className='capitalize'
+                              data-testid='notification-inbox-row-category'
+                            >
+                              {categoryForItem(item)}
+                            </Badge>
                             <Button
                               type='button'
                               variant='outline'
-                              size='sm'
+                              size='icon'
                               onClick={() =>
                                 void updateItems(
                                   [item.id],
@@ -811,33 +823,45 @@ export function NotificationInbox() {
                                   ? 'notification-inbox-row-unread'
                                   : 'notification-inbox-row-read'
                               }
+                              aria-label={
+                                read
+                                  ? `Mark ${item.title} unread`
+                                  : `Mark ${item.title} read`
+                              }
+                              title={
+                                read
+                                  ? `Mark ${item.title} unread`
+                                  : `Mark ${item.title} read`
+                              }
                             >
                               {read ? (
                                 <Mail className='h-4 w-4' />
                               ) : (
                                 <MailOpen className='h-4 w-4' />
                               )}
-                              {read ? 'Unread' : 'Read'}
                             </Button>
                             <Button
                               type='button'
                               variant='outline'
-                              size='sm'
+                              size='icon'
                               onClick={() =>
                                 void updateItems([item.id], 'archived')
                               }
                               disabled={updating}
                               data-testid='notification-inbox-row-archive'
+                              aria-label={`Archive ${item.title}`}
+                              title={`Archive ${item.title}`}
                             >
                               <Archive className='h-4 w-4' />
-                              Archive
                             </Button>
                             <Button
                               type='button'
                               variant='outline'
-                              size='sm'
+                              size='icon'
                               onClick={() => toggleExpanded(item.id)}
                               aria-expanded={expanded}
+                              aria-label={`Toggle details for ${item.title}`}
+                              title={`Toggle details for ${item.title}`}
                               data-testid='notification-inbox-row-expand'
                             >
                               {expanded ? (
@@ -845,13 +869,12 @@ export function NotificationInbox() {
                               ) : (
                                 <ChevronDown className='h-4 w-4' />
                               )}
-                              Details
                             </Button>
                           </div>
                         </div>
                         {expanded ? (
                           <div
-                            className='mt-3 rounded-md border bg-background p-3 text-sm'
+                            className='mt-2 rounded-md border border-slate-700 bg-slate-950 p-3 text-sm text-slate-300'
                             data-testid='notification-inbox-row-detail'
                           >
                             <p>
@@ -859,7 +882,7 @@ export function NotificationInbox() {
                                 item.metadata?.confirmation_state ||
                                 item.summary}
                             </p>
-                            <p className='mt-2 text-xs text-muted-foreground'>
+                            <p className='mt-2 text-xs text-slate-500'>
                               Source:{' '}
                               {item.metadata?.source_label ??
                                 sourceLabel(item.source)}
@@ -871,7 +894,7 @@ export function NotificationInbox() {
                   })}
                 </div>
               ) : null}
-              <div className='mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground'>
+              <div className='flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-400'>
                 <p data-testid='notification-inbox-total-count'>
                   {filteredItems.length} total messages
                 </p>
@@ -912,55 +935,96 @@ export function NotificationInbox() {
               </div>
             </div>
             <aside
-              className='min-h-0 overflow-y-auto rounded-md border bg-card p-4'
+              className='min-h-0 overflow-y-auto rounded-md border border-slate-800 bg-slate-900 p-4'
               data-testid='notification-inbox-detail-pane'
             >
               {selectedItem ? (
                 <div className='space-y-4'>
-                  <div className='space-y-2'>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <Badge
-                        variant={
-                          normalizeStatus(selectedItem.status) === 'read'
-                            ? 'outline'
-                            : 'secondary'
-                        }
-                      >
-                        {normalizeStatus(selectedItem.status)}
-                      </Badge>
-                      <Badge variant='outline'>
-                        {categoryForItem(selectedItem)}
-                      </Badge>
+                  <div className='space-y-2 border-b border-slate-800 pb-4'>
+                    <div className='flex items-start justify-between gap-3'>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <Badge
+                          variant={
+                            normalizeStatus(selectedItem.status) === 'read'
+                              ? 'outline'
+                              : 'secondary'
+                          }
+                          className='capitalize'
+                        >
+                          {normalizeStatus(selectedItem.status)}
+                        </Badge>
+                        <Badge variant='outline' className='capitalize'>
+                          {categoryForItem(selectedItem)}
+                        </Badge>
+                      </div>
+                      <div className='flex shrink-0 gap-2'>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='icon'
+                          disabled={updating}
+                          onClick={() =>
+                            void updateItems([selectedItem.id], 'read')
+                          }
+                          data-testid='notification-inbox-detail-mark-handled'
+                          aria-label='Mark handled'
+                          title='Mark handled'
+                        >
+                          <CheckCheck className='h-4 w-4' />
+                          <span className='sr-only'>Mark handled</span>
+                        </Button>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='icon'
+                          disabled={updating}
+                          onClick={() =>
+                            void updateItems([selectedItem.id], 'archived')
+                          }
+                          data-testid='notification-inbox-detail-delete'
+                          aria-label='Delete notification'
+                          title='Delete notification'
+                        >
+                          <Trash2 className='h-4 w-4' />
+                          <span className='sr-only'>Delete</span>
+                        </Button>
+                      </div>
                     </div>
-                    <h2 className='text-lg font-semibold'>
+                    <h2 className='text-lg font-semibold text-slate-100'>
                       {selectedItem.title}
                     </h2>
-                    <p className='text-sm text-muted-foreground'>
+                    <p className='text-sm text-slate-400'>
                       {selectedItem.summary}
                     </p>
                   </div>
-                  <div className='space-y-2 text-sm'>
+                  <div className='rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300'>
+                    <p className='mb-2 text-xs font-medium uppercase text-slate-500'>
+                      Details
+                    </p>
                     <p>
                       {selectedItem.metadata?.detail ||
                         selectedItem.metadata?.confirmation_state ||
                         selectedItem.summary}
                     </p>
-                    <dl className='grid gap-2 text-xs text-muted-foreground'>
+                    <dl className='mt-3 grid gap-2 text-xs text-slate-500'>
                       <div>
-                        <dt className='font-medium text-foreground'>Source</dt>
+                        <dt className='font-medium text-slate-300'>Source</dt>
                         <dd>
                           {selectedItem.metadata?.source_label ??
                             sourceLabel(selectedItem.source)}
                         </dd>
                       </div>
                       <div>
-                        <dt className='font-medium text-foreground'>Created</dt>
+                        <dt className='font-medium text-slate-300'>Created</dt>
                         <dd>{formatTimestamp(selectedItem.created_at)}</dd>
                       </div>
                     </dl>
                   </div>
                   {targetLink(selectedItem) ? (
-                    <div className='flex flex-wrap gap-2'>
+                    <div className='rounded-md border border-slate-800 bg-slate-950 p-3'>
+                      <p className='mb-2 text-xs font-medium uppercase text-slate-500'>
+                        Action
+                      </p>
                       <Button asChild variant='outline' size='sm'>
                         <a href={targetLink(selectedItem)?.href}>
                           <ExternalLink className='h-4 w-4' />
@@ -969,40 +1033,14 @@ export function NotificationInbox() {
                       </Button>
                     </div>
                   ) : null}
-                  <div className='flex flex-wrap gap-2'>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='sm'
-                      disabled={updating}
-                      onClick={() => void updateItems([selectedItem.id], 'read')}
-                      data-testid='notification-inbox-detail-mark-handled'
-                    >
-                      <CheckCheck className='h-4 w-4' />
-                      Mark handled
-                    </Button>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='sm'
-                      disabled={updating}
-                      onClick={() =>
-                        void updateItems([selectedItem.id], 'archived')
-                      }
-                      data-testid='notification-inbox-detail-delete'
-                    >
-                      <Trash2 className='h-4 w-4' />
-                      Delete
-                    </Button>
-                  </div>
                 </div>
               ) : (
                 <div
-                  className='flex min-h-60 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground'
+                  className='flex min-h-60 flex-col items-center justify-center gap-3 text-center text-sm text-slate-400'
                   data-testid='notification-inbox-detail-empty'
                 >
                   <Bell className='h-10 w-10' />
-                  <p className='font-medium text-foreground'>
+                  <p className='font-medium text-slate-100'>
                     No notification selected
                   </p>
                   <p>Select a notification to inspect its details.</p>
