@@ -6,6 +6,7 @@ type integrationProviderManifest struct {
 	ProviderID        string
 	DisplayName       string
 	BaseDomain        string
+	MarketWatchScope  string
 	ProviderCategory  string
 	ProviderType      string
 	APIFamily         string
@@ -42,6 +43,9 @@ func (m integrationProviderManifest) payload() map[string]any {
 	if strings.TrimSpace(m.ConfigSchemaRef) != "" {
 		payload["config_schema_ref"] = m.ConfigSchemaRef
 	}
+	if strings.TrimSpace(m.MarketWatchScope) != "" {
+		payload["market_watch_scope"] = strings.TrimSpace(m.MarketWatchScope)
+	}
 	return payload
 }
 
@@ -59,6 +63,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 			ProviderID:        "openai",
 			DisplayName:       "OpenAI / ChatGPT",
 			BaseDomain:        "platform.openai.com",
+			MarketWatchScope:  "",
 			ProviderCategory:  "chat/AI",
 			ProviderType:      "assistant",
 			APIFamily:         "ai_provider",
@@ -85,6 +90,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 			ProviderID:        "telegram",
 			DisplayName:       "Telegram",
 			BaseDomain:        "telegram.org",
+			MarketWatchScope:  "",
 			ProviderCategory:  "notification",
 			ProviderType:      "messaging",
 			APIFamily:         "messaging_channel",
@@ -109,6 +115,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 			ProviderID:        "ebay",
 			DisplayName:       "eBay",
 			BaseDomain:        "ebay.com",
+			MarketWatchScope:  "ebay",
 			ProviderCategory:  "marketplace",
 			ProviderType:      "marketplace",
 			APIFamily:         "official_api",
@@ -132,6 +139,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 			ProviderID:        "amazon",
 			DisplayName:       "Amazon",
 			BaseDomain:        "amazon.com",
+			MarketWatchScope:  "amazon",
 			ProviderCategory:  "marketplace",
 			ProviderType:      "marketplace",
 			APIFamily:         "official_api",
@@ -190,6 +198,7 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 		ProviderID:        "au-webshop-" + strings.ReplaceAll(domain, ".", "-"),
 		DisplayName:       domain,
 		BaseDomain:        domain,
+		MarketWatchScope:  marketWatchScopeForAUWebshopDomain(domain),
 		ProviderCategory:  "storefront/source matcher",
 		ProviderType:      "retailer",
 		APIFamily:         apiFamily,
@@ -208,5 +217,26 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 			"health":            true,
 		},
 		SetupInstructions: "Webshop ingestion uses crawl parsing and does not require API credentials.",
+	}
+}
+
+func marketWatchScopeForAUWebshopDomain(domain string) string {
+	switch normalizeProviderDomain(domain) {
+	case "bonzaslotcars.com.au":
+		return "bonzaslotcars"
+	case "frontlinehobbies.com.au":
+		return "frontlinehobbies"
+	case "hobbytechtoys.com.au":
+		return "hobbytechtoys"
+	case "andrewshobbies.com.au":
+		return "andrewshobbies"
+	case "voglers.com.au":
+		return "voglers"
+	case "acercmodels.com":
+		return "acercmodels"
+	case "mrtoys.com.au":
+		return "mrtoys"
+	default:
+		return normalizeProviderDomain(domain)
 	}
 }

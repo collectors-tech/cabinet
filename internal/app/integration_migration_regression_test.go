@@ -183,3 +183,66 @@ func TestProviderRegistryProjectsCanonicalManifestCategories(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderRegistryProjectsMarketWatchProviderScopes(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"ProviderManifestMarketWatchProjection"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	for providerID, wantScope := range map[string]string{
+		"ebay":                               "ebay",
+		"amazon":                             "amazon",
+		"au-webshop-bonzaslotcars-com-au":    "bonzaslotcars",
+		"au-webshop-frontlinehobbies-com-au": "frontlinehobbies",
+		"au-webshop-hobbytechtoys-com-au":    "hobbytechtoys",
+		"au-webshop-voglers-com-au":          "voglers",
+		"au-webshop-mrtoys-com-au":           "mrtoys",
+	} {
+		provider := findRegistryProvider(payload.Providers, providerID)
+		if provider == nil {
+			t.Fatalf("provider %q missing from registry payload: %+v", providerID, payload.Providers)
+		}
+		if got := fmt.Sprintf("%v", provider["market_watch_scope"]); got != wantScope {
+			t.Fatalf("provider %s market_watch_scope got %q want %q: %+v", providerID, got, wantScope, provider)
+		}
+		workflowRefs, ok := provider["workflow_refs"].([]any)
+		if !ok {
+			t.Fatalf("provider %s workflow_refs got %T: %+v", providerID, provider["workflow_refs"], provider)
+		}
+		foundMarketWatchWorkflow := false
+		for _, ref := range workflowRefs {
+			if fmt.Sprintf("%v", ref) == "market_watch.run" {
+				foundMarketWatchWorkflow = true
+				break
+			}
+		}
+		if !foundMarketWatchWorkflow {
+			t.Fatalf("provider %s must advertise market_watch.run for UI provider projection: %+v", providerID, workflowRefs)
+		}
+	}
+}

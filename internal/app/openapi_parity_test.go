@@ -729,6 +729,8 @@ func TestOpenAPIDocumentsEbayRegistrySetupReadinessContract(t *testing.T) {
 	}
 	for _, token := range []string{
 		"provider_id: { type: string, example: ebay }",
+		"market_watch_scope:",
+		"Provider-scope value Market Watch saves in query sets for this manifest entry.",
 		"has_token:",
 		"$ref: \"#/components/schemas/EbayProviderSetupStatus\"",
 		"setup_status:",

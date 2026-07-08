@@ -624,6 +624,29 @@ func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) 
 	}
 }
 
+func TestMarketWatchProviderControlsUseProviderRegistryContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/scanner/index.tsx")
+	if err != nil {
+		t.Fatalf("read scanner feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"/api/providers/registry",
+		"marketWatchProviderOptionsFromRegistry",
+		"market_watch_scope",
+		"workflowRefs.includes('market_watch.run')",
+		"setMarketWatchProviderOptions(registryProviderOptions)",
+		"marketWatchProviderOptions.map((provider) =>",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("Market Watch provider registry contract missing token: %s", token)
+		}
+	}
+}
+
 func TestIntegrationsEbaySetupStatusPanelContract(t *testing.T) {
 	t.Parallel()
 

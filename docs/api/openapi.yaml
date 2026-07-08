@@ -3420,6 +3420,7 @@ components:
         providers:
           - provider_id: ebay
             display_name: eBay
+            market_watch_scope: ebay
             auth_mode: api_key
             has_token: true
             state: ready
@@ -3438,6 +3439,10 @@ components:
         provider_id: { type: string, example: ebay }
         display_name: { type: string, example: eBay }
         base_domain: { type: string, example: ebay.com }
+        market_watch_scope:
+          type: string
+          description: Provider-scope value Market Watch saves in query sets for this manifest entry.
+          example: ebay
         api_family: { type: string, example: official_api }
         api_support_profile: { type: string, example: rest_v1 }
         active_mode: { type: string, example: official_api }
