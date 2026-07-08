@@ -59,13 +59,23 @@ type CaptureCallbackRequest struct {
 }
 
 type AgentTextRequest struct {
-	SenderID       string         `json:"sender_id"`
-	ChatID         string         `json:"chat_id"`
-	MessageID      string         `json:"message_id"`
-	Text           string         `json:"text"`
-	SkillID        string         `json:"skill_id,omitempty"`
-	Parameters     map[string]any `json:"parameters,omitempty"`
-	SourceMetadata map[string]any `json:"source_metadata,omitempty"`
+	SenderID       string                  `json:"sender_id"`
+	ChatID         string                  `json:"chat_id"`
+	MessageID      string                  `json:"message_id"`
+	Text           string                  `json:"text"`
+	SkillID        string                  `json:"skill_id,omitempty"`
+	Parameters     map[string]any          `json:"parameters,omitempty"`
+	Media          []AgentTextMediaRequest `json:"media,omitempty"`
+	SourceMetadata map[string]any          `json:"source_metadata,omitempty"`
+}
+
+type AgentTextMediaRequest struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id,omitempty"`
+	FileSize     int    `json:"file_size,omitempty"`
+	Filename     string `json:"filename,omitempty"`
+	MIMEType     string `json:"mime_type,omitempty"`
+	Kind         string `json:"kind,omitempty"`
 }
 
 type AgentTextCallbackRequest struct {
@@ -102,7 +112,7 @@ func CabinetRequestFromUpdate(update Update) (CabinetRequest, error) {
 		return CabinetRequest{Path: CaptureCallbackPath, Body: body}, nil
 	}
 	if update.Message != nil {
-		if isAgentTextCommand(update.Message.Text) {
+		if isAgentTextCommand(agentTextCommandSource(update.Message)) {
 			body := agentTextRequestFromMessage(update.UpdateID, update.Message)
 			if body.SenderID == "" || body.ChatID == "" || body.MessageID == "" || body.Text == "" {
 				return CabinetRequest{}, fmt.Errorf("telegram agent text sender, chat, message, and text are required")
@@ -553,8 +563,18 @@ func isAgentTextCommand(text string) bool {
 	return lower == "/agent" || strings.HasPrefix(lower, "/agent ") || strings.HasPrefix(lower, "agent:")
 }
 
+func agentTextCommandSource(message *WebhookMessage) string {
+	if message == nil {
+		return ""
+	}
+	if text := strings.TrimSpace(message.Text); text != "" {
+		return text
+	}
+	return strings.TrimSpace(message.Caption)
+}
+
 func agentTextRequestFromMessage(updateID int64, message *WebhookMessage) AgentTextRequest {
-	commandText := strings.TrimSpace(message.Text)
+	commandText := strings.TrimSpace(agentTextCommandSource(message))
 	commandText = strings.TrimSpace(strings.TrimPrefix(commandText, "/agent"))
 	if strings.HasPrefix(strings.ToLower(commandText), "agent:") {
 		commandText = strings.TrimSpace(commandText[len("agent:"):])
@@ -567,11 +587,67 @@ func agentTextRequestFromMessage(updateID int64, message *WebhookMessage) AgentT
 		Text:       commandText,
 		SkillID:    skillID,
 		Parameters: params,
+		Media:      agentTextMediaRequestsFromMessage(message),
 		SourceMetadata: map[string]any{
 			"update_id": updateID,
 			"command":   "agent",
 		},
 	}
+}
+
+func agentTextMediaRequestsFromMessage(message *WebhookMessage) []AgentTextMediaRequest {
+	if message == nil {
+		return nil
+	}
+	media := []AgentTextMediaRequest{}
+	if photo := largestAgentTextPhoto(message.Photo); photo.FileID != "" {
+		filename := strings.TrimSpace(photo.FileUniqueID)
+		if filename == "" {
+			filename = strings.TrimSpace(photo.FileID)
+		}
+		media = append(media, AgentTextMediaRequest{
+			FileID:       strings.TrimSpace(photo.FileID),
+			FileUniqueID: strings.TrimSpace(photo.FileUniqueID),
+			FileSize:     photo.FileSize,
+			Filename:     filename + ".jpg",
+			MIMEType:     "image/jpeg",
+			Kind:         "photo",
+		})
+	}
+	if doc := message.Document; doc != nil && strings.HasPrefix(strings.ToLower(strings.TrimSpace(doc.MIMEType)), "image/") {
+		filename := strings.TrimSpace(doc.FileName)
+		if filename == "" {
+			filename = strings.TrimSpace(doc.FileUniqueID)
+		}
+		if filename == "" {
+			filename = strings.TrimSpace(doc.FileID)
+		}
+		media = append(media, AgentTextMediaRequest{
+			FileID:       strings.TrimSpace(doc.FileID),
+			FileUniqueID: strings.TrimSpace(doc.FileUniqueID),
+			FileSize:     doc.FileSize,
+			Filename:     filename,
+			MIMEType:     strings.TrimSpace(doc.MIMEType),
+			Kind:         "document_image",
+		})
+	}
+	if len(media) == 0 {
+		return nil
+	}
+	return media
+}
+
+func largestAgentTextPhoto(photos []telegramcapture.WebhookPhotoSize) telegramcapture.WebhookPhotoSize {
+	var selected telegramcapture.WebhookPhotoSize
+	for _, photo := range photos {
+		if strings.TrimSpace(photo.FileID) == "" {
+			continue
+		}
+		if selected.FileID == "" || photo.FileSize > selected.FileSize || (photo.FileSize == selected.FileSize && photo.Width*photo.Height > selected.Width*selected.Height) {
+			selected = photo
+		}
+	}
+	return selected
 }
 
 func parseAgentTextCommand(text string) (string, map[string]any) {
