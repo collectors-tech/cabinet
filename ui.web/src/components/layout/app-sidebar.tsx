@@ -17,7 +17,6 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useLayout } from '@/context/layout-provider'
-import { useSearch } from '@/context/search-provider'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
   Sidebar,
@@ -38,6 +37,7 @@ import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
+import { SearchWorkspacePanel } from './search-workspace-panel'
 import { TeamSwitcher } from './team-switcher'
 import { type NavCollapsible, type NavItem } from './types'
 
@@ -78,7 +78,6 @@ export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const { state: sidebarState, isMobile, setOpen } = useSidebar()
   const { t } = useTranslation('nav')
-  const { open: searchOpen, setOpen: setSearchOpen } = useSearch()
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const isCollapsedSidebar = sidebarState === 'collapsed' && !isMobile
   const authUser = useAuthStore((state) => state.auth.user)
@@ -390,19 +389,15 @@ export function AppSidebar() {
   const markNotificationInboxOpening = () => {
     setActiveWorkspace('navigation')
   }
-  const openWorkspaceSearch = () => {
-    setSearchOpen(true)
-  }
   const openSettingsDisplay = () => {
     setNavEditMode(false)
     setActiveWorkspace('navigation')
     void navigate({ to: '/settings/display' })
   }
   const inboxActive = location.pathname.startsWith('/inbox')
-  const navigationActive =
-    !searchOpen && !inboxActive && activeWorkspace === 'navigation'
-  const assistantActive =
-    !searchOpen && !inboxActive && activeWorkspace === 'assistant'
+  const navigationActive = !inboxActive && activeWorkspace === 'navigation'
+  const searchActive = !inboxActive && activeWorkspace === 'search'
+  const assistantActive = !inboxActive && activeWorkspace === 'assistant'
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
@@ -436,9 +431,9 @@ export function AppSidebar() {
               aria-label='Search workspace'
               title='Search workspace'
               data-testid='shell-workspace-search'
-              data-active={searchOpen ? 'true' : 'false'}
+              data-active={searchActive ? 'true' : 'false'}
               className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
-              onClick={openWorkspaceSearch}
+              onClick={() => setActiveWorkspace('search')}
             >
               <SearchIcon className='h-4 w-4' aria-hidden />
             </button>
@@ -657,6 +652,8 @@ export function AppSidebar() {
           translatedNavGroups.map((props) => (
             <NavGroup key={props.title} {...props} />
           ))
+        ) : activeWorkspace === 'search' ? (
+          <SearchWorkspacePanel />
         ) : null}
         {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
       </SidebarContent>
