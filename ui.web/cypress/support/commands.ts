@@ -31,7 +31,7 @@ declare global {
         options?: {
           workspace?: boolean;
           path?: string;
-          shellWorkspace?: "navigation" | "assistant" | "inbox";
+          shellWorkspace?: "navigation" | "search" | "assistant" | "inbox";
         }
       ): Chainable<void>;
     }
@@ -113,7 +113,7 @@ Cypress.Commands.add("e2eCompleteSetupHelper", (overrides = {}) => {
 Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: string, options?: {
   workspace?: boolean;
   path?: string;
-  shellWorkspace?: "navigation" | "assistant" | "inbox";
+  shellWorkspace?: "navigation" | "search" | "assistant" | "inbox";
 }) => {
   const withWorkspace = options?.workspace ?? true;
   const targetPath = options?.path ?? "/";

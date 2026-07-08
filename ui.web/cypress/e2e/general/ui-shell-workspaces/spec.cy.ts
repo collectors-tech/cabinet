@@ -57,7 +57,8 @@ describe('general/ui-shell-workspaces', () => {
       .should('have.length', 1)
 
     cy.get('[data-testid="shell-workspace-search"]').click()
-    cy.get('input[placeholder="Type a command or search..."]')
+    cy.get('[data-testid="shell-search-workspace"]').should('be.visible')
+    cy.get('[data-testid="shell-search-workspace-input"]')
       .should('be.visible')
       .and('be.focused')
     cy.get('[data-testid="shell-workspace-search"]').should(
@@ -67,8 +68,15 @@ describe('general/ui-shell-workspaces', () => {
     )
     cy.get('[data-testid="shell-workspace-icon-rail"] [data-active="true"]')
       .should('have.length', 1)
+    cy.get('[data-testid="shell-search-local-results"]').should(
+      'contain',
+      'Local catalog'
+    )
+    cy.get('[data-testid="shell-search-barcode-results"]').should(
+      'contain',
+      'Barcode lookup'
+    )
     cy.location('pathname').should('match', /^\/inventory\/?$/)
-    cy.get('body').type('{esc}')
 
     cy.get('[data-testid="shell-workspace-assistant"]').click()
     cy.get('[data-testid="shell-workspace-assistant"]').should(
@@ -177,5 +185,30 @@ describe('general/ui-shell-workspaces', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
     cy.get('[data-testid="shell-workspace-assistant"]').should('have.attr', 'data-active', 'true')
     cy.contains('Profile settings').should('be.visible')
+  })
+
+  it('UI-SHELL-WORKSPACES-007 persists Search workspace as a real shell panel', () => {
+    openInventory()
+    cy.get('[data-testid="shell-workspace-search"]').click()
+    cy.get('[data-testid="shell-search-workspace"]').should('be.visible')
+    cy.window()
+      .its('localStorage')
+      .invoke(
+        'getItem',
+        'cabinet.shell.workspace.active.e2e-profile-001'
+      )
+      .should('eq', 'search')
+
+    cy.reload()
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/inventory\/?$/
+    )
+    cy.get('[data-testid="shell-workspace-search"]').should(
+      'have.attr',
+      'data-active',
+      'true'
+    )
+    cy.get('[data-testid="shell-search-workspace"]').should('be.visible')
   })
 })

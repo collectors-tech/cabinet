@@ -183,7 +183,7 @@ Cabinet SHALL render the workspace chrome rail as compact icon-only controls wit
 - **THEN** Navigation, Search, Chat, and Inbox controls MUST render as icon-only buttons with accessible names and tooltips
 - **AND** no visible `Workspace`, `Nav`, `Search`, `Chat`, `Assistant`, or `Inbox` text label MUST appear in the workspace tool group
 - **AND** exactly one workspace control MUST expose the active visual state
-- **AND** the Search control MUST open the shared command/search panel without navigating away from the current route
+- **AND** the Search control MUST open the left shell Search workspace without navigating away from the current route
 
 #### Scenario: Bell is the only top-level Inbox affordance
 - **GIVEN** the authenticated shell workspace rail is visible

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 
-export type ShellWorkspace = 'navigation' | 'assistant' | 'inbox'
+export type ShellWorkspace = 'navigation' | 'search' | 'assistant' | 'inbox'
 
 type ShellWorkspaceContextValue = {
   activeWorkspace: ShellWorkspace
@@ -23,6 +23,7 @@ const ShellWorkspaceContext = createContext<ShellWorkspaceContextValue | null>(
 
 function normalizeWorkspace(value: string | null | undefined): ShellWorkspace {
   switch (value) {
+    case 'search':
     case 'assistant':
     case 'inbox':
       return value

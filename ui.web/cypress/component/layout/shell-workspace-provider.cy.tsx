@@ -13,7 +13,12 @@ function WorkspaceProbe() {
     toggleAssistantWorkspace,
   } = useShellWorkspace()
 
-  const workspaces: ShellWorkspace[] = ['navigation', 'assistant', 'inbox']
+  const workspaces: ShellWorkspace[] = [
+    'navigation',
+    'search',
+    'assistant',
+    'inbox',
+  ]
 
   return (
     <section>
@@ -84,5 +89,12 @@ describe('ShellWorkspaceProvider', () => {
 
     cy.contains('button', 'Toggle assistant').click()
     cy.get('[data-testid="active-workspace"]').should('have.text', 'navigation')
+
+    cy.contains('button', 'Open search').click()
+    cy.get('[data-testid="active-workspace"]').should('have.text', 'search')
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.shell.workspace.active.profile-beta')
+      .should('eq', 'search')
   })
 })

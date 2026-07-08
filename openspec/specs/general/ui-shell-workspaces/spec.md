@@ -1,14 +1,16 @@
 ## Purpose
-Define the authenticated Cabinet shell workspace model so Navigation, Assistant, and Inbox are first-class workspaces instead of ad-hoc panels.
+Define the authenticated Cabinet shell workspace model so Navigation, Search, Assistant, and Inbox are first-class workspaces instead of ad-hoc panels.
 
 ## Requirements
-### Requirement UI-SHELL-WORKSPACES-001: Cabinet SHALL provide left-rail workspace switching for Navigation, Assistant, and Inbox
-Authenticated shell MUST provide a deterministic workspace switcher that exposes Navigation, Assistant, and Inbox as top-level shell workspaces.
+### Requirement UI-SHELL-WORKSPACES-001: Cabinet SHALL provide left-rail workspace switching for Navigation, Search, Assistant, and Inbox
+Authenticated shell MUST provide a deterministic workspace switcher that exposes Navigation, Search, Assistant, and Inbox as top-level shell workspaces.
 
 #### Scenario: Switch shell workspaces
 - **GIVEN** authenticated shell is visible
 - **WHEN** user selects `Navigation`
 - **THEN** left workspace region MUST show primary app navigation
+- **WHEN** user selects `Search`
+- **THEN** left workspace region MUST show a focused search workspace without navigating away from the current route
 - **WHEN** user selects `Assistant`
 - **THEN** left workspace region MUST show assistant thread/composer workspace
 - **WHEN** user selects `Inbox`
