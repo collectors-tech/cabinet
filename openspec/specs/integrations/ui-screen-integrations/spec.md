@@ -75,6 +75,13 @@ Integrations screen SHALL expose the page header Add Integration action as an ic
 - **THEN** the provider-specific setup dialog MUST open for that selected provider
 - **AND** the flow MUST NOT default straight into `acercmodels.com` or any other first registry provider without selection
 
+#### Scenario: Unconfigured registry providers remain addable
+- **GIVEN** `/api/providers/registry` includes an unconfigured provider and the active profile has that provider disabled
+- **WHEN** the integrations route renders configured-only rows and the user opens Add Integration
+- **THEN** the provider MUST be absent from the configured rows
+- **AND** the provider MUST remain selectable from the Add Integration provider selector using registry `display_name` and `base_domain`
+- **AND** selecting the provider MUST open setup with provider metadata from the registry payload, including integration mode and API family/support profile when present
+
 ### Requirement UI-SCREEN-INTEGRATIONS-011: Integrations screen SHALL use a paginated full-height configured integrations table as the primary provider list
 Integrations screen SHALL render the primary configured integrations list as a scan-friendly full-height table with pagination and stable operational columns.
 
@@ -253,4 +260,4 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-18 | Use row interaction surfaces | Table row single-click opens details, double-click opens edit, selected context is URL-backed, and nested row actions do not trigger row dialogs | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs` |
 | UC-INT-UI-19 | Hydrate direct route empty filter state | Shared `/integrations/` URL with no matching providers shows deterministic no-match table state, stable zero-result pagination, and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-19: shows deterministic empty state for direct route filters` |
 | UC-INT-UI-20 | Hydrate direct route empty cards state | Shared `/integrations/` URL with no matching providers in cards view shows explicit no-match feedback and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-20: shows deterministic empty state for direct route filters in cards view` |
-| UC-INT-UI-21 | Add Integration provider-selection-first flow | Header action is icon-only/no visible text, opens provider selector first, and only opens selected provider setup after selection | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-015 + #1435: Add Integration is icon-only and opens provider selection first` |
+| UC-INT-UI-21 | Add Integration provider-selection-first flow | Header action is icon-only/no visible text, opens provider selector first, keeps unconfigured registry providers addable, and only opens selected provider setup after selection | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-015 + #1435: Add Integration is icon-only and opens provider selection first`; `UI-SCREEN-INTEGRATIONS-015 + #1497: Add Integration shows unconfigured Voglers from registry metadata` |
