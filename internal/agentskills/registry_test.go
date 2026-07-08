@@ -751,6 +751,75 @@ func TestProfileScopedInstalledSkillEnableDisableAndInvalidState(t *testing.T) {
 	}
 }
 
+func TestInstalledSkillStorePersistsProfileScopedState(t *testing.T) {
+	t.Parallel()
+
+	store := NewInstalledSkillStore([]InstalledSkillState{
+		{ProfileID: " profile-a ", SkillID: " local.archive.writer ", Enabled: true, Status: StatusAvailable},
+		{
+			ProfileID:          "profile-a",
+			SkillID:            "local.archive.invalid",
+			Enabled:            true,
+			Status:             StatusInvalid,
+			ValidationErrors:   []string{"missing capability: local.writer"},
+			ValidationWarnings: []string{"deprecated schema"},
+		},
+		{ProfileID: "profile-b", SkillID: "local.archive.writer", Enabled: false, Status: StatusDisabled},
+	})
+
+	profileA := store.List("profile-a")
+	if len(profileA) != 2 {
+		t.Fatalf("expected two profile-a installed states, got %+v", profileA)
+	}
+	if profileA[0].SkillID != "local.archive.invalid" || profileA[1].SkillID != "local.archive.writer" {
+		t.Fatalf("expected deterministic skill ordering, got %+v", profileA)
+	}
+	profileA[0].ValidationErrors[0] = "mutated"
+	again := store.List("profile-a")
+	if again[0].ValidationErrors[0] != "missing capability: local.writer" {
+		t.Fatalf("installed skill store must protect validation slices from caller mutation, got %+v", again[0])
+	}
+
+	disabled, err := store.SetEnabled("profile-a", "local.archive.writer", false)
+	if err != nil {
+		t.Fatalf("disable installed skill: %v", err)
+	}
+	if disabled.Status != StatusDisabled || disabled.Enabled {
+		t.Fatalf("expected disabled persisted state, got %+v", disabled)
+	}
+
+	enabled, err := store.SetEnabled("profile-a", "local.archive.writer", true)
+	if err != nil {
+		t.Fatalf("enable installed skill: %v", err)
+	}
+	if enabled.Status != StatusAvailable || !enabled.Enabled {
+		t.Fatalf("expected re-enabled available state, got %+v", enabled)
+	}
+
+	imported := []Skill{
+		{ID: "local.archive.writer", Version: "0.1.0", DisplayName: "Writer", Status: StatusAvailable, SafetyLevel: SafetyConfirmRequired, Enabled: true},
+		{ID: "local.archive.invalid", Version: "0.1.0", DisplayName: "Invalid", Status: StatusAvailable, SafetyLevel: SafetyReadOnly, Enabled: true},
+	}
+	registry := NewProfileRegistry("profile-a", imported, store.List("profile-a"))
+	invalid, ok := registry.Resolve("local.archive.invalid")
+	if !ok {
+		t.Fatalf("expected invalid imported skill")
+	}
+	if invalid.Status != StatusInvalid || invalid.Executable || !slices.Contains(invalid.ValidationWarnings, "deprecated schema") {
+		t.Fatalf("expected persisted invalid state to make imported skill safe, got %+v", invalid)
+	}
+
+	if !store.Remove("profile-a", "local.archive.invalid") {
+		t.Fatalf("expected installed state removal to report true")
+	}
+	if len(store.List("profile-a")) != 1 || len(store.List("profile-b")) != 1 {
+		t.Fatalf("expected removal to stay profile scoped, profile-a=%+v profile-b=%+v", store.List("profile-a"), store.List("profile-b"))
+	}
+	if _, err := store.Save(InstalledSkillState{ProfileID: "profile-a"}); err == nil {
+		t.Fatalf("expected required skill id error")
+	}
+}
+
 func containsSkill(skills []Skill, id string) bool {
 	for _, skill := range skills {
 		if skill.ID == id {
