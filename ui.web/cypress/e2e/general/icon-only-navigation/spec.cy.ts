@@ -11,9 +11,12 @@ describe('general/icon-only-navigation', () => {
     cy.clearLocalStorage()
   })
 
-  it('UI-FOUNDATION-SHELL-NAVIGATION-018 renders expanded primary navigation with readable labels', () => {
+  it('UI-FOUNDATION-SHELL-NAVIGATION-018/#1415 defaults primary navigation to a compact icon rail', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.get('[data-slot="sidebar"]')
+      .first()
+      .should('have.attr', 'data-state', 'collapsed')
 
     const navLinks = [
       ['dashboard', 'Dashboard'],
@@ -38,9 +41,7 @@ describe('general/icon-only-navigation', () => {
         .and('have.attr', 'aria-label', label)
         .within(() => {
           cy.get('svg').should('be.visible')
-          cy.get(`[data-testid="sidebar-nav-label-${key}"]`)
-            .should('be.visible')
-            .and('have.text', label)
+          cy.get(`[data-testid="sidebar-nav-label-${key}"]`).should('not.exist')
         })
     })
 
@@ -50,7 +51,7 @@ describe('general/icon-only-navigation', () => {
       .should('be.focused')
   })
 
-  it('UI-FOUNDATION-SHELL-NAVIGATION-019 expands the sidebar when Navigation is selected', () => {
+  it('UI-FOUNDATION-SHELL-NAVIGATION-019 keeps labels available after explicit expansion', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
