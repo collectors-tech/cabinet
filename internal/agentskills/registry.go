@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/collectors-tech/cabinet/internal/chat"
 )
@@ -89,6 +90,11 @@ type InstalledSkillState struct {
 	ValidationErrors   []string `json:"validation_errors,omitempty"`
 }
 
+type InstalledSkillStore struct {
+	mu     sync.RWMutex
+	states map[string]map[string]InstalledSkillState
+}
+
 type PreviewRequest struct {
 	SkillID         string         `json:"skill_id"`
 	ProfileID       string         `json:"profile_id"`
@@ -129,6 +135,127 @@ func NewProfileRegistry(profileID string, imported []Skill, installed []Installe
 	registry := NewRegistry(imported)
 	registry.imported = applyInstalledSkillState(profileID, registry.imported, installed)
 	return registry
+}
+
+func NewInstalledSkillStore(initial []InstalledSkillState) *InstalledSkillStore {
+	store := &InstalledSkillStore{states: map[string]map[string]InstalledSkillState{}}
+	for _, state := range initial {
+		_, _ = store.Save(state)
+	}
+	return store
+}
+
+func (s *InstalledSkillStore) List(profileID string) []InstalledSkillState {
+	if s == nil {
+		return nil
+	}
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	profileStates := s.states[profileID]
+	if len(profileStates) == 0 {
+		return nil
+	}
+	out := make([]InstalledSkillState, 0, len(profileStates))
+	for _, state := range profileStates {
+		out = append(out, cloneInstalledSkillState(state))
+	}
+	slices.SortFunc(out, func(a, b InstalledSkillState) int {
+		return strings.Compare(a.SkillID, b.SkillID)
+	})
+	return out
+}
+
+func (s *InstalledSkillStore) Save(state InstalledSkillState) (InstalledSkillState, error) {
+	if s == nil {
+		return InstalledSkillState{}, errors.New("installed skill store is nil")
+	}
+	state.ProfileID = strings.TrimSpace(state.ProfileID)
+	state.SkillID = strings.TrimSpace(state.SkillID)
+	if state.ProfileID == "" {
+		return InstalledSkillState{}, errors.New("profile id is required")
+	}
+	if state.SkillID == "" {
+		return InstalledSkillState{}, errors.New("skill id is required")
+	}
+	state = cloneInstalledSkillState(state)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.states == nil {
+		s.states = map[string]map[string]InstalledSkillState{}
+	}
+	if s.states[state.ProfileID] == nil {
+		s.states[state.ProfileID] = map[string]InstalledSkillState{}
+	}
+	s.states[state.ProfileID][state.SkillID] = state
+	return cloneInstalledSkillState(state), nil
+}
+
+func (s *InstalledSkillStore) SetEnabled(profileID, skillID string, enabled bool) (InstalledSkillState, error) {
+	if s == nil {
+		return InstalledSkillState{}, errors.New("installed skill store is nil")
+	}
+	profileID = strings.TrimSpace(profileID)
+	skillID = strings.TrimSpace(skillID)
+	if profileID == "" {
+		return InstalledSkillState{}, errors.New("profile id is required")
+	}
+	if skillID == "" {
+		return InstalledSkillState{}, errors.New("skill id is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.states == nil {
+		s.states = map[string]map[string]InstalledSkillState{}
+	}
+	if s.states[profileID] == nil {
+		s.states[profileID] = map[string]InstalledSkillState{}
+	}
+	state := s.states[profileID][skillID]
+	state.ProfileID = profileID
+	state.SkillID = skillID
+	state.Enabled = enabled
+	if enabled && state.Status == StatusDisabled {
+		state.Status = StatusAvailable
+	}
+	if !enabled && (state.Status == "" || state.Status == StatusAvailable || state.Status == StatusPreviewOnly) {
+		state.Status = StatusDisabled
+	}
+	s.states[profileID][skillID] = state
+	return cloneInstalledSkillState(state), nil
+}
+
+func (s *InstalledSkillStore) Remove(profileID, skillID string) bool {
+	if s == nil {
+		return false
+	}
+	profileID = strings.TrimSpace(profileID)
+	skillID = strings.TrimSpace(skillID)
+	if profileID == "" || skillID == "" {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	profileStates := s.states[profileID]
+	if len(profileStates) == 0 {
+		return false
+	}
+	if _, ok := profileStates[skillID]; !ok {
+		return false
+	}
+	delete(profileStates, skillID)
+	if len(profileStates) == 0 {
+		delete(s.states, profileID)
+	}
+	return true
 }
 
 func (r Registry) List() []Skill {
@@ -915,6 +1042,12 @@ func applyInstalledSkillState(profileID string, imported []Skill, installed []In
 		out = append(out, skill)
 	}
 	return out
+}
+
+func cloneInstalledSkillState(state InstalledSkillState) InstalledSkillState {
+	state.ValidationWarnings = append([]string{}, state.ValidationWarnings...)
+	state.ValidationErrors = append([]string{}, state.ValidationErrors...)
+	return state
 }
 
 func deriveExecutionState(skill Skill) Skill {
