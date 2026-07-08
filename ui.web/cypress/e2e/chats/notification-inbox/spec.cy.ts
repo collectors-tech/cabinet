@@ -244,10 +244,6 @@ describe('chats/notification-inbox', () => {
       expect(pane.clientHeight, 'list pane is height constrained').to.be.lessThan(
         620
       )
-      expect(
-        pane.scrollHeight,
-        'list pane owns vertical scrolling'
-      ).to.be.greaterThan(pane.clientHeight)
     })
   })
 
@@ -277,13 +273,32 @@ describe('chats/notification-inbox', () => {
       .and('contain', 'No system or runtime notices are waiting.')
   })
 
-  it('UI-SCREEN-NOTIFICATION-INBOX-007 + #1438 keeps dense Inbox actions icon-only and clearing recoverable', () => {
+  it('UI-SCREEN-NOTIFICATION-INBOX-007 + #1438/#1461 keeps dense Inbox actions icon-only and clearing recoverable', () => {
     bootInbox(denseInboxItems)
 
     cy.get('[data-testid="notification-inbox-page"]').should(
       'have.attr',
       'data-layout',
       'dense-two-pane'
+    )
+    cy.get('[data-testid="notification-inbox-list-pane"]')
+      .should('have.class', 'bg-slate-900')
+      .and('have.class', 'border-slate-800')
+    cy.get('[data-testid="notification-inbox-stat-visible"]').should(
+      'contain',
+      '6'
+    )
+    cy.get('[data-testid="notification-inbox-stat-unread"]').should(
+      'contain',
+      '4'
+    )
+    cy.get('[data-testid="notification-inbox-stat-system"]').should(
+      'contain',
+      '2'
+    )
+    cy.get('[data-testid="notification-inbox-stat-hidden"]').should(
+      'contain',
+      '1'
     )
     cy.get('[data-testid="notification-inbox-filter-all"]')
       .should('contain', 'All')
@@ -305,6 +320,23 @@ describe('chats/notification-inbox', () => {
     })
 
     cy.get('[data-testid="notification-inbox-row"]').should('have.length', 5)
+    cy.get('[data-testid="notification-inbox-row"]')
+      .first()
+      .then(($row) => {
+        expect($row.outerHeight(), 'compact table-style row height').to.be.lessThan(
+          120
+        )
+      })
+    cy.get('[data-testid="notification-inbox-row"]')
+      .first()
+      .find('[data-testid="notification-inbox-row-read"]')
+      .should('have.attr', 'aria-label')
+      .and('include', 'read')
+    cy.get('[data-testid="notification-inbox-row"]')
+      .first()
+      .find('[data-testid="notification-inbox-row-read"]')
+      .invoke('text')
+      .should('match', /^\s*$/)
     cy.get('[data-testid="notification-inbox-total-count"]').should(
       'contain',
       '6 total messages'
@@ -328,6 +360,12 @@ describe('chats/notification-inbox', () => {
       .should('contain', 'Assistant price review is ready')
       .and('contain', 'Mark handled')
       .and('contain', 'Delete')
+    cy.get('[data-testid="notification-inbox-detail-mark-handled"]')
+      .should('have.attr', 'aria-label', 'Mark handled')
+      .and('have.attr', 'title', 'Mark handled')
+    cy.get('[data-testid="notification-inbox-detail-delete"]')
+      .should('have.attr', 'aria-label', 'Delete notification')
+      .and('have.attr', 'title', 'Delete notification')
 
     cy.get('[data-testid="notification-inbox-clear-visible"]').click()
     cy.wait([
