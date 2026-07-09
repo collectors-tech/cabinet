@@ -176,9 +176,16 @@ func planChatMessageAppControl(content string, envelope map[string]any) (chatApp
 			}, true
 		}
 		return chatAppControlIntent{
-			CapabilityID:      "update_open_item_title",
-			Action:            "update_open_item_title",
-			Payload:           map[string]any{"item_id": itemID, "title": title, "source_route": routePath(envelope)},
+			CapabilityID: "update_open_item_title",
+			Action:       "update_open_item_title",
+			Payload: map[string]any{
+				"item_id":            itemID,
+				"title":              title,
+				"field":              "title",
+				"source_route":       routePath(envelope),
+				"guided_workflow_id": "inventory.item.update",
+				"guided_mode":        string(chat.GuidedWorkflowModeWithMe),
+			},
 			ConfirmationState: "pending",
 			Message:           "I prepared a title-change preview for the open item. Confirm before Cabinet applies it.",
 		}, true
