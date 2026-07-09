@@ -664,12 +664,12 @@ describe('chats/assistant-workspace', () => {
       expect(request.body.metadata.forked_from_thread_id).to.eq(originalThreadId)
     })
 
-    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'anthropic')
-    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'claude-3-5-haiku')
-    cy.get('[data-testid="shell-assistant-thread-semantics"]').should('contain', 'fork a new assistant thread')
     cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
       expect($next.text().trim()).not.to.eq(originalThreadId)
     })
+    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'anthropic')
+    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'claude-3-5-haiku')
+    cy.get('[data-testid="shell-assistant-thread-semantics"]').should('contain', 'fork a new assistant thread')
   })
 
   it('ASSISTANT-WORKSPACE-004 applies explicit reset boundaries for manual new-thread and active profile changes', () => {
