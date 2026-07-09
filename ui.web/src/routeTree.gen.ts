@@ -47,6 +47,7 @@ import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/c
 import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
 import { Route as AuthenticatedSettingsStorageRouteImport } from './routes/_authenticated/settings/storage'
+import { Route as AuthenticatedSettingsSkillsRouteImport } from './routes/_authenticated/settings/skills'
 import { Route as AuthenticatedSettingsProfileRouteImport } from './routes/_authenticated/settings/profile'
 import { Route as AuthenticatedSettingsOperationsRouteImport } from './routes/_authenticated/settings/operations'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
@@ -257,6 +258,12 @@ const AuthenticatedSettingsStorageRoute =
     path: '/storage',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsSkillsRoute =
+  AuthenticatedSettingsSkillsRouteImport.update({
+    id: '/skills',
+    path: '/skills',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedSettingsProfileRoute =
   AuthenticatedSettingsProfileRouteImport.update({
     id: '/profile',
@@ -339,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/settings/profile': typeof AuthenticatedSettingsProfileRoute
+  '/settings/skills': typeof AuthenticatedSettingsSkillsRoute
   '/settings/storage': typeof AuthenticatedSettingsStorageRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
@@ -384,6 +392,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/settings/profile': typeof AuthenticatedSettingsProfileRoute
+  '/settings/skills': typeof AuthenticatedSettingsSkillsRoute
   '/settings/storage': typeof AuthenticatedSettingsStorageRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
@@ -434,6 +443,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/_authenticated/settings/profile': typeof AuthenticatedSettingsProfileRoute
+  '/_authenticated/settings/skills': typeof AuthenticatedSettingsSkillsRoute
   '/_authenticated/settings/storage': typeof AuthenticatedSettingsStorageRoute
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
@@ -482,6 +492,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/operations'
     | '/settings/profile'
+    | '/settings/skills'
     | '/settings/storage'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
@@ -527,6 +538,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/operations'
     | '/settings/profile'
+    | '/settings/skills'
     | '/settings/storage'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
@@ -576,6 +588,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/operations'
     | '/_authenticated/settings/profile'
+    | '/_authenticated/settings/skills'
     | '/_authenticated/settings/storage'
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
@@ -882,6 +895,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsStorageRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/skills': {
+      id: '/_authenticated/settings/skills'
+      path: '/skills'
+      fullPath: '/settings/skills'
+      preLoaderRoute: typeof AuthenticatedSettingsSkillsRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/profile': {
       id: '/_authenticated/settings/profile'
       path: '/profile'
@@ -957,6 +977,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsOperationsRoute: typeof AuthenticatedSettingsOperationsRoute
   AuthenticatedSettingsProfileRoute: typeof AuthenticatedSettingsProfileRoute
+  AuthenticatedSettingsSkillsRoute: typeof AuthenticatedSettingsSkillsRoute
   AuthenticatedSettingsStorageRoute: typeof AuthenticatedSettingsStorageRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -972,6 +993,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsOperationsRoute: AuthenticatedSettingsOperationsRoute,
     AuthenticatedSettingsProfileRoute: AuthenticatedSettingsProfileRoute,
+    AuthenticatedSettingsSkillsRoute: AuthenticatedSettingsSkillsRoute,
     AuthenticatedSettingsStorageRoute: AuthenticatedSettingsStorageRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   }

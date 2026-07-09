@@ -57,9 +57,10 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
 	allowed := map[string][]string{
 		"AGENT-SKILLS-REGISTRY-008": {
-			"| planned |",
+			"| partial |",
 			"#1667/#1670",
-			"AGENT-SKILLS-REGISTRY-008 lists details imports and toggles skills safely",
+			"AGENT-SKILLS-REGISTRY-008 lists skills opens details and imports a local archive disabled by default",
+			"AGENT-SKILLS-REGISTRY-008 toggles imported skills safely",
 			"marketplace browsing is unavailable",
 		},
 		"AGENT-SKILLS-REGISTRY-009": {
@@ -67,12 +68,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"#1667/#1668/#1672/#1715",
 			"TestAgentSkillAPIPropagatesInvocationSourceContext",
 			"broader skill execution timeline coverage remains planned",
-		},
-		"AGENT-SKILLS-REGISTRY-010": {
-			"| partial |",
-			"#1667/#1670/#1671",
-			"AGENT-SKILLS-REGISTRY-010 keeps marketplace behavior deferred",
-			"remote marketplace installs",
 		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",

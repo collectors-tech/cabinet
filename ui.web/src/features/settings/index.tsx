@@ -9,6 +9,7 @@ import {
   CreditCard,
   HardDrive,
   Settings as SettingsIcon,
+  Sparkles,
   Tags,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
@@ -51,6 +52,11 @@ const sidebarNavItems = [
     title: 'Storage',
     href: '/settings/storage',
     icon: <HardDrive size={18} />,
+  },
+  {
+    title: 'Skills',
+    href: '/settings/skills',
+    icon: <Sparkles size={18} />,
   },
   {
     title: 'Categories',
