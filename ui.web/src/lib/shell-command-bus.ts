@@ -20,6 +20,10 @@ export type ShellCommandType =
   | 'chat.action.preview'
   | 'chat.action.confirm_apply'
   | 'ui.clear_guidance'
+  | 'walkthrough.step_back'
+  | 'walkthrough.pause'
+  | 'walkthrough.resume'
+  | 'walkthrough.skip'
   | 'walkthrough.cancel'
 
 export type ShellCommand = {
@@ -128,6 +132,26 @@ export async function dispatchShellCommand(
       case 'walkthrough.cancel':
         clearUiGuidance()
         dispatcher.emit(commandEvent(command, 'success', 'Guidance cleared'))
+        return
+      case 'walkthrough.step_back':
+        dispatcher.emit(
+          commandEvent(command, 'success', 'Returned to previous checkpoint')
+        )
+        return
+      case 'walkthrough.pause':
+        dispatcher.emit(
+          commandEvent(command, 'success', 'Walkthrough paused before mutation')
+        )
+        return
+      case 'walkthrough.resume':
+        dispatcher.emit(
+          commandEvent(command, 'success', 'Walkthrough resumed')
+        )
+        return
+      case 'walkthrough.skip':
+        dispatcher.emit(
+          commandEvent(command, 'success', 'Skipped to next safe checkpoint')
+        )
         return
       case 'ui.wait_for_user_action':
         dispatcher.emit(
