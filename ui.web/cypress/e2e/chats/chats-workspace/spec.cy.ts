@@ -133,11 +133,10 @@ describe('chats/chats-workspace', () => {
         })
       })
 
-    cy.get('[data-testid="chat-tool-card-container"]').should(
-      'have.attr',
-      'data-visual-priority',
-      'secondary'
-    )
+    cy.contains('p', 'Attachments').should('not.exist')
+    cy.contains('p', 'Action Preview').should('not.exist')
+    cy.get('[data-testid="chat-tool-card-container"]').should('not.exist')
+    cy.get('[data-testid="chat-upload-attachment-button"]').should('not.exist')
   })
 
   it('CHATS-WORKSPACE-005 filters thread rows and keeps new-thread actions route-stable', () => {
@@ -391,30 +390,32 @@ describe('chats/chats-workspace', () => {
         'rename the open item through governed chat preview'
       )
 
-      cy.get('[data-testid="chat-preview-action-mode"]').select(
-        'update_inventory_item'
-      )
-      cy.get('[data-testid="chat-preview-target-item-id"]')
-        .clear()
-        .type(itemId)
-      cy.get('[data-testid="chat-preview-part-number"]')
-        .clear()
-        .type('CHAT-UPDATE-001-R1')
-      cy.get('[data-testid="chat-preview-title"]')
-        .clear()
-        .type('Main Chat Updated Title')
-      cy.intercept('POST', '/api/chat/actions/preview').as(
-        'mainChatUpdatePreview'
-      )
-      cy.get('[data-testid="chat-preview-action-button"]').click()
-      cy.wait('@mainChatUpdatePreview').then(({ request, response }) => {
-        expect(request.body.profile_id).to.eq('e2e-profile-001')
-        expect(request.body.action).to.eq('update_inventory_item')
-        expect(request.body.payload.item_id).to.eq(itemId)
-        expect(request.body.payload.part_number).to.eq('CHAT-UPDATE-001-R1')
-        expect(request.body.payload.title).to.eq('Main Chat Updated Title')
-        expect(response?.statusCode).to.eq(200)
-      })
+      cy.request('/api/chat/threads?profile_id=e2e-profile-001')
+        .its('body.threads')
+        .then((threads: Array<{ id: string; title?: string }>) => {
+          const thread = threads.find(
+            (candidate) => candidate.title === 'E2E Main Chat Item Update'
+          )
+          expect(thread?.id, 'created chat thread id').to.be.a('string').and.not.eq('')
+
+          cy.request('POST', '/api/chat/actions/preview', {
+            profile_id: 'e2e-profile-001',
+            thread_id: thread?.id,
+            action: 'update_inventory_item',
+            payload: {
+              item_id: itemId,
+              part_number: 'CHAT-UPDATE-001-R1',
+              title: 'Main Chat Updated Title',
+              assistant_provider: 'openai',
+              assistant_model: 'gpt-4o-mini',
+            },
+          }).then((previewResponse) => {
+            expect(previewResponse.status).to.eq(200)
+            const previewId = String(previewResponse.body.id)
+            cy.visit(`/chats/?thread_id=${thread?.id}&preview_id=${previewId}`)
+          })
+        })
+
       cy.get('[data-testid="chat-action-preview"]')
         .should('contain', 'update_inventory_item')
         .and('contain', `target=${itemId}`)

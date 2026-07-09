@@ -62,7 +62,8 @@ Chats workspace MUST render close to the provided assistant-ui examples: a dark,
 - **AND** the conversation rail MUST stay compact beside the main surface
 - **AND** the message canvas MUST occupy the dominant vertical workspace
 - **AND** the composer MUST be docked at the bottom center of the conversation surface
-- **AND** action-preview and attachment controls MUST remain visually secondary to the chat composer
+- **AND** the composer MUST NOT be followed by separate custom Attachments or Action Preview panels
+- **AND** attachment affordances MUST live with the composer while action previews, when present, MUST appear in the conversation canvas instead of as stacked controls under the composer
 
 ### Requirement CHATS-WORKSPACE-008: `/chats` SHALL dispatch normal user text through governed app-control planning
 Chats workspace MUST send normal conversation text with profile, thread, route, and assistant context so deterministic app-control requests can return governed route or action results instead of defaulting to Inbox handoff.

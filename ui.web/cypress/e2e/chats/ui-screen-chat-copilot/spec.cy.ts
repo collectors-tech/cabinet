@@ -116,7 +116,7 @@ describe('chats/ui-screen-chat-copilot', () => {
     createThread('E2E Empty Thread Preview Gate')
 
     cy.contains('No messages in this thread yet.').should('be.visible')
-    cy.get('[data-testid="chat-preview-action-button"]').should('be.disabled')
+    cy.get('[data-testid="chat-preview-action-button"]').should('not.exist')
     cy.get('[data-testid="chat-action-preview"]').should('not.exist')
   })
 
@@ -130,10 +130,11 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-assistant-ui-composer-primitive"]').should(
       'be.visible'
     )
-    cy.get('[data-testid="chat-upload-attachment-button"]').should(
+    cy.get('[data-testid="chat-composer-attachment-button"]').should(
       'be.visible'
     )
-    cy.get('[data-testid="chat-preview-action-button"]').should('be.disabled')
+    cy.get('[data-testid="chat-preview-action-button"]').should('not.exist')
+    cy.get('[data-testid="chat-tool-card-container"]').should('not.exist')
 
     cy.get('[data-testid="chat-compose-input"]').type(
       'route assistant ui composer send'
@@ -204,7 +205,10 @@ describe('chats/ui-screen-chat-copilot', () => {
         cy.contains('button', chip).should('be.visible')
       }
     })
-    cy.get('[data-testid="chat-tool-card-container"]').should('be.visible')
+    cy.contains('p', 'Attachments').should('not.exist')
+    cy.contains('p', 'Action Preview').should('not.exist')
+    cy.get('[data-testid="chat-tool-card-container"]').should('not.exist')
+    cy.get('[data-testid="chat-upload-attachment-button"]').should('not.exist')
   })
 
   it('UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations', () => {
