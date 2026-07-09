@@ -76,6 +76,45 @@ The phone should help the user collect data. It should not silently mutate the m
 7. **No destructive mobile permissions in MVP**
    A paired mobile device can upload capture batches, but cannot delete or overwrite desktop inventory.
 
+## Collector differentiation
+
+Competitor collection apps prove demand for broad inventory tracking, barcode capture, photos, wishlists, estimated values, custom fields, cloud sync, and sharing. Cabinet should match the everyday utility collectors expect, but differentiate through desktop review, local ownership, fast offline capture, clean migration/export, and niche collector depth for categories such as trading cards and slot cars.
+
+Cabinet's mobile story should be:
+
+```text
+Phone = scan, photograph, tag, queue
+Desktop = review, match, organise, save, prepare trades
+```
+
+Useful launch positioning:
+
+> Scan fast, organise properly, export everything, and prepare trades without relying on reception or a marketplace account.
+
+The mobile companion should feed a trusted desktop review workflow rather than silently mutating inventory. The key desktop surface is the Mobile Upload Inbox, where captures can be approved, edited, merged with existing items, attached as evidence, deferred, or rejected.
+
+Suggested capture states:
+
+| State | Meaning |
+|---|---|
+| `Captured` | Raw capture saved locally on the device. |
+| `Queued` | Waiting to sync to Cabinet desktop. |
+| `SyncedToInbox` | Available in the desktop Mobile Upload Inbox. |
+| `Matched` | Has a candidate catalogue or inventory match. |
+| `NeedsReview` | Ambiguous, incomplete, or duplicate-prone. |
+| `Approved` | User accepted and saved to inventory, wishlist, or media. |
+| `Rejected` | User discarded the capture. |
+| `Deferred` | User kept it for later review. |
+
+Additional differentiators to preserve in backlog planning:
+
+- iCollect/generic CSV migration assistant planning
+- trading-card quick toggles such as foil, holo, reverse holo, first edition, graded, raw, promo, and language
+- slot-car quick toggles such as boxed, unboxed, analogue, digital, modified, needs maintenance, and missing parts
+- explicit pairing with no silent inventory attachment
+- optional local-network-only, cable/local-transfer, or configured sync-target transport
+- no escrow or payment custody in Cabinet core
+
 ## Non-goals for MVP
 
 The first mobile release should not include:

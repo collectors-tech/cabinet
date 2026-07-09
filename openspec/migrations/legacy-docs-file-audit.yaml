@@ -113,7 +113,22 @@ files:
     requirement_markers: 0
     targets:
       - openspec/migration/product-planning/README.md
+  - source: docs/planning/mobile-capture-companion-and-collector-differentiation.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/mobile-companion-and-bulk-image-scanning.md
+  - source: docs/product/beta-mvp.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/product-planning/beta-mvp-and-market-validation.md
   - source: docs/product/beta-mvp-and-market-validation.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/product-planning/beta-mvp-and-market-validation.md
+  - source: docs/product/kickstarter-market-validation.md
     status: migrated
     requirement_markers: 0
     targets:
