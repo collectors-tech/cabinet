@@ -66,6 +66,13 @@ func TestOpenAIRegistryExposesMethodAwareSetupNeededState(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected OpenAI setup_status map, got %#v", openai["setup_status"])
 	}
+	health, ok := openai["health"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected OpenAI registry health map, got %#v", openai["health"])
+	}
+	if health["status"] != "needs_config" || health["state"] != "provider_setup_required" || health["next_action"] != "connect_openai_api_key_or_browser_auth" {
+		t.Fatalf("expected setup-needed OpenAI registry health, got %+v", health)
+	}
 	for key, want := range map[string]string{
 		"auth_mode":                   "hybrid",
 		"active_auth_method":          "none",
@@ -138,6 +145,10 @@ func TestOpenAIRegistryProjectsAssistantMigrationContract(t *testing.T) {
 		}
 	}
 	setup := openai["setup_status"].(map[string]any)
+	health := openai["health"].(map[string]any)
+	if health["status"] != "ready" || health["state"] != "assistant_workflows_ready" || health["auth_method"] != "api_key" || health["next_action"] != "run_openai_test" {
+		t.Fatalf("expected ready OpenAI registry health to mirror assistant setup readiness, got %+v", health)
+	}
 	for key, want := range map[string]string{
 		"active_auth_method":         "api_key",
 		"api_key_state":              "stored",

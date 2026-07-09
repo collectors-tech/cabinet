@@ -8992,6 +8992,16 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		}
 		healthPayload["last_checked_at"] = lastChecked
 		provider["health"] = healthPayload
+		if strings.EqualFold(providerID, "openai") {
+			provider["health"] = openAIRegistryHealthPayload(
+				openAIReady,
+				openAIActiveMethod,
+				openAIAPIKeyPresent,
+				openAIBrowserState,
+				openAIBrowserCredentialPresent,
+				openAIBrowserProviderTestPassed,
+			)
+		}
 		provider["last_run"] = map[string]any{
 			"status":      lastRunStatus,
 			"finished_at": lastRunFinished,
@@ -9076,6 +9086,33 @@ func openAIRegistrySetupStatus(settings map[string]string, activeMethod string, 
 		"assistant_default_model":           assistantDefaultModel,
 		"workflow_state":                    map[bool]string{true: "assistant_workflows_ready", false: "provider_setup_required"}[ready],
 		"next_action":                       openAIRegistrySetupNextAction(activeMethod, apiKeyReady, browserState, browserArtifactPresent, browserProviderTestPassed),
+	}
+}
+
+func openAIRegistryHealthPayload(ready bool, activeMethod string, apiKeyReady bool, browserState string, browserArtifactPresent bool, browserProviderTestPassed bool) map[string]any {
+	status := "needs_config"
+	state := "provider_setup_required"
+	message := "Choose OpenAI API-key mode or complete verified Browser Auth before running OpenAI workflows."
+	if ready {
+		status = "ready"
+		state = "assistant_workflows_ready"
+		message = "OpenAI assistant provider setup is ready for workflow execution."
+	}
+	if activeMethod == "api_key" && !apiKeyReady {
+		message = "OpenAI API-key mode is selected, but no API key secret is stored for the active profile."
+	}
+	if activeMethod == "browser_auth" && (!strings.EqualFold(browserState, "connected") || !browserArtifactPresent) {
+		message = "OpenAI Browser Auth requires a verified auth artifact before Cabinet marks assistant workflows ready."
+	}
+	if activeMethod == "browser_auth" && strings.EqualFold(browserState, "connected") && browserArtifactPresent && !browserProviderTestPassed {
+		message = "OpenAI Browser Auth requires passed provider-test proof before assistant workflows can run."
+	}
+	return map[string]any{
+		"status":      status,
+		"state":       state,
+		"auth_method": map[bool]string{true: activeMethod, false: "none"}[strings.TrimSpace(activeMethod) != ""],
+		"message":     message,
+		"next_action": openAIRegistrySetupNextAction(activeMethod, apiKeyReady, browserState, browserArtifactPresent, browserProviderTestPassed),
 	}
 }
 
