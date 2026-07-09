@@ -60,6 +60,7 @@ const allowedRoutes = new Set([
   '/settings/account',
   '/settings/appearance',
   '/settings/storage',
+  '/settings/skills',
   '/settings/display',
 ])
 
