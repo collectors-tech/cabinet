@@ -110,14 +110,20 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-shared-table"]')
       .should('be.visible')
       .and('have.attr', 'data-table-surface', 'true')
+    cy.get('[data-testid="media-global-header-actions"]').within(() => {
+      cy.get('[data-testid="media-upload-action"]').should('be.enabled')
+      cy.get('[data-testid="media-download-selected-action"]').should(
+        'be.disabled'
+      )
+    })
     cy.get('[data-testid="media-table-toolbar"]').within(() => {
       cy.get('[data-testid="media-table-search-input"]').should('be.visible')
       cy.get('[data-testid="media-linkage-filter-trigger"]')
         .should('be.visible')
         .and('contain', 'All')
-      cy.get('[data-testid="media-upload-action"]').should('be.enabled')
+      cy.get('[data-testid="media-upload-action"]').should('not.exist')
       cy.get('[data-testid="media-download-selected-action"]').should(
-        'be.disabled'
+        'not.exist'
       )
       cy.get('[data-testid="media-view-mode-cards"]').should('be.visible')
       cy.get('[data-testid="media-view-mode-rows"]').should('be.visible')
