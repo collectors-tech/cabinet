@@ -269,6 +269,95 @@ describe('chats/assistant-workspace', () => {
     })
   })
 
+  it('ASSISTANT-WORKSPACE-008/#1509 starts a show-mode guided item-update walkthrough without mutation', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/messages').as('assistantGuidedWalkthrough')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type(
+      'show me how to update an item'
+    )
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+
+    let threadId = ''
+    cy.wait('@assistantGuidedWalkthrough').then(({ request, response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.app_control.capability_id).to.eq(
+        'guided.inventory.item.update'
+      )
+      expect(response?.body.app_control.route).to.eq('/inventory')
+      expect(response?.body.app_control.guided_workflow.recipe_id).to.eq(
+        'inventory.item.update'
+      )
+      expect(response?.body.app_control.guided_workflow.mode).to.eq('show_me')
+      expect(
+        JSON.stringify(response?.body.app_control.guided_workflow)
+      ).to.include('inventory.item.title')
+      expect(response?.body.assistant_handoff).to.eq(undefined)
+      threadId = String(request.body.thread_id)
+    })
+
+    cy.get('[data-testid="shell-assistant-guided-walkthrough"]')
+      .should('be.visible')
+      .and('have.attr', 'data-guided-mode', 'show_me')
+      .and('have.attr', 'data-guided-recipe', 'inventory.item.update')
+    cy.get('[data-testid="shell-assistant-guided-boundary"]').should(
+      'contain',
+      'show_me_never_mutates'
+    )
+    cy.get('[data-testid="shell-assistant-guided-step"]')
+      .filter('[data-guided-command="chat.action.confirm_apply"]')
+      .should('have.attr', 'data-guided-target', 'inventory.item.save')
+    cy.get('[data-testid="shell-assistant-guided-pause"]')
+      .should('have.attr', 'data-guided-paused', 'false')
+      .click()
+      .should('have.attr', 'data-guided-paused', 'true')
+    cy.get('[data-testid="shell-assistant-guided-start"]').click()
+
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.get('[data-testid="shell-assistant-modal-content"]').should('be.visible')
+    cy.get('[data-testid="shell-assistant-action-timeline"] summary').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-command-event"]')
+      .filter('[data-command-type="navigate.open_surface"]')
+      .last()
+      .should('have.attr', 'data-command-status', 'success')
+      .and('contain', 'Opened /inventory without mutation')
+    cy.get('[data-testid="shell-assistant-command-event"]')
+      .filter('[data-command-type="chat.action.confirm_apply"]')
+      .last()
+      .should('have.attr', 'data-command-status', 'skipped')
+      .and('contain', 'Show mode stops before preview, save, or apply')
+    cy.get('[data-testid="shell-assistant-guided-cancel"]').click()
+    cy.get('[data-testid="shell-assistant-command-event"]')
+      .filter('[data-command-type="walkthrough.cancel"]')
+      .last()
+      .should('have.attr', 'data-command-status', 'success')
+
+    cy.then(() => {
+      cy.request(
+        `/api/chat/workflow-runs?profile_id=e2e-profile-001&thread_id=${encodeURIComponent(
+          threadId
+        )}`
+      )
+        .its('body')
+        .should((payload) => {
+          const serialized = JSON.stringify(payload)
+          expect(serialized).to.include('guided.inventory.item.update')
+          expect(serialized).to.include('inventory.item.update')
+          expect(serialized).to.include('show_me_never_mutates')
+        })
+      cy.request('/api/items?profile_id=e2e-profile-001')
+        .its('body')
+        .should((items) => {
+          expect(JSON.stringify(items)).not.to.include(
+            'show_me_never_mutates'
+          )
+        })
+    })
+  })
+
   it('AGENT-ATTACHMENTS-001 handles side-panel attachments with the same scoped message binding as main Chat', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/attachments').as('assistantAttachment')

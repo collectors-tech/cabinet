@@ -20,6 +20,7 @@ type chatAppControlIntent struct {
 	ErrorCode         string
 	ErrorMessage      string
 	SetupNeeded       bool
+	GuidedWorkflow    map[string]any
 }
 
 func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, profileID, threadID, content string, envelope map[string]any, sourceMessageID string) (map[string]any, bool) {
@@ -36,6 +37,9 @@ func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, p
 	}
 	if intent.SetupNeeded {
 		result["setup_needed"] = true
+	}
+	if intent.GuidedWorkflow != nil {
+		result["guided_workflow"] = intent.GuidedWorkflow
 	}
 	if intent.ErrorCode != "" {
 		result["error"] = map[string]any{"code": intent.ErrorCode, "message": intent.ErrorMessage}
@@ -94,7 +98,7 @@ func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, p
 			RunID:             run.ID,
 			Status:            status,
 			ProviderTrace:     map[string]any{"mode": "deterministic_app_control_planner", "live_provider": false},
-			Result:            map[string]any{"route": intent.Route, "setup_needed": intent.SetupNeeded},
+			Result:            map[string]any{"route": intent.Route, "setup_needed": intent.SetupNeeded, "guided_workflow": intent.GuidedWorkflow},
 			Error:             runError,
 			ConfirmationState: intent.ConfirmationState,
 		})
@@ -116,6 +120,24 @@ func planChatMessageAppControl(content string, envelope map[string]any) (chatApp
 	normalized := normalizePlannerText(content)
 	if normalized == "" {
 		return chatAppControlIntent{}, false
+	}
+	if requestsGuidedInventoryUpdate(normalized) {
+		recipe := chat.GuidedWorkflowRegistry()[0]
+		return chatAppControlIntent{
+			CapabilityID:      "guided.inventory.item.update",
+			Route:             "/inventory",
+			ConfirmationState: "not_required",
+			Message:           "I can show the Inventory update walkthrough. I will open Inventory, highlight registered targets, and stop before any save or apply action.",
+			GuidedWorkflow: map[string]any{
+				"recipe_id":           recipe.ID,
+				"title":               recipe.Title,
+				"mode":                string(chat.GuidedWorkflowModeShowMe),
+				"route":               "/inventory",
+				"steps":               recipe.Steps,
+				"mutation_boundary":   "show_me_never_mutates",
+				"completion_criteria": "Inventory route and registered update targets were highlighted without applying changes.",
+			},
+		}, true
 	}
 	if route, label, ok := plannedOpenSurface(normalized); ok {
 		return chatAppControlIntent{
@@ -170,6 +192,17 @@ func planChatMessageAppControl(content string, envelope map[string]any) (chatApp
 		}, true
 	}
 	return chatAppControlIntent{}, false
+}
+
+func requestsGuidedInventoryUpdate(normalized string) bool {
+	return (strings.Contains(normalized, "show me") ||
+		strings.Contains(normalized, "walk me through") ||
+		strings.Contains(normalized, "guide me") ||
+		strings.Contains(normalized, "how to")) &&
+		(strings.Contains(normalized, "update an item") ||
+			strings.Contains(normalized, "update item") ||
+			strings.Contains(normalized, "edit an item") ||
+			strings.Contains(normalized, "edit inventory"))
 }
 
 func chatMessageRequiresAssistantHandoff(content string) bool {

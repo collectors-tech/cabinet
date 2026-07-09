@@ -16,7 +16,7 @@ func TestGuidedWorkflowRegistryMatchesInventoryItemUpdateRecipe(t *testing.T) {
 			HasTargetItem:     true,
 			EditableFields:    []string{"title", "condition"},
 			Capabilities:      []string{"navigate.open_surface", "ui.highlight_target", "chat.action.preview", "chat.action.confirm_apply"},
-			AvailableTargets:  []string{"inventory.item.row", "inventory.item.editor.title", "inventory.item.editor.save"},
+			AvailableTargets:  []string{"inventory.item.row", "inventory.item.title", "inventory.item.save"},
 			ActiveProfileID:   "profile-1",
 			ActiveThreadID:    "thread-1",
 			ActiveWorkspaceID: "inventory",
@@ -51,7 +51,7 @@ func TestGuidedWorkflowRegistryMatchesInventoryItemUpdateRecipe(t *testing.T) {
 			t.Fatalf("expected allowed command %q, got %+v", command, recipe.AllowedCommands)
 		}
 	}
-	for _, target := range []string{"inventory.item.row", "inventory.item.editor.title", "inventory.item.editor.save"} {
+	for _, target := range []string{"inventory.item.row", "inventory.item.title", "inventory.item.save"} {
 		if !slices.Contains(recipe.UITargets, target) {
 			t.Fatalf("expected UI target %q, got %+v", target, recipe.UITargets)
 		}
@@ -61,9 +61,9 @@ func TestGuidedWorkflowRegistryMatchesInventoryItemUpdateRecipe(t *testing.T) {
 	}
 	assertStep(t, recipe.Steps[0], "open-inventory", "navigate.open_surface", "/inventory", "")
 	assertStep(t, recipe.Steps[1], "select-item", "ui.highlight_target", "/inventory", "inventory.item.row")
-	assertStep(t, recipe.Steps[2], "focus-editable-field", "ui.highlight_target", "/inventory", "inventory.item.editor.title")
-	assertStep(t, recipe.Steps[3], "preview-change", "chat.action.preview", "/inventory", "inventory.item.editor.title")
-	assertStep(t, recipe.Steps[4], "confirm-apply", "chat.action.confirm_apply", "/inventory", "inventory.item.editor.save")
+	assertStep(t, recipe.Steps[2], "focus-editable-field", "ui.highlight_target", "/inventory", "inventory.item.title")
+	assertStep(t, recipe.Steps[3], "preview-change", "chat.action.preview", "/inventory", "inventory.item.title")
+	assertStep(t, recipe.Steps[4], "confirm-apply", "chat.action.confirm_apply", "/inventory", "inventory.item.save")
 	if recipe.MutationBoundaries != "preview_before_apply_explicit_confirmation" {
 		t.Fatalf("expected confirmation mutation boundary, got %q", recipe.MutationBoundaries)
 	}
@@ -105,7 +105,7 @@ func TestGuidedWorkflowRegistryAsksFollowUpForUnderSpecifiedRequests(t *testing.
 				ActiveThreadID:   "thread-1",
 				EditableFields:   []string{"title"},
 				Capabilities:     []string{"navigate.open_surface", "ui.highlight_target", "chat.action.preview", "chat.action.confirm_apply"},
-				AvailableTargets: []string{"inventory.item.editor.title"},
+				AvailableTargets: []string{"inventory.item.title"},
 			},
 			want: "open or select the inventory item",
 		},
@@ -118,7 +118,7 @@ func TestGuidedWorkflowRegistryAsksFollowUpForUnderSpecifiedRequests(t *testing.
 				HasTargetItem:    true,
 				EditableFields:   []string{"title"},
 				Capabilities:     []string{"navigate.open_surface"},
-				AvailableTargets: []string{"inventory.item.row", "inventory.item.editor.title", "inventory.item.editor.save"},
+				AvailableTargets: []string{"inventory.item.row", "inventory.item.title", "inventory.item.save"},
 			},
 			want: "safe preview and confirmation tools",
 		},

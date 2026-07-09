@@ -105,7 +105,7 @@ func MatchGuidedWorkflowRecipe(input GuidedWorkflowMatchInput) GuidedWorkflowMat
 				return guidedWorkflowFollowUp("This walkthrough needs safe preview and confirmation tools before it can run.")
 			}
 		}
-		for _, required := range []string{"inventory.item.row", "inventory.item.editor.title", "inventory.item.editor.save"} {
+		for _, required := range []string{"inventory.item.row", "inventory.item.title", "inventory.item.save"} {
 			if !containsString(input.Context.AvailableTargets, required) {
 				return guidedWorkflowFollowUp("This walkthrough needs stable inventory UI targets before it can run.")
 			}
@@ -162,7 +162,7 @@ func inventoryItemUpdateRecipe() GuidedWorkflowRecipe {
 				Title:         "Focus editable field",
 				Instruction:   "Highlight the editable title field and collect the intended value.",
 				Route:         "/inventory",
-				UITargetID:    "inventory.item.editor.title",
+				UITargetID:    "inventory.item.title",
 				Command:       GuidedCommandHighlightTarget,
 				ExpectedState: "The editable title field is visible and ready for a draft value.",
 				OnFailure:     "Report the missing target and avoid creating a mutation preview.",
@@ -172,7 +172,7 @@ func inventoryItemUpdateRecipe() GuidedWorkflowRecipe {
 				Title:         "Preview change",
 				Instruction:   "Create a chat action preview for the intended field update.",
 				Route:         "/inventory",
-				UITargetID:    "inventory.item.editor.title",
+				UITargetID:    "inventory.item.title",
 				Command:       GuidedCommandPreviewAction,
 				ExpectedState: "A preview records item id, field, old value, new value, and pending confirmation.",
 				OnFailure:     "Leave the item unchanged and show retry guidance.",
@@ -182,7 +182,7 @@ func inventoryItemUpdateRecipe() GuidedWorkflowRecipe {
 				Title:         "Confirm apply",
 				Instruction:   "Wait for explicit confirmation before saving the update.",
 				Route:         "/inventory",
-				UITargetID:    "inventory.item.editor.save",
+				UITargetID:    "inventory.item.save",
 				Command:       GuidedCommandConfirmApply,
 				ExpectedState: "Confirmed apply persists the item update and records audit evidence.",
 				OnFailure:     "Cancel or pause without mutating the item.",
@@ -190,8 +190,8 @@ func inventoryItemUpdateRecipe() GuidedWorkflowRecipe {
 		},
 		UITargets: []string{
 			"inventory.item.row",
-			"inventory.item.editor.title",
-			"inventory.item.editor.save",
+			"inventory.item.title",
+			"inventory.item.save",
 		},
 		AllowedCommands: []GuidedWorkflowCommand{
 			GuidedCommandNavigateOpenSurface,
