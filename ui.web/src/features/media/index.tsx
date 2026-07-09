@@ -55,6 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
   SheetContent,
@@ -1004,13 +1005,50 @@ export function Media() {
           iconTestId='media-page-icon'
         />
         <div
-          className='ms-auto flex items-center space-x-4'
+          className='ms-auto flex min-w-0 items-center gap-3'
           data-header-title-avoid='true'
         >
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
+          <div
+            className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+            data-testid='media-global-header-actions'
+          >
+            <Button
+              type='button'
+              size='icon'
+              className='h-8 w-8'
+              aria-label='Add new asset'
+              title='Add media'
+              data-testid='media-upload-action'
+              onClick={() => {
+                setAddMediaOpen(true)
+                setAddMediaError(null)
+              }}
+            >
+              <ImagePlus className='h-4 w-4' aria-hidden='true' />
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              className='h-8'
+              disabled={selectedAssetIds.length === 0 || downloadLoading}
+              data-testid='media-download-selected-action'
+              onClick={() => void previewDownload()}
+            >
+              <Download className='h-4 w-4' aria-hidden='true' />
+              {downloadLoading ? 'Previewing...' : 'Download selected'}
+            </Button>
+          </div>
+          <Separator
+            orientation='vertical'
+            className='h-6'
+            data-testid='media-header-action-separator'
+          />
+          <div className='flex items-center gap-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ConfigDrawer />
+            <ProfileDropdown />
+          </div>
         </div>
       </Header>
 
@@ -1140,32 +1178,6 @@ export function Media() {
                 }
                 actions={
                   <>
-                    <Button
-                      type='button'
-                      size='icon'
-                      className='h-8 w-8'
-                      aria-label='Add new asset'
-                      data-testid='media-upload-action'
-                      onClick={() => {
-                        setAddMediaOpen(true)
-                        setAddMediaError(null)
-                      }}
-                    >
-                      <ImagePlus />
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='h-8'
-                      disabled={
-                        selectedAssetIds.length === 0 || downloadLoading
-                      }
-                      data-testid='media-download-selected-action'
-                      onClick={() => void previewDownload()}
-                    >
-                      <Download />
-                      {downloadLoading ? 'Previewing...' : 'Download selected'}
-                    </Button>
                     <div
                       className='flex items-center gap-1'
                       aria-label='Media view mode'

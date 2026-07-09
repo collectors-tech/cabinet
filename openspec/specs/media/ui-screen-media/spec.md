@@ -282,13 +282,13 @@ Cabinet SHALL expose explicit Cards and Rows view controls on the authenticated 
 - **THEN** Cabinet MUST restore the selected Media view mode from `cabinet.viewMode.media` without changing the active media filter or API query.
 
 ### Requirement UI-SCREEN-MEDIA-015: Media workspace table SHALL use Cabinet shared table affordances
-Cabinet SHALL render the Media page primary content with the shared table surface used by other Cabinet management pages, including toolbar search/filtering, sortable scan-friendly columns, stable row selection, row actions, and toolbar-scoped table actions. The Media workspace SHALL reclaim working space by omitting the former top summary-card row above the table workflow.
+Cabinet SHALL render the Media page primary content with the shared table surface used by other Cabinet management pages, including toolbar search/filtering, sortable scan-friendly columns, stable row selection, row actions, and header-scoped primary actions. The Media workspace SHALL reclaim working space by omitting the former top summary-card row above the table workflow.
 
 #### Scenario: Manage media from shared table surface
 - **GIVEN** the Media workspace has returned profile-scoped media assets
 - **WHEN** the user opens `/media`
 - **THEN** the primary content MUST render a `data-table-surface` table with thumbnail/title identity, analysis status, linkage state, upload timestamp, source/context, filename, row selection, and open/analyze/assign/archive actions.
-- **AND** the table toolbar MUST expose an accessible `Add new asset` action.
+- **AND** the page header action area MUST expose an accessible `Add new asset` action while the table toolbar remains focused on table search, filtering, and view controls.
 - **AND** the workspace MUST NOT render the former top summary cards for Assets, Unlinked, or Ready for review above the table workflow.
 - **AND** the table toolbar MUST provide search/filtering over media identity, status, linkage, source, and filename fields without switching away from the table.
 
@@ -308,8 +308,8 @@ Cabinet SHALL keep both Media Cards and Rows view modes on the same shared table
 - **THEN** the Media table body or card body region MUST be the scrolling surface
 - **AND** the page header, table toolbar, and pagination controls MUST remain reachable without relying on whole-page table scrolling.
 
-### Requirement UI-SCREEN-MEDIA-018: Media workspace SHALL keep all persistent controls inside the shared table toolbar
-Cabinet SHALL render `/media` as a compact table-first workspace where persistent Media controls live inside the shared table toolbar instead of in permanent page-level chrome above the table.
+### Requirement UI-SCREEN-MEDIA-018: Media workspace SHALL keep primary actions in the page header
+Cabinet SHALL render `/media` as a compact table-first workspace where primary Media actions live in the shared page header action area while table search, filters, view mode, and column controls remain inside the shared table toolbar.
 
 #### Scenario: Render compact Media workspace without duplicate page chrome
 - **GIVEN** the user opens `/media`
@@ -317,10 +317,19 @@ Cabinet SHALL render `/media` as a compact table-first workspace where persisten
 - **THEN** the workspace MUST render the shared Media table section at the top of the workspace
 - **AND** the workspace MUST NOT render a permanent in-page `Media` heading, page description, asset-count row, table-summary row, or All/Unlinked tab strip above the table.
 
+#### Scenario: Use Media primary actions from the page header
+- **GIVEN** the Media page header is visible
+- **WHEN** the user reviews persistent page actions
+- **THEN** the shared page header action area MUST contain Add media and Download selected controls.
+- **AND** the Add media action MUST open the Add media dialog through the same create path used by page-wide drop.
+- **AND** Download selected MUST remain disabled until one or more assets are selected and MUST use the `/api/media/downloads/preview` contract when activated.
+- **AND** the header action area MUST wrap cleanly on narrow widths without creating a duplicate in-body action row above the table.
+
 #### Scenario: Use Media controls from the table toolbar
 - **GIVEN** the Media table toolbar is visible
 - **WHEN** the user reviews persistent table controls
-- **THEN** the toolbar MUST contain `Filter media...` search, the Linked filter, Add media, Download selected, Cards, Rows, and the table `View` control.
+- **THEN** the toolbar MUST contain `Filter media...` search, the Linked filter, Cards, Rows, and the table `View` control.
+- **AND** the toolbar MUST NOT duplicate the Add media or Download selected page header actions.
 - **WHEN** the user selects Linked `Unlinked`
 - **THEN** Cabinet MUST keep using the `/api/media/assets?filter=unlinked` contract and update visible table or card results to unlinked media only.
 - **AND** Cards and Rows controls MUST stay adjacent to the table `View` control and share the same search, linkage filter, and pagination state.
