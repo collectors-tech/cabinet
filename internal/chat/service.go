@@ -1026,6 +1026,7 @@ func (s *Service) recordActionPreviewWorkflowRun(ctx context.Context, preview Ac
 		Input:             payload,
 		ProviderTrace:     map[string]any{"mode": "governed_preview_before_apply", "live_provider": false},
 		ConfirmationState: "pending",
+		BulkItems:         actionPreviewWorkflowSteps(preview, capabilityID, payload, "previewed", ApplyActionResult{}),
 	})
 	if err != nil {
 		return WorkflowRun{}, err
@@ -1037,6 +1038,7 @@ func (s *Service) recordActionPreviewWorkflowRun(ctx context.Context, preview Ac
 		ProviderTrace:     map[string]any{"mode": "governed_preview_before_apply", "live_provider": false},
 		Result:            map[string]any{"preview_id": preview.ID, "action": preview.Action, "confirmation_required": true},
 		ConfirmationState: "pending",
+		BulkItems:         actionPreviewWorkflowSteps(preview, capabilityID, payload, "previewed", ApplyActionResult{}),
 	})
 }
 
@@ -1069,7 +1071,140 @@ func (s *Service) updateActionWorkflowRun(ctx context.Context, profileID, thread
 	update.ProfileID = profileID
 	update.RunID = run.ID
 	update.ProviderTrace = map[string]any{"mode": "governed_preview_before_apply", "live_provider": false}
+	if len(update.BulkItems) == 0 {
+		preview, err := s.getPreview(ctx, profileID, previewID)
+		if err == nil {
+			update.BulkItems = actionPreviewWorkflowSteps(preview, run.CapabilityID, run.Input, update.ConfirmationState, actionResultFromWorkflowPayload(update.Result))
+		}
+	}
 	return s.UpdateWorkflowRun(ctx, update)
+}
+
+func actionPreviewWorkflowSteps(preview ActionPreview, capabilityID string, payload map[string]any, confirmationState string, result ApplyActionResult) []map[string]any {
+	if !isGuidedInventoryUpdateWorkflow(capabilityID, payload) {
+		return nil
+	}
+	recipeID := trimPayloadString(payload, "guided_workflow_id")
+	if recipeID == "" {
+		recipeID = "inventory.item.update"
+	}
+	mode := trimPayloadString(payload, "guided_mode")
+	if mode == "" {
+		mode = string(GuidedWorkflowModeWithMe)
+	}
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	steps := []map[string]any{
+		guidedWorkflowStepRecord(recipeID, mode, "open-inventory", string(GuidedCommandNavigateOpenSurface), "inventory.surface", "completed", occurredAt, map[string]any{
+			"route": "/inventory",
+		}),
+		guidedWorkflowStepRecord(recipeID, mode, "focus-editable-field", string(GuidedCommandHighlightTarget), guidedWorkflowTargetID(payload), "completed", occurredAt, map[string]any{
+			"item_id": trimPayloadString(payload, "item_id"),
+			"field":   guidedWorkflowField(payload),
+		}),
+		guidedWorkflowStepRecord(recipeID, mode, "preview-change", string(GuidedCommandPreviewAction), guidedWorkflowTargetID(payload), "needs_input", occurredAt, map[string]any{
+			"preview_id":            preview.ID,
+			"action":                preview.Action,
+			"confirmation_required": true,
+			"new_value":             guidedWorkflowNewValue(payload),
+		}),
+		guidedWorkflowStepRecord(recipeID, mode, "confirm-apply", string(GuidedCommandConfirmApply), "inventory.item.save", "needs_input", occurredAt, map[string]any{
+			"preview_id": preview.ID,
+			"state":      normalizeConfirmationState(confirmationState),
+		}),
+	}
+	if normalizeConfirmationState(confirmationState) == "confirmed" && result.Applied {
+		steps[2]["status"] = "completed"
+		steps[3]["status"] = "completed"
+		steps = append(steps, guidedWorkflowStepRecord(recipeID, mode, "apply-result", "chat.action.result", "inventory.item.save", "completed", occurredAt, map[string]any{
+			"preview_id":       result.PreviewID,
+			"item_id":          result.ItemID,
+			"mutation_applied": result.Applied,
+			"title":            result.Title,
+			"part_number":      result.PartNumber,
+		}))
+	}
+	if normalizeConfirmationState(confirmationState) == "cancelled" {
+		steps[3]["status"] = "cancelled"
+		steps[3]["result"] = map[string]any{"preview_id": preview.ID, "state": "cancelled", "mutation_applied": false}
+	}
+	return steps
+}
+
+func guidedWorkflowStepRecord(recipeID, mode, stepID, commandID, targetID, status, occurredAt string, result map[string]any) map[string]any {
+	return map[string]any{
+		"kind":        "guided_workflow_step",
+		"recipe_id":   recipeID,
+		"mode":        mode,
+		"step_id":     stepID,
+		"command_id":  commandID,
+		"target_id":   targetID,
+		"status":      status,
+		"occurred_at": occurredAt,
+		"result":      result,
+	}
+}
+
+func isGuidedInventoryUpdateWorkflow(capabilityID string, payload map[string]any) bool {
+	if strings.TrimSpace(capabilityID) != "inventory.item.update" && strings.TrimSpace(capabilityID) != "update_open_item_title" {
+		return false
+	}
+	recipeID := trimPayloadString(payload, "guided_workflow_id")
+	return recipeID == "inventory.item.update" || recipeID == "guided.inventory.item.update"
+}
+
+func guidedWorkflowField(payload map[string]any) string {
+	if field := trimPayloadString(payload, "field"); field != "" {
+		return field
+	}
+	if trimPayloadString(payload, "title") != "" {
+		return "title"
+	}
+	if trimPayloadString(payload, "part_number") != "" {
+		return "part_number"
+	}
+	if trimPayloadString(payload, "brand") != "" {
+		return "brand"
+	}
+	if trimPayloadString(payload, "category") != "" {
+		return "category"
+	}
+	return "item"
+}
+
+func guidedWorkflowTargetID(payload map[string]any) string {
+	switch guidedWorkflowField(payload) {
+	case "title":
+		return "inventory.item.title"
+	case "category":
+		return "inventory.item.category"
+	default:
+		return "inventory.item.editor"
+	}
+}
+
+func guidedWorkflowNewValue(payload map[string]any) string {
+	if field := guidedWorkflowField(payload); field != "" {
+		return trimPayloadString(payload, field)
+	}
+	return ""
+}
+
+func actionResultFromWorkflowPayload(payload map[string]any) ApplyActionResult {
+	return ApplyActionResult{
+		Applied:        boolFromPayload(payload, "mutation_applied"),
+		Action:         trimPayloadString(payload, "action"),
+		ItemID:         trimPayloadString(payload, "item_id"),
+		WishlistID:     trimPayloadString(payload, "wishlist_id"),
+		CollectionName: trimPayloadString(payload, "collection_name"),
+		PartNumber:     trimPayloadString(payload, "part_number"),
+		Title:          trimPayloadString(payload, "title"),
+		PreviewID:      trimPayloadString(payload, "preview_id"),
+	}
+}
+
+func boolFromPayload(payload map[string]any, key string) bool {
+	value, _ := payload[key].(bool)
+	return value
 }
 
 func (s *Service) findActionWorkflowRunByPreview(ctx context.Context, profileID, threadID, previewID string) (WorkflowRun, error) {

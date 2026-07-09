@@ -766,7 +766,12 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 		t.Fatalf("rename preview app-control status=%d body=%s", renameResp.Code, renameResp.Body.String())
 	}
 	renameBody := renameResp.Body.String()
-	if !strings.Contains(renameBody, `"capability_id":"update_open_item_title"`) || !strings.Contains(renameBody, `"action":"update_open_item_title"`) || !strings.Contains(renameBody, `"item_id":"`+item.ID+`"`) || !strings.Contains(renameBody, `"title":"Planner Updated Title"`) {
+	if !strings.Contains(renameBody, `"capability_id":"update_open_item_title"`) ||
+		!strings.Contains(renameBody, `"action":"update_open_item_title"`) ||
+		!strings.Contains(renameBody, `"item_id":"`+item.ID+`"`) ||
+		!strings.Contains(renameBody, `"title":"Planner Updated Title"`) ||
+		!strings.Contains(renameBody, `"guided_workflow_id":"inventory.item.update"`) ||
+		!strings.Contains(renameBody, `"guided_mode":"do_it_with_me"`) {
 		t.Fatalf("expected open item rename preview result, body=%s", renameBody)
 	}
 	itemsAfterRenamePreview := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
@@ -781,7 +786,14 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 	if runs.Code != http.StatusOK {
 		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
 	}
-	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) || !strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) || !strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) || !strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) || !strings.Contains(runs.Body.String(), `"status":"failed"`) || !strings.Contains(runs.Body.String(), `"code":"unknown_surface"`) {
+	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) ||
+		!strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) ||
+		!strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) ||
+		!strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) ||
+		!strings.Contains(runs.Body.String(), `"step_id":"preview-change"`) ||
+		!strings.Contains(runs.Body.String(), `"command_id":"chat.action.preview"`) ||
+		!strings.Contains(runs.Body.String(), `"status":"failed"`) ||
+		!strings.Contains(runs.Body.String(), `"code":"unknown_surface"`) {
 		t.Fatalf("expected durable app-control workflow audit runs, body=%s", runs.Body.String())
 	}
 }

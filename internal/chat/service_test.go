@@ -551,6 +551,109 @@ func TestServiceUpdatePreviewApplyRejectsMissingTarget(t *testing.T) {
 	}
 }
 
+func TestGuidedInventoryUpdatePersistsTimelineAndConfirmedMutation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "profile-guided-update"
+	if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, "Guided Update"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	itemID := "guided-update-item"
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO canonical_items(
+			id, profile_id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		) VALUES (?, ?, 'AFX', 'Cars', 'GUIDE-001', 'Original title', '', '', '', '', '', '', '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, itemID, profileID); err != nil {
+		t.Fatalf("insert item: %v", err)
+	}
+	thread, err := svc.CreateThread(ctx, profileID, "Guided Update Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+		"route":   map[string]any{"pathname": "/inventory", "search": "?item=" + itemID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID:    profileID,
+		ThreadID:     thread.ID,
+		CapabilityID: "inventory.item.update",
+		Payload: map[string]any{
+			"item_id":            itemID,
+			"title":              "Guided confirmed title",
+			"field":              "title",
+			"guided_workflow_id": "inventory.item.update",
+			"guided_mode":        string(GuidedWorkflowModeWithMe),
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(guided update) error = %v", err)
+	}
+	runs, err := svc.ListWorkflowRuns(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListWorkflowRuns(after preview) error = %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected one preview workflow run, got %d", len(runs))
+	}
+	if runs[0].Status != "needs_input" || runs[0].ConfirmationState != "pending" {
+		t.Fatalf("expected pending preview workflow run, got %+v", runs[0])
+	}
+	assertGuidedStep(t, runs[0].BulkItems, "open-inventory", "navigate.open_surface", "inventory.surface", "completed")
+	assertGuidedStep(t, runs[0].BulkItems, "preview-change", "chat.action.preview", "inventory.item.title", "needs_input")
+	assertGuidedStep(t, runs[0].BulkItems, "confirm-apply", "chat.action.confirm_apply", "inventory.item.save", "needs_input")
+
+	applied, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	})
+	if err != nil {
+		t.Fatalf("ApplyAction(guided update) error = %v", err)
+	}
+	if !applied.Applied || applied.ItemID != itemID || applied.Title != "Guided confirmed title" {
+		t.Fatalf("unexpected guided update apply result: %+v", applied)
+	}
+	var title string
+	if err := conn.QueryRowContext(ctx, "SELECT title FROM canonical_items WHERE id = ? AND profile_id = ?", itemID, profileID).Scan(&title); err != nil {
+		t.Fatalf("select updated item title: %v", err)
+	}
+	if title != "Guided confirmed title" {
+		t.Fatalf("expected confirmed guided update to persist title, got %q", title)
+	}
+	runs, err = svc.ListWorkflowRuns(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListWorkflowRuns(after apply) error = %v", err)
+	}
+	if runs[0].Status != "completed" || runs[0].ConfirmationState != "confirmed" {
+		t.Fatalf("expected completed confirmed workflow run, got %+v", runs[0])
+	}
+	assertGuidedStep(t, runs[0].BulkItems, "preview-change", "chat.action.preview", "inventory.item.title", "completed")
+	assertGuidedStep(t, runs[0].BulkItems, "confirm-apply", "chat.action.confirm_apply", "inventory.item.save", "completed")
+	assertGuidedStep(t, runs[0].BulkItems, "apply-result", "chat.action.result", "inventory.item.save", "completed")
+}
+
+func assertGuidedStep(t *testing.T, steps []map[string]any, stepID, commandID, targetID, status string) {
+	t.Helper()
+	for _, step := range steps {
+		if step["kind"] == "guided_workflow_step" && step["step_id"] == stepID {
+			if step["recipe_id"] != "inventory.item.update" || step["command_id"] != commandID || step["target_id"] != targetID || step["status"] != status || step["occurred_at"] == "" {
+				t.Fatalf("guided step %s mismatch: %+v", stepID, step)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing guided step %s in %+v", stepID, steps)
+}
+
 func TestServiceCollectionAssignmentRejectsMissingTarget(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
