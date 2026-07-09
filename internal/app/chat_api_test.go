@@ -506,7 +506,7 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 		switch workflow.ID {
 		case "inventory.item.update":
 			inventoryWorkflow = slices.Contains(workflow.RequiredContext, "target_inventory_item") &&
-				slices.Contains(workflow.UITargets, "inventory.item.editor.title")
+				slices.Contains(workflow.UITargets, "inventory.item.title")
 		case "wishlist.entry.create":
 			wishlistWorkflow = true
 		}
@@ -783,6 +783,53 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 	}
 	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) || !strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) || !strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) || !strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) || !strings.Contains(runs.Body.String(), `"status":"failed"`) || !strings.Contains(runs.Body.String(), `"code":"unknown_surface"`) {
 		t.Fatalf("expected durable app-control workflow audit runs, body=%s", runs.Body.String())
+	}
+}
+
+func TestChatMessageAppControlPlannerStartsGuidedInventoryWalkthrough(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Guided Walkthrough Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Guided Walkthrough Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"show me how to update an item","context":{"route":{"pathname":"/dashboard"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("guided walkthrough status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	body := resp.Body.String()
+	if strings.Contains(body, `"assistant_handoff"`) {
+		t.Fatalf("guided walkthrough must not create default inbox handoff, body=%s", body)
+	}
+	for _, expected := range []string{`"capability_id":"guided.inventory.item.update"`, `"route":"/inventory"`, `"recipe_id":"inventory.item.update"`, `"mode":"show_me"`, `"ui_target_id":"inventory.item.title"`, `"mutation_boundary":"show_me_never_mutates"`, `"confirmation_state":"not_required"`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected guided walkthrough response to include %s, body=%s", expected, body)
+		}
+	}
+	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if strings.Contains(items.Body.String(), "show_me_never_mutates") {
+		t.Fatalf("show walkthrough must not mutate inventory, body=%s", items.Body.String())
 	}
 }
 

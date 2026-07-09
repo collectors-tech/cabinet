@@ -16,6 +16,9 @@ export type ShellCommandType =
   | 'ui.highlight_target'
   | 'ui.scroll_to_target'
   | 'ui.focus_field'
+  | 'ui.wait_for_user_action'
+  | 'chat.action.preview'
+  | 'chat.action.confirm_apply'
   | 'ui.clear_guidance'
   | 'walkthrough.cancel'
 
@@ -125,6 +128,21 @@ export async function dispatchShellCommand(
       case 'walkthrough.cancel':
         clearUiGuidance()
         dispatcher.emit(commandEvent(command, 'success', 'Guidance cleared'))
+        return
+      case 'ui.wait_for_user_action':
+        dispatcher.emit(
+          commandEvent(command, 'success', 'Paused for user checkpoint')
+        )
+        return
+      case 'chat.action.preview':
+      case 'chat.action.confirm_apply':
+        dispatcher.emit(
+          commandEvent(
+            command,
+            'skipped',
+            'Show mode stops before preview, save, or apply'
+          )
+        )
         return
       default:
         dispatcher.emit(commandEvent(command, 'skipped', 'Unsupported command'))

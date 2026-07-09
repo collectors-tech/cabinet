@@ -9,12 +9,17 @@ import {
 import {
   Bot,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   GitBranchPlus,
   MessageSquarePlus,
   Paperclip,
+  Pause,
+  Play,
   ShieldAlert,
   Sparkles,
+  SkipForward,
   VolumeX,
   Wand2,
   X,
@@ -23,6 +28,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import {
   dispatchShellCommand,
   type ShellCommandEvent,
+  type ShellCommandType,
 } from '@/lib/shell-command-bus'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
@@ -103,11 +109,31 @@ type AppControlContext = {
   route?: string
   setup_needed?: boolean
   preview?: ActionPreview
+  guided_workflow?: GuidedWorkflowPlan
   workflow_run?: {
     id?: string
     status?: string
     confirmation_state?: string
   }
+}
+
+type GuidedWorkflowStep = {
+  id: string
+  title: string
+  instruction: string
+  route?: string
+  ui_target_id?: string
+  command: string
+}
+
+type GuidedWorkflowPlan = {
+  recipe_id: string
+  title: string
+  mode: 'explain' | 'show_me' | 'do_it_with_me' | 'do_it_for_me'
+  route: string
+  steps: GuidedWorkflowStep[]
+  mutation_boundary: string
+  completion_criteria: string
 }
 
 type ApplyActionResult = {
@@ -546,6 +572,7 @@ export function AssistantWorkspacePanel() {
   const [workflowRuns, setWorkflowRuns] = useState<ChatWorkflowRun[]>([])
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false)
   const [workflowRunsError, setWorkflowRunsError] = useState('')
+  const [guidedPaused, setGuidedPaused] = useState(false)
 
   const routeContext = useMemo(
     () => ({
@@ -573,6 +600,7 @@ export function AssistantWorkspacePanel() {
     [provider]
   )
   const appControl = useMemo(() => latestAppControl(messages), [messages])
+  const guidedWorkflow = appControl?.guided_workflow
   const backendNavigationAction = useMemo(
     () => navigationActionFromAppControl(appControl),
     [appControl]
@@ -1077,7 +1105,7 @@ export function AssistantWorkspacePanel() {
   }
 
   const appendCommandEvent = useCallback((event: ShellCommandEvent) => {
-    setCommandEvents((current) => [...current.slice(-7), event])
+    setCommandEvents((current) => [...current.slice(-19), event])
   }, [])
 
   const runNavigationAction = useCallback(
@@ -1136,6 +1164,50 @@ export function AssistantWorkspacePanel() {
       }
     )
   }, [appendCommandEvent, navigate])
+
+  const dispatchGuidedStep = useCallback(
+    async (step: GuidedWorkflowStep) => {
+      await dispatchShellCommand(
+        {
+          id: `walkthrough:${step.id}`,
+          type: step.command as ShellCommandType,
+          route: step.route,
+          targetId: step.ui_target_id,
+          title: step.title,
+          instruction: step.instruction,
+        },
+        {
+          navigate: async (route) => {
+            await navigate({ to: route })
+            setActiveWorkspace('assistant')
+          },
+          emit: appendCommandEvent,
+        }
+      )
+    },
+    [appendCommandEvent, navigate, setActiveWorkspace]
+  )
+
+  const runGuidedWalkthrough = useCallback(
+    async (plan: GuidedWorkflowPlan) => {
+      setGuidedPaused(false)
+      for (const step of plan.steps) {
+        if (step.command === 'navigate.open_surface') {
+          await dispatchGuidedStep(step)
+        }
+        if (step.command === 'ui.highlight_target') {
+          await dispatchGuidedStep(step)
+        }
+        if (
+          step.command === 'chat.action.preview' ||
+          step.command === 'chat.action.confirm_apply'
+        ) {
+          await dispatchGuidedStep(step)
+        }
+      }
+    },
+    [dispatchGuidedStep]
+  )
 
   const handleAssistantUiNewMessage = useCallback(
     async (message: AppendMessage) => {
@@ -1852,6 +1924,157 @@ export function AssistantWorkspacePanel() {
                             Show target
                           </Button>
                         ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+                {guidedWorkflow ? (
+                  <div
+                    className='mt-3 rounded-md border border-cyan-800/70 bg-cyan-950/30 p-3 text-sm'
+                    data-testid='shell-assistant-guided-walkthrough'
+                    data-guided-mode={guidedWorkflow.mode}
+                    data-guided-recipe={guidedWorkflow.recipe_id}
+                  >
+                    <div className='flex items-start gap-2'>
+                      <Sparkles className='mt-0.5 h-4 w-4 shrink-0 text-cyan-300' />
+                      <div className='min-w-0 flex-1'>
+                        <p
+                          className='font-medium text-slate-100'
+                          data-testid='shell-assistant-guided-title'
+                        >
+                          {guidedWorkflow.title}
+                        </p>
+                        <p
+                          className='mt-1 text-xs text-slate-300'
+                          data-testid='shell-assistant-guided-boundary'
+                        >
+                          {guidedWorkflow.mutation_boundary}
+                        </p>
+                        <div
+                          className='mt-2 flex flex-wrap gap-1'
+                          data-testid='shell-assistant-guided-steps'
+                        >
+                          {guidedWorkflow.steps.map((step) => (
+                            <span
+                              key={step.id}
+                              className='rounded border border-cyan-800/60 bg-slate-950 px-2 py-1 text-[11px] text-slate-300'
+                              data-testid='shell-assistant-guided-step'
+                              data-guided-command={step.command}
+                              data-guided-target={step.ui_target_id || ''}
+                            >
+                              {step.title}
+                            </span>
+                          ))}
+                        </div>
+                        <div className='mt-3 flex flex-wrap gap-2'>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            className='border-cyan-800 bg-slate-950 text-slate-100 hover:bg-slate-900'
+                            data-testid='shell-assistant-guided-start'
+                            onClick={() =>
+                              void runGuidedWalkthrough(guidedWorkflow)
+                            }
+                          >
+                            <Play className='h-3.5 w-3.5' />
+                            Start
+                          </Button>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='outline'
+                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                            aria-label='Previous walkthrough step'
+                            title='Previous walkthrough step'
+                            data-testid='shell-assistant-guided-back'
+                            onClick={() =>
+                              guidedWorkflow.steps[0]
+                                ? void dispatchGuidedStep(
+                                    guidedWorkflow.steps[0]
+                                  )
+                                : undefined
+                            }
+                          >
+                            <ChevronLeft className='h-3.5 w-3.5' />
+                          </Button>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='outline'
+                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                            aria-label={
+                              guidedPaused
+                                ? 'Resume walkthrough'
+                                : 'Pause walkthrough'
+                            }
+                            title={
+                              guidedPaused
+                                ? 'Resume walkthrough'
+                                : 'Pause walkthrough'
+                            }
+                            data-testid='shell-assistant-guided-pause'
+                            data-guided-paused={guidedPaused ? 'true' : 'false'}
+                            onClick={() => setGuidedPaused((value) => !value)}
+                          >
+                            {guidedPaused ? (
+                              <Play className='h-3.5 w-3.5' />
+                            ) : (
+                              <Pause className='h-3.5 w-3.5' />
+                            )}
+                          </Button>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='outline'
+                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                            aria-label='Skip walkthrough step'
+                            title='Skip walkthrough step'
+                            data-testid='shell-assistant-guided-skip'
+                            onClick={() =>
+                              guidedWorkflow.steps[
+                                guidedWorkflow.steps.length - 1
+                              ]
+                                ? void dispatchGuidedStep(
+                                    guidedWorkflow.steps[
+                                      guidedWorkflow.steps.length - 1
+                                    ]
+                                  )
+                                : undefined
+                            }
+                          >
+                            <SkipForward className='h-3.5 w-3.5' />
+                          </Button>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='outline'
+                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                            aria-label='Next walkthrough step'
+                            title='Next walkthrough step'
+                            data-testid='shell-assistant-guided-next'
+                            onClick={() =>
+                              guidedWorkflow.steps[1]
+                                ? void dispatchGuidedStep(
+                                    guidedWorkflow.steps[1]
+                                  )
+                                : undefined
+                            }
+                          >
+                            <ChevronRight className='h-3.5 w-3.5' />
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-900'
+                            data-testid='shell-assistant-guided-cancel'
+                            onClick={() => void cancelGuidance()}
+                          >
+                            <X className='h-3.5 w-3.5' />
+                            Cancel
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>

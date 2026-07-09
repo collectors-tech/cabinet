@@ -193,7 +193,7 @@ func TestAgentSkillImportAPIInstallsLocalFolderDisabledAndListsMetadata(t *testi
 		"status": "preview-only",
 		"capabilities": ["inventory.item.update"],
 		"guidedWorkflows": ["inventory.item.update"],
-		"uiTargets": ["inventory.item.editor.title"],
+		"uiTargets": ["inventory.item.title"],
 		"permissions": {
 			"cabinetReads": ["inventory.item"],
 			"cabinetWrites": ["inventory.item"],
@@ -280,7 +280,7 @@ func TestAgentSkillImportAPIPersistsInstalledMetadataAcrossRestart(t *testing.T)
 		"status": "preview-only",
 		"capabilities": ["inventory.item.update"],
 		"guidedWorkflows": ["inventory.item.update"],
-		"uiTargets": ["inventory.item.editor.title"],
+		"uiTargets": ["inventory.item.title"],
 		"permissions": {
 			"cabinetReads": ["inventory.item"],
 			"cabinetWrites": ["inventory.item"],
@@ -337,7 +337,7 @@ func TestAgentSkillStateAPIEnablesAndDisablesImportedSkill(t *testing.T) {
 		"status": "preview-only",
 		"capabilities": ["inventory.item.update"],
 		"guidedWorkflows": ["inventory.item.update"],
-		"uiTargets": ["inventory.item.editor.title"],
+		"uiTargets": ["inventory.item.title"],
 		"permissions": {
 			"cabinetReads": ["inventory.item"],
 			"cabinetWrites": ["inventory.item"],
@@ -2567,7 +2567,7 @@ func validAgentSkillImportManifest(overrides string) string {
 		"modes": ["in-app", "assistant"],
 		"capabilities": ["navigate.open_surface"],
 		"guidedWorkflows": [],
-		"uiTargets": ["inventory.item.editor.title"],
+		"uiTargets": ["inventory.item.title"],
 		"integrationRequirements": [],
 		"permissions": {
 			"cabinetReads": ["inventory.help"],
