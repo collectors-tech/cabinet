@@ -966,7 +966,7 @@ func TestAgentSkillApplyAPIHandlesCollectionsSkills(t *testing.T) {
 
 	assignItem := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
-		"skill_id":"cabinet.collections.assign_item",
+		"skill_id":"cabinet.collection.assign_item",
 		"confirm":true,
 		"parameters":{"collection_name":"Display Case","item_id":"agent-collection-item-1"}
 	}`), map[string]string{"Content-Type": "application/json"})

@@ -71,6 +71,7 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.collections.create",
 		"cabinet.collections.update_metadata",
 		"cabinet.collections.assign_item",
+		"cabinet.collection.assign_item",
 		"cabinet.collections.soft_delete",
 		"cabinet.collections.move_items_on_delete":
 		return applyAgentCollectionsSkill(ctx, conn, skillID, profileID, params)
@@ -1604,7 +1605,7 @@ func applyAgentCollectionsSkill(ctx context.Context, conn *sql.DB, skillID, prof
 		result["previous_collection_name"] = collectionName
 		result["collection_persisted"] = true
 		result["workspace"] = state
-	case "cabinet.collections.assign_item":
+	case "cabinet.collections.assign_item", "cabinet.collection.assign_item":
 		collectionName := agentCollectionName(params)
 		itemID := stringMapParam(params, "item_id")
 		if itemID == "" {
