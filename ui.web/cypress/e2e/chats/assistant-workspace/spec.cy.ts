@@ -383,6 +383,132 @@ describe('chats/assistant-workspace', () => {
     })
   })
 
+  it('ASSISTANT-EXECUTION-015/#1513 previews and confirms a do-with-me guided item update with persistence proof', () => {
+    bootstrapInventory()
+
+    cy.request('POST', '/api/items', {
+      part_number: 'GUIDED-1513',
+      title: 'Guided Original Title',
+      brand: 'AFX',
+      category: 'Slot Cars',
+    }).then((createResponse) => {
+      expect(createResponse.status).to.eq(201)
+      const itemId = String(createResponse.body.id)
+      expect(itemId).not.to.eq('')
+
+      cy.visit(`/inventory/?item=${encodeURIComponent(itemId)}`)
+      cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+      cy.location('search').should('contain', itemId)
+
+      cy.intercept('POST', '/api/chat/messages').as('assistantGuidedUpdate')
+      cy.intercept('POST', '/api/chat/actions/apply').as('assistantGuidedApply')
+      openAssistantWorkspace()
+
+      cy.get('[data-testid="shell-assistant-compose-input"]').type(
+        'rename title to Guided Do With Me Updated Title'
+      )
+      cy.get('[data-testid="shell-assistant-send-button"]').click()
+
+      let threadId = ''
+      cy.wait('@assistantGuidedUpdate').then(({ request, response }) => {
+        expect(request.body.profile_id).to.eq('e2e-profile-001')
+        expect(request.body.context.route.pathname).to.match(/^\/inventory\/?$/)
+        expect(request.body.context.route.search).to.include(itemId)
+        expect(response?.statusCode).to.eq(201)
+        expect(response?.body.app_control.capability_id).to.eq(
+          'update_open_item_title'
+        )
+        expect(response?.body.app_control.preview.action).to.eq(
+          'update_open_item_title'
+        )
+        expect(response?.body.app_control.preview.payload.item_id).to.eq(itemId)
+        expect(response?.body.app_control.preview.payload.title).to.eq(
+          'Guided Do With Me Updated Title'
+        )
+        expect(response?.body.app_control.preview.payload.guided_workflow_id).to.eq(
+          'inventory.item.update'
+        )
+        expect(response?.body.app_control.preview.payload.guided_mode).to.eq(
+          'do_it_with_me'
+        )
+        threadId = String(request.body.thread_id)
+      })
+
+      cy.get('[data-testid="shell-assistant-permission-guidance"]').should(
+        'contain',
+        'Confirm before any mutation is applied'
+      )
+      cy.get('[data-testid="shell-assistant-action-preview"]')
+        .should('contain', 'update_open_item_title')
+        .and('contain', 'Guided Do With Me Updated Title')
+      cy.request('/api/items?profile_id=e2e-profile-001')
+        .its('body')
+        .should((items) => {
+          const serialized = JSON.stringify(items)
+          expect(serialized).to.include('Guided Original Title')
+          expect(serialized).not.to.include('Guided Do With Me Updated Title')
+        })
+
+      cy.get('[data-testid="shell-assistant-apply-action"]').click()
+      cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
+        'be.visible'
+      )
+      cy.get('[data-testid="shell-assistant-apply-confirm-summary"]')
+        .should('contain', 'update_open_item_title')
+        .and('contain', 'Guided Do With Me Updated Title')
+      cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+      cy.wait('@assistantGuidedApply').then(({ request, response }) => {
+        expect(request.body.profile_id).to.eq('e2e-profile-001')
+        expect(request.body.thread_id).to.eq(threadId)
+        expect(request.body.confirm).to.eq(true)
+        expect(response?.statusCode).to.eq(200)
+        expect(response?.body.applied).to.eq(true)
+        expect(response?.body.action).to.eq('update_open_item_title')
+        expect(response?.body.item_id).to.eq(itemId)
+        expect(response?.body.title).to.eq('Guided Do With Me Updated Title')
+      })
+      cy.get('[data-testid="shell-assistant-execution-state"]').should(
+        'contain',
+        'success'
+      )
+      cy.get('[data-testid="shell-assistant-apply-result"]')
+        .should('contain', 'Applied update_open_item_title')
+        .and('contain', itemId)
+      cy.get('[data-testid="shell-assistant-action-timeline"] summary').click({
+        force: true,
+      })
+      cy.get('[data-testid="shell-assistant-workflow-run"]')
+        .last()
+        .should('have.attr', 'data-workflow-status', 'completed')
+        .and('contain', 'update_open_item_title')
+
+      cy.request('/api/items?profile_id=e2e-profile-001')
+        .its('body')
+        .should((items) => {
+          const serialized = JSON.stringify(items)
+          expect(serialized).to.include('GUIDED-1513')
+          expect(serialized).to.include('Guided Do With Me Updated Title')
+          expect(serialized).not.to.include('Guided Original Title')
+        })
+      cy.request(
+        `/api/chat/workflow-runs?profile_id=e2e-profile-001&thread_id=${encodeURIComponent(
+          threadId
+        )}`
+      )
+        .its('body')
+        .should((payload) => {
+          const serialized = JSON.stringify(payload)
+          expect(serialized).to.include('inventory.item.update')
+          expect(serialized).to.include('do_it_with_me')
+          expect(serialized).to.include('"confirmation_state":"confirmed"')
+          expect(serialized).to.include('chat.action.preview')
+          expect(serialized).to.include('chat.action.confirm_apply')
+          expect(serialized).to.include('Guided Do With Me Updated Title')
+        })
+    })
+  })
+
   it('AGENT-ATTACHMENTS-001 handles side-panel attachments with the same scoped message binding as main Chat', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/attachments').as('assistantAttachment')
@@ -538,12 +664,12 @@ describe('chats/assistant-workspace', () => {
       expect(request.body.metadata.forked_from_thread_id).to.eq(originalThreadId)
     })
 
-    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'anthropic')
-    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'claude-3-5-haiku')
-    cy.get('[data-testid="shell-assistant-thread-semantics"]').should('contain', 'fork a new assistant thread')
     cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
       expect($next.text().trim()).not.to.eq(originalThreadId)
     })
+    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'anthropic')
+    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'claude-3-5-haiku')
+    cy.get('[data-testid="shell-assistant-thread-semantics"]').should('contain', 'fork a new assistant thread')
   })
 
   it('ASSISTANT-WORKSPACE-004 applies explicit reset boundaries for manual new-thread and active profile changes', () => {
