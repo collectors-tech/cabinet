@@ -18,7 +18,6 @@ import {
   ShieldAlert,
   Share2,
   Sparkles,
-  X,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -198,18 +197,7 @@ export function Chats() {
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
-  const [pendingAttachment, setPendingAttachment] = useState<File | null>(null)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
-  const [actionPartNumber, setActionPartNumber] = useState('CHAT-001')
-  const [actionTitle, setActionTitle] = useState('Chat Created Item')
-  const [actionMode, setActionMode] = useState<
-    | 'create_inventory_item'
-    | 'create_wishlist_entry'
-    | 'update_inventory_item'
-    | 'assign_collection_item'
-  >('create_inventory_item')
-  const [actionTargetItemID, setActionTargetItemID] = useState('')
-  const [actionCollectionName, setActionCollectionName] = useState('Store 1')
   const [actionPreview, setActionPreview] = useState<ChatActionPreview | null>(
     null
   )
@@ -537,15 +525,15 @@ export function Chats() {
     },
   })
 
-  const uploadAttachment = async () => {
-    if (!activeProfileId || !selectedThreadId || !pendingAttachment) {
+  const uploadAttachment = async (file: File | null | undefined) => {
+    if (!activeProfileId || !selectedThreadId || !file) {
       return
     }
     setSendError(null)
     const form = new FormData()
     form.set('profile_id', activeProfileId)
     form.set('thread_id', selectedThreadId)
-    form.set('file', pendingAttachment)
+    form.set('file', file)
 
     const response = await fetch('/api/chat/attachments', {
       method: 'POST',
@@ -557,57 +545,6 @@ export function Chats() {
     }
     const attachment = (await response.json()) as ChatAttachment
     setAttachments((current) => [attachment, ...current])
-    setPendingAttachment(null)
-  }
-
-  const removeAttachment = (attachmentID: string) => {
-    setAttachments((current) =>
-      current.filter((attachment) => attachment.id !== attachmentID)
-    )
-  }
-
-  const previewCreateItemAction = async () => {
-    if (!activeProfileId || !selectedThreadId || messages.length === 0) {
-      return
-    }
-    setSendError(null)
-    setApplyResult(null)
-    setApplyNotice('')
-    const response = await fetch('/api/chat/actions/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        profile_id: activeProfileId,
-        thread_id: selectedThreadId,
-        action: actionMode,
-        payload: {
-          part_number: actionPartNumber.trim(),
-          title: actionTitle.trim(),
-          brand: 'AFX',
-          category: 'General',
-          item_id:
-            actionMode === 'update_inventory_item' ||
-            actionMode === 'assign_collection_item'
-              ? actionTargetItemID.trim()
-              : '',
-          collection_name:
-            actionMode === 'assign_collection_item'
-              ? actionCollectionName.trim()
-              : '',
-          priority: actionMode === 'create_wishlist_entry' ? 'medium' : '',
-          assistant_provider: assistantDefaults.provider,
-          assistant_model: assistantDefaults.model,
-        },
-      }),
-    })
-    if (!response.ok) {
-      setSendError(`chat_action_preview_${response.status}`)
-      return
-    }
-    const preview = (await response.json()) as ChatActionPreview
-    setActionPreview(preview)
-    writeStoredActionPreview(selectedActionPreviewStorageKey, preview)
-    await loadMessages(activeProfileId, selectedThreadId)
   }
 
   const applyPreviewAction = async () => {
@@ -742,16 +679,6 @@ export function Chats() {
     !actionPreview?.status || actionPreview.status === 'previewed'
       ? 'pending'
       : actionPreview.status
-
-  const previewDisabled =
-    !selectedThreadId ||
-    messages.length === 0 ||
-    !actionPartNumber.trim() ||
-    !actionTitle.trim() ||
-    ((actionMode === 'update_inventory_item' ||
-      actionMode === 'assign_collection_item') &&
-      !actionTargetItemID.trim()) ||
-    (actionMode === 'assign_collection_item' && !actionCollectionName.trim())
 
   return (
     <>
@@ -1090,6 +1017,84 @@ export function Chats() {
                           </div>
                         </div>
                       ) : null}
+                      {actionPreview ? (
+                        <div
+                          className='rounded-md border border-slate-800 bg-slate-900 p-3 text-sm text-slate-100'
+                          data-testid='chat-action-preview'
+                        >
+                          <div className='flex flex-wrap items-start justify-between gap-2'>
+                            <div>
+                              <p className='font-medium'>
+                                Preview {actionPreview.id}:{' '}
+                                {actionPreview.action}
+                              </p>
+                              <p className='mt-1 text-xs text-slate-400'>
+                                {actionPreviewStatusLabel} via{' '}
+                                {String(
+                                  actionPreview.payload?.assistant_provider ??
+                                    'openai'
+                                )}{' '}
+                                /{' '}
+                                {String(
+                                  actionPreview.payload?.assistant_model ??
+                                    'gpt-4o-mini'
+                                )}
+                                {actionPreviewTargetSummary
+                                  ? ` - ${actionPreviewTargetSummary}`
+                                  : ''}
+                              </p>
+                            </div>
+                            <div className='flex flex-wrap gap-2'>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                                data-testid='chat-apply-action-button'
+                                onClick={() => setConfirmApplyOpen(true)}
+                                disabled={
+                                  !selectedThreadId ||
+                                  !actionPreview.id ||
+                                  actionPreviewStatusLabel !== 'pending'
+                                }
+                              >
+                                Apply
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='ghost'
+                                className='text-slate-300 hover:bg-slate-800 hover:text-slate-100'
+                                data-testid='chat-cancel-action-button'
+                                onClick={() => void cancelPreviewApply()}
+                                disabled={
+                                  !selectedThreadId ||
+                                  !actionPreview.id ||
+                                  actionPreviewStatusLabel !== 'pending'
+                                }
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                          {applyResult ? (
+                            <p
+                              data-testid='chat-action-apply-result'
+                              className='mt-2 text-xs text-slate-300'
+                            >
+                              {applyResultSummary}
+                            </p>
+                          ) : null}
+                          {applyNotice ? (
+                            <p
+                              data-testid='chat-action-apply-notice'
+                              className='mt-2 text-xs text-slate-400'
+                            >
+                              {applyNotice}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <div
                         className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-3 text-sm text-slate-100'
                         data-testid='chat-action-timeline'
@@ -1201,6 +1206,17 @@ export function Chats() {
                           sendButton: 'chat-send-button',
                         }}
                       />
+                      <Input
+                        type='file'
+                        data-testid='chat-attachment-input'
+                        className='sr-only'
+                        disabled={!selectedThreadId}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0]
+                          event.target.value = ''
+                          void uploadAttachment(file)
+                        }}
+                      />
                       <div className='mt-2 flex items-center justify-between gap-2'>
                         <Button
                           type='button'
@@ -1243,207 +1259,6 @@ export function Chats() {
                     {sendError}
                   </p>
                 ) : null}
-                <div className='relative z-0 mt-4 space-y-3 rounded-md border border-slate-800 bg-slate-950 p-3'>
-                  <p className='text-sm font-medium'>Attachments</p>
-                  <div className='flex items-center gap-2'>
-                    <Input
-                      type='file'
-                      data-testid='chat-attachment-input'
-                      disabled={!selectedThreadId}
-                      onChange={(event) =>
-                        setPendingAttachment(event.target.files?.[0] ?? null)
-                      }
-                    />
-                    <Button
-                      type='button'
-                      data-testid='chat-upload-attachment-button'
-                      disabled={!selectedThreadId || !pendingAttachment}
-                      onClick={() => void uploadAttachment()}
-                    >
-                      Upload
-                    </Button>
-                  </div>
-                  <div
-                    data-testid='chat-attachment-list'
-                    className='space-y-1 text-sm'
-                  >
-                    {attachments.length === 0 ? (
-                      <p className='text-muted-foreground'>
-                        No attachments uploaded.
-                      </p>
-                    ) : (
-                      attachments.map((attachment) => (
-                        <div
-                          key={attachment.id}
-                          className='flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-900 px-2 py-1'
-                          data-attachment-id={attachment.id}
-                        >
-                          <span className='min-w-0 truncate'>
-                            {attachment.filename}
-                          </span>
-                          <Button
-                            type='button'
-                            size='icon'
-                            variant='ghost'
-                            className='h-7 w-7 shrink-0 text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-                            data-testid='chat-remove-attachment-button'
-                            aria-label={`Remove ${attachment.filename}`}
-                            onClick={() => removeAttachment(attachment.id)}
-                          >
-                            <X className='h-3.5 w-3.5' />
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  className='relative z-0 mt-3 space-y-3 rounded-md border border-slate-800/80 bg-slate-950/70 p-3 opacity-90'
-                  data-testid='chat-tool-card-container'
-                  data-visual-priority='secondary'
-                >
-                  <div className='flex flex-wrap items-start justify-between gap-2'>
-                    <p className='text-sm font-medium'>Action Preview</p>
-                    <p
-                      className='rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground'
-                      data-testid='chat-assistant-defaults'
-                    >
-                      Assistant default: {assistantDefaults.provider} /{' '}
-                      {assistantDefaults.model}
-                    </p>
-                  </div>
-                  <label className='grid gap-1 text-sm'>
-                    <span>Action Mode</span>
-                    <select
-                      data-testid='chat-preview-action-mode'
-                      className='h-9 rounded-md border bg-background px-3'
-                      value={actionMode}
-                      onChange={(event) =>
-                        setActionMode(
-                          event.target.value as
-                            | 'create_inventory_item'
-                            | 'create_wishlist_entry'
-                            | 'update_inventory_item'
-                            | 'assign_collection_item'
-                        )
-                      }
-                      disabled={!selectedThreadId}
-                    >
-                      <option value='create_inventory_item'>
-                        create_inventory_item
-                      </option>
-                      <option value='create_wishlist_entry'>
-                        create_wishlist_entry
-                      </option>
-                      <option value='update_inventory_item'>
-                        update_inventory_item
-                      </option>
-                      <option value='assign_collection_item'>
-                        assign_collection_item
-                      </option>
-                    </select>
-                  </label>
-                  {actionMode === 'update_inventory_item' ||
-                  actionMode === 'assign_collection_item' ? (
-                    <Input
-                      data-testid='chat-preview-target-item-id'
-                      value={actionTargetItemID}
-                      onChange={(event) =>
-                        setActionTargetItemID(event.target.value)
-                      }
-                      placeholder='Existing item ID'
-                      disabled={!selectedThreadId}
-                    />
-                  ) : null}
-                  {actionMode === 'assign_collection_item' ? (
-                    <Input
-                      data-testid='chat-preview-collection-name'
-                      value={actionCollectionName}
-                      onChange={(event) =>
-                        setActionCollectionName(event.target.value)
-                      }
-                      placeholder='Collection name'
-                      disabled={!selectedThreadId}
-                    />
-                  ) : null}
-                  <div className='grid gap-2 sm:grid-cols-2'>
-                    <Input
-                      data-testid='chat-preview-part-number'
-                      value={actionPartNumber}
-                      onChange={(event) =>
-                        setActionPartNumber(event.target.value)
-                      }
-                      placeholder='Part number'
-                      disabled={!selectedThreadId}
-                    />
-                    <Input
-                      data-testid='chat-preview-title'
-                      value={actionTitle}
-                      onChange={(event) => setActionTitle(event.target.value)}
-                      placeholder='Item title'
-                      disabled={!selectedThreadId}
-                    />
-                  </div>
-                  <div className='flex flex-wrap gap-2'>
-                    <Button
-                      type='button'
-                      data-testid='chat-preview-action-button'
-                      onClick={() => void previewCreateItemAction()}
-                      disabled={previewDisabled}
-                    >
-                      Preview Action
-                    </Button>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      data-testid='chat-apply-action-button'
-                      onClick={() => setConfirmApplyOpen(true)}
-                      disabled={
-                        !selectedThreadId ||
-                        !actionPreview?.id ||
-                        actionPreviewStatusLabel !== 'pending'
-                      }
-                    >
-                      Apply Action
-                    </Button>
-                  </div>
-                  {actionPreview ? (
-                    <p
-                      data-testid='chat-action-preview'
-                      className='text-sm text-muted-foreground'
-                    >
-                      Preview {actionPreview.id}: {actionPreview.action} (
-                      {actionPreviewStatusLabel}) via{' '}
-                      {String(
-                        actionPreview.payload?.assistant_provider ?? 'openai'
-                      )}{' '}
-                      /{' '}
-                      {String(
-                        actionPreview.payload?.assistant_model ?? 'gpt-4o-mini'
-                      )}
-                      {actionPreviewTargetSummary
-                        ? ` - ${actionPreviewTargetSummary}`
-                        : ''}
-                    </p>
-                  ) : null}
-                  {applyResult ? (
-                    <p
-                      data-testid='chat-action-apply-result'
-                      className='text-sm'
-                    >
-                      {applyResultSummary}
-                    </p>
-                  ) : null}
-                  {applyNotice ? (
-                    <p
-                      data-testid='chat-action-apply-notice'
-                      className='text-sm text-muted-foreground'
-                    >
-                      {applyNotice}
-                    </p>
-                  ) : null}
-                </div>
               </>
             )}
           </div>
