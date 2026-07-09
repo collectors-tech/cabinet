@@ -298,6 +298,24 @@ Avoid promising financial returns, marketplace sales volume, item-value guarante
 
 Before launch, verify current Kickstarter creator eligibility, fee, software reward, AI/disclosure, and project guideline requirements.
 
+### Safer claim language
+
+Use claim language that Cabinet can prove in beta.
+
+| Avoid | Use instead |
+|---|---|
+| Absolute data sovereignty | Local-first by default |
+| Unbreachable | No central Cabinet inventory database |
+| 100% offline | Core local vault works offline |
+| 0% marketplace fees | 0% Cabinet trade fee |
+| No central server | No central Cabinet-owned inventory database |
+| Invisible transactions | Private direct-trade workflows where users choose what to share |
+| Lifetime ownership of everything | Exportable records and scoped founding licences |
+
+Cabinet can make a strong privacy claim without overpromising:
+
+> Local-first by default. No central Cabinet inventory database. Optional connectivity only when the collector chooses it.
+
 ### Suggested reward tiers
 
 | Tier | Price | Reward | Validation signal |
