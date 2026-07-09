@@ -8877,6 +8877,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			}
 			provider["model_options"] = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
 			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
+			provider["setup_status"] = openAIRegistrySetupStatus(settings, openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProofState, openAIBrowserProviderTestPassed, openAIReady)
 		case "telegram":
 			provider["active_mode"] = telegramConnectionState
 			provider["auth_methods"] = map[string]any{
@@ -9034,6 +9035,68 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 
 	return base
+}
+
+func openAIRegistrySetupStatus(settings map[string]string, activeMethod string, apiKeyReady bool, browserState string, browserArtifactPresent bool, browserProviderTestState string, browserProviderTestPassed bool, ready bool) map[string]any {
+	if strings.TrimSpace(activeMethod) == "" {
+		activeMethod = "none"
+	}
+	apiKeyState := "missing"
+	if apiKeyReady {
+		apiKeyState = "stored"
+	}
+	if strings.TrimSpace(browserState) == "" {
+		browserState = "setup_needed"
+	}
+	browserArtifactState := "missing"
+	if browserArtifactPresent {
+		browserArtifactState = "present"
+	}
+	if strings.TrimSpace(browserProviderTestState) == "" {
+		browserProviderTestState = "not_run"
+	}
+	assistantDefaultProvider := strings.TrimSpace(settings["assistant_default_provider"])
+	if assistantDefaultProvider == "" {
+		assistantDefaultProvider = "openai"
+	}
+	assistantDefaultModel := strings.TrimSpace(settings["assistant_default_model"])
+	if assistantDefaultModel == "" {
+		assistantDefaultModel = "gpt-4o-mini"
+	}
+	return map[string]any{
+		"auth_mode":                         "hybrid",
+		"active_auth_method":                activeMethod,
+		"api_key_state":                     apiKeyState,
+		"browser_auth_state":                browserState,
+		"browser_auth_artifact_state":       browserArtifactState,
+		"browser_auth_provider_test_state":  browserProviderTestState,
+		"browser_auth_provider_test_passed": browserProviderTestPassed,
+		"validation_status":                 map[bool]string{true: "ready", false: "setup_needed"}[ready],
+		"assistant_default_provider":        assistantDefaultProvider,
+		"assistant_default_model":           assistantDefaultModel,
+		"workflow_state":                    map[bool]string{true: "assistant_workflows_ready", false: "provider_setup_required"}[ready],
+		"next_action":                       openAIRegistrySetupNextAction(activeMethod, apiKeyReady, browserState, browserArtifactPresent, browserProviderTestPassed),
+	}
+}
+
+func openAIRegistrySetupNextAction(activeMethod string, apiKeyReady bool, browserState string, browserArtifactPresent bool, browserProviderTestPassed bool) string {
+	switch activeMethod {
+	case "api_key":
+		if !apiKeyReady {
+			return "connect_openai_api_key"
+		}
+		return "run_openai_test"
+	case "browser_auth":
+		if !strings.EqualFold(browserState, "connected") || !browserArtifactPresent {
+			return "complete_browser_auth_artifact_proof"
+		}
+		if !browserProviderTestPassed {
+			return "run_browser_auth_provider_test"
+		}
+		return "run_openai_workflow"
+	default:
+		return "connect_openai_api_key_or_browser_auth"
+	}
 }
 
 func telegramCatalogCaptureConfigured(settings map[string]string) bool {

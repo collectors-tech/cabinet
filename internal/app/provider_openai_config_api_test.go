@@ -62,6 +62,98 @@ func TestOpenAIRegistryExposesMethodAwareSetupNeededState(t *testing.T) {
 	if connected, _ := browser["connected"].(bool); connected {
 		t.Fatalf("browser auth must not be connected without a verified artifact/callback")
 	}
+	setup, ok := openai["setup_status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected OpenAI setup_status map, got %#v", openai["setup_status"])
+	}
+	for key, want := range map[string]string{
+		"auth_mode":                   "hybrid",
+		"active_auth_method":          "none",
+		"api_key_state":               "missing",
+		"browser_auth_state":          "setup_needed",
+		"browser_auth_artifact_state": "missing",
+		"validation_status":           "setup_needed",
+		"assistant_default_provider":  "openai",
+		"assistant_default_model":     "gpt-4o-mini",
+		"workflow_state":              "provider_setup_required",
+		"next_action":                 "connect_openai_api_key_or_browser_auth",
+	} {
+		if got := fmt.Sprintf("%v", setup[key]); got != want {
+			t.Fatalf("setup_status[%s] got %q want %q; setup=%+v", key, got, want, setup)
+		}
+	}
+}
+
+func TestOpenAIRegistryProjectsAssistantMigrationContract(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"OpenAIAssistantRegistryMigration"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.active_auth_method":"api_key","assistant_default_provider":"openai","assistant_default_model":"gpt-4.1-mini"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	secret := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/secrets", strings.NewReader(`{"key":"openai_api_key","value":"sk-registry-migration"}`), map[string]string{"Content-Type": "application/json"})
+	if secret.Code != http.StatusOK {
+		t.Fatalf("secret status=%d body=%s", secret.Code, secret.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	openai := findRegistryProvider(payload.Providers, "openai")
+	if openai == nil {
+		t.Fatalf("expected openai provider in registry payload: %+v", payload.Providers)
+	}
+	if openai["state"] != "ready" || openai["provider_type"] != "assistant" || openai["provider_category"] != "chat/AI" || openai["config_schema_ref"] != "integrations/openai/auth" {
+		t.Fatalf("OpenAI assistant provider registry metadata drifted: %+v", openai)
+	}
+	capabilities := openai["capabilities"].(map[string]any)
+	for _, capability := range []string{"assistant", "image_help", "content_generation", "health"} {
+		if capabilities[capability] != true {
+			t.Fatalf("OpenAI capability %q missing from registry payload: %+v", capability, capabilities)
+		}
+	}
+	workflowRefs := openai["workflow_refs"].([]any)
+	for _, workflow := range []string{"assistant.chat", "assistant.image_help", "assistant.content_generation"} {
+		if !containsAnyString(workflowRefs, workflow) {
+			t.Fatalf("OpenAI registry missing assistant workflow %q in %+v", workflow, workflowRefs)
+		}
+	}
+	setup := openai["setup_status"].(map[string]any)
+	for key, want := range map[string]string{
+		"active_auth_method":         "api_key",
+		"api_key_state":              "stored",
+		"validation_status":          "ready",
+		"assistant_default_provider": "openai",
+		"assistant_default_model":    "gpt-4.1-mini",
+		"workflow_state":             "assistant_workflows_ready",
+		"next_action":                "run_openai_test",
+	} {
+		if got := fmt.Sprintf("%v", setup[key]); got != want {
+			t.Fatalf("setup_status[%s] got %q want %q; setup=%+v", key, got, want, setup)
+		}
+	}
+	if strings.Contains(registry.Body.String(), "sk-registry-migration") {
+		t.Fatalf("OpenAI registry response must not leak API key: %s", registry.Body.String())
+	}
 }
 
 func TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof(t *testing.T) {
@@ -699,4 +791,13 @@ func findRegistryProvider(providers []map[string]any, id string) map[string]any 
 		}
 	}
 	return nil
+}
+
+func containsAnyString(values []any, want string) bool {
+	for _, value := range values {
+		if fmt.Sprintf("%v", value) == want {
+			return true
+		}
+	}
+	return false
 }
