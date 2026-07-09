@@ -116,14 +116,7 @@ describe('collections-pagination', () => {
       'data-state',
       'selected'
     )
-    cy.get('[data-testid="collections-members-summary"]').should(
-      'contain.text',
-      'Showing 1 of 1 items.'
-    )
-    cy.get('[data-testid="collections-member-row-pagination-item-12"]').should(
-      'contain.text',
-      'Pagination proof card'
-    )
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
 
     cy.reload()
     cy.wait('@loadCollectionSettings')

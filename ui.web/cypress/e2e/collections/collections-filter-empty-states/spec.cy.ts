@@ -73,22 +73,10 @@ describe('collections-filter-empty-states', () => {
 
     cy.get('[data-testid="collections-search-input"]').clear()
     cy.get('[data-testid="collections-row-all-items"]').should('be.visible')
-    cy.get('[data-testid="collections-members-summary"]').should(
-      'contain.text',
-      'Showing 2 of 2 items.'
-    )
-    cy.get('[data-testid="collections-members-search-input"]').type(
-      'no matching member row'
-    )
-    cy.get('[data-testid="collections-members-summary"]').should(
-      'contain.text',
-      'Showing 0 of 2 items.'
-    )
-    cy.get('[data-testid="collections-member-row-inventory-item-kobe-rookie"]').should(
-      'not.exist'
-    )
+    cy.get('[data-testid="collections-members-search-input"]').should('not.exist')
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
     cy.contains('No collection members match the current filter.').should(
-      'be.visible'
+      'not.exist'
     )
     cy.get('[data-testid="collections-active-context"]').should(
       'contain.text',

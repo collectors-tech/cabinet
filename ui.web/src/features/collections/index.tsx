@@ -13,14 +13,9 @@ import {
 } from '@tanstack/react-table'
 import { Eye, Pencil, Plus, Tag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -39,7 +34,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Table,
   TableBody,
@@ -48,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Tooltip,
   TooltipContent,
@@ -64,7 +59,6 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { recordNotificationHistory } from '@/lib/toast-history'
 import {
   type WorkspaceCollectionItem,
   type WorkspaceCollectionSummary,
@@ -297,55 +291,6 @@ function buildCollectionColumns({
   ]
 }
 
-function buildCollectionMemberColumns(): ColumnDef<CollectionMemberRow>[] {
-  return [
-    {
-      accessorKey: 'name',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='Item' />
-      ),
-      cell: ({ row }) => (
-        <span
-          className='block truncate font-medium'
-          data-testid={`collections-member-${collectionKey(row.original.name)}`}
-        >
-          <span
-            className='block truncate'
-            data-testid={`collections-member-name-${collectionKey(row.original.name)}`}
-          >
-            {row.original.name}
-          </span>
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'detail',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='Details' />
-      ),
-      cell: ({ row }) => (
-        <span className='block truncate text-muted-foreground'>
-          {row.original.detail}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'collectionName',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='Current collection' />
-      ),
-      cell: ({ row }) => (
-        <span
-          className='block truncate text-muted-foreground'
-          data-testid={`collections-member-current-${collectionKey(row.original.name)}`}
-        >
-          Currently in {row.original.collectionName ?? 'Unassigned'}.
-        </span>
-      ),
-    },
-  ]
-}
-
 export function Collections() {
   const {
     activeWorkspaceCollection,
@@ -362,10 +307,6 @@ export function Collections() {
     { id: 'name', desc: false },
   ])
   const [globalFilter, setGlobalFilter] = useState('')
-  const [memberSorting, setMemberSorting] = useState<SortingState>([
-    { id: 'name', desc: false },
-  ])
-  const [memberGlobalFilter, setMemberGlobalFilter] = useState('')
   const [selectedCollectionID, setSelectedCollectionID] = useState<
     string | null
   >(null)
@@ -465,14 +406,8 @@ export function Collections() {
   )
 
   const selectedCollectionName = selectedRow?.name ?? 'All Items'
-  const selectedCollectionAssignedCount = useMemo(
-    () =>
-      selectedRow && selectedRow.name !== 'All Items'
-        ? memberRows.filter((item) => item.collectionName === selectedRow.name)
-            .length
-        : 0,
-    [memberRows, selectedRow]
-  )
+  const selectedCollectionAssignedCount =
+    selectedRow && selectedRow.name !== 'All Items' ? selectedRow.itemCount : 0
   const deleteDestinationOptions = useMemo(
     () =>
       activeRows.filter(
@@ -482,16 +417,6 @@ export function Collections() {
           !row.deletedAt
       ),
     [activeRows, selectedRow]
-  )
-
-  const selectedCollectionItems = useMemo(
-    () =>
-      selectedCollectionName === 'All Items'
-        ? memberRows
-        : memberRows.filter(
-            (item) => item.collectionName === selectedCollectionName
-          ),
-    [memberRows, selectedCollectionName]
   )
 
   const handleSelectCollection = useCallback(
@@ -537,8 +462,6 @@ export function Collections() {
       }),
     [handleViewCollection, openEditPanel]
   )
-  const memberColumns = useMemo(() => buildCollectionMemberColumns(), [])
-
   const table = useReactTable({
     data: rows,
     columns,
@@ -569,36 +492,7 @@ export function Collections() {
     getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
-  const membersTable = useReactTable({
-    data: selectedCollectionItems,
-    columns: memberColumns,
-    state: {
-      sorting: memberSorting,
-      globalFilter: memberGlobalFilter,
-    },
-    onSortingChange: setMemberSorting,
-    onGlobalFilterChange: setMemberGlobalFilter,
-    globalFilterFn: (row, _columnId, filterValue) => {
-      const searchValue = String(filterValue).trim().toLowerCase()
-      if (!searchValue) {
-        return true
-      }
-      return [
-        row.original.name,
-        row.original.detail,
-        row.original.collectionName ?? 'Unassigned',
-      ].some((value) => value.toLowerCase().includes(searchValue))
-    },
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
-  })
-
   const filteredCount = table.getFilteredRowModel().rows.length
-  const filteredMemberCount = membersTable.getFilteredRowModel().rows.length
   const visibleRows = table
     .getRowModel()
     .rows.map((tableRow) => tableRow.original)
@@ -815,11 +709,11 @@ export function Collections() {
 
       <Main fixed className='min-h-0 gap-3 sm:gap-4'>
         <div
-          className='grid min-h-0 flex-1 grid-rows-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-4'
+          className='flex min-h-0 flex-1 flex-col'
           data-testid='collections-workspace'
         >
           <Card
-            className='flex min-h-0 flex-col overflow-hidden'
+            className='flex min-h-0 flex-1 flex-col overflow-hidden'
             data-testid='collections-section'
           >
             <CardContent className='flex min-h-0 flex-1 flex-col gap-3'>
@@ -854,7 +748,9 @@ export function Collections() {
                       setSelectedCollectionID(null)
                     }}
                   >
-                    {showDeletedCollections ? 'Showing deleted' : 'Show deleted'}
+                    {showDeletedCollections
+                      ? 'Showing deleted'
+                      : 'Show deleted'}
                   </Button>
                 </div>
               </div>
@@ -941,103 +837,6 @@ export function Collections() {
                 data-testid='collections-table-pagination'
               >
                 <DataTablePagination table={table} />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card
-            className='flex min-h-0 flex-col overflow-hidden'
-            data-testid='collections-members-panel'
-          >
-            <CardHeader className='shrink-0 py-3'>
-              <CardTitle>Collection members</CardTitle>
-              <CardDescription>
-                Review inventory items assigned to the selected collection.
-                Assign or move items from Inventory row actions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex min-h-0 flex-1 flex-col gap-3'>
-              <div className='space-y-3'>
-                <div data-testid='collections-members-table-toolbar'>
-                  <DataTableToolbar
-                    table={membersTable}
-                    searchPlaceholder='Filter collection members...'
-                    searchInputTestId='collections-members-search-input'
-                  />
-                </div>
-                <p
-                  className='text-sm text-muted-foreground'
-                  data-testid='collections-members-summary'
-                >
-                  Showing {filteredMemberCount} of{' '}
-                  {selectedCollectionItems.length} items.
-                </p>
-              </div>
-              <div
-                className='min-h-0 flex-1 overflow-auto rounded-md border'
-                data-table-surface='true'
-                data-testid='collections-members-table'
-              >
-                <Table className={tableClassName}>
-                  <TableHeader>
-                    {membersTable.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <TableHead
-                            key={header.id}
-                            className={tableHeaderClassName}
-                          >
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {membersTable.getRowModel().rows.length ? (
-                      membersTable.getRowModel().rows.map((row) => (
-                        <TableRow
-                          key={row.id}
-                          data-testid={`collections-member-row-${row.original.id}`}
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell
-                              key={cell.id}
-                              className={tableCellClassName}
-                            >
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext()
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow data-testid='collections-members-empty-row'>
-                        <TableCell
-                          colSpan={memberColumns.length}
-                          className='h-24 text-center text-muted-foreground'
-                        >
-                          {selectedCollectionItems.length
-                            ? 'No collection members match the current filter.'
-                            : `No items are currently assigned to ${selectedCollectionName}.`}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              <div
-                className='mt-auto'
-                data-testid='collections-members-table-pagination'
-              >
-                <DataTablePagination table={membersTable} />
               </div>
             </CardContent>
           </Card>
@@ -1181,7 +980,9 @@ export function Collections() {
               <span>Description</span>
               <Textarea
                 value={editDescriptionValue}
-                onChange={(event) => setEditDescriptionValue(event.target.value)}
+                onChange={(event) =>
+                  setEditDescriptionValue(event.target.value)
+                }
                 placeholder='Collection description'
                 data-testid='collections-edit-description-input'
               />
@@ -1212,7 +1013,7 @@ export function Collections() {
         <DialogContent data-testid='collections-delete-dialog'>
           <DialogHeader>
             <DialogTitle>Delete collection</DialogTitle>
-          <DialogDescription>
+            <DialogDescription>
               Hide the selected collection from active collection views.
             </DialogDescription>
           </DialogHeader>
@@ -1237,7 +1038,9 @@ export function Collections() {
                   className='h-9 w-full rounded-md border border-input bg-background px-3 text-sm'
                   data-testid='collections-delete-destination-select'
                 >
-                  <option value=''>No destination, remove membership only</option>
+                  <option value=''>
+                    No destination, remove membership only
+                  </option>
                   {deleteDestinationOptions.map((row) => (
                     <option key={row.key} value={row.name}>
                       {row.name}
