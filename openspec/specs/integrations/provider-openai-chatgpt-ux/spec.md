@@ -25,6 +25,7 @@ Cabinet MUST define which assistant capabilities use OpenAI / ChatGPT integratio
 - **GIVEN** OpenAI / ChatGPT provider is configured
 - **WHEN** provider details are viewed
 - **THEN** UI MUST show which Cabinet assistant workflows are enabled or disabled for that provider configuration
+- **AND** provider registry metadata MUST expose stable assistant action ids, workflow refs, read/write classification, confirmation requirements, availability state, and setup next action for OpenAI-backed assistant workflows
 
 ### Requirement PROVIDER-OPENAI-UX-004: Provider/model defaults SHALL integrate with Assistant workspace selection behavior
 Cabinet MUST define how integrations-level provider defaults interact with Assistant workspace provider/model selection and thread metadata.
@@ -106,6 +107,7 @@ Cabinet MUST return deterministic OpenAI health/readiness feedback for the activ
 - **AND** Cabinet MUST report ready health when the profile has an API-key secret
 - **AND** the provider registry MUST keep the OpenAI provider state setup-needed until the active API-key method has a stored secret
 - **AND** the provider registry health projection MUST mirror the profile-scoped OpenAI setup/readiness state instead of reporting generic scanner health
+- **AND** OpenAI assistant action metadata MUST remain setup-needed with required next action until the active profile has verified readiness
 - **AND** the health payload MUST NOT include the secret value
 
 #### Scenario: Validate Browser Auth proof readiness

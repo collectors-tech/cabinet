@@ -8878,6 +8878,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			provider["model_options"] = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
 			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
 			provider["setup_status"] = openAIRegistrySetupStatus(settings, openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProofState, openAIBrowserProviderTestPassed, openAIReady)
+			provider["actions"] = openAIRegistryAssistantActions(openAIReady, openAIRegistrySetupNextAction(openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProviderTestPassed))
 		case "telegram":
 			provider["active_mode"] = telegramConnectionState
 			provider["auth_methods"] = map[string]any{
@@ -9045,6 +9046,50 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 
 	return base
+}
+
+func openAIRegistryAssistantActions(ready bool, nextAction string) []map[string]any {
+	availability := "setup_needed"
+	requiredNextAction := any(nextAction)
+	if ready {
+		availability = "available"
+		requiredNextAction = nil
+	}
+	return []map[string]any{
+		{
+			"action_id":             "assistant.chat",
+			"label":                 "Assistant chat",
+			"workflow_ref":          "assistant.chat",
+			"capability_category":   "assistant",
+			"execution_mode":        "provider_workflow",
+			"classification":        "read_only",
+			"confirmation_required": false,
+			"availability_state":    availability,
+			"next_action":           requiredNextAction,
+		},
+		{
+			"action_id":             "assistant.image_help",
+			"label":                 "Image help",
+			"workflow_ref":          "assistant.image_help",
+			"capability_category":   "assistant",
+			"execution_mode":        "provider_workflow",
+			"classification":        "preview_only",
+			"confirmation_required": false,
+			"availability_state":    availability,
+			"next_action":           requiredNextAction,
+		},
+		{
+			"action_id":             "assistant.content_generation",
+			"label":                 "Content generation",
+			"workflow_ref":          "assistant.content_generation",
+			"capability_category":   "assistant",
+			"execution_mode":        "provider_workflow",
+			"classification":        "preview_only",
+			"confirmation_required": false,
+			"availability_state":    availability,
+			"next_action":           requiredNextAction,
+		},
+	}
 }
 
 func openAIRegistrySetupStatus(settings map[string]string, activeMethod string, apiKeyReady bool, browserState string, browserArtifactPresent bool, browserProviderTestState string, browserProviderTestPassed bool, ready bool) map[string]any {

@@ -70,6 +70,19 @@ func TestOpenAIRegistryExposesMethodAwareSetupNeededState(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected OpenAI registry health map, got %#v", openai["health"])
 	}
+	actions, ok := openai["actions"].([]any)
+	if !ok {
+		t.Fatalf("expected OpenAI registry actions list, got %#v", openai["actions"])
+	}
+	for _, actionID := range []string{"assistant.chat", "assistant.image_help", "assistant.content_generation"} {
+		action := findRegistryAction(actions, actionID)
+		if action == nil {
+			t.Fatalf("OpenAI registry missing assistant action %q in %+v", actionID, actions)
+		}
+		if action["availability_state"] != "setup_needed" || action["next_action"] != "connect_openai_api_key_or_browser_auth" {
+			t.Fatalf("expected setup-needed assistant action %q, got %+v", actionID, action)
+		}
+	}
 	if health["status"] != "needs_config" || health["state"] != "provider_setup_required" || health["next_action"] != "connect_openai_api_key_or_browser_auth" {
 		t.Fatalf("expected setup-needed OpenAI registry health, got %+v", health)
 	}
@@ -142,6 +155,19 @@ func TestOpenAIRegistryProjectsAssistantMigrationContract(t *testing.T) {
 	for _, workflow := range []string{"assistant.chat", "assistant.image_help", "assistant.content_generation"} {
 		if !containsAnyString(workflowRefs, workflow) {
 			t.Fatalf("OpenAI registry missing assistant workflow %q in %+v", workflow, workflowRefs)
+		}
+	}
+	actions := openai["actions"].([]any)
+	for _, actionID := range []string{"assistant.chat", "assistant.image_help", "assistant.content_generation"} {
+		action := findRegistryAction(actions, actionID)
+		if action == nil {
+			t.Fatalf("OpenAI registry missing assistant action %q in %+v", actionID, actions)
+		}
+		if action["workflow_ref"] != actionID || action["capability_category"] != "assistant" || action["execution_mode"] != "provider_workflow" {
+			t.Fatalf("OpenAI assistant action metadata drifted for %q: %+v", actionID, action)
+		}
+		if action["availability_state"] != "available" || action["next_action"] != nil {
+			t.Fatalf("expected ready assistant action %q, got %+v", actionID, action)
 		}
 	}
 	setup := openai["setup_status"].(map[string]any)
@@ -799,6 +825,19 @@ func findRegistryProvider(providers []map[string]any, id string) map[string]any 
 	for _, provider := range providers {
 		if fmt.Sprintf("%v", provider["provider_id"]) == id {
 			return provider
+		}
+	}
+	return nil
+}
+
+func findRegistryAction(actions []any, id string) map[string]any {
+	for _, raw := range actions {
+		action, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if fmt.Sprintf("%v", action["action_id"]) == id {
+			return action
 		}
 	}
 	return nil

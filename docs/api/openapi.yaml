@@ -3461,6 +3461,24 @@ components:
           allOf:
             - $ref: "#/components/schemas/EbayProviderSetupStatus"
           description: Non-secret readiness summary for the eBay setup surface.
+        actions:
+          type: array
+          description: Provider workflow/action metadata including availability and required next action.
+          items:
+            type: object
+            required: [action_id, label, workflow_ref, capability_category, execution_mode, classification, confirmation_required, availability_state]
+            properties:
+              action_id: { type: string, example: assistant.chat }
+              label: { type: string, example: Assistant chat }
+              workflow_ref: { type: string, example: assistant.chat }
+              capability_category: { type: string, example: assistant }
+              execution_mode: { type: string, example: provider_workflow }
+              classification: { type: string, enum: [read_only, preview_only, confirm_required, external_write] }
+              confirmation_required: { type: boolean }
+              availability_state: { type: string, enum: [available, setup_needed, blocked, unavailable] }
+              next_action:
+                type: [string, "null"]
+                example: connect_openai_api_key_or_browser_auth
         seller_operations:
           type: array
           items:
