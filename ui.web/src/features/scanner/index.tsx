@@ -461,8 +461,8 @@ function mapScannerActionError(
     return {
       summary: 'Retry request was rejected due to invalid scanner state.',
       actions: [
-        'Confirm the failed query set still exists.',
-        'Re-run the query set directly after fixing provider inputs.',
+        'Confirm the failed saved watch still exists.',
+        'Re-run the saved watch directly after fixing provider inputs.',
       ],
       diagnosticCode: errorCode,
       diagnostics,
@@ -494,7 +494,7 @@ function mapScannerActionError(
     summary: operation === 'run' ? 'Run failed.' : 'Retry failed.',
     actions: [
       'Verify provider health and credentials.',
-      'Validate query set configuration, then retry.',
+      'Validate saved watch configuration, then retry.',
     ],
     diagnosticCode: errorCode,
     diagnostics,
@@ -726,8 +726,8 @@ export function Scanner() {
     setActionFeedback({
       summary: 'Barcode lookup is ready for Market Watch.',
       actions: [
-        'Review provider scope before creating the query set.',
-        'Create the query set or edit the barcode keyword first.',
+        'Review provider scope before creating the saved watch.',
+        'Create the saved watch or edit the barcode keyword first.',
       ],
     })
   }, [])
@@ -753,19 +753,19 @@ export function Scanner() {
       .filter(Boolean)
     const nextValidation: CreateQueryValidation = {}
     if (!newName.trim()) {
-      nextValidation.name = 'Query set name is required.'
+      nextValidation.name = 'Saved watch name is required.'
     }
     if (keywords.length === 0) {
       nextValidation.keywords =
-        'Enter at least one keyword before creating a query set.'
+        'Enter at least one keyword before creating a saved watch.'
     }
     if (nextValidation.name || nextValidation.keywords) {
       setCreateValidation(nextValidation)
       setActionStatus('create_query_set_validation_failed')
       setActionFeedback({
-        summary: 'Create Query Set requires the highlighted fields.',
+        summary: 'Create Saved Watch requires the highlighted fields.',
         actions: [
-          nextValidation.name ?? 'Provide a query set name.',
+          nextValidation.name ?? 'Provide a saved watch name.',
           nextValidation.keywords ?? 'Provide at least one keyword.',
         ],
       })
@@ -938,9 +938,9 @@ export function Scanner() {
     if (querySets.length === 0) {
       setActionStatus('scheduled_run_blocked_empty')
       setActionFeedback({
-        summary: 'Run Scheduled Refresh needs at least one runnable query set.',
+        summary: 'Run Scheduled Watches needs at least one runnable saved watch.',
         actions: [
-          'Create a query set first.',
+          'Create a saved watch first.',
           'Add keywords so the first scheduled run has valid criteria.',
         ],
       })
@@ -1660,6 +1660,66 @@ export function Scanner() {
     ranAt: formatRunTime(querySet.id),
     output: formatOutputSummary(querySet.id),
   }))
+  const marketWatchSummaryCards = [
+    {
+      label: 'Active watches',
+      value: String(
+        querySets.filter((querySet) => querySet.enabled !== false).length
+      ),
+      detail: `${querySets.length} saved total`,
+    },
+    {
+      label: 'New discoveries',
+      value: String(
+        Object.values(candidatesByQuerySet)
+          .flat()
+          .filter((candidate) => normalizeResultStatus(candidate) === 'new').length
+      ),
+      detail: 'Unreviewed provider results',
+    },
+    {
+      label: 'Wishlist matches',
+      value: String(
+        Object.values(candidatesByQuerySet)
+          .flat()
+          .filter((candidate) => candidate.wishlist_match === true).length
+      ),
+      detail: 'Matched to wanted items',
+    },
+    {
+      label: 'Provider issues',
+      value: String(
+        querySets.filter(
+          (querySet) =>
+            formatRunStatus(querySet.id) === 'failed' ||
+            Boolean(querySet.last_run_message)
+        ).length + (hasProviderAttention ? 1 : 0)
+      ),
+      detail: hasProviderAttention
+        ? providerHealthSummary
+        : 'No provider attention needed',
+    },
+    {
+      label: 'Last run',
+      value: latestRunHistory[0]?.ranAt ?? 'Never',
+      detail: latestRunHistory[0]?.name ?? 'No saved watch has run',
+    },
+    {
+      label: 'Next run',
+      value:
+        querySets.some(
+          (querySet) =>
+            querySet.enabled !== false && Boolean(querySet.schedule_cron?.trim())
+        )
+          ? 'Scheduled'
+          : 'Manual',
+      detail:
+        querySets.find(
+          (querySet) =>
+            querySet.enabled !== false && Boolean(querySet.schedule_cron?.trim())
+        )?.name ?? 'Create a cadence to automate searches',
+    },
+  ]
 
   const selectedOutputCandidates = selectedOutputQuerySetID
     ? (candidatesByQuerySet[selectedOutputQuerySetID] ?? [])
@@ -1937,7 +1997,7 @@ export function Scanner() {
         <Search />
         <HeaderTitle
           title='Market Watch'
-          description='Provider scans, listing candidates, and discovery queues.'
+          description='Saved integration searches, provider health, and discovery inboxes.'
           icon={ScanSearch}
           testId='market-watch-header-title'
           iconTestId='market-watch-page-icon'
@@ -1957,10 +2017,33 @@ export function Scanner() {
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>Market Watch</h1>
           <p className='text-muted-foreground'>
-            Manage provider query sets, run market watch searches, and recover
-            from provider failures.
+            Track saved searches across integrations, review new discoveries,
+            and recover provider issues without leaving the dashboard.
           </p>
         </div>
+
+        <section
+          className='grid gap-2 sm:grid-cols-2 lg:grid-cols-6'
+          data-testid='market-watch-dashboard-summary'
+        >
+          {marketWatchSummaryCards.map((card) => (
+            <div
+              key={card.label}
+              className='rounded-md border p-3 text-sm'
+              data-testid={`market-watch-summary-${card.label
+                .toLowerCase()
+                .replace(/\s+/g, '-')}`}
+            >
+              <p className='text-xs font-medium text-muted-foreground'>
+                {card.label}
+              </p>
+              <p className='mt-1 truncate text-lg font-semibold'>{card.value}</p>
+              <p className='mt-1 truncate text-xs text-muted-foreground'>
+                {card.detail}
+              </p>
+            </div>
+          ))}
+        </section>
 
         <div
           className='rounded-md border p-3 text-sm'
@@ -2005,7 +2088,7 @@ export function Scanner() {
                   name: undefined,
                 }))
               }}
-              placeholder='Query set name'
+              placeholder='Saved watch name'
               aria-invalid={createValidation.name ? 'true' : 'false'}
               data-testid='scanner-new-query-name'
             />
@@ -2028,7 +2111,7 @@ export function Scanner() {
                   keywords: undefined,
                 }))
               }}
-              placeholder='Keywords (comma-separated)'
+              placeholder='Search terms (comma-separated)'
               aria-invalid={createValidation.keywords ? 'true' : 'false'}
               data-testid='scanner-new-query-keywords'
             />
@@ -2133,14 +2216,14 @@ export function Scanner() {
             onClick={() => void createQuerySet()}
             data-testid='scanner-create-query'
           >
-            Create Query Set
+            Create Saved Watch
           </Button>
           <Button
             variant='outline'
             onClick={() => void runScheduledRefresh()}
             data-testid='scanner-run-scheduled-refresh'
           >
-            Run Scheduled Refresh
+            Run Scheduled Watches
           </Button>
         </section>
         <section className='flex flex-wrap items-center gap-2'>
@@ -2335,7 +2418,7 @@ export function Scanner() {
               data-testid='market-watch-filter-summary'
             >
               Showing {filteredQuerySets.length} of {querySets.length} Market
-              Watch queries
+              Watch saved watches
             </p>
           </section>
         ) : null}
@@ -2347,7 +2430,7 @@ export function Scanner() {
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <p className='font-medium'>Latest run history</p>
               <p className='text-xs text-muted-foreground'>
-                Hydrated from saved query metadata
+                Hydrated from saved watch metadata
               </p>
             </div>
             <ul className='mt-2 divide-y text-xs'>
@@ -2747,8 +2830,8 @@ export function Scanner() {
             className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
             data-testid='scanner-empty-state'
           >
-            No query sets found. Create your first query set to start Market
-            Watch runs.
+            No saved watches found. Create your first saved integration search
+            to start Market Watch runs.
           </div>
         ) : null}
 
@@ -2977,7 +3060,7 @@ export function Scanner() {
               <table className='w-full text-sm'>
                 <thead className='bg-muted/30 text-left'>
                   <tr>
-                    <th className='px-3 py-2 font-medium'>Query Name</th>
+                    <th className='px-3 py-2 font-medium'>Saved Watch</th>
                     <th className='px-3 py-2 font-medium'>Terms</th>
                     <th className='px-3 py-2 font-medium'>Provider Scope</th>
                     <th className='px-3 py-2 font-medium'>Schedule</th>

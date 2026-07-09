@@ -292,6 +292,17 @@ Market Watch SHALL focus its primary dashboard on saved provider searches while 
 - **AND WHEN** user activates the secondary action
 - **THEN** Market Watch MUST reveal Quick Scan, manual entry queueing, and Recent Unlinked Scans review controls without disrupting saved-query creation
 
+### Requirement UI-SCREEN-MARKET-WATCH-018: Market Watch SHALL present a saved integration search dashboard
+Market Watch SHALL frame the primary route as a collector-facing saved integration search dashboard instead of a raw query-set control panel.
+
+#### Scenario: Saved integration search dashboard shell
+- **GIVEN** user opens `/market-watch`
+- **WHEN** Market Watch workspace data loads
+- **THEN** the page header MUST explain saved searches across integrations, discoveries, and provider recovery
+- **AND** the top summary MUST show active watches, new discoveries, wishlist matches, provider issues, last run, and next run
+- **AND** the primary create controls MUST use saved-watch/search terminology rather than raw query-set terminology
+- **AND** provider health, saved-watch table controls, result inbox controls, and secondary manual listing capture MUST be visible or reachable from the same dashboard surface
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -315,3 +326,4 @@ Market Watch SHALL focus its primary dashboard on saved provider searches while 
 | UC-MW-18 | Purchase handoff from output detail | Output detail Purchase handoff posts selected candidate, persists purchase lifecycle and expected-arrival records, and keeps Market Watch/Discoveries status synchronized | implemented: `internal/discovery/service_test.go` `TestApplyActionMarkPurchasedCreatesCommerceHandoff`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-015 persists output-detail Purchase handoff provenance`; `ui.web/src/features/scanner/index.tsx` `scanner-handoff-purchase-*` |
 | UC-MW-19 | Result inbox lifecycle review | Output detail result inbox shows status/provider/match/wishlist filters, match rationale, seen timestamps, total price, lifecycle status, and decision history without losing dismissed or downstream-handoff results; candidate API supports status/provider pagination, profile-scoped lifecycle status persistence, and durable transition history | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-016 + #1548 renders result inbox lifecycle filters and match provenance`; `internal/scanner/service_test.go` `TestCandidateResultInboxFiltersPaginationAndLifecycleUpdate`; `internal/app/scanner_api_test.go` `TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbaySavedSearchHandoffContract`; `ui.web/src/features/scanner/index.tsx` `market-watch-results-inbox-*`; `docs/api/openapi.yaml` `CandidateDecisionHistoryRecord` |
 | UC-MW-20 | Provider health and run history | Unknown provider health stays actionable, provider health taxonomy includes label/guidance/retry timing, health transitions persist after run outcomes, and persisted run history lists provider outcomes after reload | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsClassifiedProviderHealthTransitions`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbayProviderHealthContract`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history`; `UI-SCREEN-MARKET-WATCH-017 shows provider health taxonomy labels guidance and retry timing` |
+| UC-MW-21 | Saved integration search dashboard shell | Header, top summary, create controls, provider health, saved-watch table, result inbox, and manual listing entry present Market Watch as a saved integration search dashboard | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-018 + #1540 presents saved integration search dashboard shell` |

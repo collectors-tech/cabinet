@@ -29,9 +29,16 @@ describe('integrations/ui-screen-scanner', () => {
     cy.wait(['@querySets', '@failures', '@providerHealth'])
 
     cy.location('pathname').should('match', /^\/scanner\/?$/)
-    cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('contain', 'Market Watch')
-    cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('not.contain', 'Scanner')
     cy.get('main').contains('h1', 'Market Watch').should('be.visible')
+    cy.get('[data-testid="market-watch-header-title"]')
+      .should('contain', 'Market Watch')
+    cy.get('main')
+      .contains('Track saved searches across integrations')
+      .should('be.visible')
+    cy.get('[data-testid="scanner-empty-state"]').should(
+      'contain',
+      'Create your first saved integration search'
+    )
   })
 
   it('UI-SCREEN-SCANNER-001 supports query set create/load and run controls', () => {
@@ -132,10 +139,10 @@ describe('integrations/ui-screen-scanner', () => {
       body: { status: 'ok' },
     }).as('providerHealth')
     cy.intercept('POST', '/api/scanner/query-sets', () => {
-      throw new Error('Create Query Set should stay client-side when required fields are blank')
+      throw new Error('Create Saved Watch should stay client-side when required fields are blank')
     }).as('createQuerySetBlocked')
     cy.intercept('POST', '/api/scanner/run/scheduled', () => {
-      throw new Error('Scheduled refresh should stay client-side when no query sets exist')
+      throw new Error('Scheduled refresh should stay client-side when no saved watches exist')
     }).as('scheduledRefreshBlocked')
 
     signInToScanner()
@@ -145,20 +152,20 @@ describe('integrations/ui-screen-scanner', () => {
     cy.get('[data-testid="scanner-create-query"]').click()
     cy.get('[data-testid="scanner-new-query-name-validation"]')
       .should('be.visible')
-      .and('contain', 'Query set name is required.')
+      .and('contain', 'Saved watch name is required.')
     cy.get('[data-testid="scanner-new-query-keywords-validation"]')
       .should('be.visible')
-      .and('contain', 'Enter at least one keyword before creating a query set.')
+      .and('contain', 'Enter at least one keyword before creating a saved watch.')
     cy.get('[data-testid="scanner-action-feedback"]')
-      .should('contain', 'Create Query Set requires the highlighted fields.')
-      .and('contain', 'Query set name is required.')
-      .and('contain', 'Enter at least one keyword before creating a query set.')
+      .should('contain', 'Create Saved Watch requires the highlighted fields.')
+      .and('contain', 'Saved watch name is required.')
+      .and('contain', 'Enter at least one keyword before creating a saved watch.')
 
     cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
     cy.get('[data-testid="scanner-action-status"]').should('contain', 'scheduled_run_blocked_empty')
     cy.get('[data-testid="scanner-action-feedback"]')
-      .should('contain', 'Run Scheduled Refresh needs at least one runnable query set.')
-      .and('contain', 'Create a query set first.')
+      .should('contain', 'Run Scheduled Watches needs at least one runnable saved watch.')
+      .and('contain', 'Create a saved watch first.')
       .and('contain', 'Add keywords so the first scheduled run has valid criteria.')
 
     cy.intercept('GET', '/api/scanner/query-sets', {

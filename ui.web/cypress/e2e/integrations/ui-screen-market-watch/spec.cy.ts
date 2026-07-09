@@ -10,6 +10,40 @@ describe('integrations/ui-screen-market-watch', () => {
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            key: 'ebay',
+            display_name: 'eBay',
+            provider_category: 'marketplace',
+            market_watch_scope: 'ebay',
+            state: 'enabled',
+            workflow_refs: ['market_watch.run'],
+            capabilities: { search: true },
+          },
+          {
+            key: 'amazon',
+            display_name: 'Amazon',
+            provider_category: 'marketplace',
+            market_watch_scope: 'amazon',
+            state: 'enabled',
+            workflow_refs: ['market_watch.run'],
+            capabilities: { search: true },
+          },
+          {
+            key: 'bonzaslotcars',
+            display_name: 'bonzaslotcars.com.au',
+            provider_category: 'storefront/source matcher',
+            market_watch_scope: 'bonzaslotcars',
+            state: 'enabled',
+            workflow_refs: ['market_watch.run'],
+            capabilities: { search: true, pricing: true },
+          },
+        ],
+      },
+    }).as('providerRegistry')
   })
 
   it('UI-SCREEN-MARKET-WATCH-004 shows deterministic workspace states', () => {
@@ -32,12 +66,96 @@ describe('integrations/ui-screen-market-watch', () => {
 
     cy.get('[data-testid="scanner-empty-state"]')
       .should('be.visible')
-      .and('contain', 'Create your first query set')
+      .and('contain', 'Create your first saved integration search')
     cy.get('[data-testid="market-watch-provider-attention-state"]')
       .should('be.visible')
       .and('contain', 'Provider needs attention')
       .and('contain', 'auth_required')
       .and('contain', 'Review provider credentials')
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-018 + #1540 presents saved integration search dashboard shell', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-dashboard',
+            name: 'Tyco truck watch',
+            keywords: ['tyco truck'],
+            provider_scope: ['ebay'],
+            schedule_cron: '0 */6 * * *',
+            enabled: true,
+            last_run_status: 'failed',
+            last_run_at: '2026-07-09T17:10:00Z',
+            last_run_message: 'Provider credentials expired',
+            last_candidate_count: 0,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: {
+        provider: 'ebay',
+        status: 'auth_required',
+        state: 'degraded',
+        label: 'Reconnect required',
+        guidance: 'Reconnect eBay before saved watches can run again.',
+      },
+    }).as('providerHealth')
+    cy.intercept('GET', '/api/scanner/runs?limit=25', { statusCode: 200, body: { runs: [] } }).as(
+      'runs'
+    )
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth', '@runs'])
+
+    cy.contains('Track saved searches across integrations').should('be.visible')
+    cy.get('[data-testid="market-watch-dashboard-summary"]')
+      .should('contain', 'Active watches')
+      .and('contain', 'New discoveries')
+      .and('contain', 'Wishlist matches')
+      .and('contain', 'Provider issues')
+      .and('contain', 'Last run')
+      .and('contain', 'Next run')
+    cy.get('[data-testid="market-watch-summary-active-watches"]').should('contain', '1')
+    cy.get('[data-testid="market-watch-summary-provider-issues"]')
+      .should('contain', '2')
+      .and('contain', 'Reconnect required')
+    cy.get('[data-testid="scanner-new-query-name"]').should(
+      'have.attr',
+      'placeholder',
+      'Saved watch name'
+    )
+    cy.get('[data-testid="scanner-new-query-keywords"]').should(
+      'have.attr',
+      'placeholder',
+      'Search terms (comma-separated)'
+    )
+    cy.get('[data-testid="scanner-create-query"]').should('contain', 'Create Saved Watch')
+    cy.get('[data-testid="scanner-run-scheduled-refresh"]').should(
+      'contain',
+      'Run Scheduled Watches'
+    )
+    cy.get('[data-testid="scanner-provider-health"]').should('contain', 'Reconnect required')
+    cy.get('[data-testid="market-watch-table-filters"]').should(
+      'contain',
+      'Showing 1 of 1 Market Watch saved watches'
+    )
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]')
+      .should('contain', 'Tyco truck watch')
+      .and('contain', 'Saved Watch')
+    cy.get('[data-testid="market-watch-open-output-qs-dashboard"]').click()
+    cy.get('[data-testid="market-watch-output-detail"]').should('be.visible')
+    cy.get('[data-testid="market-watch-results-inbox-filters"]').should('be.visible')
+    cy.get('[data-testid="market-watch-capture-reveal"]')
+      .should('be.visible')
+      .and('contain', 'Add listing manually')
   })
 
   it('UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history', () => {
@@ -292,7 +410,7 @@ describe('integrations/ui-screen-market-watch', () => {
     )
     cy.get('[data-testid="scanner-action-feedback"]')
       .should('contain', 'Barcode lookup is ready for Market Watch.')
-      .and('contain', 'Review provider scope before creating the query set.')
+      .and('contain', 'Review provider scope before creating the saved watch.')
     cy.get('[data-testid="scanner-create-query"]').click()
     cy.wait('@createBarcodeQuery')
     cy.get('[data-testid="scanner-query-providers-qs-mw-barcode"]').should('contain', 'ebay')
@@ -973,7 +1091,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-action-feedback"]')
       .should('contain', 'Run failed.')
       .and('contain', 'Verify provider health and credentials.')
-      .and('contain', 'Validate query set configuration, then retry.')
+      .and('contain', 'Validate saved watch configuration, then retry.')
       .and('contain', 'method_not_allowed')
       .and('not.contain', 'Market Watch action was denied.')
       .and('not.contain', 'Sign in again')
@@ -1504,7 +1622,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-view-mode-table"]').click()
     cy.get('[data-testid="market-watch-query-table"]').should('be.visible')
     cy.get('[data-testid="market-watch-query-table"]').within(() => {
-      cy.contains('th', 'Query Name').should('be.visible')
+      cy.contains('th', 'Saved Watch').should('be.visible')
       cy.contains('th', 'Terms').should('be.visible')
       cy.contains('th', 'Provider Scope').should('be.visible')
       cy.contains('th', 'Schedule').should('be.visible')
