@@ -100,7 +100,7 @@ describe('collections-sorting-no-mutation', () => {
     )
   }
 
-  it('UI-SCREEN-COLLECTIONS-031 sorts collections and members without passive settings writes', () => {
+  it('UI-SCREEN-COLLECTIONS-031 sorts collections without passive settings writes', () => {
     seedSortableCollectionsProfile()
 
     cy.get('[data-testid="collections-active-context"]').should(
@@ -115,13 +115,7 @@ describe('collections-sorting-no-mutation', () => {
       'collections-row-middle-shelf',
       'collections-row-zulu-vault',
     ])
-    rowTestIDs(
-      '[data-testid="collections-members-table"] tbody tr[data-testid^="collections-member-row-"]'
-    ).should('deep.equal', [
-      'collections-member-row-sort-item-alpha-card',
-      'collections-member-row-sort-item-middle-card',
-      'collections-member-row-sort-item-zulu-card',
-    ])
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
     cy.get('@saveCollectionSettings.all').should('have.length', 0)
 
     sortColumnDescending('[data-testid="collections-shared-table"]', 'Collection')
@@ -139,14 +133,6 @@ describe('collections-sorting-no-mutation', () => {
     )
     cy.get('@saveCollectionSettings.all').should('have.length', 0)
 
-    sortColumnDescending('[data-testid="collections-members-table"]', 'Item')
-    rowTestIDs(
-      '[data-testid="collections-members-table"] tbody tr[data-testid^="collections-member-row-"]'
-    ).should('deep.equal', [
-      'collections-member-row-sort-item-zulu-card',
-      'collections-member-row-sort-item-middle-card',
-      'collections-member-row-sort-item-alpha-card',
-    ])
     cy.get('[data-testid="collections-active-context"]').should(
       'contain.text',
       'All Items'

@@ -150,27 +150,25 @@ Deleting a collection from Collections SHALL remove it from downstream compact c
 - **AND** the active collection context MUST fall back deterministically
 - **AND** downstream compact filters MUST NOT show the deleted collection option
 
-### Requirement UI-SCREEN-COLLECTIONS-016: Collections SHALL render selected collection members in a lower table
-Collections SHALL show collection rows and selected collection inventory members as separate shared table surfaces on the same route.
+### Requirement UI-SCREEN-COLLECTIONS-016: Collections SHALL retire the lower members table
+Collections SHALL show collection rows as the primary working surface and SHALL NOT render a separate lower `Collection members` table on the Collections route.
 
-#### Scenario: Select collections and inspect members table
+#### Scenario: Open collections without a members table
 - **GIVEN** an authenticated user opens `/collections`
-- **WHEN** `All Items` is selected
-- **THEN** the lower members table MUST show live inventory members
-- **WHEN** the user selects a populated collection
-- **THEN** the members table MUST show only that collection's members
-- **WHEN** the user selects an empty collection
-- **THEN** the members table MUST show the selected collection empty state
+- **WHEN** the screen loads
+- **THEN** the main Collections table MUST be visible and usable
+- **AND** the route MUST NOT render a `Collection members` card or lower members table
+- **AND** collection row selection MUST still update the active collection context
+- **AND** useful collection information such as live item counts MUST remain visible in the main table
 
-### Requirement UI-SCREEN-COLLECTIONS-017: Collection members table SHALL support deterministic filtering
-The selected collection members table SHALL expose a filter that limits visible member rows without changing the active collection context.
+### Requirement UI-SCREEN-COLLECTIONS-017: Collection members table filtering is retired from this route
+The selected collection members table filter SHALL be absent because the separate members table is retired from Collections.
 
-#### Scenario: Filter collection members
-- **GIVEN** an authenticated user opens `/collections` with members visible
-- **WHEN** the user filters the members table
-- **THEN** only matching member rows MUST remain visible
-- **AND** nonmatching member rows MUST be hidden
-- **AND** the members summary MUST update deterministically
+#### Scenario: Members filter is absent
+- **GIVEN** an authenticated user opens `/collections`
+- **WHEN** the screen loads
+- **THEN** no collection-members filter input MUST render
+- **AND** no collection-members summary MUST render
 
 ### Requirement UI-SCREEN-COLLECTIONS-018: All Items count SHALL match live inventory
 The protected `All Items` collection row SHALL derive its count from the live inventory catalogue.
@@ -191,25 +189,25 @@ The pre-table in-route assignment control contract for Collections SHALL be reti
 - **THEN** `UI-SCREEN-COLLECTIONS-019` MUST be documented as retired/replaced
 - **AND** active member-surface behavior MUST be covered by `UI-SCREEN-COLLECTIONS-016`, `017`, `018`, `020`, `021`, and later focused #1078 requirements
 
-### Requirement UI-SCREEN-COLLECTIONS-020: Collections tables SHALL stretch to available viewport height
-The Collections and members table surfaces SHALL use the available viewport height without causing page-level overflow in normal desktop review dimensions.
+### Requirement UI-SCREEN-COLLECTIONS-020: Collections table SHALL stretch to available viewport height
+The main Collections table surface SHALL use the available viewport height without causing page-level overflow in normal desktop review dimensions.
 
-#### Scenario: Render table surfaces at desktop height
+#### Scenario: Render single table surface at desktop height
 - **GIVEN** an authenticated user opens `/collections` at a desktop viewport
 - **WHEN** the Collections workspace renders
-- **THEN** both table cards MUST have usable vertical height
-- **AND** both shared table surfaces MUST have usable vertical height
+- **THEN** the Collections table card MUST consume the available workspace height
+- **AND** the shared table surface MUST have usable vertical height
+- **AND** the lower members table MUST NOT render
 - **AND** the document MUST NOT introduce avoidable page-level vertical overflow
 
-### Requirement UI-SCREEN-COLLECTIONS-021: Collection member cells SHALL truncate long values safely
-The collection members table SHALL prevent long member values from overflowing columns while preserving readable clipped text.
+### Requirement UI-SCREEN-COLLECTIONS-021: Collection table cells SHALL truncate long values safely
+The single Collections table SHALL prevent long values from overflowing columns while preserving readable clipped text.
 
-#### Scenario: Render long member values
-- **GIVEN** a live inventory member has unusually long text values
+#### Scenario: Render long collection table values
+- **GIVEN** live inventory records or collection metadata include unusually long text values
 - **WHEN** the user opens `/collections`
-- **THEN** the members table MUST NOT create horizontal table overflow
-- **AND** each visible member cell MUST keep its content inside the cell bounds
-- **AND** long member names MUST use ellipsis truncation
+- **THEN** the Collections table MUST NOT create horizontal table overflow
+- **AND** each visible table cell MUST keep its content inside the cell bounds
 
 ### Requirement UI-SCREEN-COLLECTIONS-022: Create collection dialog SHALL submit from Enter
 The Create collection dialog SHALL treat Enter in its single-line collection name input as the same create action as the primary save button while preserving the same validation and persistence contract.
@@ -245,7 +243,7 @@ The Collections screen SHALL expose the Create collection workflow through a pag
 - **AND** submitting a valid collection name MUST persist the new collection and active context
 
 ### Requirement UI-SCREEN-COLLECTIONS-024: Collections filters SHALL expose deterministic empty states without mutation
-Collections table and collection-members table filters SHALL show deterministic zero-result summaries and empty-row messages while preserving the selected collection context and avoiding profile-settings writes.
+Collections table filters SHALL show deterministic zero-result summaries and empty-row messages while preserving the selected collection context and avoiding profile-settings writes; the retired collection-members filter SHALL remain absent.
 
 #### Scenario: Collections table filter has no matches
 - **GIVEN** an authenticated user opens `/collections`
@@ -255,12 +253,10 @@ Collections table and collection-members table filters SHALL show deterministic 
 - **AND** the selected collection context MUST remain unchanged
 - **AND** no profile-settings save MUST be sent by filtering alone
 
-#### Scenario: Collection members filter has no matches
-- **GIVEN** an authenticated user opens `/collections` with collection members visible
-- **WHEN** the user enters a members filter that matches no member rows
-- **THEN** the members table MUST show zero matching rows
-- **AND** the members summary MUST show `Showing 0 of <selected total> items.`
-- **AND** the empty-row message MUST explain that no collection members match the current filter
+#### Scenario: Retired collection members filter is absent
+- **GIVEN** an authenticated user opens `/collections`
+- **WHEN** the user filters the Collections table
+- **THEN** no collection-members filter or empty-row message MUST render
 - **AND** no profile-settings save MUST be sent by filtering alone
 
 ### Requirement UI-SCREEN-COLLECTIONS-025: Collections transient workflows SHALL cancel without mutation
@@ -309,24 +305,21 @@ Collections row edit side panel SHALL provide deterministic record navigation an
 - **AND** the original and duplicate source rows MUST remain unchanged
 - **AND** the active collection context MUST remain on the row being edited
 
-### Requirement UI-SCREEN-COLLECTIONS-027: Collections members panel SHALL reflect selected collection contents
-The Collections members panel SHALL render the selected collection's current inventory members using the same live inventory catalogue and persisted workspace assignment state that drives collection row counts.
+### Requirement UI-SCREEN-COLLECTIONS-027: Collections members panel is retired
+The Collections members panel SHALL remain absent; selected collection contents are represented by main table row counts and inventory navigation.
 
-#### Scenario: All Items reflects live inventory members
+#### Scenario: All Items count reflects live inventory without members panel
 - **GIVEN** an authenticated user opens `/collections` and live inventory records are available
 - **WHEN** the Collections screen loads with `All Items` selected
 - **THEN** the `All Items` row count MUST equal the live inventory member count
-- **AND** the members table summary MUST show all live inventory members
-- **AND** each visible member row MUST show its assigned or unassigned collection label
+- **AND** no members panel MUST render
 
-#### Scenario: Selecting a collection updates the members panel
+#### Scenario: Selecting a collection updates active context without members panel
 - **GIVEN** an authenticated user opens `/collections` with assigned and empty collections available
-- **WHEN** the user selects a collection that has assigned members
-- **THEN** the members panel MUST show only the selected collection's assigned members
+- **WHEN** the user selects a collection
+- **THEN** the active collection context MUST update
 - **AND** the persisted active collection setting MUST match the selected collection
-- **WHEN** the user selects a collection with no assigned members
-- **THEN** the members panel MUST show the empty state for that selected collection
-- **AND** it MUST NOT display members from the previously selected collection
+- **AND** no members panel MUST render
 
 ### Requirement UI-SCREEN-COLLECTIONS-028: Collections table pagination SHALL preserve selection and avoid passive mutation
 Collections table pagination SHALL let users reach collections beyond the first page while keeping profile writes limited to explicit collection selection.
@@ -346,25 +339,19 @@ Collections table pagination SHALL let users reach collections beyond the first 
 - **THEN** the selected row MUST remain reachable and selected
 - **AND** filtering MUST NOT send an additional profile-settings save
 
-### Requirement UI-SCREEN-COLLECTIONS-029: Collection members pagination SHALL preserve selected context without passive mutation
-The Collection members table SHALL let users reach selected-collection members beyond the first page while preserving the active collection context and keeping profile writes limited to explicit collection selection or item assignment actions.
+### Requirement UI-SCREEN-COLLECTIONS-029: Collection members pagination is retired
+The Collection members table pagination SHALL remain absent because the separate members table is retired from Collections.
 
-#### Scenario: Page selected collection members
-- **GIVEN** an authenticated user opens `/collections` with a selected collection containing enough assigned inventory members to require multiple members-table pages
-- **WHEN** the user navigates to a later members page
-- **THEN** later-page member rows MUST render for the selected collection
-- **AND** the active collection context MUST remain unchanged
-- **AND** no profile-settings save MUST be sent by members pagination alone
-- **WHEN** the user refreshes the route
-- **THEN** the same selected collection context MUST be restored from profile settings
-- **AND** the later-page members MUST remain reachable
+#### Scenario: Members pagination is absent
+- **GIVEN** an authenticated user opens `/collections`
+- **WHEN** the Collections screen loads
+- **THEN** no collection-members pagination control MUST render
+- **AND** the active collection context MUST remain visible
 
-#### Scenario: Filter after members pagination
-- **GIVEN** a selected collection has paginated member rows
-- **WHEN** the user filters the members table to a later-page member
-- **THEN** the matching member MUST remain visible for the selected collection
-- **AND** the members summary MUST reflect the filtered result count
-- **AND** filtering MUST NOT send a profile-settings save
+#### Scenario: Main table pagination remains non-mutating
+- **GIVEN** collections require table pagination
+- **WHEN** the user changes Collections table pages
+- **THEN** the main table page change MUST NOT send a profile-settings save
 
 ### Requirement UI-SCREEN-COLLECTIONS-030: Protected default collection SHALL reject rename and delete mutation
 The `All Items` default collection SHALL remain a protected management context that cannot be renamed or deleted from row workflows.
@@ -381,7 +368,7 @@ The `All Items` default collection SHALL remain a protected management context t
 - **AND** the active collection context MUST remain `All Items`
 
 ### Requirement UI-SCREEN-COLLECTIONS-031: Collections tables SHALL sort deterministically without passive mutation
-Collections and collection-members tables SHALL expose deterministic column sorting while preserving the current selected collection context and avoiding profile-settings writes.
+The Collections table SHALL expose deterministic column sorting while preserving the current selected collection context and avoiding profile-settings writes; retired collection-members table sorting SHALL remain absent.
 
 #### Scenario: Sort collections and members tables
 - **GIVEN** an authenticated user opens `/collections` with multiple collections and collection members visible
@@ -389,10 +376,7 @@ Collections and collection-members tables SHALL expose deterministic column sort
 - **THEN** the collection rows MUST render in deterministic descending name order
 - **AND** the active collection context MUST remain unchanged
 - **AND** no profile-settings save MUST be sent by sorting alone
-- **WHEN** the user sorts the collection-members table by item name descending
-- **THEN** the member rows MUST render in deterministic descending item order for the active collection
-- **AND** the active collection context MUST remain unchanged
-- **AND** no profile-settings save MUST be sent by member sorting alone
+- **AND** the retired collection-members table MUST remain absent
 
 ### Requirement UI-SCREEN-COLLECTIONS-032: Collection delete SHALL soft-delete and reconcile assigned items
 Collections SHALL hide deleted collection rows from active views by default, retain deleted metadata for review, and make assigned-item outcomes explicit before saving.
@@ -459,21 +443,21 @@ Collections row action controls SHALL use compact icon-only buttons while preser
 | UC-COL-13 | Wishlist creates collection | Wishlist table collection create persists into Collections manager state | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-013 reflects wishlist table collection create inside the collections manager` |
 | UC-COL-14 | Rename propagates to Wishlist | Collection rename updates Wishlist compact collection filter options | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-014 propagates rename into the wishlist table collection filter` |
 | UC-COL-15 | Delete propagates to filters | Collection delete removes the option from compact filters and falls back active context | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-015 removes deleted collections from compact filters` |
-| UC-COL-16 | Selected collection members | Lower members table reflects All Items, populated, and empty selected collection states | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-016 renders selected collection items in a lower table` |
-| UC-COL-17 | Filter collection members | Members table filter hides nonmatching rows and updates its summary | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-017 filters collection members within the members table surface` |
+| UC-COL-16 | Retire members table | Collections renders one main working table and no lower members table | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-016 retires the lower members table and keeps the main table useful` |
+| UC-COL-17 | Retire members filter | Members table filter and summary are absent | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-017 retires the members table filter from Collections` |
 | UC-COL-18 | All Items live count | All Items row count and members summary match live inventory records | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-018 keeps All Items count aligned with inventory members` |
-| UC-COL-19 | Retired assignment controls | Legacy in-route assignment controls are documented as retired/replaced by member-surface contracts | retired/replaced by `UI-SCREEN-COLLECTIONS-016`, `017`, `018`, `020`, `021`, and focused #1078 member/table specs |
-| UC-COL-20 | Viewport-height tables | Collections and members tables stretch to available viewport height without page overflow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-020 stretches both tables to the available viewport height` |
-| UC-COL-21 | Long member truncation | Members table clips long values inside cells with ellipsis | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-021 truncates long member table values instead of overflowing columns` |
+| UC-COL-19 | Retired assignment controls | Legacy in-route assignment controls are documented as retired/replaced by table/navigation contracts | retired/replaced by `UI-SCREEN-COLLECTIONS-016`, `017`, `018`, `020`, `021`, and Inventory assignment workflows |
+| UC-COL-20 | Viewport-height table | Collections table stretches to available viewport height without page overflow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-020 stretches the main table to the available viewport height` |
+| UC-COL-21 | Long value truncation | Collections table clips long values inside cells | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-021 keeps long collection values inside the single table` |
 | UC-COL-22 | Press Enter in create dialog | Valid Enter submit persists; invalid Enter shows inline validation | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter` |
 | UC-COL-23 | Shortcut and command create | `Ctrl+N` and command palette entry open the same create dialog and persisted create flow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-023 opens Create collection from Ctrl+N and command entry` |
 | UC-COL-24 | Zero-result filters | Collections and members filters show deterministic empty states without profile-settings writes | `ui.web/cypress/e2e/collections/collections-filter-empty-states/spec.cy.ts` `UI-SCREEN-COLLECTIONS-024 shows deterministic zero-result filter states without saving settings` |
 | UC-COL-25 | Cancel transient workflows | Create/edit/delete cancellation closes transient surfaces without adding, renaming, deleting, changing active context, or saving settings | `ui.web/cypress/e2e/collections/collections-cancel-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-025 cancels create edit and delete workflows without saving settings` |
 | UC-COL-26 | Row edit side panel | Double-click opens the right-side edit panel, record navigation changes draft context, valid rename persists, and duplicate rename does not save | `ui.web/cypress/e2e/collections/collections-row-side-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-026 opens and validates collection row side-panel workflows` |
-| UC-COL-27 | Members panel contents | Selected collection drives member rows, live All Items count, assignment labels, and empty selected-collection states | `ui.web/cypress/e2e/collections/collections-members-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-027 reflects selected collection members and empty states` |
+| UC-COL-27 | Retired members panel | Separate members panel remains absent while main table counts stay useful | `ui.web/cypress/e2e/collections/collections-members-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-027 retires the separate members panel from Collections` |
 | UC-COL-28 | Paginate collections table | Later-page rows render without passive settings writes; selected later-page context persists across refresh and remains selected after filtering | `ui.web/cypress/e2e/collections/collections-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-028 preserves paginated collection selection without passive settings writes` |
-| UC-COL-29 | Paginate collection members | Later-page member rows render for the selected collection without passive settings writes; selected context survives refresh and member filtering remains non-mutating | `ui.web/cypress/e2e/collections/collections-members-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-029 preserves paginated collection members without passive settings writes` |
+| UC-COL-29 | Retired members pagination | Members-table pagination remains absent | `ui.web/cypress/e2e/collections/collections-members-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-029 retires members-table pagination from Collections` |
 | UC-COL-30 | Protect All Items | Rename and delete attempts do not write profile settings, create replacement rows, or leave the active `All Items` context | `ui.web/cypress/e2e/collections/collections-protected-all-items/spec.cy.ts` `UI-SCREEN-COLLECTIONS-030 keeps All Items protected from row rename and delete actions` |
-| UC-COL-31 | Sort collections and members | Collection and member rows sort deterministically without saving settings or changing the active collection context | `ui.web/cypress/e2e/collections/collections-sorting-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-031 sorts collections and members without passive settings writes` |
+| UC-COL-31 | Sort collections | Collection rows sort deterministically without saving settings or changing the active collection context | `ui.web/cypress/e2e/collections/collections-sorting-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-031 sorts collections without passive settings writes` |
 | UC-COL-32 | Soft-delete and reconcile collection items | Deleted rows are hidden by default, visible in the deleted filter, assigned items move to a chosen destination or become unassigned, and metadata edits persist | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-032 soft-deletes with deleted filter, reassignment choices, and editable metadata` |
 | UC-COL-33 | Icon-only row actions | Row View/Edit/Delete actions render as compact icon-only accessible controls without changing row workflows | `ui.web/cypress/e2e/collections/collections-row-side-panel/spec.cy.ts` `renders collection row actions as icon-only accessible controls` |
