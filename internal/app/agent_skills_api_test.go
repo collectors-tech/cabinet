@@ -327,6 +327,152 @@ func TestAgentSkillImportAPIPersistsInstalledMetadataAcrossRestart(t *testing.T)
 	}
 }
 
+func TestAgentSkillStateAPIEnablesAndDisablesImportedSkill(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	root := writeAgentSkillImportFixture(t, validAgentSkillImportManifest(`{
+		"id": "cabinet.example.api_imported_toggle",
+		"safetyLevel": "confirm-required",
+		"status": "preview-only",
+		"capabilities": ["inventory.item.update"],
+		"guidedWorkflows": ["inventory.item.update"],
+		"uiTargets": ["inventory.item.editor.title"],
+		"permissions": {
+			"cabinetReads": ["inventory.item"],
+			"cabinetWrites": ["inventory.item"],
+			"externalReads": [],
+			"externalWrites": [],
+			"secretAccess": false,
+			"destructive": false
+		},
+		"audit": {
+			"actionTimeline": "records imported skill state changes",
+			"requiresConfirmation": true
+		}
+	}`))
+
+	importResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importResp.Code != http.StatusOK {
+		t.Fatalf("import status=%d body=%s", importResp.Code, importResp.Body.String())
+	}
+
+	enableResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/state", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"skill_id":"cabinet.example.api_imported_toggle",
+		"enabled":true
+	}`), map[string]string{"Content-Type": "application/json"})
+	if enableResp.Code != http.StatusOK {
+		t.Fatalf("enable status=%d body=%s", enableResp.Code, enableResp.Body.String())
+	}
+	var enablePayload struct {
+		State struct {
+			ProfileID string `json:"profile_id"`
+			SkillID   string `json:"skill_id"`
+			Status    string `json:"status"`
+			Enabled   bool   `json:"enabled"`
+		} `json:"state"`
+		Skill apiSkillPayload `json:"skill"`
+	}
+	if err := json.NewDecoder(enableResp.Body).Decode(&enablePayload); err != nil {
+		t.Fatalf("decode enable: %v", err)
+	}
+	if enablePayload.State.ProfileID != "profile-a" || enablePayload.State.SkillID != "cabinet.example.api_imported_toggle" || !enablePayload.State.Enabled {
+		t.Fatalf("expected enabled profile state, got %+v", enablePayload.State)
+	}
+	if !enablePayload.Skill.Enabled || enablePayload.Skill.Status != "available" || !enablePayload.Skill.Executable {
+		t.Fatalf("expected enabled executable imported skill, got %+v", enablePayload.Skill)
+	}
+
+	disableResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/state", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"skill_id":"cabinet.example.api_imported_toggle",
+		"enabled":false
+	}`), map[string]string{"Content-Type": "application/json"})
+	if disableResp.Code != http.StatusOK {
+		t.Fatalf("disable status=%d body=%s", disableResp.Code, disableResp.Body.String())
+	}
+	listResp := doRequest(t, a, http.MethodGet, "/api/agent/skills?profile_id=profile-a", nil, nil)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var listPayload struct {
+		Skills []apiSkillPayload `json:"skills"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	imported := findAPISkill(listPayload.Skills, "cabinet.example.api_imported_toggle")
+	if imported == nil {
+		t.Fatalf("expected imported skill after state change")
+	}
+	if imported.Enabled || imported.Status != "disabled" || imported.Executable {
+		t.Fatalf("expected disabled non-executable imported skill, got %+v", imported)
+	}
+}
+
+func TestAgentSkillStateAPIBlocksBuiltInAndHighRiskWithoutConfirmation(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	builtInResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/state", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"skill_id":"cabinet.inventory.search_items",
+		"enabled":false
+	}`), map[string]string{"Content-Type": "application/json"})
+	if builtInResp.Code != http.StatusConflict || !strings.Contains(builtInResp.Body.String(), "built_in_skill_state_locked") {
+		t.Fatalf("expected built-in lock conflict, status=%d body=%s", builtInResp.Code, builtInResp.Body.String())
+	}
+
+	root := writeAgentSkillImportFixture(t, validAgentSkillImportManifest(`{
+		"id": "cabinet.example.api_imported_external",
+		"safetyLevel": "external-write",
+		"status": "preview-only",
+		"capabilities": ["inventory.item.update"],
+		"permissions": {
+			"cabinetReads": ["inventory.item"],
+			"cabinetWrites": ["inventory.item"],
+			"externalReads": [],
+			"externalWrites": ["provider.configure"],
+			"secretAccess": false,
+			"destructive": false
+		},
+		"audit": {
+			"actionTimeline": "records external write confirmation",
+			"requiresConfirmation": true
+		}
+	}`))
+	importResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importResp.Code != http.StatusOK {
+		t.Fatalf("import status=%d body=%s", importResp.Code, importResp.Body.String())
+	}
+	withoutConfirm := doRequest(t, a, http.MethodPost, "/api/agent/skills/state", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"skill_id":"cabinet.example.api_imported_external",
+		"enabled":true
+	}`), map[string]string{"Content-Type": "application/json"})
+	if withoutConfirm.Code != http.StatusConflict || !strings.Contains(withoutConfirm.Body.String(), "strong_confirmation_required") {
+		t.Fatalf("expected strong confirmation conflict, status=%d body=%s", withoutConfirm.Code, withoutConfirm.Body.String())
+	}
+	withConfirm := doRequest(t, a, http.MethodPost, "/api/agent/skills/state", strings.NewReader(`{
+		"profile_id":"profile-a",
+		"skill_id":"cabinet.example.api_imported_external",
+		"enabled":true,
+		"confirm":true
+	}`), map[string]string{"Content-Type": "application/json"})
+	if withConfirm.Code != http.StatusOK {
+		t.Fatalf("confirmed enable status=%d body=%s", withConfirm.Code, withConfirm.Body.String())
+	}
+}
+
 func TestAgentSkillImportAPIRejectsInvalidFolderWithoutListingSkill(t *testing.T) {
 	t.Parallel()
 

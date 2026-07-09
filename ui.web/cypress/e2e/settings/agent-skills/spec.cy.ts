@@ -102,22 +102,40 @@ describe('settings/agent-skills', () => {
     cy.intercept('POST', '/api/agent/skills/import', (req) => {
       expect(req.body).to.deep.equal({
         profile_id: 'e2e-profile-001',
-        source_path: 'C:/cabinet/skills/parts-lookup',
+        path: 'C:/cabinet/skills/parts-lookup',
       })
       skills.push(importedSkill)
       req.reply({
         statusCode: 200,
         body: {
-          profile_id: 'e2e-profile-001',
-          result: {
-            state: 'installed-disabled',
-            skill: importedSkill,
-            warnings: ['Installed disabled until reviewed.'],
-            errors: [],
-          },
+          state: 'installed-disabled',
+          skill: importedSkill,
+          warnings: ['Installed disabled until reviewed.'],
+          errors: [],
         },
       })
     }).as('importSkill')
+    cy.intercept('POST', '/api/agent/skills/state', (req) => {
+      expect(req.body.profile_id).to.equal('e2e-profile-001')
+      expect(req.body.skill_id).to.equal('cabinet.imported.parts_lookup')
+      const enabled = Boolean(req.body.enabled)
+      importedSkill.enabled = enabled
+      importedSkill.status = enabled ? 'available' : 'disabled'
+      importedSkill.executable = enabled
+      req.reply({
+        statusCode: 200,
+        body: {
+          profile_id: 'e2e-profile-001',
+          state: {
+            profile_id: 'e2e-profile-001',
+            skill_id: importedSkill.id,
+            enabled,
+            status: importedSkill.status,
+          },
+          skill: importedSkill,
+        },
+      })
+    }).as('toggleSkill')
 
     signInToSkills()
     cy.wait('@activeProfile')
@@ -164,6 +182,8 @@ describe('settings/agent-skills', () => {
       .should('contain', 'Installed Disabled')
       .and('contain', 'Parts Lookup Import')
       .and('contain', 'Installed disabled until reviewed.')
+    cy.get('body').type('{esc}')
+    cy.get('[data-testid="settings-skills-import-panel"]').should('not.exist')
     cy.get('[data-testid="settings-skills-summary-installed"]').should(
       'contain',
       '1'
@@ -172,6 +192,29 @@ describe('settings/agent-skills', () => {
       .should('contain', 'Parts Lookup Import')
       .and('contain', 'Archive')
       .and('contain', 'Disabled')
+    cy.get(
+      '[data-testid="settings-skills-toggle-cabinet.imported.parts_lookup"]'
+    ).click()
+    cy.wait('@toggleSkill')
+    cy.wait('@loadSkills')
+    cy.get('[data-testid="settings-skills-table"]')
+      .should('contain', 'Parts Lookup Import')
+      .and('contain', 'Available')
+    cy.get(
+      '[data-testid="settings-skills-detail-cabinet.imported.parts_lookup"]'
+    ).click()
+    cy.get('[data-testid="settings-skills-detail-panel"]')
+      .should('contain', 'Parts Lookup Import')
+      .and('contain', 'This imported skill is enabled for the active profile.')
+    cy.get(
+      '[data-testid="settings-skills-detail-toggle-cabinet.imported.parts_lookup"]'
+    ).click()
+    cy.wait('@toggleSkill')
+    cy.wait('@loadSkills')
+    cy.get('[data-testid="settings-skills-detail-panel"]').should(
+      'contain',
+      'This imported skill is disabled for the active profile.'
+    )
   })
 
   it('AGENT-SKILLS-REGISTRY-010 keeps marketplace unavailable and surfaces import validation failures', () => {

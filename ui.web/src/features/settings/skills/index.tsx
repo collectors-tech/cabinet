@@ -70,7 +70,7 @@ type ImportResult = {
   errors?: string[]
 }
 
-type ImportResponse = {
+type ImportResponse = ImportResult & {
   result?: ImportResult
 }
 
@@ -89,6 +89,10 @@ export function SettingsSkills() {
   const [importPending, setImportPending] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [statePendingSkillID, setStatePendingSkillID] = useState<string | null>(
+    null
+  )
+  const [stateError, setStateError] = useState<string | null>(null)
 
   const loadSkills = useCallback(async () => {
     setLoading(true)
@@ -172,15 +176,16 @@ export function SettingsSkills() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           profile_id: profileID,
-          source_path: sourcePath,
+          path: sourcePath,
         }),
       })
       const payload = (await response.json()) as ImportResponse
+      const result = payload.result ?? payload
       if (!response.ok) {
-        const message = payload.result?.errors?.[0] || 'Skill import failed.'
+        const message = result.errors?.[0] || 'Skill import failed.'
         throw new Error(message)
       }
-      setImportResult(payload.result ?? null)
+      setImportResult(result ?? null)
       await loadSkills()
     } catch (err) {
       setImportError(
@@ -188,6 +193,57 @@ export function SettingsSkills() {
       )
     } finally {
       setImportPending(false)
+    }
+  }
+
+  async function updateSkillEnabled(skill: AgentSkill, enabled: boolean) {
+    if (!profileID) {
+      setStateError(missingProfileCopy)
+      return
+    }
+    if (!canToggleSkill(skill)) {
+      setStateError('Built-in skills stay enabled and cannot be changed here.')
+      return
+    }
+    const needsStrongConfirmation =
+      enabled &&
+      ['external-write', 'destructive'].includes(normalized(skill.safety_level))
+    if (
+      needsStrongConfirmation &&
+      !globalThis.confirm(
+        `Enable ${skill.display_name || skill.id}? This skill declares ${labelize(skill.safety_level)} safety and may affect external or destructive workflows.`
+      )
+    ) {
+      return
+    }
+    setStatePendingSkillID(skill.id)
+    setStateError(null)
+    try {
+      const response = await fetch('/api/agent/skills/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: profileID,
+          skill_id: skill.id,
+          enabled,
+          confirm: needsStrongConfirmation,
+        }),
+      })
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null
+        throw new Error(payload?.error || 'skill_state_update_failed')
+      }
+      await loadSkills()
+    } catch (err) {
+      setStateError(
+        err instanceof Error
+          ? labelize(err.message) || 'Skill state update failed.'
+          : 'Skill state update failed.'
+      )
+    } finally {
+      setStatePendingSkillID(null)
     }
   }
 
@@ -236,6 +292,14 @@ export function SettingsSkills() {
             <p className='font-medium'>{error}</p>
           </div>
         ) : null}
+        {stateError ? (
+          <div
+            className='rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive'
+            data-testid='settings-skills-state-error'
+          >
+            <p className='font-medium'>{stateError}</p>
+          </div>
+        ) : null}
 
         <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
           <SummaryTile
@@ -267,14 +331,14 @@ export function SettingsSkills() {
           >
             <thead className='bg-muted/40 text-xs text-muted-foreground uppercase'>
               <tr>
-                <th className='w-[24%] px-3 py-2 font-medium'>Name</th>
+                <th className='w-[22%] px-3 py-2 font-medium'>Name</th>
                 <th className='w-[12%] px-3 py-2 font-medium'>Category</th>
                 <th className='w-[10%] px-3 py-2 font-medium'>Source</th>
                 <th className='w-[12%] px-3 py-2 font-medium'>Status</th>
                 <th className='w-[14%] px-3 py-2 font-medium'>Safety</th>
                 <th className='w-[16%] px-3 py-2 font-medium'>Required setup</th>
                 <th className='w-[6%] px-3 py-2 font-medium'>Version</th>
-                <th className='w-[6%] px-3 py-2 text-right font-medium'>
+                <th className='w-[8%] px-3 py-2 text-right font-medium'>
                   Actions
                 </th>
               </tr>
@@ -326,7 +390,21 @@ export function SettingsSkills() {
                   <td className='px-3 py-2 text-muted-foreground'>
                     {skill.version || 'n/a'}
                   </td>
-                  <td className='px-3 py-2 text-right'>
+                  <td className='px-3 py-2'>
+                    <div className='flex justify-end gap-2'>
+                      {canToggleSkill(skill) ? (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          data-testid={`settings-skills-toggle-${skill.id}`}
+                          disabled={statePendingSkillID === skill.id}
+                          onClick={() => {
+                            void updateSkillEnabled(skill, !skill.enabled)
+                          }}
+                        >
+                          {skill.enabled ? 'Disable' : 'Enable'}
+                        </Button>
+                      ) : null}
                     <Button
                       variant='outline'
                       size='sm'
@@ -339,6 +417,7 @@ export function SettingsSkills() {
                     >
                       <Info className='h-4 w-4' />
                     </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -357,7 +436,15 @@ export function SettingsSkills() {
               </SheetTitle>
               <SheetDescription>{selectedSkill?.id}</SheetDescription>
             </SheetHeader>
-            {selectedSkill ? <SkillDetail skill={selectedSkill} /> : null}
+            {selectedSkill ? (
+              <SkillDetail
+                skill={selectedSkill}
+                pending={statePendingSkillID === selectedSkill.id}
+                onToggle={(enabled) => {
+                  void updateSkillEnabled(selectedSkill, enabled)
+                }}
+              />
+            ) : null}
           </SheetContent>
         </Sheet>
 
@@ -464,7 +551,15 @@ function SummaryTile({
   )
 }
 
-function SkillDetail({ skill }: { skill: AgentSkill }) {
+function SkillDetail({
+  skill,
+  pending,
+  onToggle,
+}: {
+  skill: AgentSkill
+  pending: boolean
+  onToggle: (enabled: boolean) => void
+}) {
   return (
     <div className='space-y-4 px-4 pb-6 text-sm'>
       <p className='text-muted-foreground'>
@@ -520,8 +615,24 @@ function SkillDetail({ skill }: { skill: AgentSkill }) {
         <p className='mt-1 text-muted-foreground'>
           {skill.built_in
             ? 'Built-in skills stay enabled and cannot be removed by local imports.'
-            : 'Imported skill enable/disable controls are reserved for the next install-state API slice.'}
+            : skill.enabled
+              ? 'This imported skill is enabled for the active profile.'
+              : 'This imported skill is disabled for the active profile.'}
         </p>
+        {canToggleSkill(skill) ? (
+          <Button
+            className='mt-3'
+            size='sm'
+            variant={skill.enabled ? 'outline' : 'default'}
+            data-testid={`settings-skills-detail-toggle-${skill.id}`}
+            disabled={pending}
+            onClick={() => {
+              onToggle(!skill.enabled)
+            }}
+          >
+            {skill.enabled ? 'Disable skill' : 'Enable skill'}
+          </Button>
+        ) : null}
       </div>
     </div>
   )
@@ -579,6 +690,10 @@ function sourceLabel(skill: AgentSkill) {
     return 'Built-in'
   }
   return labelize(skill.source) || 'Imported'
+}
+
+function canToggleSkill(skill: AgentSkill) {
+  return !skill.built_in && skill.source !== 'built-in'
 }
 
 function formatList(values?: string[]) {

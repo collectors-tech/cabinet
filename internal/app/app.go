@@ -5299,6 +5299,66 @@ func New(cfg config.Config) (*App, error) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/agent/skills/state", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			SkillID   string `json:"skill_id"`
+			Enabled   bool   `json:"enabled"`
+			Confirm   bool   `json:"confirm"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(req.ProfileID)
+		skillID := strings.TrimSpace(req.SkillID)
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		if skillID == "" {
+			http.Error(w, `{"error":"skill_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentSkillRegistry(profileID)
+		skill, ok := registry.Resolve(skillID)
+		if !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if skill.BuiltIn || skill.Source == agentskills.SourceBuiltIn {
+			http.Error(w, `{"error":"built_in_skill_state_locked"}`, http.StatusConflict)
+			return
+		}
+		if req.Enabled && (skill.SafetyLevel == agentskills.SafetyExternalWrite || skill.SafetyLevel == agentskills.SafetyDestructive) && !req.Confirm {
+			http.Error(w, `{"error":"strong_confirmation_required"}`, http.StatusConflict)
+			return
+		}
+		state, err := agentSkillStore.SetEnabled(profileID, skillID, req.Enabled)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_update_skill_state"}`, http.StatusInternalServerError)
+			return
+		}
+		agentSkillMu.Lock()
+		if err := persistAgentSkillState(r.Context(), conn, agentImportedSkills, agentSkillStore.ListAll()); err != nil {
+			agentSkillMu.Unlock()
+			http.Error(w, `{"error":"failed_to_persist_skill_state"}`, http.StatusInternalServerError)
+			return
+		}
+		agentSkillMu.Unlock()
+		registry = agentSkillRegistry(profileID)
+		updatedSkill, _ := registry.Resolve(skillID)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id": profileID,
+			"state":      state,
+			"skill":      updatedSkill,
+		})
+	})
 	mux.HandleFunc("/api/agent/skills/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
