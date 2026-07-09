@@ -105,6 +105,7 @@ Cabinet MUST return deterministic OpenAI health/readiness feedback for the activ
 - **THEN** Cabinet MUST report setup-needed health when the profile has no `openai_api_key` secret
 - **AND** Cabinet MUST report ready health when the profile has an API-key secret
 - **AND** the provider registry MUST keep the OpenAI provider state setup-needed until the active API-key method has a stored secret
+- **AND** the provider registry health projection MUST mirror the profile-scoped OpenAI setup/readiness state instead of reporting generic scanner health
 - **AND** the health payload MUST NOT include the secret value
 
 #### Scenario: Validate Browser Auth proof readiness
@@ -113,3 +114,4 @@ Cabinet MUST return deterministic OpenAI health/readiness feedback for the activ
 - **THEN** Cabinet MUST report setup-needed health until verified Browser Auth proof is present
 - **AND** Cabinet MUST report ready health only when Browser Auth state is connected and the verified artifact/proof flag is present
 - **AND** the provider registry MUST keep the OpenAI provider state setup-needed until Browser Auth connected state and proof are both present
+- **AND** the provider registry health projection MUST keep Browser Auth setup-needed until passed provider-test proof is present
