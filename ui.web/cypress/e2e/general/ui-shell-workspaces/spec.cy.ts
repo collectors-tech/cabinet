@@ -68,13 +68,14 @@ describe('general/ui-shell-workspaces', () => {
     )
     cy.get('[data-testid="shell-workspace-icon-rail"] [data-active="true"]')
       .should('have.length', 1)
-    cy.get('[data-testid="shell-search-local-results"]').should(
+    cy.get('[data-testid="shell-search-nav-results"]').should('be.visible')
+    cy.get('[data-testid="shell-search-nav-result"]')
+      .first()
+      .should('contain', 'Dashboard')
+      .and('contain', 'General')
+    cy.get('[data-testid="shell-search-nav-result"]').should(
       'contain',
-      'Local catalog'
-    )
-    cy.get('[data-testid="shell-search-barcode-results"]').should(
-      'contain',
-      'Barcode lookup'
+      'Settings / Profile'
     )
     cy.location('pathname').should('match', /^\/inventory\/?$/)
 
@@ -210,5 +211,34 @@ describe('general/ui-shell-workspaces', () => {
       'true'
     )
     cy.get('[data-testid="shell-search-workspace"]').should('be.visible')
+  })
+
+  it('UI-SHELL-WORKSPACES-008/#1456 filters dense navigation results and navigates from Search workspace', () => {
+    openInventory()
+    cy.get('[data-testid="shell-workspace-search"]').click()
+    cy.get('[data-testid="shell-search-workspace"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-search"]').should(
+      'have.attr',
+      'data-active',
+      'true'
+    )
+    cy.get('[data-testid="shell-search-workspace-input"]')
+      .should('have.attr', 'placeholder', 'Search nav, settings, help...')
+      .type('appearance')
+    cy.get('[data-testid="shell-search-nav-result"]')
+      .should('have.length', 1)
+      .and('contain', 'Settings / Appearance')
+      .and('contain', 'Other · /settings/appearance')
+      .click()
+
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/settings\/appearance\/?$/
+    )
+    cy.get('[data-testid="shell-workspace-search"]').should(
+      'have.attr',
+      'data-active',
+      'true'
+    )
   })
 })
