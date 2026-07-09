@@ -102,6 +102,7 @@ Notes:
 
 ## Product Documentation
 - Top-level feature map / product overview: `docs/PRODUCT-OVERVIEW.md`
+- Archived product planning notes: `openspec/migration/product-planning/`
 - Help Center section drafts: `docs/help-center/`
 
 ## API Documentation

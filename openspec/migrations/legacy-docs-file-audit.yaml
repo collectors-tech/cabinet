@@ -103,6 +103,21 @@ files:
     requirement_markers: 0
     targets:
       - docs/api/openapi.yaml
+  - source: docs/integrations/agent-skill-archive-template.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/agent-skill-archive-template.md
+  - source: docs/product/README.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/product-planning/README.md
+  - source: docs/product/beta-mvp-and-market-validation.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/product-planning/beta-mvp-and-market-validation.md
   - source: docs/auth/CLERK_BILLING_SETUP.md
     status: migrated
     requirement_markers: 0

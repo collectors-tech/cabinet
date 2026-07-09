@@ -10,7 +10,7 @@ import (
 func TestAgentSkillArchiveTemplateDocsCoverLocalImportContract(t *testing.T) {
 	t.Parallel()
 
-	docPath := filepath.Join("..", "docs", "integrations", "agent-skill-archive-template.md")
+	docPath := filepath.Join("..", "openspec", "migration", "agent-skill-archive-template.md")
 	raw, err := os.ReadFile(docPath)
 	if err != nil {
 		t.Fatalf("read agent skill archive template doc: %v", err)
@@ -80,7 +80,7 @@ func TestAgentSkillArchiveDocsTraceabilityStaysBoundToIssue1671(t *testing.T) {
 	for _, fragment := range []string{
 		"AGENT-SKILLS-REGISTRY-005",
 		"#1667/#1669/#1671",
-		"docs/integrations/agent-skill-archive-template.md",
+		"openspec/migration/agent-skill-archive-template.md",
 		"TestAgentSkillArchiveTemplateDocsCoverLocalImportContract",
 		"AGENT-SKILLS-REGISTRY-010",
 		"#1667/#1670/#1671",

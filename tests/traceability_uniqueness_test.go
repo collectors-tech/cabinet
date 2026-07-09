@@ -56,13 +56,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 
 	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
 	allowed := map[string][]string{
-		"AGENT-SKILLS-REGISTRY-008": {
-			"| partial |",
-			"#1667/#1670",
-			"AGENT-SKILLS-REGISTRY-008 lists skills opens details and imports a local archive disabled by default",
-			"AGENT-SKILLS-REGISTRY-008 toggles imported skills safely",
-			"marketplace browsing is unavailable",
-		},
 		"AGENT-SKILLS-REGISTRY-009": {
 			"| partial |",
 			"#1667/#1668/#1672/#1715",
