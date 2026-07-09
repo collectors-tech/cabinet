@@ -433,7 +433,10 @@ export function AppSidebar() {
               data-testid='shell-workspace-search'
               data-active={searchActive ? 'true' : 'false'}
               className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
-              onClick={() => setActiveWorkspace('search')}
+              onClick={() => {
+                setOpen(true)
+                setActiveWorkspace('search')
+              }}
             >
               <SearchIcon className='h-4 w-4' aria-hidden />
             </button>

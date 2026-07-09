@@ -52,6 +52,20 @@ When Inbox has no items, the workspace MUST provide clear actions so users are n
 - **THEN** the workspace MUST show at least one explicit refresh or navigation affordance
 - **AND** users MUST be able to open a related communications surface without guessing
 
+### Requirement UI-SHELL-WORKSPACES-006: Search workspace SHALL present dense navigation search from shell routes
+The Search workspace MUST use Cabinet shell navigation data as its source of truth and render compact command-style route results instead of a card-heavy modal or unrelated search theme.
+
+#### Scenario: Filter and open navigation route from Search workspace
+- **GIVEN** authenticated shell workspace rail is visible
+- **WHEN** user selects `Search`
+- **THEN** the left workspace/sidebar panel MUST show a compact dark Search workspace with an icon-only active Search rail state
+- **AND** the search input MUST be directly below the workspace rail
+- **AND** navigation results MUST be generated from `sidebarData.navGroups`
+- **AND** result rows MUST use dense command result structure with a primary title and muted `Group · /path` metadata
+- **AND** nested routes MUST render as `Parent / Child`
+- **WHEN** user filters and selects a route result
+- **THEN** Cabinet MUST navigate to that route while preserving Search as the active shell workspace
+
 ### Requirement UI-SHELL-WORKSPACES-007: Workspace overflow menu SHALL expose Settings and left-panel navigation customisation
 Authenticated shell workspace rail MUST expose an overflow menu with `Customise Nav` and `Settings`. `Settings` MUST navigate to the Settings Display surface. `Customise Nav` MUST open a left workspace/sidebar panel that edits primary nav ordering and visibility as draft changes until the user applies them.
 
