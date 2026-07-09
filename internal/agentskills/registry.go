@@ -448,7 +448,7 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 		}
 		return resp, nil
 	}
-	if strings.HasPrefix(skill.ID, "cabinet.collections.") {
+	if isCollectionSkill(skill.ID) {
 		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
 		resp.Blocker = previewCollectionsBlocker(skill.ID, params)
 		resp.Target = previewTarget(params, "collection_name", "collection", "destination_collection", "item_id", "move_items", "remove_items", "has_items")
@@ -555,7 +555,7 @@ func builtInSkills() []Skill {
 		collectionsSkill("cabinet.collections.assign_item", "Assign item to collection", "Prepare a collection assignment preview before collection membership changes.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"collections.item.assign"}, []string{"item_id", "collection_name"}),
 		collectionsSkill("cabinet.collections.soft_delete", "Soft-delete collection", "Preview collection deletion while protecting All Items and describing item move or remove outcomes.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "collection"}, []string{"collections.soft_delete"}, []string{"collection_name"}),
 		collectionsSkill("cabinet.collections.move_items_on_delete", "Move collection items on delete", "Preview reassignment for items that would otherwise lose collection context during deletion.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "collection", "destination_collection"}, []string{"collections.move_items_on_delete"}, []string{"collection_name", "destination_collection"}),
-		builtIn("cabinet.collection.assign_item", "Assign item to collection", "Prepare a collection assignment preview before collection membership changes.", "collections", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"collections.item.assign"}, nil, nil),
+		collectionsSkill("cabinet.collection.assign_item", "Assign item to collection", "Prepare a collection assignment preview before collection membership changes.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"collections.item.assign"}, []string{"item_id", "collection_name"}),
 		builtIn("cabinet.guided.inventory.update_item", "Guided inventory item update", "Guide an inventory item update through route focus, target highlight, preview, and confirmation.", "guided-workflows", SafetyConfirmRequired, []string{"profile", "thread", "target_inventory_item", "editable_field"}, []string{"inventory.item.update"}, []string{"inventory.item.update"}, []string{"inventory.item.row", "inventory.item.editor.title", "inventory.item.editor.save"}),
 		builtIn("cabinet.chat.action_timeline.view", "View chat Action Timeline", "Read assistant workflow and action timeline evidence for the active thread.", "chat", SafetyReadOnly, []string{"profile", "thread"}, nil, nil, nil),
 		builtIn("cabinet.inbox.search_notifications", "Search Inbox notifications", "Search and filter Inbox notifications without mutating review state.", "inbox", SafetyReadOnly, []string{"profile", "workspace"}, nil, nil, []string{"inbox.list", "inbox.search"}),
@@ -857,7 +857,7 @@ func previewCollectionsBlocker(skillID string, params map[string]any) string {
 		if skillID == "cabinet.collections.move_items_on_delete" && strings.TrimSpace(stringParam(params, "destination_collection")) == "" {
 			return "collections_destination_required"
 		}
-	case "cabinet.collections.assign_item":
+	case "cabinet.collections.assign_item", "cabinet.collection.assign_item":
 		if strings.TrimSpace(stringParam(params, "item_id")) == "" {
 			return "collections_item_required"
 		}
@@ -866,6 +866,10 @@ func previewCollectionsBlocker(skillID string, params map[string]any) string {
 		}
 	}
 	return "confirmation_required"
+}
+
+func isCollectionSkill(skillID string) bool {
+	return strings.HasPrefix(skillID, "cabinet.collections.") || skillID == "cabinet.collection.assign_item"
 }
 
 func previewIntegrationBlocker(skillID string, params map[string]any) string {

@@ -257,6 +257,25 @@ func TestWishlistAndCollectionsSkillsExposePreviewBoundaries(t *testing.T) {
 	if missingItem.Allowed || missingItem.Blocker != "collections_item_required" {
 		t.Fatalf("expected Collections item blocker, got %+v", missingItem)
 	}
+	legacyAssignItem, ok := registry.Resolve("cabinet.collection.assign_item")
+	if !ok {
+		t.Fatalf("expected legacy Collection assign item skill")
+	}
+	if legacyAssignItem.SafetyLevel != SafetyConfirmRequired ||
+		!slices.Contains(legacyAssignItem.IntegrationWorkflows, "collections.item.assign") ||
+		!slices.Contains(legacyAssignItem.InputSchemaRefs, "collection_name") {
+		t.Fatalf("legacy collection assign skill should expose governed assignment metadata, got %+v", legacyAssignItem)
+	}
+	legacyMissingCollection, err := registry.Preview(PreviewRequest{
+		SkillID:    "cabinet.collection.assign_item",
+		Parameters: map[string]any{"item_id": "item-1"},
+	})
+	if err != nil {
+		t.Fatalf("preview legacy collection assign item: %v", err)
+	}
+	if legacyMissingCollection.Allowed || legacyMissingCollection.Blocker != "collections_target_required" {
+		t.Fatalf("expected legacy Collections target blocker, got %+v", legacyMissingCollection)
+	}
 
 	protectedAllItems, err := registry.Preview(PreviewRequest{
 		SkillID:    "cabinet.collections.soft_delete",
