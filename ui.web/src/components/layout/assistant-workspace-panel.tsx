@@ -1165,6 +1165,24 @@ export function AssistantWorkspacePanel() {
     )
   }, [appendCommandEvent, navigate])
 
+  const dispatchGuidedControl = useCallback(
+    async (type: ShellCommandType) => {
+      await dispatchShellCommand(
+        {
+          id: `walkthrough:${type}`,
+          type,
+        },
+        {
+          navigate: async (route) => {
+            await navigate({ to: route })
+          },
+          emit: appendCommandEvent,
+        }
+      )
+    },
+    [appendCommandEvent, navigate]
+  )
+
   const dispatchGuidedStep = useCallback(
     async (step: GuidedWorkflowStep) => {
       await dispatchShellCommand(
@@ -1988,13 +2006,14 @@ export function AssistantWorkspacePanel() {
                             aria-label='Previous walkthrough step'
                             title='Previous walkthrough step'
                             data-testid='shell-assistant-guided-back'
-                            onClick={() =>
-                              guidedWorkflow.steps[0]
-                                ? void dispatchGuidedStep(
-                                    guidedWorkflow.steps[0]
-                                  )
-                                : undefined
-                            }
+                            onClick={() => {
+                              void dispatchGuidedControl(
+                                'walkthrough.step_back'
+                              )
+                              if (guidedWorkflow.steps[0]) {
+                                void dispatchGuidedStep(guidedWorkflow.steps[0])
+                              }
+                            }}
                           >
                             <ChevronLeft className='h-3.5 w-3.5' />
                           </Button>
@@ -2015,7 +2034,15 @@ export function AssistantWorkspacePanel() {
                             }
                             data-testid='shell-assistant-guided-pause'
                             data-guided-paused={guidedPaused ? 'true' : 'false'}
-                            onClick={() => setGuidedPaused((value) => !value)}
+                            onClick={() => {
+                              const nextPaused = !guidedPaused
+                              setGuidedPaused(nextPaused)
+                              void dispatchGuidedControl(
+                                nextPaused
+                                  ? 'walkthrough.pause'
+                                  : 'walkthrough.resume'
+                              )
+                            }}
                           >
                             {guidedPaused ? (
                               <Play className='h-3.5 w-3.5' />
@@ -2031,17 +2058,20 @@ export function AssistantWorkspacePanel() {
                             aria-label='Skip walkthrough step'
                             title='Skip walkthrough step'
                             data-testid='shell-assistant-guided-skip'
-                            onClick={() =>
-                              guidedWorkflow.steps[
-                                guidedWorkflow.steps.length - 1
-                              ]
-                                ? void dispatchGuidedStep(
-                                    guidedWorkflow.steps[
-                                      guidedWorkflow.steps.length - 1
-                                    ]
-                                  )
-                                : undefined
-                            }
+                            onClick={() => {
+                              void dispatchGuidedControl('walkthrough.skip')
+                              if (
+                                guidedWorkflow.steps[
+                                  guidedWorkflow.steps.length - 1
+                                ]
+                              ) {
+                                void dispatchGuidedStep(
+                                  guidedWorkflow.steps[
+                                    guidedWorkflow.steps.length - 1
+                                  ]
+                                )
+                              }
+                            }}
                           >
                             <SkipForward className='h-3.5 w-3.5' />
                           </Button>

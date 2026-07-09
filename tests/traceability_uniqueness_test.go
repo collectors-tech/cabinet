@@ -114,10 +114,12 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"ASSISTANT-EXECUTION-010 preserves confirm-before-apply across walkthrough modes",
 		},
 		"ASSISTANT-EXECUTION-014": {
-			"| planned |",
-			"#1507/#1514",
+			"| partial |",
+			"#1507/#1513/#1514",
+			"TestAssistantShellCommandBusTraceabilityIsImplemented",
+			"ASSISTANT-WORKSPACE-008/#1509 starts a show-mode guided item-update walkthrough without mutation",
 			"TestGuidedWalkthroughActionTimelinePersistsOrderedStepRecords",
-			"ASSISTANT-EXECUTION-014 renders paused and completed walkthrough timeline steps",
+			"durable backend step persistence remains planned",
 		},
 		"ASSISTANT-EXECUTION-015": {
 			"| planned |",

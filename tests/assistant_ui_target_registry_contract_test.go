@@ -106,6 +106,10 @@ func TestAssistantShellCommandBusTraceabilityIsImplemented(t *testing.T) {
 		"'navigate.open_surface'",
 		"'ui.highlight_target'",
 		"'ui.clear_guidance'",
+		"'walkthrough.step_back'",
+		"'walkthrough.pause'",
+		"'walkthrough.resume'",
+		"'walkthrough.skip'",
 		"'walkthrough.cancel'",
 		"ShellCommandEvent",
 		"allowedRoutes",
@@ -131,6 +135,7 @@ func TestAssistantShellCommandBusTraceabilityIsImplemented(t *testing.T) {
 		"data-testid='shell-assistant-command-event'",
 		"data-command-type={event.type}",
 		"data-command-status={event.status}",
+		"dispatchGuidedControl",
 		"setActiveWorkspace('assistant')",
 	} {
 		if !strings.Contains(panel, fragment) {
