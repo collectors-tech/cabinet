@@ -263,3 +263,131 @@ const indexName = 'frontline_products_live';
 		t.Fatalf("expected frontline run to persist candidate count=2, got %+v", latest)
 	}
 }
+
+func TestFrontlineRunFailureCreatesProviderWorkflowInboxEvent(t *testing.T) {
+	t.Parallel()
+
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/assets/pd-search.js" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript")
+		_, _ = w.Write([]byte(`
+window.Glgoliasearch('APP123','KEY456');
+const indexName = 'frontline_products_live';
+`))
+	}))
+	defer assetServer.Close()
+
+	searchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "frontline unavailable", http.StatusServiceUnavailable)
+	}))
+	defer searchServer.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"FrontlineFailureProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.frontlinehobbies.base_url":"%s","integration.frontlinehobbies.items_per_page":"24"}}`, assetServer.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"AFX","keywords":["AFX"],"provider_scope":["frontlinehobbies"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	searchURL := searchServer.URL + "/1/indexes/frontline_products_live/query"
+	runBody := fmt.Sprintf(`{"query_set_id":"%s","discovery_asset_url":"%s/assets/pd-search.js","search_url":"%s"}`, qs.ID, assetServer.URL, searchURL)
+	run := doRequest(t, a, http.MethodPost, "/api/providers/frontline/run", strings.NewReader(runBody), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("expected failed Frontline run status=400, got=%d body=%s", run.Code, run.Body.String())
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	var inboxPayload struct {
+		Items []struct {
+			Source   string         `json:"source"`
+			Status   string         `json:"status"`
+			Title    string         `json:"title"`
+			Summary  string         `json:"summary"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(inbox.Body).Decode(&inboxPayload); err != nil {
+		t.Fatalf("decode inbox payload: %v", err)
+	}
+	if len(inboxPayload.Items) != 1 {
+		t.Fatalf("expected one provider workflow Inbox event, got %+v", inboxPayload.Items)
+	}
+	item := inboxPayload.Items[0]
+	if item.Source != "provider_workflow" || item.Status != "unread" || item.Title != "frontlinehobbies.com.au workflow failed" {
+		t.Fatalf("unexpected provider workflow Inbox item shell: %+v", item)
+	}
+	for _, want := range []string{"status 503", "frontline"} {
+		if !strings.Contains(strings.ToLower(item.Summary), want) {
+			t.Fatalf("expected Inbox summary to preserve provider failure detail %q, got %q", want, item.Summary)
+		}
+	}
+	expectedMetadata := map[string]string{
+		"provider_id":           "au-webshop-frontlinehobbies-com-au",
+		"provider_display_name": "frontlinehobbies.com.au",
+		"workflow_action_id":    "market_watch.run",
+		"required_action_code":  "check_provider_health_and_retry",
+		"category":              "integration_workflow",
+		"severity":              "error",
+		"target_route":          "/integrations",
+		"query_set_id":          qs.ID,
+		"provider_error_code":   "FAILED_TO_RUN_FRONTLINE_PROVIDER",
+		"health_impact":         "updates_provider_health",
+		"base_url":              assetServer.URL,
+		"search_url":            searchURL,
+	}
+	for key, want := range expectedMetadata {
+		if got := fmt.Sprintf("%v", item.Metadata[key]); got != want {
+			t.Fatalf("Inbox metadata[%s] got %q want %q; metadata=%+v", key, got, want, item.Metadata)
+		}
+	}
+
+	repeat := doRequest(t, a, http.MethodPost, "/api/providers/frontline/run", strings.NewReader(runBody), map[string]string{"Content-Type": "application/json"})
+	if repeat.Code != http.StatusBadRequest {
+		t.Fatalf("expected repeat failed Frontline run status=400, got=%d body=%s", repeat.Code, repeat.Body.String())
+	}
+	repeatedInbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if repeatedInbox.Code != http.StatusOK {
+		t.Fatalf("repeated inbox status=%d body=%s", repeatedInbox.Code, repeatedInbox.Body.String())
+	}
+	var repeatedPayload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(repeatedInbox.Body).Decode(&repeatedPayload); err != nil {
+		t.Fatalf("decode repeated inbox payload: %v", err)
+	}
+	if len(repeatedPayload.Items) != 1 {
+		t.Fatalf("expected repeated Frontline provider workflow failures to coalesce into one Inbox item, got %+v", repeatedPayload.Items)
+	}
+}

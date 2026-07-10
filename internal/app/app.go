@@ -3061,6 +3061,15 @@ func New(cfg config.Config) (*App, error) {
 			req.FallbackDiscoveryAssetURLs,
 		)
 		if err != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-frontlinehobbies-com-au", "frontlinehobbies.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_DISCOVER_FRONTLINE_CONFIG",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+				"discovery_asset_url": discoveryAssetURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-frontlinehobbies-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_discover_frontline_config"}`, http.StatusBadRequest)
 			return
 		}
@@ -3070,6 +3079,15 @@ func New(cfg config.Config) (*App, error) {
 		}
 		candidates, total, runErr := runFrontlineAlgoliaSearch(r.Context(), http.DefaultClient, searchURL, qs, cfg, baseURL, itemsPerPage)
 		if runErr != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-frontlinehobbies-com-au", "frontlinehobbies.com.au", "market_watch.run", "check_provider_health_and_retry", runErr.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_FRONTLINE_PROVIDER",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+				"search_url":          searchURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-frontlinehobbies-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_run_frontline_provider"}`, http.StatusBadRequest)
 			return
 		}
