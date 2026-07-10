@@ -133,6 +133,46 @@ files:
     requirement_markers: 0
     targets:
       - openspec/migration/product-planning/beta-mvp-and-market-validation.md
+  - source: docs/planning/metadata-studio/00-metadata-studio-index.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/00-metadata-studio-index.md
+  - source: docs/planning/metadata-studio/01-field-types-and-values.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/01-field-types-and-values.md
+  - source: docs/planning/metadata-studio/02-category-templates.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/02-category-templates.md
+  - source: docs/planning/metadata-studio/03-display-and-form-configuration.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/03-display-and-form-configuration.md
+  - source: docs/planning/metadata-studio/04-search-sort-filter-and-reporting.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/04-search-sort-filter-and-reporting.md
+  - source: docs/planning/metadata-studio/05-import-export-and-migration.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/05-import-export-and-migration.md
+  - source: docs/planning/metadata-studio/06-core-domain-boundaries.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/06-core-domain-boundaries.md
+  - source: docs/planning/metadata-studio/07-backlog-plan.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/metadata-studio/07-backlog-plan.md
   - source: docs/auth/CLERK_BILLING_SETUP.md
     status: migrated
     requirement_markers: 0
