@@ -49,8 +49,12 @@ func TestLicenseStatusAndFreeTierCap(t *testing.T) {
 	}
 	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
 
-	for i := 0; i < 150; i++ {
+	for i := 0; i < 249; i++ {
 		_, _ = a.db.ExecContext(context.Background(), `INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES (?, 'AFX', 'Slot', ?, ?)`, "seed-"+strconv.Itoa(i), "P-"+strconv.Itoa(i), "T-"+strconv.Itoa(i))
+	}
+	withinLimitResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"brand":"AFX","category":"Slot","part_number":"P249","title":"Item 249"}`), map[string]string{"Content-Type": "application/json"})
+	if withinLimitResp.Code != http.StatusCreated {
+		t.Fatalf("expected free tier item 250 to be allowed, got %d body=%s", withinLimitResp.Code, withinLimitResp.Body.String())
 	}
 	limitResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"brand":"AFX","category":"Slot","part_number":"PX","title":"Item"}`), map[string]string{"Content-Type": "application/json"})
 	if limitResp.Code != http.StatusPaymentRequired {

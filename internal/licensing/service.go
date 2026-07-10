@@ -92,7 +92,7 @@ func (s *Service) Status(ctx context.Context, profileID string) (Status, error) 
 	}
 	return Status{
 		State:     "valid",
-		Tier:      strings.ToLower(p.Tier),
+		Tier:      NormalizeTier(p.Tier),
 		Features:  p.Features,
 		ExpiresAt: p.ExpiresAt,
 	}, nil
@@ -103,7 +103,7 @@ func (s *Service) Allow(ctx context.Context, profileID, feature string) (bool, e
 	if err != nil {
 		return false, err
 	}
-	if status.State != "valid" || status.Tier != "pro" {
+	if status.State != "valid" || (status.Tier != "plus" && status.Tier != "pro") {
 		return false, nil
 	}
 	for _, f := range status.Features {
@@ -112,4 +112,17 @@ func (s *Service) Allow(ctx context.Context, profileID, feature string) (bool, e
 		}
 	}
 	return false, nil
+}
+
+func NormalizeTier(tier string) string {
+	switch strings.TrimSpace(strings.ToLower(tier)) {
+	case "", "free", "mvp":
+		return "free"
+	case "plus", "creator":
+		return "plus"
+	case "pro", "paid", "teams":
+		return "pro"
+	default:
+		return strings.TrimSpace(strings.ToLower(tier))
+	}
 }

@@ -1756,9 +1756,9 @@ func New(cfg config.Config) (*App, error) {
 			if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
 				if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
 					status, _ := licenseSvc.Status(r.Context(), active.ID)
-					if status.State != "valid" || status.Tier != "pro" {
+					if status.State != "valid" || !planHasFeature(status.Tier, "collection_unlimited") {
 						var count int
-						if err := conn.QueryRowContext(r.Context(), `SELECT COUNT(1) FROM canonical_items`).Scan(&count); err == nil && count >= 150 {
+						if err := conn.QueryRowContext(r.Context(), `SELECT COUNT(1) FROM canonical_items`).Scan(&count); err == nil && count >= freeTierItemLimit {
 							http.Error(w, `{"error":"free_tier_item_limit_reached"}`, http.StatusPaymentRequired)
 							return
 						}
@@ -6855,17 +6855,16 @@ func New(cfg config.Config) (*App, error) {
 		if role == "" {
 			role = "member"
 		}
-		plan := strings.TrimSpace(strings.ToLower(claimAsString(claims, "plan")))
+		plan := normalizePlan(claimAsString(claims, "plan"))
 		entitlementSource := "billing"
-		if plan == "" {
-			plan = strings.TrimSpace(strings.ToLower(claimAsString(claims, "cabinet_plan")))
+		if plan == "free" && strings.TrimSpace(claimAsString(claims, "plan")) == "" {
+			plan = normalizePlan(claimAsString(claims, "cabinet_plan"))
 		}
 		if override, ok := cloudEntitlements.Get(userID); ok {
 			plan = override
 			entitlementSource = "override"
 		}
-		if plan == "" {
-			plan = "free"
+		if strings.TrimSpace(claimAsString(claims, "plan")) == "" && strings.TrimSpace(claimAsString(claims, "cabinet_plan")) == "" && entitlementSource == "billing" {
 			entitlementSource = "trial"
 		}
 		features := entitlementFeaturesFromPlan(plan)
@@ -8370,10 +8369,16 @@ func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) 
 
 func normalizePlan(plan string) string {
 	normalized := strings.TrimSpace(strings.ToLower(plan))
-	if normalized == "" {
+	switch normalized {
+	case "", "free", "mvp":
 		return "free"
+	case "plus", "creator":
+		return "plus"
+	case "pro", "paid", "teams":
+		return "pro"
+	default:
+		return normalized
 	}
-	return normalized
 }
 
 func parseUnverifiedJWTPayload(token string) (map[string]any, error) {
@@ -8431,22 +8436,23 @@ func providerScopeIncludes(scope []string, providerID string) bool {
 }
 
 func entitlementFeaturesFromPlan(plan string) []string {
-	switch strings.TrimSpace(strings.ToLower(plan)) {
-	case "teams", "pro", "paid", "plus":
+	switch normalizePlan(plan) {
+	case "pro":
 		return []string{"collection_core", "ai_assist", "price_tracking", "scanner_automation"}
-	case "creator":
-		return []string{"collection_core", "ai_assist", "scanner_automation"}
-	case "mvp":
-		return []string{"collection_core"}
+	case "plus":
+		return []string{"collection_core", "price_tracking", "scanner_automation"}
 	default:
 		return []string{"collection_core"}
 	}
 }
 
-func cloudPlanHasFeature(plan, feature string) bool {
+func planHasFeature(plan, feature string) bool {
 	target := strings.TrimSpace(strings.ToLower(feature))
 	if target == "" {
 		return true
+	}
+	if target == "collection_unlimited" {
+		return normalizePlan(plan) == "plus" || normalizePlan(plan) == "pro"
 	}
 	for _, entry := range entitlementFeaturesFromPlan(plan) {
 		if strings.TrimSpace(strings.ToLower(entry)) == target {
@@ -8454,6 +8460,12 @@ func cloudPlanHasFeature(plan, feature string) bool {
 		}
 	}
 	return false
+}
+
+const freeTierItemLimit = 250
+
+func cloudPlanHasFeature(plan, feature string) bool {
+	return planHasFeature(plan, feature)
 }
 
 func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
