@@ -85,6 +85,71 @@ At minimum, schema changes should keep these provider shapes covered:
 - Browser Auth provider: a read-only `browser-auth-status` field until Cabinet has verified callback/artifact and provider-test proof.
 - No-auth/static source provider: non-secret fields plus validate or provider-family detect action, without requiring a secret target.
 
+## Complete Example
+
+Use this shape as the minimum reviewable example for a new provider. Replace the IDs and scopes with the real provider contract, then add targeted tests for the changed manifest, schema, action, UI projection, and persistence path.
+
+```go
+integrationProviderManifest{
+	ProviderID:        "example-market",
+	DisplayName:       "Example Market",
+	BaseDomain:        "example.test",
+	MarketWatchScope:  "example-market",
+	ProviderCategory:  "marketplace",
+	ProviderType:      "marketplace",
+	APIFamily:         "official_api",
+	APISupportProfile: "rest_v1",
+	ActiveMode:        "official_api",
+	IntegrationMode:   "official_api",
+	APIAvailable:      true,
+	AuthRequirement:   "api_key",
+	AuthMode:          "api_key",
+	ConfigSchemaRef:   "integrations/example-market/setup",
+	WorkflowRefs:      []string{"market_watch.run", "example.preview_listing"},
+	CapabilityFlags: map[string]bool{
+		"search": true,
+		"pricing": true,
+		"health": true,
+	},
+	SetupInstructions: "Add an Example Market API key, validate health, then run Market Watch scans.",
+}
+```
+
+```go
+integrationConfigSchemaDefinition{
+	SchemaRef:        "integrations/example-market/setup",
+	PersistenceScope: "active_profile",
+	SubmitTarget:     "/api/profiles/:profileId/settings",
+	SecretTarget:     "/api/profiles/:profileId/secrets",
+	ValidateAction:   "provider.test",
+	Fields: []integrationConfigSchemaField{
+		{Key: "example_market_region", Label: "Region", Type: "select", Required: true, Persistence: "profile_settings", Default: "AU", Options: []integrationConfigSchemaOption{{Value: "AU", Label: "Australia"}, {Value: "US", Label: "United States"}}},
+		{Key: "example_market_base_url", Label: "API base URL", Type: "url", Required: true, Persistence: "profile_settings", Placeholder: "https://api.example.test", ValidationRules: []string{"url"}},
+		{Key: "example_market_api_key", Label: "API key", Type: "secret", Required: true, WriteOnly: true, Persistence: "profile_secrets", SecretKey: "example_market_api_key"},
+	},
+}
+```
+
+```go
+integrationWorkflowActionDefinition{
+	ID:                   "example.preview_listing",
+	Label:                "Preview listing",
+	Description:          "Build a reviewable listing preview before any marketplace write.",
+	Type:                 "marketplace_listing_preview",
+	InputSchema:          "example.preview_listing.request.v1",
+	OutputSchema:         "example.preview_listing.preview.v1",
+	RequiresAuth:         true,
+	RequiresSecrets:      true,
+	Capabilities:         []string{"pricing", "listing_lifecycle"},
+	SideEffectLevel:      "preview_only",
+	ConfirmationRequired: true,
+	ScheduleSupport:      "manual",
+	InboxEvents:          []string{"workflow_failed", "required_action", "confirmation_pending"},
+	HealthImpact:         "requires_ready_provider",
+	ExecutionMode:        "provider_workflow",
+}
+```
+
 ## Consumer Contracts
 
 These consumers must derive provider identity, category, auth/setup state, capabilities, and workflow/action state from the registry manifest:
@@ -124,6 +189,24 @@ Each provider-authoring change should include the smallest useful set of evidenc
 - `openspec validate --all --strict --no-interactive`.
 - `git diff --check`.
 
+## Security Checklist
+
+- Secret setup fields use `Type: "secret"`, `WriteOnly: true`, `Persistence: "profile_secrets"`, and a stable `SecretKey`.
+- Registry, setup status, health, last-run, Inbox event, and UI payloads expose credential presence only, never clear secret values.
+- Mutating or destructive workflow actions set `ConfirmationRequired: true` and use `SideEffectLevel: "write"` or `"destructive"`.
+- Provider setup instructions explain the next safe operator action without including private account, token, or customer data.
+- Disabled, beta, unavailable, or credential-blocked providers keep actions unavailable until validated evidence exists.
+
+## Add Integration UI Checklist
+
+- The provider appears in the Add Integration selector from `/api/providers/registry`, including unconfigured providers.
+- Provider rows/cards show display name, domain, category/type, auth/setup type, status, description or setup instructions, and key capabilities.
+- Search and filters can match provider name, domain, category/type, auth type, capabilities, and status.
+- Selecting the provider opens a schema-driven setup form; provider-specific fields must not render before explicit selection.
+- Labels are visible and programmatically associated with setup inputs, including secret fields and read-only status fields.
+- Disabled, deprecated, beta, setup-needed, and repair-needed states are visually distinct and do not expose unsafe actions.
+- Save, validate, disable, repair, and workflow controls verify resulting state or API outcome rather than relying on toasts.
+
 ## Reference Tests
 
 Current #1463 provider registry guards include:
@@ -131,3 +214,7 @@ Current #1463 provider registry guards include:
 - `internal/app/openspec_provider_specs_test.go` (`TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract`, `TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow`)
 - `internal/app/integration_migration_regression_test.go` (`TestProviderRegistryProjectsCanonicalManifestCategories`, `TestProviderRegistryProjectsMarketWatchProviderScopes`)
 - `internal/app/ui_template_contract_test.go` (`TestMarketWatchProviderControlsUseProviderRegistryContract`, `TestIntegrationsProviderDetailActionsUseProviderRegistryContract`)
+
+Current #1468 authoring-guide closure guard:
+
+- `internal/app/openspec_provider_specs_test.go` (`TestIntegrationProviderAuthoringGuideCoversIssue1468AcceptanceChecklist`)

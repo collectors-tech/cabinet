@@ -264,6 +264,55 @@ func TestIntegrationProviderAuthoringGuideCoversIssue1465WorkflowActions(t *test
 	}
 }
 
+func TestIntegrationProviderAuthoringGuideCoversIssue1468AcceptanceChecklist(t *testing.T) {
+	t.Parallel()
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+
+	for _, token := range []string{
+		"## Complete Example",
+		"ProviderID:        \"example-market\"",
+		"ConfigSchemaRef:   \"integrations/example-market/setup\"",
+		"WorkflowRefs:      []string{\"market_watch.run\", \"example.preview_listing\"}",
+		"SchemaRef:        \"integrations/example-market/setup\"",
+		"SecretTarget:     \"/api/profiles/:profileId/secrets\"",
+		"Type: \"secret\"",
+		"SecretKey: \"example_market_api_key\"",
+		"ID:                   \"example.preview_listing\"",
+		"SideEffectLevel:      \"preview_only\"",
+		"ConfirmationRequired: true",
+		"## Security Checklist",
+		"Registry, setup status, health, last-run, Inbox event, and UI payloads expose credential presence only",
+		"## Add Integration UI Checklist",
+		"provider-specific fields must not render before explicit selection",
+		"Disabled, deprecated, beta, setup-needed, and repair-needed states are visually distinct",
+		"`openspec validate --all --strict --no-interactive`",
+	} {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1468 acceptance token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"#1468",
+		"complete provider manifest, setup schema, and workflow/action examples",
+		"TestIntegrationProviderAuthoringGuideCoversIssue1468AcceptanceChecklist",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1468 authoring guide token: %s", token)
+		}
+	}
+}
+
 func TestIntegrationRegistryOpenSpecCoversIssue1464ConfigSchemas(t *testing.T) {
 	t.Parallel()
 
