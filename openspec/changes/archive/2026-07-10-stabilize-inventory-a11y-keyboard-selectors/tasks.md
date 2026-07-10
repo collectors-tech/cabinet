@@ -10,4 +10,5 @@
 ## 3. Validation
 
 - [x] 3.1 Re-run `ui-foundation-accessibility/spec.cy.ts` on a fresh 17882 branch build.
-- [ ] 3.2 Feed the result back into the broader regression gate.
+- [x] 3.2 Feed the result back into the broader regression gate.
+  - Reconciled in #1872 on 2026-07-11: the targeted selector fix was already merged and subsequent Develop Quality Gate runs for #1882, #1883, and #1884 completed successfully; packaged end-to-end release acceptance remains tracked by #1869.

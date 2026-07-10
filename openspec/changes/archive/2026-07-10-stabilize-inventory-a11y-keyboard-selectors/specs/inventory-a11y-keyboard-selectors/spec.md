@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Inventory keyboard-only accessibility workflow SHALL target stable filter control selectors
 Cabinet SHALL keep the inventory keyboard-only accessibility workflow contract anchored to a stable filter-control selector even when placeholder copy varies by current view mode.
