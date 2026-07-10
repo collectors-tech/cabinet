@@ -253,6 +253,72 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	}
 }
 
+func TestProviderWorkflowInboxEventCoalescesByRootCause(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "p-provider-workflow"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, "Provider Workflow"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	first, err := svc.CreateProviderWorkflowInboxEvent(ctx, ProviderWorkflowInboxEventInput{
+		ProfileID:           profileID,
+		ProviderID:          "ebay",
+		ProviderDisplayName: "eBay",
+		WorkflowActionID:    "ebay.seller_operations",
+		Severity:            "error",
+		RequiredActionCode:  "provider_auth_expired",
+		StatusMessage:       "Seller operations could not refresh the provider token.",
+		TargetRoute:         "/integrations/ebay",
+		OccurredAt:          "2026-07-10T04:20:00Z",
+		Metadata:            map[string]any{"health_impact": "updates_provider_health"},
+	})
+	if err != nil {
+		t.Fatalf("CreateProviderWorkflowInboxEvent(first) error = %v", err)
+	}
+	if first.Source != "provider_workflow" || first.Status != "unread" {
+		t.Fatalf("expected unread provider workflow inbox item, got %+v", first)
+	}
+	if first.Metadata["provider_id"] != "ebay" || first.Metadata["workflow_action_id"] != "ebay.seller_operations" || first.Metadata["required_action_code"] != "provider_auth_expired" {
+		t.Fatalf("expected provider workflow metadata, got %+v", first.Metadata)
+	}
+
+	updated, err := svc.CreateProviderWorkflowInboxEvent(ctx, ProviderWorkflowInboxEventInput{
+		ProfileID:           profileID,
+		ProviderID:          "ebay",
+		ProviderDisplayName: "eBay",
+		WorkflowActionID:    "ebay.seller_operations",
+		Severity:            "warning",
+		RequiredActionCode:  "provider_auth_expired",
+		StatusMessage:       "Seller operations still need provider token repair.",
+		TargetRoute:         "/integrations/ebay",
+	})
+	if err != nil {
+		t.Fatalf("CreateProviderWorkflowInboxEvent(update) error = %v", err)
+	}
+	if updated.ID != first.ID {
+		t.Fatalf("expected repeated root cause to update existing inbox item, first=%s updated=%s", first.ID, updated.ID)
+	}
+	if updated.Status != "unread" || !strings.Contains(updated.Summary, "still need provider token repair") {
+		t.Fatalf("expected updated unread provider workflow event, got %+v", updated)
+	}
+
+	items, err := svc.ListInboxItems(ctx, profileID)
+	if err != nil {
+		t.Fatalf("ListInboxItems() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected coalesced provider workflow event, got %d items: %+v", len(items), items)
+	}
+}
+
 func TestServicePreviewActionUsesCapabilityRegistry(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -85,6 +85,19 @@ type NotificationHistoryInput struct {
 	Metadata       map[string]any `json:"metadata,omitempty"`
 }
 
+type ProviderWorkflowInboxEventInput struct {
+	ProfileID           string         `json:"profile_id"`
+	ProviderID          string         `json:"provider_id"`
+	ProviderDisplayName string         `json:"provider_display_name"`
+	WorkflowActionID    string         `json:"workflow_action_id"`
+	Severity            string         `json:"severity"`
+	RequiredActionCode  string         `json:"required_action_code"`
+	StatusMessage       string         `json:"status_message"`
+	TargetRoute         string         `json:"target_route"`
+	OccurredAt          string         `json:"occurred_at"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
+}
+
 type PreviewActionInput struct {
 	ProfileID    string         `json:"profile_id"`
 	ThreadID     string         `json:"thread_id"`
@@ -654,6 +667,76 @@ func (s *Service) CreateNotificationHistoryItem(ctx context.Context, in Notifica
 	})
 }
 
+func (s *Service) CreateProviderWorkflowInboxEvent(ctx context.Context, in ProviderWorkflowInboxEventInput) (InboxItem, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.ProviderID = strings.TrimSpace(in.ProviderID)
+	in.ProviderDisplayName = strings.TrimSpace(in.ProviderDisplayName)
+	in.WorkflowActionID = strings.TrimSpace(in.WorkflowActionID)
+	in.RequiredActionCode = strings.TrimSpace(in.RequiredActionCode)
+	in.StatusMessage = strings.TrimSpace(in.StatusMessage)
+	if in.ProfileID == "" || in.ProviderID == "" || in.WorkflowActionID == "" || in.RequiredActionCode == "" {
+		return InboxItem{}, fmt.Errorf("profile_id, provider_id, workflow_action_id and required_action_code are required")
+	}
+	if in.ProviderDisplayName == "" {
+		in.ProviderDisplayName = in.ProviderID
+	}
+	severity := strings.ToLower(strings.TrimSpace(in.Severity))
+	if severity == "" {
+		severity = "warning"
+	}
+	targetRoute := strings.TrimSpace(in.TargetRoute)
+	if targetRoute == "" {
+		targetRoute = "/integrations"
+	}
+	thread, err := s.providerWorkflowThread(ctx, in.ProfileID)
+	if err != nil {
+		return InboxItem{}, err
+	}
+	metadata := map[string]any{
+		"category":              "integration_workflow",
+		"provider_id":           in.ProviderID,
+		"provider_display_name": in.ProviderDisplayName,
+		"workflow_action_id":    in.WorkflowActionID,
+		"severity":              severity,
+		"required_action_code":  in.RequiredActionCode,
+		"target_route":          targetRoute,
+	}
+	if strings.TrimSpace(in.OccurredAt) != "" {
+		metadata["occurred_at"] = strings.TrimSpace(in.OccurredAt)
+	}
+	for key, value := range in.Metadata {
+		if _, exists := metadata[key]; !exists {
+			metadata[key] = value
+		}
+	}
+	title := in.ProviderDisplayName + " workflow needs attention"
+	if severity == "error" || severity == "failed" {
+		title = in.ProviderDisplayName + " workflow failed"
+	}
+	if existing, ok, err := s.findProviderWorkflowInboxEvent(ctx, in.ProfileID, in.ProviderID, in.WorkflowActionID, in.RequiredActionCode); err != nil {
+		return InboxItem{}, err
+	} else if ok {
+		metadataJSON := marshalContextJSON(metadata)
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE chat_inbox_items
+			SET status = 'unread', title = ?, summary = ?, metadata_json = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND profile_id = ?
+		`, title, in.StatusMessage, metadataJSON, existing.ID, in.ProfileID); err != nil {
+			return InboxItem{}, fmt.Errorf("update provider workflow inbox event: %w", err)
+		}
+		return s.getInboxItem(ctx, in.ProfileID, existing.ID)
+	}
+	return s.CreateInboxItem(ctx, InboxItem{
+		ProfileID: in.ProfileID,
+		ThreadID:  thread.ID,
+		Source:    "provider_workflow",
+		Status:    "unread",
+		Title:     title,
+		Summary:   in.StatusMessage,
+		Metadata:  metadata,
+	})
+}
+
 func (s *Service) notificationHistoryThread(ctx context.Context, profileID string) (Thread, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, profile_id, title, metadata_json, created_at, updated_at
@@ -681,6 +764,33 @@ func (s *Service) notificationHistoryThread(ctx context.Context, profileID strin
 	return s.CreateThread(ctx, profileID, "Notification History", map[string]any{"kind": "notification_history"})
 }
 
+func (s *Service) providerWorkflowThread(ctx context.Context, profileID string) (Thread, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
+		FROM chat_threads
+		WHERE profile_id = ? AND json_extract(metadata_json, '$.kind') = 'provider_workflow_events'
+		ORDER BY created_at ASC
+		LIMIT 1
+	`, profileID)
+	if err != nil {
+		return Thread{}, fmt.Errorf("find provider workflow event thread: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var t Thread
+		var metadataJSON string
+		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return Thread{}, err
+		}
+		t.Metadata = parseContextJSON(metadataJSON)
+		return t, nil
+	}
+	if err := rows.Err(); err != nil {
+		return Thread{}, err
+	}
+	return s.CreateThread(ctx, profileID, "Provider Workflow Events", map[string]any{"kind": "provider_workflow_events"})
+}
+
 func (s *Service) findNotificationHistoryItem(ctx context.Context, profileID, localHistoryID string) (InboxItem, bool, error) {
 	var item InboxItem
 	var metadataJSON string
@@ -693,6 +803,30 @@ func (s *Service) findNotificationHistoryItem(ctx context.Context, profileID, lo
 		ORDER BY created_at DESC
 		LIMIT 1
 	`, profileID, localHistoryID).Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return InboxItem{}, false, nil
+		}
+		return InboxItem{}, false, err
+	}
+	item.Metadata = parseContextJSON(metadataJSON)
+	return item, true, nil
+}
+
+func (s *Service) findProviderWorkflowInboxEvent(ctx context.Context, profileID, providerID, workflowActionID, requiredActionCode string) (InboxItem, bool, error) {
+	var item InboxItem
+	var metadataJSON string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		  AND source = 'provider_workflow'
+		  AND json_extract(metadata_json, '$.provider_id') = ?
+		  AND json_extract(metadata_json, '$.workflow_action_id') = ?
+		  AND json_extract(metadata_json, '$.required_action_code') = ?
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT 1
+	`, profileID, providerID, workflowActionID, requiredActionCode).Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return InboxItem{}, false, nil
