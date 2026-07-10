@@ -15,6 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for contract tests
+        run: npm run build
+        working-directory: ui.web
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -78,12 +89,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for OpenAPI tests
+        run: npm run build
+        working-directory: ui.web
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Verify critical API/OpenAPI parity tests
         run: go test ./internal/app -run TestOpenAPIDocumentsOnboardingSampleDataEndpoint -count=1
       - name: Lint OpenAPI
@@ -139,4 +158,3 @@ jobs:
             ui.web/cypress/artifacts
             ui.web/cypress/screenshots
             ui.web/cypress/videos
-
