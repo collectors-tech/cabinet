@@ -1,5 +1,8 @@
-## MODIFIED Requirements
+# parity-components-route-contracts Specification
 
+## Purpose
+TBD - created by archiving change stabilize-parity-components-route-contracts. Update Purpose after archive.
+## Requirements
 ### Requirement: General parity contracts SHALL use canonical authenticated routes
 Cabinet SHALL keep general parity tests aligned with the canonical authenticated routes currently exposed by the shell.
 
@@ -20,3 +23,4 @@ Cabinet SHALL keep foundation component tests anchored to stable visible profile
 - **GIVEN** a foundation-components test opens the settings profile screen
 - **WHEN** it proves the profile surface is rendered
 - **THEN** it SHALL assert stable visible controls such as the username field and update action rather than hidden responsive mirrors or fragile copy-only matches
+

@@ -1,6 +1,6 @@
 # TASK_LIST
 
-Last reconciled from live GitHub/OpenSpec state: 2026-07-11 05:55 +10:00
+Last reconciled from live GitHub/OpenSpec state: 2026-07-11 09:00 +10:00
 
 This file is the Cabinet 0.1 private beta execution summary. Historical issue
 snapshots from April 2026 have been retired from this top-level queue; use
@@ -39,12 +39,9 @@ Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 
 ## Active OpenSpec Change Inventory
 
-Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive completed Agent-channel, Agent-skill registry, inventory grading, and runtime startup changes.
+Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive completed Agent-channel, Agent-skill registry, inventory grading, runtime startup, parity route-contract, and inventory accessibility selector changes.
 
 - `ingest-bonza-product-urls`: 21/24 tasks complete. Remainder is live/manual provider verification, optional HTML fallback, and final #811 delivery cleanup.
-- `stabilize-startup-nfr-gates`: 7/9 tasks complete. Remainder is blocked validation-chain rerun and issue/PR closure evidence.
-- `stabilize-parity-components-route-contracts`: 7/8 tasks complete. Remainder is feeding targeted validation back into the broader regression gate.
-- `stabilize-inventory-a11y-keyboard-selectors`: 4/5 tasks complete. Remainder is feeding targeted validation back into the broader regression gate.
 - `finalize-onboarding-and-collector-ux`: 0/14 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
 - `complete-screen-api-parity-audits`: 0/15 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
 - `stabilize-inventory-runtime-regressions`: 0/11 tasks complete. Triage against current release smoke evidence before treating old startup/runtime subtasks as active beta blockers.
@@ -54,6 +51,9 @@ Archived during #1872 reconciliation:
 - `define-agent-skill-registry`: archived into `openspec/specs/agent-skills-registry/spec.md`; Agent skill registry product breadth remains post-beta unless #1864 acceptance exposes a release blocker.
 - `inventory-item-type-condition-scales`: archived after confirming its requirements already exist in canonical inventory specs and traceability rows.
 - `harden-runtime-single-endpoint-startup`: archived after confirming its requirements already exist in canonical runtime specs and traceability rows.
+- `stabilize-startup-nfr-gates`: archived into `openspec/specs/fresh-runtime-startup/spec.md`; #446 and #448 are closed with PR/demo evidence and package-level release acceptance remains tracked by #1869.
+- `stabilize-parity-components-route-contracts`: archived into `openspec/specs/parity-components-route-contracts/spec.md`; broader packaged release acceptance remains tracked by #1869.
+- `stabilize-inventory-a11y-keyboard-selectors`: archived into `openspec/specs/inventory-a11y-keyboard-selectors/spec.md`; broader packaged release acceptance remains tracked by #1869.
 
 ## Post-Beta Scope Guardrails
 
