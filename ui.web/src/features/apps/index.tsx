@@ -148,6 +148,46 @@ type ProviderRecord = {
     finished_at?: string | null
   }
   seller_operations?: SellerOperationStatus[]
+  setup_schema?: IntegrationSetupSchema
+}
+
+type IntegrationSetupSchema = {
+  schema_ref: string
+  persistence_scope?: string
+  submit_target?: string
+  secret_target?: string
+  validate_action?: string
+  fields?: IntegrationSetupField[]
+}
+
+type IntegrationSetupField = {
+  key: string
+  label: string
+  type:
+    | 'text'
+    | 'secret'
+    | 'url'
+    | 'number'
+    | 'select'
+    | 'multiselect'
+    | 'checkbox'
+    | 'textarea'
+    | 'file'
+    | 'oauth-connect'
+    | 'browser-auth-status'
+    | string
+  required?: boolean
+  write_only?: boolean
+  read_only?: boolean
+  persistence?: string
+  secret_key?: string
+  default?: string | number | boolean | null
+  placeholder?: string
+  helper_text?: string
+  options?: Array<{ value: string; label: string }>
+  validation_rules?: string[]
+  condition?: Record<string, string>
+  documentation_url?: string
 }
 
 const formatEbaySetupNextAction = (nextAction?: string | null) => {
@@ -623,6 +663,51 @@ function isConfiguredIntegration(
   ].some((key) => Object.prototype.hasOwnProperty.call(settings, key))
 }
 
+function fieldDefaultValue(field: IntegrationSetupField) {
+  if (field.default === undefined || field.default === null) {
+    return ''
+  }
+  return String(field.default)
+}
+
+function providerManifestFieldValue(
+  provider: ProviderRecord,
+  field: IntegrationSetupField
+) {
+  const value = provider[field.key as keyof ProviderRecord]
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return String(value)
+  }
+  return fieldDefaultValue(field)
+}
+
+function setupFieldInitialValue(
+  provider: ProviderRecord,
+  field: IntegrationSetupField,
+  settings: Record<string, string>
+) {
+  if (field.persistence === 'provider_manifest') {
+    return providerManifestFieldValue(provider, field)
+  }
+  return settings[field.key] ?? fieldDefaultValue(field)
+}
+
+function setupFieldVisible(
+  field: IntegrationSetupField,
+  values: Record<string, string>
+) {
+  if (!field.condition) {
+    return true
+  }
+  return Object.entries(field.condition).every(
+    ([key, expected]) => values[key] === expected
+  )
+}
+
 function bootstrapErrorMessage(error: unknown) {
   if (!(error instanceof Error)) {
     return 'Failed to bootstrap integrations workspace.'
@@ -725,6 +810,9 @@ export function Apps({
     listingLifecycleListingId: 'listing-live-1',
     listingLifecycleTitle: 'Cabinet eBay listing draft',
   })
+  const [setupSchemaValues, setSetupSchemaValues] = useState<
+    Record<string, string>
+  >({})
   const [buyerInterestWorking, setBuyerInterestWorking] = useState(false)
   const [buyerInterestError, setBuyerInterestError] = useState<string | null>(
     null
@@ -1011,6 +1099,14 @@ export function Apps({
       listingLifecycleListingId: 'listing-live-1',
       listingLifecycleTitle: 'Cabinet eBay listing draft',
     })
+    setSetupSchemaValues(
+      Object.fromEntries(
+        (provider.setup_schema?.fields ?? []).map((field) => [
+          field.key,
+          setupFieldInitialValue(provider, field, settings),
+        ])
+      )
+    )
     setBuyerInterestError(null)
     setBuyerInterestResult(null)
     setSellerOperationError(null)
@@ -1117,6 +1213,7 @@ export function Apps({
       listingLifecycleListingId: 'listing-live-1',
       listingLifecycleTitle: 'Cabinet eBay listing draft',
     })
+    setSetupSchemaValues({})
     setBuyerInterestError(null)
     setBuyerInterestResult(null)
     setSellerOperationError(null)
@@ -1357,6 +1454,95 @@ export function Apps({
           id: 'integrations-telegram-save-success',
           title: message,
           summary: 'Telegram setup save status from Integrations.',
+        })
+        closeIntegration()
+        return
+      }
+      if (editingProvider.setup_schema?.fields?.length) {
+        const settingsPayload: Record<string, string> = {}
+        const visibleFields = editingProvider.setup_schema.fields.filter(
+          (field) => setupFieldVisible(field, setupSchemaValues)
+        )
+        const missingField = visibleFields.find((field) => {
+          if (!field.required || field.read_only) {
+            return false
+          }
+          if (field.write_only && editingProvider.has_token) {
+            return false
+          }
+          return (setupSchemaValues[field.key] ?? '').trim() === ''
+        })
+        if (missingField) {
+          throw new Error(`${missingField.label} is required.`)
+        }
+        for (const field of visibleFields) {
+          if (field.read_only || field.persistence === 'provider_manifest') {
+            continue
+          }
+          const value = (setupSchemaValues[field.key] ?? '').trim()
+          if (field.write_only || field.persistence === 'profile_secrets') {
+            if (value === '') {
+              continue
+            }
+            const secretResponse = await fetch(
+              `/api/profiles/${activeProfileId}/secrets`,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  key: field.secret_key ?? field.key,
+                  value,
+                }),
+              }
+            )
+            if (!secretResponse.ok) {
+              throw new Error(`secret_save_failed_${secretResponse.status}`)
+            }
+            continue
+          }
+          settingsPayload[field.key] = value
+        }
+        settingsPayload[providerSettingsKeys(editingProvider.provider_id).enabledKey] =
+          'true'
+        const settingsResponse = await fetch(
+          `/api/profiles/${activeProfileId}/settings`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: settingsPayload }),
+          }
+        )
+        if (!settingsResponse.ok) {
+          throw new Error(`save_failed_${settingsResponse.status}`)
+        }
+        const payload = (await settingsResponse.json()) as {
+          settings?: Record<string, string>
+        }
+        setSettings(payload.settings ?? {})
+        setProviders((prev) =>
+          prev.map((provider) =>
+            provider.provider_id === editingProvider.provider_id
+              ? {
+                  ...provider,
+                  has_token:
+                    provider.has_token ||
+                    visibleFields.some(
+                      (field) =>
+                        (field.write_only ||
+                          field.persistence === 'profile_secrets') &&
+                        (setupSchemaValues[field.key] ?? '').trim() !== ''
+                    ),
+                }
+              : provider
+          )
+        )
+        const message = 'Provider schema configuration saved.'
+        setActionMessage(message)
+        recordIntegrationsStatusHistory({
+          id: `integrations-provider-schema-save-${notificationHistoryID(editingProvider.provider_id)}`,
+          title: message,
+          summary:
+            'Schema-driven provider configuration save status from Integrations.',
         })
         closeIntegration()
         return
@@ -2997,98 +3183,148 @@ export function Apps({
                     </label>
                   </div>
                 </section>
-              ) : (
+              ) : editingProvider.setup_schema?.fields?.length ? (
                 <>
-                  <div className='space-y-2'>
-                    <Label htmlFor='provider-base-url'>Base URL</Label>
-                    <Input
-                      id='provider-base-url'
-                      placeholder='Base URL'
-                      value={form.baseURL}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          baseURL: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='provider-marketplace'>
-                      Marketplace / Region
-                    </Label>
-                    <Input
-                      id='provider-marketplace'
-                      placeholder='Marketplace / Region'
-                      value={form.marketplace}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          marketplace: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='provider-items-per-page'>
-                      Items per page
-                    </Label>
-                    <Input
-                      id='provider-items-per-page'
-                      type='number'
-                      min='1'
-                      placeholder='Items per page'
-                      value={form.itemsPerPage}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          itemsPerPage: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  {editingProvider.auth_mode !== 'none' ? (
-                    <div className='space-y-2'>
-                      {editingProvider.has_token && !replaceToken ? (
-                        <div className='rounded-md border bg-muted/20 p-3 text-xs'>
-                          <p>Token on file.</p>
-                          <p className='text-muted-foreground'>
-                            Existing token is hidden. Use replace-token to
-                            update it.
-                          </p>
-                          <Button
-                            size='sm'
-                            variant='outline'
-                            className='mt-2'
-                            data-testid='replace-token'
-                            onClick={() => setReplaceToken(true)}
-                          >
-                            Replace Token
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className='space-y-2'>
-                          <Label htmlFor='provider-token'>
-                            New token / API key
-                          </Label>
-                          <Input
-                            id='provider-token'
-                            type='password'
-                            data-testid='provider-token-input'
-                            placeholder='New token / API key'
-                            value={form.token}
-                            onChange={(e) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                token: e.target.value,
-                              }))
+                  <section
+                    className='grid gap-3 rounded-md border p-3 sm:grid-cols-2'
+                    data-testid='integration-schema-form'
+                  >
+                    {(editingProvider.setup_schema.fields ?? [])
+                      .filter((field) =>
+                        setupFieldVisible(field, setupSchemaValues)
+                      )
+                      .map((field) => {
+                        const fieldID = `provider-schema-${notificationHistoryID(field.key)}`
+                        const fieldValue = setupSchemaValues[field.key] ?? ''
+                        const updateField = (value: string) =>
+                          setSetupSchemaValues((prev) => ({
+                            ...prev,
+                            [field.key]: value,
+                          }))
+                        if (field.write_only && editingProvider.has_token && !replaceToken) {
+                          return (
+                            <div
+                              key={field.key}
+                              className='space-y-2 sm:col-span-2'
+                            >
+                              <p className='text-sm font-medium'>
+                                {field.label}
+                              </p>
+                              <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                                <p>Credential on file.</p>
+                                <p className='text-muted-foreground'>
+                                  Existing value is hidden. Replace it to update
+                                  this provider secret.
+                                </p>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  className='mt-2'
+                                  data-testid='replace-token'
+                                  onClick={() => setReplaceToken(true)}
+                                >
+                                  Replace credential
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div
+                            key={field.key}
+                            className={
+                              field.type === 'textarea' ||
+                              field.type === 'secret' ||
+                              field.type === 'browser-auth-status' ||
+                              field.type === 'oauth-connect'
+                                ? 'space-y-2 sm:col-span-2'
+                                : 'space-y-2'
                             }
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
+                          >
+                            <Label htmlFor={fieldID}>
+                              {field.label}
+                              {field.required ? ' *' : ''}
+                            </Label>
+                            {field.type === 'select' && field.options?.length ? (
+                              <Select
+                                value={fieldValue}
+                                onValueChange={updateField}
+                                disabled={field.read_only}
+                              >
+                                <SelectTrigger
+                                  id={fieldID}
+                                  data-testid={`provider-schema-field-${field.key}`}
+                                >
+                                  <SelectValue placeholder={field.placeholder} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {field.options.map((option) => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : field.type === 'textarea' ? (
+                              <textarea
+                                id={fieldID}
+                                className='min-h-24 w-full rounded-md border bg-background p-2 text-sm'
+                                data-testid={`provider-schema-field-${field.key}`}
+                                placeholder={field.placeholder}
+                                value={fieldValue}
+                                readOnly={field.read_only}
+                                onChange={(e) => updateField(e.target.value)}
+                              />
+                            ) : field.type === 'checkbox' ? (
+                              <input
+                                id={fieldID}
+                                type='checkbox'
+                                data-testid={`provider-schema-field-${field.key}`}
+                                checked={fieldValue === 'true'}
+                                disabled={field.read_only}
+                                onChange={(e) =>
+                                  updateField(e.target.checked ? 'true' : 'false')
+                                }
+                              />
+                            ) : field.type === 'oauth-connect' ||
+                              field.type === 'browser-auth-status' ? (
+                              <Input
+                                id={fieldID}
+                                data-testid={`provider-schema-field-${field.key}`}
+                                readOnly
+                                value={fieldValue || 'setup_needed'}
+                              />
+                            ) : (
+                              <Input
+                                id={fieldID}
+                                type={
+                                  field.type === 'secret'
+                                    ? 'password'
+                                    : field.type === 'number'
+                                      ? 'number'
+                                      : field.type === 'url'
+                                        ? 'url'
+                                        : 'text'
+                                }
+                                data-testid={`provider-schema-field-${field.key}`}
+                                placeholder={field.placeholder}
+                                value={fieldValue}
+                                readOnly={field.read_only}
+                                onChange={(e) => updateField(e.target.value)}
+                              />
+                            )}
+                            {field.helper_text ? (
+                              <p className='text-xs text-muted-foreground'>
+                                {field.helper_text}
+                              </p>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                  </section>
                   {editingProvider.provider_id === 'ebay' ? (
                     <section
                       className='rounded-md border p-3 text-xs'
@@ -3884,7 +4120,7 @@ export function Apps({
                     </div>
                   ) : null}
                 </>
-              )}
+              ) : null}
 
               {saveError ? (
                 <p className='text-sm text-destructive'>{saveError}</p>
