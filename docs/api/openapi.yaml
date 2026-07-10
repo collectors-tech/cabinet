@@ -3472,6 +3472,36 @@ components:
           allOf:
             - $ref: "#/components/schemas/EbayProviderSetupStatus"
           description: Non-secret readiness summary for the eBay setup surface; provider-specific registry entries may also project non-secret readiness maps such as OpenAI assistant readiness.
+        setup_schema:
+          type: object
+          description: Provider-specific schema-driven setup metadata. OpenAI exposes active-profile settings fields plus write-only secret fields without returning stored credential values.
+          properties:
+            schema_ref: { type: string, example: integrations/openai/auth }
+            persistence_scope: { type: string, example: active_profile }
+            submit_target: { type: string, example: /api/profiles/:profileId/settings }
+            secret_target: { type: string, example: /api/profiles/:profileId/secrets }
+            fields:
+              type: array
+              items:
+                type: object
+                required: [key, label, type, persistence]
+                properties:
+                  key: { type: string, example: openai_api_key }
+                  label: { type: string, example: API key }
+                  type: { type: string, enum: [select, secret, proof_state, text, boolean] }
+                  required: { type: boolean }
+                  write_only: { type: boolean }
+                  read_only: { type: boolean }
+                  persistence: { type: string, enum: [profile_settings, profile_secrets] }
+                  secret_key: { type: string, example: openai_api_key }
+                  default: { type: string, example: gpt-4o-mini }
+                  options:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        value: { type: string }
+                        label: { type: string }
         actions:
           type: array
           description: Provider workflow/action metadata including availability and required next action.
