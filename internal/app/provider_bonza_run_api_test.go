@@ -144,3 +144,113 @@ func TestBonzaRunAggregatesPagesAndEnrichesWatchedStock(t *testing.T) {
 		t.Fatalf("expected bonza run to persist candidate count=3, got %+v", latest)
 	}
 }
+
+func TestBonzaRunFailureCreatesProviderWorkflowInboxEvent(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+	}))
+	defer bonza.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BonzaFailureProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s","integration.bonzaslotcars.items_per_page":"36"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"AFX","keywords":["AFX"],"provider_scope":["bonzaslotcars"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	run := doRequest(t, a, http.MethodPost, "/api/providers/bonza/run", strings.NewReader(`{"query_set_id":"`+qs.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("expected failed Bonza run status=400, got=%d body=%s", run.Code, run.Body.String())
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	var inboxPayload struct {
+		Items []struct {
+			Source   string         `json:"source"`
+			Status   string         `json:"status"`
+			Title    string         `json:"title"`
+			Summary  string         `json:"summary"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(inbox.Body).Decode(&inboxPayload); err != nil {
+		t.Fatalf("decode inbox payload: %v", err)
+	}
+	if len(inboxPayload.Items) != 1 {
+		t.Fatalf("expected one provider workflow Inbox event, got %+v", inboxPayload.Items)
+	}
+	item := inboxPayload.Items[0]
+	if item.Source != "provider_workflow" || item.Status != "unread" || item.Title != "bonzaslotcars.com.au workflow failed" {
+		t.Fatalf("unexpected provider workflow Inbox item shell: %+v", item)
+	}
+	for _, want := range []string{"status 503", "bonza"} {
+		if !strings.Contains(strings.ToLower(item.Summary), want) {
+			t.Fatalf("expected Inbox summary to preserve provider failure detail %q, got %q", want, item.Summary)
+		}
+	}
+	expectedMetadata := map[string]string{
+		"provider_id":           "au-webshop-bonzaslotcars-com-au",
+		"provider_display_name": "bonzaslotcars.com.au",
+		"workflow_action_id":    "market_watch.run",
+		"required_action_code":  "check_provider_health_and_retry",
+		"category":              "integration_workflow",
+		"severity":              "error",
+		"target_route":          "/integrations",
+		"query_set_id":          qs.ID,
+		"provider_error_code":   "FAILED_TO_RUN_BONZA",
+		"health_impact":         "updates_provider_health",
+		"base_url":              bonza.URL,
+	}
+	for key, want := range expectedMetadata {
+		if got := fmt.Sprintf("%v", item.Metadata[key]); got != want {
+			t.Fatalf("Inbox metadata[%s] got %q want %q; metadata=%+v", key, got, want, item.Metadata)
+		}
+	}
+
+	repeat := doRequest(t, a, http.MethodPost, "/api/providers/bonza/run", strings.NewReader(`{"query_set_id":"`+qs.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if repeat.Code != http.StatusBadRequest {
+		t.Fatalf("expected repeat failed Bonza run status=400, got=%d body=%s", repeat.Code, repeat.Body.String())
+	}
+	repeatedInbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if repeatedInbox.Code != http.StatusOK {
+		t.Fatalf("repeated inbox status=%d body=%s", repeatedInbox.Code, repeatedInbox.Body.String())
+	}
+	var repeatedPayload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(repeatedInbox.Body).Decode(&repeatedPayload); err != nil {
+		t.Fatalf("decode repeated inbox payload: %v", err)
+	}
+	if len(repeatedPayload.Items) != 1 {
+		t.Fatalf("expected repeated Bonza provider workflow failures to coalesce into one Inbox item, got %+v", repeatedPayload.Items)
+	}
+}

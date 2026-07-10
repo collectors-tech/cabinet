@@ -39,6 +39,29 @@ Use one manifest entry per distinct provider or platform adapter. Do not collaps
 8. Add `capability_flags` for search, stock observation, pricing, health, assistant, media capture, text capture, or other advertised capabilities.
 9. Write `setup_instructions` as operator-safe guidance that names the next action without leaking tokens or private provider data.
 
+## Add Workflow Actions
+
+Workflow action definitions live next to provider manifests in `integrationWorkflowActionDefinitions`. Add or update a definition before adding its ID to a provider's `workflow_refs`.
+
+Every workflow action must define:
+
+- stable `id` / `workflow_ref`
+- `label` and operator-safe `description`
+- workflow `type`
+- `input_schema` and `output_schema`
+- `requires_auth` and `requires_secrets`
+- capability list
+- `side_effect_level` (`read_only`, `preview_only`, `write`, or `destructive`)
+- `confirmation_required`
+- `schedule_support`
+- `inbox_events`
+- `health_impact`
+- `execution_mode`
+
+Use `read_only` for inspection-only workflows, `preview_only` when Cabinet records reviewable local output before a later apply step, `write` for external or Cabinet state mutation, and `destructive` when an operation can end, remove, overwrite, or publish irreversible provider state. Mutating and destructive workflows must require explicit confirmation unless a narrower issue proves a safer contract.
+
+Workflow failures and required user actions must advertise Inbox event metadata such as `workflow_failed`, `required_action`, `confirmation_pending`, or `result_inbox_updated` so UI, assistant, and automation consumers can route failures consistently. Do not add a provider `workflow_refs` entry for a workflow that has no registry definition.
+
 ## Consumer Contracts
 
 These consumers must derive provider identity, category, auth/setup state, capabilities, and workflow/action state from the registry manifest:

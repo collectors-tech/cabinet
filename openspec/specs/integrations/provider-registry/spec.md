@@ -129,6 +129,30 @@ Cabinet SHALL expose provider workflow and action metadata so UI surfaces can pr
 - **AND** registry metadata MUST distinguish local-only actions, read-only remote actions, and remote writes that require explicit confirmation
 - **AND** UI controls MUST be disabled or routed to the correct workflow when action metadata marks an action unavailable, blocked, or handled outside the provider dialog
 
+### Requirement INTEGRATION-064: Provider workflow registry MUST define execution contracts
+Cabinet SHALL maintain typed workflow/action registry definitions tied to provider manifest `workflow_refs` so UI, assistant, automation, scanner, import/export, notification, and validation consumers can discover provider operations without hardcoded provider-specific action lists.
+
+#### Scenario: Workflow registry actions expose safety and routing metadata
+- **GIVEN** a provider manifest declares workflow references for assistant, notification, Market Watch, provider diagnostics, buyer-interest, seller-operation, or listing-lifecycle workflows
+- **WHEN** `GET /api/providers/registry` is requested
+- **THEN** each declared workflow with a registry definition MUST appear in the provider `actions` payload with:
+  - stable `action_id` / `workflow_ref`
+  - operator-safe `label` and `description`
+  - workflow `type`
+  - `input_schema` and `output_schema`
+  - `requires_auth` and `requires_secrets`
+  - capability list
+  - `side_effect_level`
+  - `confirmation_required`
+  - `schedule_support`
+  - `inbox_events`
+  - `health_impact`
+  - `execution_mode`
+  - `availability_state`
+- **AND** `side_effect_level` MUST distinguish `read_only`, `preview_only`, `write`, and `destructive` operations
+- **AND** mutation or destructive workflows MUST advertise explicit confirmation requirements
+- **AND** workflow failure and required-action outcomes MUST advertise Inbox event metadata so downstream consumers can route errors, warnings, required user action, and result-inbox updates consistently
+
 ### Requirement INTEGRATION-029: Integration instances MUST persist separately from provider definitions
 Cabinet SHALL persist per-profile integration instances and status independently from immutable provider manifests.
 

@@ -2758,13 +2758,23 @@ func New(cfg config.Config) (*App, error) {
 				if status <= 0 {
 					status = http.StatusBadRequest
 				}
+				nextAction := ebayProviderErrorNextAction(providerErr)
+				if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "ebay", "eBay", "market_watch.run", nextAction, providerErr.Error(), map[string]any{
+					"query_set_id":        qs.ID,
+					"provider_error_code": providerErr.ErrorCode,
+					"status_code":         status,
+					"health_impact":       "updates_provider_health",
+					"retry_after_seconds": providerErr.RetryAfterSeconds,
+				}); inboxErr != nil {
+					logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "ebay", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+				}
 				w.WriteHeader(status)
 				payload := map[string]any{
 					"error":        "failed_to_run_ebay_provider",
 					"error_code":   providerErr.ErrorCode,
 					"provider":     "ebay",
 					"message":      providerErr.Error(),
-					"next_action":  ebayProviderErrorNextAction(providerErr),
+					"next_action":  nextAction,
 					"query_set_id": qs.ID,
 				}
 				if providerErr.RetryAfterSeconds > 0 {
@@ -2832,6 +2842,14 @@ func New(cfg config.Config) (*App, error) {
 		}
 		searchResult, err := runBonzaSearch(r.Context(), http.DefaultClient, baseURL, qs, requested)
 		if err != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-bonzaslotcars-com-au", "bonzaslotcars.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_BONZA",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-bonzaslotcars-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_run_bonza"}`, http.StatusBadRequest)
 			return
 		}
@@ -3043,6 +3061,15 @@ func New(cfg config.Config) (*App, error) {
 			req.FallbackDiscoveryAssetURLs,
 		)
 		if err != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-frontlinehobbies-com-au", "frontlinehobbies.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_DISCOVER_FRONTLINE_CONFIG",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+				"discovery_asset_url": discoveryAssetURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-frontlinehobbies-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_discover_frontline_config"}`, http.StatusBadRequest)
 			return
 		}
@@ -3052,6 +3079,15 @@ func New(cfg config.Config) (*App, error) {
 		}
 		candidates, total, runErr := runFrontlineAlgoliaSearch(r.Context(), http.DefaultClient, searchURL, qs, cfg, baseURL, itemsPerPage)
 		if runErr != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-frontlinehobbies-com-au", "frontlinehobbies.com.au", "market_watch.run", "check_provider_health_and_retry", runErr.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_FRONTLINE_PROVIDER",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+				"search_url":          searchURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-frontlinehobbies-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_run_frontline_provider"}`, http.StatusBadRequest)
 			return
 		}
@@ -8808,6 +8844,29 @@ func providerHealthResponse(health map[string]string) map[string]any {
 	}
 }
 
+func recordProviderWorkflowFailure(ctx context.Context, chatSvc *chat.Service, profileID, providerID, providerDisplayName, workflowActionID, requiredActionCode, statusMessage string, metadata map[string]any) error {
+	if chatSvc == nil {
+		return nil
+	}
+	statusMessage = strings.TrimSpace(statusMessage)
+	if statusMessage == "" {
+		statusMessage = strings.TrimSpace(providerDisplayName) + " workflow failed. Review provider health and credentials before retrying."
+	}
+	_, err := chatSvc.CreateProviderWorkflowInboxEvent(ctx, chat.ProviderWorkflowInboxEventInput{
+		ProfileID:           strings.TrimSpace(profileID),
+		ProviderID:          strings.TrimSpace(providerID),
+		ProviderDisplayName: strings.TrimSpace(providerDisplayName),
+		WorkflowActionID:    strings.TrimSpace(workflowActionID),
+		Severity:            "error",
+		RequiredActionCode:  strings.TrimSpace(requiredActionCode),
+		StatusMessage:       statusMessage,
+		TargetRoute:         "/integrations",
+		OccurredAt:          time.Now().UTC().Format(time.RFC3339),
+		Metadata:            metadata,
+	})
+	return err
+}
+
 func providerHealthTaxonomy(status, message, retryAfterRaw string) (string, string, string) {
 	normalizedStatus := strings.TrimSpace(strings.ToLower(status))
 	normalizedMessage := strings.TrimSpace(strings.ToLower(message))
@@ -9077,41 +9136,7 @@ func openAIRegistryAssistantActions(ready bool, nextAction string) []map[string]
 		availability = "available"
 		requiredNextAction = nil
 	}
-	return []map[string]any{
-		{
-			"action_id":             "assistant.chat",
-			"label":                 "Assistant chat",
-			"workflow_ref":          "assistant.chat",
-			"capability_category":   "assistant",
-			"execution_mode":        "provider_workflow",
-			"classification":        "read_only",
-			"confirmation_required": false,
-			"availability_state":    availability,
-			"next_action":           requiredNextAction,
-		},
-		{
-			"action_id":             "assistant.image_help",
-			"label":                 "Image help",
-			"workflow_ref":          "assistant.image_help",
-			"capability_category":   "assistant",
-			"execution_mode":        "provider_workflow",
-			"classification":        "preview_only",
-			"confirmation_required": false,
-			"availability_state":    availability,
-			"next_action":           requiredNextAction,
-		},
-		{
-			"action_id":             "assistant.content_generation",
-			"label":                 "Content generation",
-			"workflow_ref":          "assistant.content_generation",
-			"capability_category":   "assistant",
-			"execution_mode":        "provider_workflow",
-			"classification":        "preview_only",
-			"confirmation_required": false,
-			"availability_state":    availability,
-			"next_action":           requiredNextAction,
-		},
-	}
+	return workflowActionsForRefs([]string{"assistant.chat", "assistant.image_help", "assistant.content_generation"}, availability, requiredNextAction)
 }
 
 func openAIRegistrySetupSchema() map[string]any {

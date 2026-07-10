@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -861,6 +862,80 @@ func TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance(t *testing.T) 
 	}
 	if got, ok := healthPayload["retry_after_seconds"].(float64); !ok || int(got) != 120 {
 		t.Fatalf("expected provider health retry_after_seconds=120, got %+v", healthPayload)
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	var inboxPayload struct {
+		Items []struct {
+			Source   string         `json:"source"`
+			Status   string         `json:"status"`
+			Title    string         `json:"title"`
+			Summary  string         `json:"summary"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(inbox.Body).Decode(&inboxPayload); err != nil {
+		t.Fatalf("decode inbox payload: %v", err)
+	}
+	if len(inboxPayload.Items) != 1 {
+		t.Fatalf("expected one provider workflow Inbox event, got %+v", inboxPayload.Items)
+	}
+	item := inboxPayload.Items[0]
+	if item.Source != "provider_workflow" || item.Status != "unread" || item.Title != "eBay workflow failed" {
+		t.Fatalf("unexpected provider workflow Inbox item shell: %+v", item)
+	}
+	for _, want := range []string{"12001", "API_BROWSE", "rate limit reached"} {
+		if !strings.Contains(item.Summary, want) {
+			t.Fatalf("expected Inbox summary to preserve provider failure detail %q, got %q", want, item.Summary)
+		}
+	}
+	expectedMetadata := map[string]string{
+		"provider_id":           "ebay",
+		"provider_display_name": "eBay",
+		"workflow_action_id":    "market_watch.run",
+		"required_action_code":  "check_provider_health_and_credentials",
+		"category":              "integration_workflow",
+		"severity":              "error",
+		"target_route":          "/integrations",
+		"query_set_id":          querySetID,
+		"provider_error_code":   "PROVIDER_SEARCH_FAILED",
+		"health_impact":         "updates_provider_health",
+	}
+	for key, want := range expectedMetadata {
+		if got := fmt.Sprintf("%v", item.Metadata[key]); got != want {
+			t.Fatalf("Inbox metadata[%s] got %q want %q; metadata=%+v", key, got, want, item.Metadata)
+		}
+	}
+	if got, ok := item.Metadata["retry_after_seconds"].(float64); !ok || int(got) != 120 {
+		t.Fatalf("expected Inbox retry_after_seconds=120, got metadata=%+v", item.Metadata)
+	}
+
+	repeat := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/providers/ebay/run",
+		strings.NewReader(`{"query_set_id":"`+querySetID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if repeat.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected repeat 429 search failure, got %d body=%s", repeat.Code, repeat.Body.String())
+	}
+	repeatedInbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)
+	if repeatedInbox.Code != http.StatusOK {
+		t.Fatalf("repeated inbox status=%d body=%s", repeatedInbox.Code, repeatedInbox.Body.String())
+	}
+	var repeatedPayload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(repeatedInbox.Body).Decode(&repeatedPayload); err != nil {
+		t.Fatalf("decode repeated inbox payload: %v", err)
+	}
+	if len(repeatedPayload.Items) != 1 {
+		t.Fatalf("expected repeated provider workflow failures to coalesce into one Inbox item, got %+v", repeatedPayload.Items)
 	}
 }
 

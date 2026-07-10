@@ -3504,18 +3504,36 @@ components:
                         label: { type: string }
         actions:
           type: array
-          description: Provider workflow/action metadata including availability and required next action.
+          description: Provider workflow/action metadata from the workflow/action registry including safety, schema, scheduling, Inbox event, health-impact, availability, and required next-action routing.
           items:
             type: object
-            required: [action_id, label, workflow_ref, capability_category, execution_mode, classification, confirmation_required, availability_state]
+            required: [action_id, label, workflow_ref, capability_category, execution_mode, classification, side_effect_level, confirmation_required, availability_state]
             properties:
               action_id: { type: string, example: assistant.chat }
               label: { type: string, example: Assistant chat }
+              description: { type: string, example: Run a provider-backed assistant chat turn with profile and thread context. }
               workflow_ref: { type: string, example: assistant.chat }
+              type: { type: string, example: assistant_chat }
+              input_schema: { type: string, example: assistant.chat.request.v1 }
+              output_schema: { type: string, example: assistant.chat.response.v1 }
+              requires_auth: { type: boolean }
+              requires_secrets: { type: boolean }
+              capabilities:
+                type: array
+                items:
+                  type: string
               capability_category: { type: string, example: assistant }
               execution_mode: { type: string, example: provider_workflow }
-              classification: { type: string, enum: [read_only, preview_only, confirm_required, external_write] }
+              classification: { type: string, enum: [read_only, preview_only, write, destructive] }
+              side_effect_level: { type: string, enum: [read_only, preview_only, write, destructive] }
               confirmation_required: { type: boolean }
+              schedule_support: { type: string, example: manual_and_scheduled }
+              inbox_events:
+                type: array
+                items:
+                  type: string
+                example: [workflow_failed, required_action]
+              health_impact: { type: string, example: updates_provider_health }
               availability_state: { type: string, enum: [available, setup_needed, blocked, unavailable] }
               next_action:
                 type: [string, "null"]
