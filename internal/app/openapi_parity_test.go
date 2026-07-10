@@ -735,6 +735,10 @@ func TestOpenAPIDocumentsEbayRegistrySetupReadinessContract(t *testing.T) {
 		"$ref: \"#/components/schemas/EbayProviderSetupStatus\"",
 		"setup_status:",
 		"readiness summary for the eBay setup surface",
+		"actions:",
+		"workflow/action metadata",
+		"action_id: { type: string, example: assistant.chat }",
+		"availability_state: { type: string, enum: [available, setup_needed, blocked, unavailable] }",
 	} {
 		if !strings.Contains(entrySchema, token) {
 			t.Fatalf("openapi ProviderRegistryEntry schema missing %q:\n%s", token, entrySchema)
