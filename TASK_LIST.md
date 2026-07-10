@@ -1,69 +1,72 @@
 # TASK_LIST
 
-Last synced from GitHub issues: 2026-04-25 22:55 +10:00
+Last reconciled from live GitHub/OpenSpec state: 2026-07-11 05:55 +10:00
+
+This file is the Cabinet 0.1 private beta execution summary. Historical issue
+snapshots from April 2026 have been retired from this top-level queue; use
+GitHub issues and OpenSpec change/task files for detailed execution history.
 
 ## Status Legend
-- `OPEN`: issue is open and not yet complete.
-- `DONE`: issue is closed and merged or otherwise resolved.
-- Work is executed one focused issue branch at a time, validated, merged into `develop`, then the demo is rebuilt and restarted.
 
-## Current Execution Queue
-- [ ] #644 [OPEN] Collections: remove duplicate Selected collection section
-- [ ] #645 [OPEN] Collections: convert Collection members section into items table
-- [ ] #637 [OPEN] Epic: Redesign Inventory as a table-first collection browser
-- [x] #643 [DONE] Collections: implement two-table selected collection layout
-- [x] #665 [DONE] Workspace collection deletes should remove stale options from compact filters
-- [x] #640 [DONE] Move Inventory photos into item-scoped modal with row quick action
-- [x] #641 [DONE] Move Inventory barcodes into item-scoped modal with row quick action
-- [x] #642 [DONE] Add responsive Cypress coverage for Inventory table-first redesign
-- [x] #646 [DONE] Inventory: add assign-to-collection action on each item row
-- [x] #636 [DONE] Make inventory collection-browser context menu actions visibly effective
-- [x] #635 [DONE] Implement real mobile camera photo capture for inventory items
-- [x] #634 [DONE] Unify page header actions and reclaim workspace height
+- `OPEN`: issue is open and needs focused implementation, validation, release evidence, or governance work.
+- `DONE`: issue is closed with linked evidence on GitHub.
+- `POST-BETA`: issue/epic is intentionally outside Cabinet 0.1 private beta unless a release test exposes it as a direct blocker.
+- Work is executed one focused issue branch at a time, validated, merged into `develop`, then demo/release lanes are rebuilt from `develop`.
 
-## CI, Runtime, And Repository Hygiene
-- [ ] #553 [OPEN] Consolidate duplicated main gate GitHub Actions workflows
-- [ ] #555 [OPEN] Stabilize main gate CI failures on release PR
-- [ ] #551 [OPEN] chore(repo): archive stale non-archive branches
-- [ ] #547 [OPEN] [Blocker] UI journeys regression runner path is stale
-- [ ] #546 [OPEN] [Blocker] Runtime pre-canceled Run fast-exit test flake
-- [ ] #545 [OPEN] [Blocker] Onboarding sample-data category coverage regression
-- [ ] #544 [OPEN] [Blocker] Commerce lifecycle tests red in app suite
-- [ ] #543 [OPEN] [Blocker] Chat thread schema mismatch: chat_threads missing metadata_json
-- [ ] #542 [OPEN] [Blocker] OpenAPI gate fails: missing required 4XX response contracts
-- [ ] #521 [OPEN] chore(ui): reduce lint and format baseline blocking focused PR validation
-- [ ] #518 [OPEN] bug(runtime): parallel app startup hits migration timeouts and canceled runs miss fast-exit path
-- [ ] #480 [OPEN] test(runtime): /api/test/reset fails on shared managed DB when schema table is missing
+## Cabinet 0.1 Private Beta Critical Path
 
-## Product Follow-Up
-- [ ] #537 [OPEN] feat(collections): convert collections screen into shared-table management surface
-- [ ] #526 [OPEN] feat(shell): set document title to Cabinet - <Page Title>
-- [ ] #513 [OPEN] bug(inbox): inbox workspace empty state exposes no actionable affordances
-- [ ] #487 [OPEN] bug(inbox): top-level /inbox route resolves to 404
-- [ ] #484 [OPEN] bug(collections): page shows duplicate create affordances in same view
-- [ ] #479 [OPEN] OpenAI integration: browser-login/provider-runtime follow-up beyond stub UX
+Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 
-## Integrations Follow-Up
-- [ ] #512 [OPEN] bug(integrations): OpenAI validate reports success even when token is missing
-- [ ] #511 [OPEN] bug(integrations): empty-token save validation is not clearly bound to the token field
-- [ ] #510 [OPEN] bug(integrations): needs-config OpenAI connect dialog lacks a clear labeled save-first setup flow
-- [ ] #509 [OPEN] bug(integrations): needs-config connect dialog exposes Validate and Sync before setup is completed
-- [ ] #508 [OPEN] bug(integrations): provider dialog exposes inert Sync action without visible result
-- [ ] #507 [OPEN] bug(integrations): validate success feedback does not update visible provider health state
-- [ ] #506 [OPEN] bug(integrations): provider edit dialog inputs have no visible or programmatic labels
-- [ ] #505 [OPEN] bug(integrations): route leaks raw integrations.title and integrations.description keys
+1. [x] #1865 [DONE] Add develop CI and release-candidate quality gates.
+   - Evidence: PR #1879 merged to `develop`; #1864 contains Develop Quality Gate and demo2 runtime evidence.
+2. [x] #1866 [DONE] Replace simulated local sign-in and passkey flows.
+3. [ ] #1867 [OPEN] Validate database upgrade, backup, export and restore round trip.
+4. [x] #1870 [DONE] Align Free, Plus and Pro entitlements and user-visible plan state.
+5. [ ] #1871 [OPEN] Prove one live Market Watch provider and fail closed for others.
+6. [ ] #1868 [OPEN] Package versioned Windows beta artefact and GitHub release.
+7. [ ] #1869 [OPEN] Run packaged core-workflow release acceptance suite.
+8. [ ] #1872 [OPEN] Reconcile OpenSpec active changes and stale release tracking.
 
-## Exploration And Traceability
-- [ ] #502 [OPEN] [Exploration] Traceability / backlog closure pass
-- [ ] #501 [OPEN] [Exploration] Cross-cutting UX audit and traceability pass
-- [ ] #500 [OPEN] [Exploration] Runtime / operational states audit and traceability pass
-- [ ] #499 [OPEN] [Exploration] Settings / preferences audit and traceability pass
-- [ ] #498 [OPEN] [Exploration] Inbox / communications audit and traceability pass
-- [ ] #497 [OPEN] [Exploration] Assistant / AI surfaces audit and traceability pass
-- [ ] #496 [OPEN] [Exploration] Integrations audit and traceability pass
-- [ ] #495 [OPEN] [Exploration] Tasks / operational surfaces audit and traceability pass
-- [ ] #493 [OPEN] [Exploration] Collections audit and traceability pass
-- [ ] #492 [OPEN] [Exploration] Item detail / workflow audit and traceability pass
-- [ ] #489 [OPEN] [Exploration] App shell / navigation audit and traceability pass
-- [ ] #488 [OPEN] [Exploration] Public / entry audit and traceability pass
-- [ ] #189 [OPEN] Cabinet Continuous Implementation Program - Wave Execution
+## Current Release Governance Work
+
+- [ ] #1872: reconcile every unchecked OpenSpec task into one of:
+  - completed and archive-ready with validation evidence
+  - linked to an open focused issue
+  - explicitly deferred/post-beta with reason
+- [ ] Correct stale labels/status on release issues after each live issue is verified.
+- [ ] Keep #1864 as the single private beta release summary and evidence index.
+- [ ] Do not merge `develop` into `main` until Max explicitly approves the tested release candidate.
+
+## Active OpenSpec Change Inventory
+
+Captured with `openspec list` on 2026-07-11:
+
+- `ingest-bonza-product-urls`: 21/24 tasks complete. Remainder is live/manual provider verification, optional HTML fallback, and final #811 delivery cleanup.
+- `stabilize-startup-nfr-gates`: 7/9 tasks complete. Remainder is blocked validation-chain rerun and issue/PR closure evidence.
+- `stabilize-parity-components-route-contracts`: 7/8 tasks complete. Remainder is feeding targeted validation back into the broader regression gate.
+- `stabilize-inventory-a11y-keyboard-selectors`: 4/5 tasks complete. Remainder is feeding targeted validation back into the broader regression gate.
+- `finalize-onboarding-and-collector-ux`: 0/14 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
+- `complete-screen-api-parity-audits`: 0/15 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
+- `stabilize-inventory-runtime-regressions`: 0/11 tasks complete. Triage against current release smoke evidence before treating old startup/runtime subtasks as active beta blockers.
+- `define-universal-agent-channel-contracts`: complete, archive candidate after confirming linked Agent issues remain post-beta.
+- `define-agent-skill-registry`: complete, archive candidate after confirming linked skill registry issues remain post-beta.
+- `inventory-item-type-condition-scales`: complete, archive candidate after final validation evidence is linked.
+- `harden-runtime-single-endpoint-startup`: complete, archive candidate after final validation evidence is linked.
+
+## Post-Beta Scope Guardrails
+
+The following broad work remains visible but is outside Cabinet 0.1 private beta unless release testing proves a direct blocker:
+
+- Metadata Studio breadth and Homebox/iCollect parity.
+- Public identity, signed receipts, signed feedback, reputation, Git/Radicle/P2P ledgers, and community governance.
+- Telegram as a general Agent channel and universal Agent entry points across every surface.
+- eBay seller/listing/fulfilment command-centre scope.
+- Broad retailer/provider expansion beyond the one proven beta Market Watch provider path.
+- Store/venue nodes, event infrastructure, escrow, or payment processing.
+
+## Validation Expectations
+
+- OpenSpec changes: `openspec validate --all --strict --no-interactive`
+- Backend/runtime changes: targeted `go test` package(s), then broader gates when merging.
+- UI changes: targeted Cypress spec(s) through `cypress.ps1`, with live persistence/state verification for mutating flows.
+- Release candidate: exact commit gate, packaged Windows acceptance evidence, checksums, release notes, and demo/runtime evidence from `develop`.
