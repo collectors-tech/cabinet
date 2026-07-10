@@ -3226,6 +3226,15 @@ func New(cfg config.Config) (*App, error) {
 			req.FallbackAssetURLs,
 		)
 		if err != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-"+strings.ReplaceAll(providerDomain, ".", "-"), providerDomain, "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_DISCOVER_DOOFINDER_CONFIG",
+				"health_impact":       "updates_provider_health",
+				"provider_domain":     providerDomain,
+				"asset_url":           discoveryAssetURL,
+			}); inboxErr != nil && logSvc != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": providerDomain, "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_discover_doofinder_config"}`, http.StatusBadRequest)
 			return
 		}
@@ -3263,6 +3272,16 @@ func New(cfg config.Config) (*App, error) {
 			providerDomain,
 		)
 		if runErr != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-"+strings.ReplaceAll(providerDomain, ".", "-"), providerDomain, "market_watch.run", "check_provider_health_and_retry", runErr.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_DOOFINDER_PROVIDER",
+				"health_impact":       "updates_provider_health",
+				"provider_domain":     providerDomain,
+				"asset_url":           discoveryAssetURL,
+				"search_url":          searchURL,
+			}); inboxErr != nil && logSvc != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": providerDomain, "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_run_doofinder_provider"}`, http.StatusBadRequest)
 			return
 		}
