@@ -23,3 +23,10 @@ Cabinet SHALL enforce the canonical Free/Plus/Pro beta entitlement matrix and no
 - **AND** Plus SHALL unlock beta operational automation without Assistant access
 - **AND** Pro SHALL unlock Plus capabilities plus Assistant/AI capabilities
 
+#### Scenario: Downgrade and expiry preserve owned data access
+- **GIVEN** a user owns Cabinet data created before downgrade or license expiry
+- **WHEN** the account resolves to Free because billing was downgraded or the signed license expired
+- **THEN** Cabinet SHALL keep existing owned data readable
+- **AND** Cabinet SHALL keep JSON and item CSV data export available
+- **AND** Cabinet SHALL NOT delete or hide owned records because of the entitlement transition
+
