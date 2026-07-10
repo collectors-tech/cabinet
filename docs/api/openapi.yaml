@@ -3737,7 +3737,7 @@ components:
         last_seen: { type: string }
         status: { type: string }
         source: { type: string, enum: [ebay] }
-        stock_state: { type: string, description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown. }
+        stock_state: { type: string, description: "Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown." }
         stock_count: { type: integer }
         listing_created_at: { type: string, description: Normalized eBay Browse itemCreationDate timestamp when provided. }
         listing_updated_at: { type: string, description: Normalized eBay Browse itemEndDate timestamp when provided. }
@@ -4033,7 +4033,7 @@ components:
         first_seen: { type: string }
         last_seen: { type: string }
         status: { type: string }
-        stock_state: { type: string, description: Normalized provider stock state such as in_stock, low_stock, out_of_stock, or unknown. }
+        stock_state: { type: string, description: "Normalized provider stock state such as in_stock, low_stock, out_of_stock, or unknown." }
         stock_count: { type: integer, description: Normalized provider stock quantity when available; -1 indicates unknown. }
         listing_created_at: { type: string, description: Normalized source listing creation timestamp when provided by the provider. }
         listing_updated_at: { type: string, description: Normalized source listing update or end timestamp when provided by the provider. }

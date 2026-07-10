@@ -264,6 +264,63 @@ func TestIntegrationProviderAuthoringGuideCoversIssue1465WorkflowActions(t *test
 	}
 }
 
+func TestIntegrationRegistryOpenSpecCoversIssue1464ConfigSchemas(t *testing.T) {
+	t.Parallel()
+
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
+	if err != nil {
+		t.Fatalf("read provider registry spec: %v", err)
+	}
+	registry := string(registryBytes)
+	for _, token := range []string{
+		"INTEGRATION-065",
+		"Provider registry MUST publish typed setup schema definitions",
+		"`text`, `secret`, `url`, `number`, `select`, `multiselect`, `checkbox`, `textarea`, `file`, `oauth-connect`, and `browser-auth-status`",
+		"API key provider",
+		"Browser Auth provider",
+		"No-auth/static source provider",
+		"write-only fields MUST expose only field metadata, secret key alias, and credential-presence state",
+	} {
+		if !strings.Contains(registry, token) {
+			t.Fatalf("provider registry spec missing #1464 config-schema token: %s", token)
+		}
+	}
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+	for _, token := range []string{
+		"integrationConfigSchemaDefinitions",
+		"`validate_action`",
+		"`profile_secrets`",
+		"`browser-auth-status`",
+		"TestProviderRegistryProjectsConfigSchemaShapes",
+	} {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1464 config-schema token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"`INTEGRATION-065`",
+		"#1464",
+		"schema-driven integration config forms",
+		"TestProviderRegistryProjectsConfigSchemaShapes",
+		"TestIntegrationRegistryOpenSpecCoversIssue1464ConfigSchemas",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1464 config-schema token: %s", token)
+		}
+	}
+}
+
 func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing.T) {
 	t.Parallel()
 

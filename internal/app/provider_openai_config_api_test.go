@@ -232,7 +232,7 @@ func TestOpenAIRegistryExposesSchemaDrivenSetupFields(t *testing.T) {
 		{key: "openai.active_auth_method", fieldType: "select", persistence: "profile_settings", required: true},
 		{key: "assistant_default_model", fieldType: "select", persistence: "profile_settings", required: true},
 		{key: "openai_api_key", fieldType: "secret", persistence: "profile_secrets", writeOnly: true},
-		{key: "openai.browser_auth_artifact_present", fieldType: "proof_state", persistence: "profile_settings"},
+		{key: "openai.browser_auth_artifact_present", fieldType: "browser-auth-status", persistence: "profile_settings"},
 	} {
 		field := findSetupSchemaField(fields, want.key)
 		if field == nil {

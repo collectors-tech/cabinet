@@ -88,7 +88,11 @@ describe("ui-login-session", () => {
     cy.wait("@setActiveProfile");
     cy.get('[data-testid="active-profile-name"]').should("contain", "Perf S2");
 
-    cy.contains("a", "Integrations").click();
+    cy.get('[data-testid="sidebar-nav-link-integrations"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .and("have.attr", "aria-label", "Integrations")
+      .click();
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/integrations\/?$/);
     cy.wait("@registry");
     cy.wait("@profile2Settings");

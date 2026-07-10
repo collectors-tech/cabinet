@@ -153,6 +153,32 @@ Cabinet SHALL maintain typed workflow/action registry definitions tied to provid
 - **AND** mutation or destructive workflows MUST advertise explicit confirmation requirements
 - **AND** workflow failure and required-action outcomes MUST advertise Inbox event metadata so downstream consumers can route errors, warnings, required user action, and result-inbox updates consistently
 
+### Requirement INTEGRATION-065: Provider registry MUST publish typed setup schema definitions
+Cabinet SHALL maintain typed setup schema definitions tied to provider manifest `config_schema_ref` values so Add Integration and provider setup consumers can render configuration fields without hardcoded provider-specific forms.
+
+#### Scenario: Setup schemas expose renderer-safe field metadata
+- **GIVEN** a provider manifest declares a `config_schema_ref`
+- **WHEN** `GET /api/providers/registry` is requested
+- **THEN** the provider entry MUST expose `setup_schema` with:
+  - stable `schema_ref`
+  - `persistence_scope`
+  - `submit_target`
+  - optional `secret_target`
+  - optional `validate_action`
+  - ordered field metadata
+- **AND** setup schema fields MUST support `text`, `secret`, `url`, `number`, `select`, `multiselect`, `checkbox`, `textarea`, `file`, `oauth-connect`, and `browser-auth-status`
+- **AND** each field MUST expose `key`, `label`, `type`, `required`, `write_only`, and `persistence`
+- **AND** fields MAY expose placeholder, helper text, default value, options, validation rules, documentation URL, read-only state, and conditional rendering metadata
+- **AND** write-only fields MUST expose only field metadata, secret key alias, and credential-presence state, never stored secret values
+
+#### Scenario: Required provider shapes are represented
+- **GIVEN** Add Integration renders schema-driven setup for common Cabinet provider shapes
+- **WHEN** provider registry payloads are loaded
+- **THEN** an API key provider MUST expose a secret setup field persisted through `profile_secrets`
+- **AND** a Browser Auth provider MUST expose a `browser-auth-status` field that stays read-only until verified proof exists
+- **AND** a No-auth/static source provider MUST expose non-secret setup fields and a validate/detect action without requiring a secret target
+- **AND** these shapes MUST be covered by focused registry contract tests before UI consumers claim schema-driven setup support
+
 ### Requirement INTEGRATION-029: Integration instances MUST persist separately from provider definitions
 Cabinet SHALL persist per-profile integration instances and status independently from immutable provider manifests.
 

@@ -2471,6 +2471,41 @@ describe('ui-screen-integrations', () => {
             has_token: false,
             setup_instructions:
               'Use public BigCommerce storefront data before adding a token for deeper stock fields.',
+            setup_schema: {
+              schema_ref: 'integrations/au-webshop/setup',
+              persistence_scope: 'active_profile',
+              submit_target: '/api/profiles/:profileId/settings',
+              validate_action: 'provider.family_detect',
+              fields: [
+                {
+                  key: 'base_domain',
+                  label: 'Store domain',
+                  type: 'text',
+                  required: true,
+                  read_only: true,
+                  persistence: 'provider_manifest',
+                },
+                {
+                  key: 'provider_family',
+                  label: 'Provider family',
+                  type: 'select',
+                  required: false,
+                  persistence: 'profile_settings',
+                  options: [
+                    { value: 'auto', label: 'Auto-detect' },
+                    { value: 'bigcommerce', label: 'BigCommerce' },
+                  ],
+                },
+                {
+                  key: 'crawl_interval_minutes',
+                  label: 'Polling interval',
+                  type: 'number',
+                  required: false,
+                  persistence: 'profile_settings',
+                  default: 1440,
+                },
+              ],
+            },
             capabilities: {
               search: true,
               stock_observation: true,
@@ -2519,6 +2554,16 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-detail-api-support-profile"]')
       .should('be.visible')
       .and('contain.text', 'Support Profile: bigcommerce_storefront_v1')
+    cy.get('[data-testid="integration-schema-form"]')
+      .should('be.visible')
+      .and('contain.text', 'Store domain')
+      .and('contain.text', 'Provider family')
+      .and('contain.text', 'Polling interval')
+    cy.get('[data-testid="provider-schema-field-base_domain"]')
+      .should('have.value', 'voglers.com.au')
+      .and('have.attr', 'readonly')
+    cy.get('[data-testid="provider-schema-field-crawl_interval_minutes"]')
+      .should('have.value', '1440')
   })
 
   it('UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-10: cards show provider API family badges from registry mapping', () => {

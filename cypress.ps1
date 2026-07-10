@@ -247,6 +247,23 @@ function Test-CypressDependencyReady([string]$uiRoot) {
   return (Test-Path $cypressPackage) -and ((Test-Path $cypressCmd) -or (Test-Path $cypressBin))
 }
 
+function Start-ProcessWithEnvironment([string]$filePath, [string[]]$argumentList, [string]$workingDirectory, [hashtable]$environment) {
+  $originalValues = @{}
+  foreach ($key in $environment.Keys) {
+    $originalValues[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+    [Environment]::SetEnvironmentVariable($key, [string]$environment[$key], "Process")
+  }
+
+  try {
+    return Start-Process -FilePath $filePath -ArgumentList $argumentList -WorkingDirectory $workingDirectory -PassThru
+  }
+  finally {
+    foreach ($key in $environment.Keys) {
+      [Environment]::SetEnvironmentVariable($key, $originalValues[$key], "Process")
+    }
+  }
+}
+
 function Get-ReusableNodeModulesPath([string]$repoRoot, [string]$uiRoot) {
   $candidates = @()
 
@@ -595,14 +612,14 @@ try {
           CABINET_ALLOW_INSECURE_SECRET_FALLBACK = "1"
           CABINET_FALLBACK_SECRET_PEPPER = "cypress-e2e-secret-fallback"
         }
-        $serverProc = Start-Process -FilePath $resolvedRuntimeExecutablePath -ArgumentList @(
+        $serverProc = Start-ProcessWithEnvironment -FilePath $resolvedRuntimeExecutablePath -ArgumentList @(
           "--no-open-browser",
           "--port", "$runtimePort",
           "--data-dir", "$e2eDataDir",
           "--profile", "$e2eProfile",
           "--instance-name", "$e2eInstanceName",
           "--allow-parallel"
-        ) -WorkingDirectory $repoRoot -Environment $serverEnv -PassThru
+        ) -WorkingDirectory $repoRoot -Environment $serverEnv
       } else {
         Write-Step "Runtime executable resolved: go run ./cmd/cabinet (project-local bin executable missing)"
         $serverEnv = @{
@@ -610,7 +627,7 @@ try {
           CABINET_ALLOW_INSECURE_SECRET_FALLBACK = "1"
           CABINET_FALLBACK_SECRET_PEPPER = "cypress-e2e-secret-fallback"
         }
-        $serverProc = Start-Process -FilePath "go" -ArgumentList @(
+        $serverProc = Start-ProcessWithEnvironment -FilePath "go" -ArgumentList @(
           "run",
           "./cmd/cabinet",
           "--no-open-browser",
@@ -619,7 +636,7 @@ try {
           "--profile", "$e2eProfile",
           "--instance-name", "$e2eInstanceName",
           "--allow-parallel"
-        ) -WorkingDirectory $repoRoot -Environment $serverEnv -PassThru
+        ) -WorkingDirectory $repoRoot -Environment $serverEnv
       }
       $startedServer = $true
 
