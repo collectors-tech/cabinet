@@ -131,9 +131,7 @@ Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: 
       }
     },
   });
-  cy.get('input[name="email"]').clear().type("e2e-login-session@example.com");
-  cy.get('input[name="password"]').clear().type("password123");
-  cy.contains("button", "Sign in").click();
+  cy.contains("button", "Open local workspace").click();
   cy.location("pathname", { timeout: 15000 }).should("match", targetPathRegex);
   cy.get("body").then(($body) => {
     const preferredLabel = `Use ${profileName}`;

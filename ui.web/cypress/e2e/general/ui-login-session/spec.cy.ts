@@ -13,31 +13,28 @@ describe("ui-login-session", () => {
     cy.location("search").should("include", "redirect=");
     cy.location("search").should("include", "%2Finventory%2F");
 
-    cy.get('input[name="email"]').type("e2e-login-session@example.com");
-    cy.get('input[name="password"]').type("password123");
-    cy.contains("button", "Sign in").click();
+    cy.contains("button", "Open local workspace").click();
 
     cy.location("pathname", { timeout: 15000 }).should(
       "match",
       /^\/inventory\/?$/
     );
+    cy.getCookie("thisisjustarandomstring")
+      .its("value")
+      .should("not.contain", "mock-access-token")
+      .and("not.contain", "mock-passkey-access-token");
   });
 
-  it("UI-LOGIN-SESSION-002 keeps inline validation errors and allows retry without refresh", () => {
+  it("UI-LOGIN-SESSION-002 keeps local-device auth boundary truthful and avoids simulated password success", () => {
     cy.visit("/sign-in");
-    cy.get('input[name="email"]').type("invalid-email");
-    cy.get('input[name="password"]').type("short");
-    cy.contains("button", "Sign in").click();
 
     cy.location("pathname").should("eq", "/sign-in");
-    cy.contains(/invalid email|please enter your email/i).should("be.visible");
-    cy.contains("Password must be at least 7 characters long").should(
-      "be.visible"
-    );
+    cy.get('[data-testid="local-device-auth-boundary"]').should("be.visible");
+    cy.contains(/does not verify a password/i).should("be.visible");
+    cy.get('input[name="password"]').should("not.exist");
+    cy.contains("button", "Sign in").should("not.exist");
 
-    cy.get('input[name="email"]').clear().type("e2e-login-session@example.com");
-    cy.get('input[name="password"]').clear().type("password123");
-    cy.contains("button", "Sign in").click();
+    cy.contains("button", "Open local workspace").click();
 
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
   });
@@ -76,9 +73,7 @@ describe("ui-login-session", () => {
     }).as("profile2Settings");
 
     cy.visit("/sign-in?redirect=%2Fdashboard");
-    cy.get('input[name="email"]').type("e2e-login-session@example.com");
-    cy.get('input[name="password"]').type("password123");
-    cy.contains("button", "Sign in").click();
+    cy.contains("button", "Open local workspace").click();
 
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
     cy.wait("@profiles");
@@ -100,9 +95,7 @@ describe("ui-login-session", () => {
 
   it("UI-LOGIN-SESSION-004 provisions active profile on first-run and avoids active_profile_404 across core routes", () => {
     cy.visit("/sign-in?redirect=%2Fsettings%2Fdisplay");
-    cy.get('input[name="email"]').type("e2e-first-run-profile@example.com");
-    cy.get('input[name="password"]').type("password123");
-    cy.contains("button", "Sign in").click();
+    cy.contains("button", "Open local workspace").click();
 
     cy.location("pathname", { timeout: 15000 }).should(
       "match",
@@ -125,9 +118,7 @@ describe("ui-login-session", () => {
     cy.location("pathname").should("eq", "/sign-in");
     cy.location("search").should("eq", "");
 
-    cy.get('input[name="email"]').type("e2e-clean-root-entry@example.com");
-    cy.get('input[name="password"]').type("password123");
-    cy.contains("button", "Sign in").click();
+    cy.contains("button", "Open local workspace").click();
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
 
     cy.e2eEnsureSignedOut();
@@ -191,7 +182,7 @@ describe("ui-login-session", () => {
       "match",
       /^\/inventory\/?$/
     );
-    cy.get('input[name="email"]').should("not.exist");
+    cy.contains("button", "Open local workspace").should("not.exist");
     cy.contains("button", "Sign in").should("not.exist");
     cy.contains(/inventory/i).should("be.visible");
   });
@@ -202,9 +193,7 @@ describe("ui-login-session", () => {
     cy.location("search").should("include", "redirect=");
     cy.location("search").should("include", "%2Finventory%3Fview%3Dtable");
 
-    cy.get('input[name="email"]').type("e2e-login-query-guard@example.com");
-    cy.get('input[name="password"]').type("password123");
-    cy.contains("button", "Sign in").click();
+    cy.contains("button", "Open local workspace").click();
 
     cy.location("pathname", { timeout: 15000 }).should(
       "match",
@@ -218,9 +207,10 @@ describe("ui-login-session", () => {
 
     cy.contains("Sign in to unlock your Cabinet workspace.").should("not.exist");
     cy.get('[data-testid="sign-in-profile-guidance"]').should("not.exist");
-    cy.get('input[name="email"]').should("be.visible");
-    cy.get('input[name="password"]').should("be.visible");
-    cy.contains("button", "Sign in").should("be.visible");
+    cy.get('[data-testid="local-device-auth-boundary"]').should("be.visible");
+    cy.get('input[name="email"]').should("not.exist");
+    cy.get('input[name="password"]').should("not.exist");
+    cy.contains("button", "Open local workspace").should("be.visible");
     cy.contains("a", "Create account").should("have.attr", "href", "/sign-up");
     cy.contains("a", "Forgot password?").should(
       "have.attr",
