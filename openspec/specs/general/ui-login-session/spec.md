@@ -10,13 +10,15 @@ Cabinet SHALL redirect unauthenticated users to login and preserve intended dest
 - **WHEN** router resolves route guards
 - **THEN** UI MUST redirect to sign-in and preserve redirect target for successful session bootstrap
 
-### Requirement UI-LOGIN-SESSION-002: Login state SHALL support deterministic error and retry behavior
-Cabinet SHALL surface actionable auth failure states and allow retry without hard refresh.
+### Requirement UI-LOGIN-SESSION-002: Local beta session entry SHALL not simulate password or passkey authentication
+Cabinet SHALL make local-device mode explicit and SHALL NOT present local password/passkey controls as verified authentication when no real credential ceremony is active.
 
-#### Scenario: Invalid credential or auth bootstrap failure
-- **GIVEN** sign-in request fails due to invalid credential or auth bootstrap error
-- **WHEN** login form submits
-- **THEN** UI MUST display inline error guidance and keep form state available for retry
+#### Scenario: Local-device mode states security boundary
+- **GIVEN** setup is complete and local identity mode is active
+- **WHEN** the sign-in screen renders
+- **THEN** UI MUST expose local-device workspace entry
+- **AND** UI MUST state that it does not verify password, passkey, cloud account, or encrypted-at-rest lock protection
+- **AND** UI MUST NOT store or trust `mock-access-token` or `mock-passkey-access-token`
 
 ### Requirement UI-LOGIN-SESSION-003: Session entry SHALL support profile-aware activation
 Cabinet SHALL support selecting/activating profile context after successful authentication when multiple profiles exist.

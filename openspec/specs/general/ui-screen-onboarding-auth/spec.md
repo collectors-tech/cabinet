@@ -164,14 +164,15 @@ Sign-up SHALL expose visible return/legal links that support deterministic mouse
 - **AND** each action MUST reflect deterministic enabled/disabled state from provider configuration
 - **AND** focus/inspection MUST NOT navigate away from `/sign-in-2`
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCF: Sign-in-2 retained route SHALL preserve shared auth-surface parity with sign-in
-`/sign-in-2` SHALL remain an explicitly retained alternate auth route rather than an implicit dead-end or silent redirect to `/sign-in`. The shared auth surface on `/sign-in-2` SHALL preserve the same credential-entry, passkey, provider-state, and recovery-entry contract as `/sign-in`, while allowing route-specific layout and legal-copy differences.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCF: Sign-in-2 retained route SHALL preserve explicit auth-surface boundaries
+`/sign-in-2` SHALL remain an explicitly retained alternate auth route rather than an implicit dead-end or silent redirect to `/sign-in`. Local `/sign-in` SHALL present truthful local-device entry, while retained alternate/cloud auth surfaces SHALL keep provider-state and recovery-entry controls explicit instead of silently simulating credential or passkey success.
 
 #### Scenario: Sign-in and sign-in-2 shared auth parity
 - **GIVEN** runtime setup is complete and auth provider configuration resolves mixed enabled/disabled provider states
 - **WHEN** user visits `/sign-in` and `/sign-in-2`
-- **THEN** both routes MUST render the shared auth controls for email/password entry, `Sign in`, `Sign in with Passkey`, `Forgot password?`, configured providers, and placeholder GitHub/Facebook actions
-- **AND** shared provider enabled/disabled state MUST match across both routes
+- **THEN** `/sign-in` MUST expose local-device workspace entry with truthful security-boundary copy
+- **AND** no route MAY use fixed dummy passkey challenges or mock access tokens as a production sign-in success path
+- **AND** provider enabled/disabled state MUST remain deterministic on routes that render provider controls
 - **AND** `/sign-in-2` MUST remain independently addressable at `/sign-in-2` instead of silently redirecting to `/sign-in`
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-010D: Sign-up GitHub/Facebook actions SHALL be explicit and deterministic

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Loader2, LogIn } from 'lucide-react'
+import { Loader2, LogIn, MonitorCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   IconApple,
@@ -14,7 +14,7 @@ import {
 } from '@/assets/brand-icons'
 import { useAuthStore } from '@/stores/auth-store'
 import { recordNotificationHistory } from '@/lib/toast-history'
-import { sleep, cn } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -57,6 +57,8 @@ const providerIcons: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
   apple: IconApple,
   microsoft: IconMicrosoft,
 }
+
+const LOCAL_DEVICE_SESSION_TOKEN = 'cabinet-local-device-session-v1'
 
 function normalizePasskeyError(error: unknown) {
   const fallback = 'Passkey sign-in failed. Use password or provider sign-in.'
@@ -116,79 +118,56 @@ export function UserAuthForm({
     },
   })
 
-  function onSubmit(data: z.infer<typeof formSchema>) {
+  function openLocalWorkspace() {
     setIsLoading(true)
+    const localUser = {
+      accountNo: 'LOCAL001',
+      email: 'local-device@cabinet.local',
+      role: ['local-device'],
+      exp: Date.now() + 24 * 60 * 60 * 1000,
+    }
 
-    toast.promise(sleep(2000), {
-      loading: 'Signing in...',
+    auth.setUser(localUser)
+    auth.setAccessToken(LOCAL_DEVICE_SESSION_TOKEN)
+    const targetPath = redirectTo || '/dashboard'
+    navigate({ to: targetPath, replace: true })
+    setIsLoading(false)
+  }
+
+  function onSubmit(data: z.infer<typeof formSchema>) {
+    if (identityMode === 'local') {
+      openLocalWorkspace()
+      return
+    }
+
+    setIsLoading(true)
+    const message =
+      'Cloud sign-in is unavailable until Cabinet can verify the configured identity provider.'
+    toast.error(message, {
       ...authToastHistory(
-        'auth-sign-in',
-        'Sign-in feedback',
-        `Sign-in feedback for ${data.email}`
+        'auth-sign-in-cloud-unavailable',
+        'Cloud sign-in unavailable',
+        `Cloud sign-in was blocked for ${data.email}`
       ),
-      success: () => {
-        setIsLoading(false)
-
-        // Mock successful authentication with expiry computed at success time
-        const mockUser = {
-          accountNo: 'ACC001',
-          email: data.email,
-          role: ['user'],
-          exp: Date.now() + 24 * 60 * 60 * 1000, // 24 hours from now
-        }
-
-        // Set user and access token
-        auth.setUser(mockUser)
-        auth.setAccessToken('mock-access-token')
-
-        // Redirect to the stored location or default to canonical dashboard
-        const targetPath = redirectTo || '/dashboard'
-        navigate({ to: targetPath, replace: true })
-
-        return `Welcome back, ${data.email}!`
-      },
-      error: 'Error',
     })
+    recordNotificationHistory({
+      id: 'auth-sign-in-cloud-unavailable',
+      level: 'warning',
+      title: 'Cloud sign-in unavailable',
+      summary: message,
+      source_label: 'Auth sign-in',
+      category: 'auth',
+    })
+    setIsLoading(false)
   }
 
   async function signInWithPasskey() {
     setPasskeyError(null)
     setPasskeyLoading(true)
     try {
-      const maybePublicKeyCredential = (
-        window as Window & { PublicKeyCredential?: unknown }
-      ).PublicKeyCredential
-      if (!maybePublicKeyCredential || !navigator.credentials?.get) {
-        throw new Error(
-          'Passkey sign-in is unavailable on this device. Use password or provider sign-in.'
-        )
-      }
-
-      const credential = await navigator.credentials.get({
-        publicKey: {
-          challenge: new Uint8Array([1, 2, 3, 4]),
-          timeout: 60000,
-          userVerification: 'preferred',
-        } as PublicKeyCredentialRequestOptions,
-      })
-
-      if (!credential) {
-        throw new Error(
-          'Passkey sign-in failed. Use password or provider sign-in.'
-        )
-      }
-
-      const mockUser = {
-        accountNo: 'ACC001',
-        email: 'passkey@cabinet.local',
-        role: ['user'],
-        exp: Date.now() + 24 * 60 * 60 * 1000,
-      }
-
-      auth.setUser(mockUser)
-      auth.setAccessToken('mock-passkey-access-token')
-      const targetPath = redirectTo || '/dashboard'
-      navigate({ to: targetPath, replace: true })
+      throw new Error(
+        'Passkey sign-in is not enabled for the local beta. Use local-device mode or a configured cloud identity provider.'
+      )
     } catch (error) {
       const message = normalizePasskeyError(error)
       setPasskeyError(message)
@@ -237,6 +216,62 @@ export function UserAuthForm({
       cancelled = true
     }
   }, [])
+
+  if (identityMode === 'local') {
+    return (
+      <div className={cn('grid gap-3', className)}>
+        <div
+          className='rounded-md border bg-muted/40 p-3 text-sm'
+          data-testid='local-device-auth-boundary'
+        >
+          <p className='font-medium'>Local device mode</p>
+          <p className='text-muted-foreground'>
+            Opens this device's local Cabinet workspace. This does not verify a
+            password, passkey, cloud account, or encrypted-at-rest lock.
+          </p>
+        </div>
+        <Button
+          className='mt-2'
+          type='button'
+          disabled={isLoading}
+          data-testid='open-local-workspace'
+          onClick={openLocalWorkspace}
+        >
+          {isLoading ? <Loader2 className='animate-spin' /> : <MonitorCheck />}
+          Open local workspace
+        </Button>
+        <Button
+          className='mt-1'
+          variant='outline'
+          type='button'
+          data-testid='passkey-signin'
+          disabled={passkeyLoading}
+          onClick={() => void signInWithPasskey()}
+        >
+          {passkeyLoading ? <Loader2 className='animate-spin' /> : null}
+          Passkey unavailable
+        </Button>
+        {passkeyError ? (
+          <p className='text-sm text-destructive' data-testid='passkey-error'>
+            {passkeyError}
+          </p>
+        ) : null}
+        <Link
+          to='/forgot-password'
+          data-testid='sign-in-forgot-password-link'
+          className='text-sm font-medium text-muted-foreground underline-offset-4 hover:underline'
+        >
+          Forgot password?
+        </Link>
+        <p
+          className='text-xs text-muted-foreground'
+          data-testid='identity-mode-indicator'
+        >
+          Identity mode: local-device
+        </p>
+      </div>
+    )
+  }
 
   return (
     <Form {...form}>

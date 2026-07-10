@@ -3,6 +3,10 @@ import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
 
 const ACCESS_TOKEN = 'thisisjustarandomstring'
 const AUTH_USER = 'cabinet_auth_user'
+const REJECTED_LEGACY_TOKENS = new Set([
+  'mock-access-token',
+  'mock-passkey-access-token',
+])
 
 interface AuthUser {
   accountNo: string
@@ -33,6 +37,11 @@ export const useAuthStore = create<AuthState>()((set) => {
       initToken = JSON.parse(cookieState) as string
     } catch {
       initToken = cookieState
+    }
+    if (REJECTED_LEGACY_TOKENS.has(initToken)) {
+      removeCookie(ACCESS_TOKEN)
+      removeCookie(AUTH_USER)
+      initToken = ''
     }
   }
 

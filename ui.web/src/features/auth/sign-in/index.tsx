@@ -165,7 +165,7 @@ export function SignIn() {
 
   function authReadinessLabel() {
     if (setupForm.authMode === 'local') {
-      return 'Ready: Local auth'
+      return 'Ready: local-device mode; no password, passkey, cloud account, or encrypted-at-rest lock is verified.'
     }
     return 'Built-in Clerk key configured and not editable'
   }
@@ -480,28 +480,11 @@ export function SignIn() {
                   className='rounded-md border bg-muted/40 p-3 text-sm'
                   data-testid='setup-complete-local-credentials'
                 >
-                  <p className='font-medium'>Local login credentials</p>
-                  <p className='text-muted-foreground'>
-                    Write these down before continuing.
-                  </p>
-                  <p>
-                    Username:{' '}
-                    <span
-                      className='font-medium'
-                      data-testid='setup-complete-local-username'
-                    >
-                      {setupCompleteState.local_login_username ??
-                        'admin@cabinet.local'}
-                    </span>
-                  </p>
-                  <p>
-                    Password:{' '}
-                    <span
-                      className='font-medium'
-                      data-testid='setup-complete-local-password'
-                    >
-                      {setupCompleteState.local_login_password ?? 'password123'}
-                    </span>
+                <p className='font-medium'>Local device mode</p>
+                <p className='text-muted-foreground'>
+                    Opens this device's local Cabinet workspace without
+                    password, passkey, cloud account, or encrypted-at-rest lock
+                    verification.
                   </p>
                 </div>
               ) : null}
