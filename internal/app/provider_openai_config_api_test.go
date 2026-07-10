@@ -193,6 +193,66 @@ func TestOpenAIRegistryProjectsAssistantMigrationContract(t *testing.T) {
 	}
 }
 
+func TestOpenAIRegistryExposesSchemaDrivenSetupFields(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	openai := findRegistryProvider(payload.Providers, "openai")
+	if openai == nil {
+		t.Fatalf("expected openai provider in registry payload: %+v", payload.Providers)
+	}
+	schema, ok := openai["setup_schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected OpenAI setup_schema map, got %#v", openai["setup_schema"])
+	}
+	if schema["schema_ref"] != "integrations/openai/auth" || schema["persistence_scope"] != "active_profile" {
+		t.Fatalf("OpenAI setup schema identity drifted: %+v", schema)
+	}
+	fields, ok := schema["fields"].([]any)
+	if !ok {
+		t.Fatalf("expected OpenAI setup schema fields list, got %#v", schema["fields"])
+	}
+	for _, want := range []struct {
+		key         string
+		fieldType   string
+		persistence string
+		writeOnly   bool
+		required    bool
+	}{
+		{key: "openai.active_auth_method", fieldType: "select", persistence: "profile_settings", required: true},
+		{key: "assistant_default_model", fieldType: "select", persistence: "profile_settings", required: true},
+		{key: "openai_api_key", fieldType: "secret", persistence: "profile_secrets", writeOnly: true},
+		{key: "openai.browser_auth_artifact_present", fieldType: "proof_state", persistence: "profile_settings"},
+	} {
+		field := findSetupSchemaField(fields, want.key)
+		if field == nil {
+			t.Fatalf("OpenAI setup_schema missing field %q in %+v", want.key, fields)
+		}
+		if field["type"] != want.fieldType || field["persistence"] != want.persistence {
+			t.Fatalf("OpenAI setup field %q metadata drifted: %+v", want.key, field)
+		}
+		if got, _ := field["write_only"].(bool); got != want.writeOnly {
+			t.Fatalf("OpenAI setup field %q write_only got %v want %v: %+v", want.key, got, want.writeOnly, field)
+		}
+		if got, _ := field["required"].(bool); got != want.required {
+			t.Fatalf("OpenAI setup field %q required got %v want %v: %+v", want.key, got, want.required, field)
+		}
+	}
+	if strings.Contains(registry.Body.String(), "sk-") {
+		t.Fatalf("OpenAI setup_schema must not expose API-key values: %s", registry.Body.String())
+	}
+}
+
 func TestAssistantPlaceholderProvidersAreDisabledRegistryEntries(t *testing.T) {
 	t.Parallel()
 
@@ -884,6 +944,19 @@ func findRegistryAction(actions []any, id string) map[string]any {
 		}
 		if fmt.Sprintf("%v", action["action_id"]) == id {
 			return action
+		}
+	}
+	return nil
+}
+
+func findSetupSchemaField(fields []any, key string) map[string]any {
+	for _, raw := range fields {
+		field, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if fmt.Sprintf("%v", field["key"]) == key {
+			return field
 		}
 	}
 	return nil

@@ -17,6 +17,7 @@ Cabinet MUST define and expose the supported auth model for OpenAI / ChatGPT int
 - **GIVEN** user opens OpenAI / ChatGPT integration details
 - **WHEN** auth/setup controls render
 - **THEN** UI MUST show deterministic supported auth method(s), safe credential handling, and validation feedback
+- **AND** `/api/providers/registry` MUST expose non-secret schema metadata for the OpenAI active method, default assistant model, write-only API-key secret, and Browser Auth proof state so setup consumers do not need hardcoded provider fields
 
 ### Requirement PROVIDER-OPENAI-UX-003: OpenAI / ChatGPT integration SHALL expose capability scoping for assistant workflows
 Cabinet MUST define which assistant capabilities use OpenAI / ChatGPT integration (for example chat help, photo analysis, tagging/classification, generation) and expose that scope to operators/users where appropriate.
@@ -68,6 +69,7 @@ Cabinet MUST keep OpenAI API-key entry write-only and store the key through the 
 - **WHEN** user connects or saves OpenAI
 - **THEN** Cabinet MUST write `openai_api_key` through `/api/profiles/:profileId/secrets`
 - **AND** Cabinet MUST write non-secret defaults such as `assistant_default_provider`, `assistant_default_model`, and active method through `/api/profiles/:profileId/settings`
+- **AND** registry setup schema metadata MUST mark `openai_api_key` as write-only `profile_secrets` persistence while keeping default model and active method under `profile_settings`
 
 ### Requirement PROVIDER-OPENAI-UX-008: Empty API-key actions SHALL bind validation to the token field
 Cabinet MUST present missing OpenAI API-key validation as field-level feedback on the token input, with an accessible correction path, before any settings, secret save, or provider health validation request is attempted.

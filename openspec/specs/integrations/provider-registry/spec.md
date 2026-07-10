@@ -110,6 +110,7 @@ Cabinet SHALL treat each integration provider as a manifest-backed registry entr
   - default health and required-action state
 - **AND** configurable providers MUST expose a setup schema that identifies each non-secret field, field type, label, validation rule, default value, and persistence key
 - **AND** secret fields MUST expose only write-only field metadata and credential-presence state, never the stored secret value
+- **AND** OpenAI / ChatGPT MUST publish schema-driven active-profile setup fields for active auth method, default assistant model, write-only API-key secret entry, and Browser Auth proof state so consumers can render setup without hardcoded provider-specific field lists
 
 #### Scenario: Schema-driven Add Integration setup
 - **GIVEN** the user opens Add Integration and selects a provider from the registry-driven catalog

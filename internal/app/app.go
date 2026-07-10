@@ -8877,6 +8877,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			}
 			provider["model_options"] = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
 			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
+			provider["setup_schema"] = openAIRegistrySetupSchema()
 			provider["setup_status"] = openAIRegistrySetupStatus(settings, openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProofState, openAIBrowserProviderTestPassed, openAIReady)
 			provider["actions"] = openAIRegistryAssistantActions(openAIReady, openAIRegistrySetupNextAction(openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProviderTestPassed))
 		case "anthropic", "google":
@@ -9109,6 +9110,62 @@ func openAIRegistryAssistantActions(ready bool, nextAction string) []map[string]
 			"confirmation_required": false,
 			"availability_state":    availability,
 			"next_action":           requiredNextAction,
+		},
+	}
+}
+
+func openAIRegistrySetupSchema() map[string]any {
+	return map[string]any{
+		"schema_ref":        "integrations/openai/auth",
+		"persistence_scope": "active_profile",
+		"submit_target":     "/api/profiles/:profileId/settings",
+		"secret_target":     "/api/profiles/:profileId/secrets",
+		"fields": []map[string]any{
+			{
+				"key":         "openai.active_auth_method",
+				"label":       "Connection method",
+				"type":        "select",
+				"required":    true,
+				"write_only":  false,
+				"persistence": "profile_settings",
+				"options": []map[string]string{
+					{"value": "api_key", "label": "API key"},
+					{"value": "browser_auth", "label": "Browser Auth"},
+				},
+				"default": "api_key",
+			},
+			{
+				"key":         "assistant_default_model",
+				"label":       "Default assistant model",
+				"type":        "select",
+				"required":    true,
+				"write_only":  false,
+				"persistence": "profile_settings",
+				"options": []map[string]string{
+					{"value": "gpt-4o-mini", "label": "GPT-4o mini"},
+					{"value": "gpt-4.1-mini", "label": "GPT-4.1 mini"},
+					{"value": "gpt-5.3-codex", "label": "GPT-5.3 Codex"},
+				},
+				"default": "gpt-4o-mini",
+			},
+			{
+				"key":         "openai_api_key",
+				"label":       "API key",
+				"type":        "secret",
+				"required":    false,
+				"write_only":  true,
+				"persistence": "profile_secrets",
+				"secret_key":  "openai_api_key",
+			},
+			{
+				"key":         "openai.browser_auth_artifact_present",
+				"label":       "Browser Auth proof",
+				"type":        "proof_state",
+				"required":    false,
+				"write_only":  false,
+				"persistence": "profile_settings",
+				"read_only":   true,
+			},
 		},
 	}
 }
