@@ -20,9 +20,9 @@ func TestAuthPermissionsPlanCapabilityMatrix(t *testing.T) {
 		plan     string
 		features []string
 	}{
-		{plan: "mvp", features: []string{"collection_core"}},
-		{plan: "creator", features: []string{"collection_core", "ai_assist", "scanner_automation"}},
-		{plan: "teams", features: []string{"collection_core", "ai_assist", "price_tracking", "scanner_automation"}},
+		{plan: "free", features: []string{"collection_core"}},
+		{plan: "plus", features: []string{"collection_core", "price_tracking", "scanner_automation"}},
+		{plan: "pro", features: []string{"collection_core", "ai_assist", "price_tracking", "scanner_automation"}},
 	}
 
 	for _, tc := range cases {
@@ -60,6 +60,50 @@ func TestAuthPermissionsPlanCapabilityMatrix(t *testing.T) {
 	}
 }
 
+func TestAuthPermissionsLegacyPlanAliasesNormalizeToBetaPlans(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		alias string
+		plan  string
+	}{
+		{alias: "mvp", plan: "free"},
+		{alias: "creator", plan: "plus"},
+		{alias: "teams", plan: "pro"},
+		{alias: "paid", plan: "pro"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.alias, func(t *testing.T) {
+			t.Parallel()
+
+			a := newTestApp(t)
+			token := signedLikeJWTForPlan("user_"+tc.alias, tc.alias)
+			resp := doRequest(
+				t,
+				a,
+				http.MethodPost,
+				"/api/auth/cloud/session/bootstrap",
+				strings.NewReader(`{"provider":"clerk","token":"`+token+`"}`),
+				map[string]string{"Content-Type": "application/json"},
+			)
+			if resp.Code != http.StatusOK {
+				t.Fatalf("bootstrap status=%d body=%s", resp.Code, resp.Body.String())
+			}
+			var payload struct {
+				Plan string `json:"plan"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode payload: %v", err)
+			}
+			if payload.Plan != tc.plan {
+				t.Fatalf("expected alias %q to normalize to %q, got %q", tc.alias, tc.plan, payload.Plan)
+			}
+		})
+	}
+}
+
 func TestAuthPermissionsFeatureGateMatrixFromCloudPlan(t *testing.T) {
 	t.Parallel()
 
@@ -75,25 +119,28 @@ func TestAuthPermissionsFeatureGateMatrixFromCloudPlan(t *testing.T) {
 	cfg := config.Config{}
 	profileID := "profile-test"
 
-	setCloudPlan("mvp")
+	setCloudPlan("free")
 	if hasProFeatureAccess(t.Context(), a.db, licenseSvc, cfg, profileID, "scanner_automation") {
-		t.Fatalf("mvp plan must not allow scanner_automation")
+		t.Fatalf("free plan must not allow scanner_automation")
 	}
 
-	setCloudPlan("creator")
+	setCloudPlan("plus")
 	if !hasProFeatureAccess(t.Context(), a.db, licenseSvc, cfg, profileID, "scanner_automation") {
-		t.Fatalf("creator plan must allow scanner_automation")
+		t.Fatalf("plus plan must allow scanner_automation")
 	}
-	if hasProFeatureAccess(t.Context(), a.db, licenseSvc, cfg, profileID, "price_tracking") {
-		t.Fatalf("creator plan must not allow price_tracking")
+	if !hasProFeatureAccess(t.Context(), a.db, licenseSvc, cfg, profileID, "price_tracking") {
+		t.Fatalf("plus plan must allow price_tracking")
+	}
+	if hasProFeatureAccess(t.Context(), a.db, licenseSvc, cfg, profileID, "ai_assist") {
+		t.Fatalf("plus plan must not allow pro-only ai_assist gate")
 	}
 
-	setCloudPlan("teams")
+	setCloudPlan("pro")
 	if !hasProFeatureAccess(t.Context(), a.db, licenseSvc, cfg, profileID, "price_tracking") {
-		t.Fatalf("teams plan must allow price_tracking")
+		t.Fatalf("pro plan must allow price_tracking")
 	}
 	if !hasProFeatureAccess(t.Context(), a.db, licenseSvc, cfg, profileID, "ai_assist") {
-		t.Fatalf("teams plan must allow ai_assist")
+		t.Fatalf("pro plan must allow ai_assist")
 	}
 }
 
@@ -101,7 +148,7 @@ func TestAuthPermissionsEffectiveDiagnosticsContract(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
-	token := signedLikeJWTForPlan("user_teams", "teams")
+	token := signedLikeJWTForPlan("user_pro", "pro")
 	bootstrap := doRequest(
 		t,
 		a,
