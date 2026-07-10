@@ -20,3 +20,21 @@ Cabinet SHALL target crash-free session rate above 99 percent for beta and keep 
 - **WHEN** the runtime NFR gate exercises startup, search, and scanner diagnostics
 - **THEN** the gate SHALL provide deterministic crash/regression evidence for the core beta readiness paths
 - **AND** strict startup mode SHALL fail the gate when startup exceeds the configured threshold
+
+### Requirement NON-FUNCTIONAL-003: Develop and release-candidate gates SHALL preserve beta release evidence
+Cabinet SHALL run a required quality gate for pull requests targeting `develop` and provide a manually triggered release-candidate gate for an exact commit SHA before beta promotion.
+
+#### Scenario: Develop pull request quality gate
+- **GIVEN** a pull request targets `develop`
+- **WHEN** GitHub Actions evaluates the repository workflows
+- **THEN** the Develop Quality Gate workflow SHALL run strict OpenSpec validation, UI production build, Go package tests, OpenAPI parity/lint/build, and the login/profile/runtime Cypress smoke gate
+- **AND** failing steps SHALL preserve useful workflow artifacts or command logs for review
+- **AND** the workflow SHALL not merge `develop` into `main`
+
+#### Scenario: Exact release-candidate commit gate
+- **GIVEN** a full 40-character commit SHA is supplied to the beta release-candidate workflow
+- **WHEN** the workflow checks out the requested commit
+- **THEN** the checked-out `HEAD` SHALL equal the supplied SHA
+- **AND** the working tree SHALL be clean before validation starts
+- **AND** strict OpenSpec validation, `go test ./...`, UI production build, OpenAPI lint/build, and the configured Cypress release pack SHALL run against that exact checkout
+- **AND** the workflow SHALL upload logs and a summary that identify the commit SHA and workflow run without merging `develop` into `main`
