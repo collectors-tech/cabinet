@@ -63,7 +63,7 @@ jobs:
         working-directory: ui.web
 
   go-tests:
-    name: Go package tests
+    name: Go runtime package tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,8 +81,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Run Go tests
-        run: go test ./...
+      - name: Run Go runtime package tests
+        run: go test ./internal/... ./cmd/...
 
   openapi:
     name: OpenAPI parity and docs

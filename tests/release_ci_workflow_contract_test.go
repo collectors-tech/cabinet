@@ -25,7 +25,7 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 		"Build runtime UI static bundle for contract tests",
 		"openspec validate --all --strict --no-interactive",
 		"npm run build",
-		"go test ./...",
+		"go test ./internal/... ./cmd/...",
 		"Build runtime UI static bundle for OpenAPI tests",
 		"go test ./internal/app -run TestOpenAPIDocumentsOnboardingSampleDataEndpoint -count=1",
 		"@redocly/cli@latest lint docs/api/openapi.yaml",
