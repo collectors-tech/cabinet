@@ -1,0 +1,123 @@
+name: Beta Release Candidate Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact commit SHA to validate as the Cabinet beta release candidate
+        required: true
+        type: string
+      cypress_spec:
+        description: Cypress release pack spec glob
+        required: false
+        default: cypress/e2e/general/ui-login-session/spec.cy.ts
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release-candidate:
+    name: Exact commit release candidate
+    runs-on: windows-latest
+    steps:
+      - name: Validate exact SHA input
+        shell: pwsh
+        run: |
+          if ("${{ inputs.commit_sha }}" -notmatch "^[0-9a-fA-F]{40}$") {
+            throw "commit_sha must be a full 40-character Git commit SHA."
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Confirm checked-out commit
+        id: commit
+        shell: pwsh
+        run: |
+          $actual = git rev-parse HEAD
+          if ($actual -ne "${{ inputs.commit_sha }}") {
+            throw "Expected ${{ inputs.commit_sha }} but checked out $actual"
+          }
+          if ((git status --porcelain).Length -gt 0) {
+            throw "Release candidate checkout is not clean."
+          }
+          "sha=$actual" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          New-Item -ItemType Directory -Force -Path .logs/release-candidate | Out-Null
+          "commit_sha=$actual" | Set-Content .logs/release-candidate/commit.txt
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+
+      - name: Install OpenSpec CLI
+        shell: pwsh
+        run: npm install -g @fission-ai/openspec@latest
+
+      - name: Install ui.web dependencies
+        shell: pwsh
+        run: npm --prefix ui.web ci
+
+      - name: Strict OpenSpec validation
+        shell: pwsh
+        run: openspec validate --all --strict --no-interactive *>&1 | Tee-Object .logs/release-candidate/openspec.log
+
+      - name: UI production build
+        shell: pwsh
+        run: npm --prefix ui.web run build *>&1 | Tee-Object .logs/release-candidate/ui-build.log
+
+      - name: Full Go test suite
+        shell: pwsh
+        run: go test ./... *>&1 | Tee-Object .logs/release-candidate/go-test.log
+
+      - name: OpenAPI parity and docs
+        shell: pwsh
+        run: |
+          go test ./internal/app -run TestOpenAPIDocumentsOnboardingSampleDataEndpoint -count=1 *>&1 | Tee-Object .logs/release-candidate/openapi-go.log
+          npx --yes @redocly/cli@latest lint docs/api/openapi.yaml *>&1 | Tee-Object .logs/release-candidate/openapi-lint.log
+          npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html *>&1 | Tee-Object .logs/release-candidate/openapi-build.log
+
+      - name: Cypress release pack
+        shell: pwsh
+        env:
+          CABINET_E2E_MODE: "1"
+          CABINET_OPEN_BROWSER: "0"
+        run: |
+          pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec "${{ inputs.cypress_spec }}" -Browser chrome -RequireE2EHooks *>&1 | Tee-Object .logs/release-candidate/cypress.log
+
+      - name: Write release-candidate summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summary = @(
+            "# Cabinet beta release-candidate gate",
+            "",
+            "Commit SHA: ${{ steps.commit.outputs.sha }}",
+            "Workflow run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "Cypress spec: ${{ inputs.cypress_spec }}",
+            "",
+            "This workflow validates the exact checkout only and does not merge develop into main."
+          )
+          $summary | Set-Content .logs/release-candidate/summary.md
+          $summary | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload release-candidate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-release-candidate-${{ inputs.commit_sha }}
+          path: |
+            .logs/release-candidate
+            docs/api/index.html
+            ui.web/cypress/artifacts
+            ui.web/cypress/screenshots
+            ui.web/cypress/videos
+
