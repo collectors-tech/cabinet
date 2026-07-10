@@ -2758,13 +2758,23 @@ func New(cfg config.Config) (*App, error) {
 				if status <= 0 {
 					status = http.StatusBadRequest
 				}
+				nextAction := ebayProviderErrorNextAction(providerErr)
+				if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "ebay", "eBay", "market_watch.run", nextAction, providerErr.Error(), map[string]any{
+					"query_set_id":        qs.ID,
+					"provider_error_code": providerErr.ErrorCode,
+					"status_code":         status,
+					"health_impact":       "updates_provider_health",
+					"retry_after_seconds": providerErr.RetryAfterSeconds,
+				}); inboxErr != nil {
+					logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "ebay", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+				}
 				w.WriteHeader(status)
 				payload := map[string]any{
 					"error":        "failed_to_run_ebay_provider",
 					"error_code":   providerErr.ErrorCode,
 					"provider":     "ebay",
 					"message":      providerErr.Error(),
-					"next_action":  ebayProviderErrorNextAction(providerErr),
+					"next_action":  nextAction,
 					"query_set_id": qs.ID,
 				}
 				if providerErr.RetryAfterSeconds > 0 {
@@ -8806,6 +8816,29 @@ func providerHealthResponse(health map[string]string) map[string]any {
 		"next_action":         nextAction,
 		"updated_at":          updated,
 	}
+}
+
+func recordProviderWorkflowFailure(ctx context.Context, chatSvc *chat.Service, profileID, providerID, providerDisplayName, workflowActionID, requiredActionCode, statusMessage string, metadata map[string]any) error {
+	if chatSvc == nil {
+		return nil
+	}
+	statusMessage = strings.TrimSpace(statusMessage)
+	if statusMessage == "" {
+		statusMessage = strings.TrimSpace(providerDisplayName) + " workflow failed. Review provider health and credentials before retrying."
+	}
+	_, err := chatSvc.CreateProviderWorkflowInboxEvent(ctx, chat.ProviderWorkflowInboxEventInput{
+		ProfileID:           strings.TrimSpace(profileID),
+		ProviderID:          strings.TrimSpace(providerID),
+		ProviderDisplayName: strings.TrimSpace(providerDisplayName),
+		WorkflowActionID:    strings.TrimSpace(workflowActionID),
+		Severity:            "error",
+		RequiredActionCode:  strings.TrimSpace(requiredActionCode),
+		StatusMessage:       statusMessage,
+		TargetRoute:         "/integrations",
+		OccurredAt:          time.Now().UTC().Format(time.RFC3339),
+		Metadata:            metadata,
+	})
+	return err
 }
 
 func providerHealthTaxonomy(status, message, retryAfterRaw string) (string, string, string) {
