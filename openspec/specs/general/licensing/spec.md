@@ -17,3 +17,9 @@ Cabinet SHALL expose current license state in settings.
 - **GIVEN** settings requests license status
 - **WHEN** license status API is called
 - **THEN** Cabinet SHALL return active license summary
+
+#### Scenario: Founding license import from settings
+- **GIVEN** a user has an active profile and a signed founding license payload
+- **WHEN** the user imports the signed license from Settings Billing
+- **THEN** Cabinet SHALL submit the signed payload to the license import API
+- **AND** the refreshed Settings Billing state SHALL show the resulting signed license status
