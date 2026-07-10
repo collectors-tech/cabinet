@@ -39,7 +39,7 @@ Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 
 ## Active OpenSpec Change Inventory
 
-Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive completed Agent-channel and Agent-skill registry changes.
+Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive completed Agent-channel, Agent-skill registry, inventory grading, and runtime startup changes.
 
 - `ingest-bonza-product-urls`: 21/24 tasks complete. Remainder is live/manual provider verification, optional HTML fallback, and final #811 delivery cleanup.
 - `stabilize-startup-nfr-gates`: 7/9 tasks complete. Remainder is blocked validation-chain rerun and issue/PR closure evidence.
@@ -48,13 +48,12 @@ Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive complet
 - `finalize-onboarding-and-collector-ux`: 0/14 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
 - `complete-screen-api-parity-audits`: 0/15 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
 - `stabilize-inventory-runtime-regressions`: 0/11 tasks complete. Triage against current release smoke evidence before treating old startup/runtime subtasks as active beta blockers.
-- `inventory-item-type-condition-scales`: complete, archive candidate after final validation evidence is linked.
-- `harden-runtime-single-endpoint-startup`: complete, archive candidate after final validation evidence is linked.
-
 Archived during #1872 reconciliation:
 
 - `define-universal-agent-channel-contracts`: archived into `openspec/specs/agent-universal-channels/spec.md`; broad Agent/Telegram implementation remains post-beta unless #1864 acceptance exposes a release blocker.
 - `define-agent-skill-registry`: archived into `openspec/specs/agent-skills-registry/spec.md`; Agent skill registry product breadth remains post-beta unless #1864 acceptance exposes a release blocker.
+- `inventory-item-type-condition-scales`: archived after confirming its requirements already exist in canonical inventory specs and traceability rows.
+- `harden-runtime-single-endpoint-startup`: archived after confirming its requirements already exist in canonical runtime specs and traceability rows.
 
 ## Post-Beta Scope Guardrails
 
