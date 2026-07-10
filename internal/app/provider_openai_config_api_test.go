@@ -193,6 +193,52 @@ func TestOpenAIRegistryProjectsAssistantMigrationContract(t *testing.T) {
 	}
 }
 
+func TestAssistantPlaceholderProvidersAreDisabledRegistryEntries(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	for _, providerID := range []string{"anthropic", "google"} {
+		provider := findRegistryProvider(payload.Providers, providerID)
+		if provider == nil {
+			t.Fatalf("expected disabled assistant placeholder provider %q in registry payload: %+v", providerID, payload.Providers)
+		}
+		if provider["provider_category"] != "chat/AI" || provider["provider_type"] != "assistant" {
+			t.Fatalf("expected %s to remain categorized as a disabled assistant provider, got %+v", providerID, provider)
+		}
+		if provider["state"] != "disabled" || provider["api_available"] != false || provider["active_mode"] != "disabled_placeholder" || provider["api_support_profile"] != "placeholder_disabled" {
+			t.Fatalf("expected %s placeholder to be visibly disabled, got %+v", providerID, provider)
+		}
+		if provider["auth_requirement"] != "not_supported" || provider["auth_mode"] != "none" || provider["config_schema_ref"] != "integrations/assistant/placeholder" {
+			t.Fatalf("expected %s placeholder setup metadata to block credential entry, got %+v", providerID, provider)
+		}
+		capabilities, ok := provider["capabilities"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected %s capabilities map, got %#v", providerID, provider["capabilities"])
+		}
+		if capabilities["assistant"] != false || capabilities["image_help"] != false || capabilities["content_generation"] != false || capabilities["health"] != true {
+			t.Fatalf("expected %s placeholder to expose disabled assistant capabilities and health metadata, got %+v", providerID, capabilities)
+		}
+		workflowRefs, ok := provider["workflow_refs"].([]any)
+		if !ok || len(workflowRefs) != 0 {
+			t.Fatalf("expected %s placeholder to expose no workflow refs until adapter support exists, got %#v", providerID, provider["workflow_refs"])
+		}
+		if strings.Contains(strings.ToLower(registry.Body.String()), providerID+"_api_key") {
+			t.Fatalf("%s placeholder registry response must not advertise credential keys, body=%s", providerID, registry.Body.String())
+		}
+	}
+}
+
 func TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof(t *testing.T) {
 	t.Parallel()
 

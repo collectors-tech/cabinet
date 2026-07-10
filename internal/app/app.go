@@ -8879,6 +8879,19 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
 			provider["setup_status"] = openAIRegistrySetupStatus(settings, openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProofState, openAIBrowserProviderTestPassed, openAIReady)
 			provider["actions"] = openAIRegistryAssistantActions(openAIReady, openAIRegistrySetupNextAction(openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProviderTestPassed))
+		case "anthropic", "google":
+			provider["state"] = "disabled"
+			provider["health"] = map[string]any{
+				"status":      "disabled",
+				"state":       "disabled_placeholder",
+				"message":     fmt.Sprintf("%s assistant provider adapter is not yet supported.", manifest.DisplayName),
+				"next_action": "wait_for_supported_assistant_provider_adapter",
+			}
+			provider["setup_status"] = map[string]any{
+				"validation_status": "disabled",
+				"workflow_state":    "adapter_not_supported",
+				"next_action":       "wait_for_supported_assistant_provider_adapter",
+			}
 		case "telegram":
 			provider["active_mode"] = telegramConnectionState
 			provider["auth_methods"] = map[string]any{
@@ -9002,6 +9015,14 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				openAIBrowserCredentialPresent,
 				openAIBrowserProviderTestPassed,
 			)
+		}
+		if strings.EqualFold(providerID, "anthropic") || strings.EqualFold(providerID, "google") {
+			provider["health"] = map[string]any{
+				"status":      "disabled",
+				"state":       "disabled_placeholder",
+				"message":     fmt.Sprintf("%s assistant provider adapter is not yet supported.", fmt.Sprintf("%v", provider["display_name"])),
+				"next_action": "wait_for_supported_assistant_provider_adapter",
+			}
 		}
 		provider["last_run"] = map[string]any{
 			"status":      lastRunStatus,
