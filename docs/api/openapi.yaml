@@ -3447,9 +3447,20 @@ components:
         api_support_profile: { type: string, example: rest_v1 }
         active_mode: { type: string, example: official_api }
         integration_mode: { type: string, example: official_api }
+        provider_category: { type: string, example: chat/AI }
+        provider_type: { type: string, example: assistant }
         api_available: { type: boolean }
         auth_requirement: { type: string, example: api_key }
         auth_mode: { type: string, example: api_key }
+        config_schema_ref:
+          type: string
+          description: Registry setup schema reference; disabled placeholders may point to a placeholder schema that blocks credential entry.
+          example: integrations/openai/auth
+        workflow_refs:
+          type: array
+          description: Stable workflow references supported by this provider; disabled assistant placeholders return an empty list.
+          items:
+            type: string
         capabilities:
           type: object
           additionalProperties:
@@ -3460,7 +3471,7 @@ components:
         setup_status:
           allOf:
             - $ref: "#/components/schemas/EbayProviderSetupStatus"
-          description: Non-secret readiness summary for the eBay setup surface.
+          description: Non-secret readiness summary for the eBay setup surface; provider-specific registry entries may also project non-secret readiness maps such as OpenAI assistant readiness.
         actions:
           type: array
           description: Provider workflow/action metadata including availability and required next action.

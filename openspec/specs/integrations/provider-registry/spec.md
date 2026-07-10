@@ -164,6 +164,13 @@ Cabinet SHALL treat `/api/providers/registry`, `/api/providers/:id/*`, the Add I
 - **AND** capability flags MUST preserve config form requirements, health/diagnostics, matching/import/export support, and browser-auth/external-login behavior for each provider
 - **AND** consumer-specific payloads MAY project only the fields they need but MUST NOT invent provider identity, category, setup, or capability state outside the canonical registry definition
 
+#### Scenario: Disabled assistant placeholders remain explicit and non-actionable
+- **GIVEN** the assistant runtime registry contains provider placeholders that do not yet have supported adapters
+- **WHEN** `GET /api/providers/registry` returns chat/AI provider entries
+- **THEN** disabled assistant placeholders such as Anthropic and Google MUST appear as `provider_type=assistant` entries with `state=disabled`, `api_available=false`, `active_mode=disabled_placeholder`, and `api_support_profile=placeholder_disabled`
+- **AND** disabled assistant placeholders MUST expose no workflow refs or credential setup controls until a supported adapter, setup schema, health check, and workflow mapping exists
+- **AND** disabled placeholder capability flags MUST prevent assistant, image-help, and content-generation actions while still making the limitation visible in registry health/setup metadata
+
 ## Validation Coverage Required By Issue #1469
 - Provider registry entries and manifest fields: Go registry/OpenAPI contract tests.
 - Provider setup schemas and Add Integration form rendering: Go template contract tests plus targeted Cypress for registry-driven field rendering.

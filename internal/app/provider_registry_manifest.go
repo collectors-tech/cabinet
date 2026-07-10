@@ -23,6 +23,7 @@ type integrationProviderManifest struct {
 }
 
 func (m integrationProviderManifest) payload() map[string]any {
+	workflowRefs := append([]string{}, m.WorkflowRefs...)
 	payload := map[string]any{
 		"provider_id":         m.ProviderID,
 		"display_name":        m.DisplayName,
@@ -37,7 +38,7 @@ func (m integrationProviderManifest) payload() map[string]any {
 		"auth_requirement":    m.AuthRequirement,
 		"auth_mode":           m.AuthMode,
 		"capabilities":        copyCapabilityFlags(m.CapabilityFlags),
-		"workflow_refs":       append([]string(nil), m.WorkflowRefs...),
+		"workflow_refs":       workflowRefs,
 		"setup_instructions":  m.SetupInstructions,
 	}
 	if strings.TrimSpace(m.ConfigSchemaRef) != "" {
@@ -85,6 +86,60 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 				"content_generation": true,
 			},
 			SetupInstructions: "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
+		},
+		{
+			ProviderID:        "anthropic",
+			DisplayName:       "Anthropic / Claude",
+			BaseDomain:        "console.anthropic.com",
+			MarketWatchScope:  "",
+			ProviderCategory:  "chat/AI",
+			ProviderType:      "assistant",
+			APIFamily:         "ai_provider",
+			APISupportProfile: "placeholder_disabled",
+			ActiveMode:        "disabled_placeholder",
+			IntegrationMode:   "assistant_workflows_disabled",
+			APIAvailable:      false,
+			AuthRequirement:   "not_supported",
+			AuthMode:          "none",
+			ConfigSchemaRef:   "integrations/assistant/placeholder",
+			WorkflowRefs:      []string{},
+			CapabilityFlags: map[string]bool{
+				"search":             false,
+				"stock_observation":  false,
+				"pricing":            false,
+				"health":             true,
+				"assistant":          false,
+				"image_help":         false,
+				"content_generation": false,
+			},
+			SetupInstructions: "Anthropic is present only as a disabled assistant runtime placeholder until Cabinet ships a supported provider adapter, setup schema, health check, and workflow mapping.",
+		},
+		{
+			ProviderID:        "google",
+			DisplayName:       "Google / Gemini",
+			BaseDomain:        "ai.google.dev",
+			MarketWatchScope:  "",
+			ProviderCategory:  "chat/AI",
+			ProviderType:      "assistant",
+			APIFamily:         "ai_provider",
+			APISupportProfile: "placeholder_disabled",
+			ActiveMode:        "disabled_placeholder",
+			IntegrationMode:   "assistant_workflows_disabled",
+			APIAvailable:      false,
+			AuthRequirement:   "not_supported",
+			AuthMode:          "none",
+			ConfigSchemaRef:   "integrations/assistant/placeholder",
+			WorkflowRefs:      []string{},
+			CapabilityFlags: map[string]bool{
+				"search":             false,
+				"stock_observation":  false,
+				"pricing":            false,
+				"health":             true,
+				"assistant":          false,
+				"image_help":         false,
+				"content_generation": false,
+			},
+			SetupInstructions: "Google Gemini is present only as a disabled assistant runtime placeholder until Cabinet ships a supported provider adapter, setup schema, health check, and workflow mapping.",
 		},
 		{
 			ProviderID:        "telegram",
