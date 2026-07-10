@@ -316,3 +316,96 @@ func TestProviderRegistryProjectsWorkflowActionRegistryMetadata(t *testing.T) {
 		t.Fatalf("Telegram catalog capture workflow registry metadata drifted: %+v", capture)
 	}
 }
+
+func TestProviderRegistryProjectsConfigSchemaShapes(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"ProviderConfigSchemaShapes"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	settings := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/"+profile.ID+"/settings",
+		strings.NewReader(`{"settings":{"ebay_bearer_token":"secret-ebay-schema-token","telegram.bot_token":"secret-telegram-schema-token"}}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	raw := registry.Body.String()
+	for _, secret := range []string{"secret-ebay-schema-token", "secret-telegram-schema-token"} {
+		if strings.Contains(raw, secret) {
+			t.Fatalf("registry setup schemas must not leak secret value %q: %s", secret, raw)
+		}
+	}
+
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	for providerID, want := range map[string]struct {
+		schemaRef        string
+		fieldKey         string
+		fieldType        string
+		fieldPersistence string
+		writeOnly        bool
+	}{
+		"ebay":                            {schemaRef: "integrations/ebay/setup", fieldKey: "ebay_bearer_token", fieldType: "secret", fieldPersistence: "profile_secrets", writeOnly: true},
+		"telegram":                        {schemaRef: "integrations/telegram/channel", fieldKey: "telegram.bot_token", fieldType: "secret", fieldPersistence: "profile_secrets", writeOnly: true},
+		"au-webshop-bonzaslotcars-com-au": {schemaRef: "integrations/au-webshop/setup", fieldKey: "crawl_interval_minutes", fieldType: "number", fieldPersistence: "profile_settings"},
+	} {
+		provider := findRegistryProvider(payload.Providers, providerID)
+		if provider == nil {
+			t.Fatalf("provider %q missing from registry payload: %+v", providerID, payload.Providers)
+		}
+		schema, ok := provider["setup_schema"].(map[string]any)
+		if !ok {
+			t.Fatalf("provider %s missing setup_schema map: %+v", providerID, provider)
+		}
+		if got := fmt.Sprintf("%v", schema["schema_ref"]); got != want.schemaRef {
+			t.Fatalf("provider %s schema_ref got %q want %q: %+v", providerID, got, want.schemaRef, schema)
+		}
+		if got := fmt.Sprintf("%v", schema["validate_action"]); got == "" {
+			t.Fatalf("provider %s setup_schema must expose validate/test action: %+v", providerID, schema)
+		}
+		fields, ok := schema["fields"].([]any)
+		if !ok || len(fields) == 0 {
+			t.Fatalf("provider %s setup_schema fields got %#v", providerID, schema["fields"])
+		}
+		field := findSetupSchemaField(fields, want.fieldKey)
+		if field == nil {
+			t.Fatalf("provider %s setup_schema missing field %q in %+v", providerID, want.fieldKey, fields)
+		}
+		if got := fmt.Sprintf("%v", field["type"]); got != want.fieldType {
+			t.Fatalf("provider %s field %s type got %q want %q: %+v", providerID, want.fieldKey, got, want.fieldType, field)
+		}
+		if got := fmt.Sprintf("%v", field["persistence"]); got != want.fieldPersistence {
+			t.Fatalf("provider %s field %s persistence got %q want %q: %+v", providerID, want.fieldKey, got, want.fieldPersistence, field)
+		}
+		if got, _ := field["write_only"].(bool); got != want.writeOnly {
+			t.Fatalf("provider %s field %s write_only got %v want %v: %+v", providerID, want.fieldKey, got, want.writeOnly, field)
+		}
+	}
+}

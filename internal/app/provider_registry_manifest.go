@@ -22,6 +22,38 @@ type integrationProviderManifest struct {
 	SetupInstructions string
 }
 
+type integrationConfigSchemaDefinition struct {
+	SchemaRef        string
+	PersistenceScope string
+	SubmitTarget     string
+	SecretTarget     string
+	Fields           []integrationConfigSchemaField
+	ValidateAction   string
+}
+
+type integrationConfigSchemaField struct {
+	Key              string
+	Label            string
+	Type             string
+	Required         bool
+	WriteOnly        bool
+	ReadOnly         bool
+	Persistence      string
+	SecretKey        string
+	Default          any
+	Placeholder      string
+	HelperText       string
+	ValidationRules  []string
+	Options          []integrationConfigSchemaOption
+	Condition        map[string]string
+	DocumentationURL string
+}
+
+type integrationConfigSchemaOption struct {
+	Value string
+	Label string
+}
+
 type integrationWorkflowActionDefinition struct {
 	ID                   string
 	Label                string
@@ -67,6 +99,136 @@ func (m integrationProviderManifest) payload() map[string]any {
 		payload["market_watch_scope"] = strings.TrimSpace(m.MarketWatchScope)
 	}
 	return payload
+}
+
+func providerConfigSchemaForRef(ref string) (map[string]any, bool) {
+	definition, ok := integrationConfigSchemaDefinitions()[strings.TrimSpace(ref)]
+	if !ok {
+		return nil, false
+	}
+	return definition.payload(), true
+}
+
+func (d integrationConfigSchemaDefinition) payload() map[string]any {
+	fields := make([]map[string]any, 0, len(d.Fields))
+	for _, field := range d.Fields {
+		fields = append(fields, field.payload())
+	}
+	payload := map[string]any{
+		"schema_ref":        d.SchemaRef,
+		"persistence_scope": d.PersistenceScope,
+		"submit_target":     d.SubmitTarget,
+		"fields":            fields,
+	}
+	if strings.TrimSpace(d.SecretTarget) != "" {
+		payload["secret_target"] = d.SecretTarget
+	}
+	if strings.TrimSpace(d.ValidateAction) != "" {
+		payload["validate_action"] = d.ValidateAction
+	}
+	return payload
+}
+
+func (f integrationConfigSchemaField) payload() map[string]any {
+	payload := map[string]any{
+		"key":         f.Key,
+		"label":       f.Label,
+		"type":        f.Type,
+		"required":    f.Required,
+		"write_only":  f.WriteOnly,
+		"persistence": f.Persistence,
+	}
+	if f.ReadOnly {
+		payload["read_only"] = true
+	}
+	if strings.TrimSpace(f.SecretKey) != "" {
+		payload["secret_key"] = f.SecretKey
+	}
+	if f.Default != nil {
+		payload["default"] = f.Default
+	}
+	if strings.TrimSpace(f.Placeholder) != "" {
+		payload["placeholder"] = f.Placeholder
+	}
+	if strings.TrimSpace(f.HelperText) != "" {
+		payload["helper_text"] = f.HelperText
+	}
+	if len(f.ValidationRules) > 0 {
+		rules := append([]string{}, f.ValidationRules...)
+		payload["validation_rules"] = rules
+	}
+	if len(f.Options) > 0 {
+		options := make([]map[string]string, 0, len(f.Options))
+		for _, option := range f.Options {
+			options = append(options, map[string]string{"value": option.Value, "label": option.Label})
+		}
+		payload["options"] = options
+	}
+	if len(f.Condition) > 0 {
+		condition := map[string]string{}
+		for k, v := range f.Condition {
+			condition[k] = v
+		}
+		payload["condition"] = condition
+	}
+	if strings.TrimSpace(f.DocumentationURL) != "" {
+		payload["documentation_url"] = f.DocumentationURL
+	}
+	return payload
+}
+
+func integrationConfigSchemaDefinitions() map[string]integrationConfigSchemaDefinition {
+	profileSettingsTarget := "/api/profiles/:profileId/settings"
+	profileSecretsTarget := "/api/profiles/:profileId/secrets"
+	return map[string]integrationConfigSchemaDefinition{
+		"integrations/openai/auth": {
+			SchemaRef: "integrations/openai/auth", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
+			Fields: []integrationConfigSchemaField{
+				{Key: "openai.active_auth_method", Label: "Connection method", Type: "select", Required: true, Persistence: "profile_settings", Default: "api_key", Options: []integrationConfigSchemaOption{{Value: "api_key", Label: "API key"}, {Value: "browser_auth", Label: "Browser Auth"}}},
+				{Key: "assistant_default_model", Label: "Default assistant model", Type: "select", Required: true, Persistence: "profile_settings", Default: "gpt-4o-mini", Options: []integrationConfigSchemaOption{{Value: "gpt-4o-mini", Label: "GPT-4o mini"}, {Value: "gpt-4.1-mini", Label: "GPT-4.1 mini"}, {Value: "gpt-5.3-codex", Label: "GPT-5.3 Codex"}}},
+				{Key: "openai_api_key", Label: "API key", Type: "secret", WriteOnly: true, Persistence: "profile_secrets", SecretKey: "openai_api_key", Condition: map[string]string{"openai.active_auth_method": "api_key"}, HelperText: "Stored through the profile secrets path and never returned in registry payloads."},
+				{Key: "openai.browser_auth_artifact_present", Label: "Browser Auth proof", Type: "browser-auth-status", ReadOnly: true, Persistence: "profile_settings", Condition: map[string]string{"openai.active_auth_method": "browser_auth"}, HelperText: "Cabinet requires verified auth artifact and provider-test proof before marking Browser Auth ready."},
+			},
+		},
+		"integrations/telegram/channel": {
+			SchemaRef: "integrations/telegram/channel", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
+			Fields: []integrationConfigSchemaField{
+				{Key: "telegram.catalog_capture.sender_id", Label: "Sender ID", Type: "text", Required: true, Persistence: "profile_settings", Placeholder: "123456789", ValidationRules: []string{"numeric_string"}},
+				{Key: "telegram.catalog_capture.chat_id", Label: "Chat ID", Type: "text", Required: true, Persistence: "profile_settings", Placeholder: "-1001234567890", ValidationRules: []string{"telegram_chat_id"}},
+				{Key: "telegram.bot_token", Label: "Bot token", Type: "secret", Required: true, WriteOnly: true, Persistence: "profile_secrets", SecretKey: "telegram_bot_token"},
+				{Key: "telegram.webhook_route", Label: "Webhook route", Type: "url", Required: false, Persistence: "profile_settings", ValidationRules: []string{"url"}},
+			},
+		},
+		"integrations/ebay/setup": {
+			SchemaRef: "integrations/ebay/setup", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
+			Fields: []integrationConfigSchemaField{
+				{Key: "ebay_marketplace", Label: "Marketplace", Type: "select", Required: true, Persistence: "profile_settings", Default: "EBAY_AU", Options: []integrationConfigSchemaOption{{Value: "EBAY_AU", Label: "Australia"}, {Value: "EBAY_US", Label: "United States"}, {Value: "EBAY_GB", Label: "United Kingdom"}}},
+				{Key: "ebay_base_url", Label: "API base URL", Type: "url", Required: false, Persistence: "profile_settings", Placeholder: "https://api.ebay.com", ValidationRules: []string{"url"}},
+				{Key: "ebay_bearer_token", Label: "Bearer token", Type: "secret", Required: true, WriteOnly: true, Persistence: "profile_secrets", SecretKey: "ebay_bearer_token"},
+			},
+		},
+		"integrations/amazon/setup": {
+			SchemaRef: "integrations/amazon/setup", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
+			Fields: []integrationConfigSchemaField{
+				{Key: "amazon_access_mode", Label: "Access mode", Type: "select", Required: true, Persistence: "profile_settings", Default: "program_api", Options: []integrationConfigSchemaOption{{Value: "program_api", Label: "Program API"}, {Value: "disabled", Label: "Disabled"}}},
+				{Key: "amazon_partner_tag", Label: "Partner tag", Type: "text", Required: false, Persistence: "profile_settings"},
+				{Key: "amazon_oauth_status", Label: "OAuth status", Type: "oauth-connect", Required: false, ReadOnly: true, Persistence: "profile_settings"},
+			},
+		},
+		"integrations/au-webshop/setup": {
+			SchemaRef: "integrations/au-webshop/setup", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, ValidateAction: "provider.family_detect",
+			Fields: []integrationConfigSchemaField{
+				{Key: "base_domain", Label: "Store domain", Type: "text", Required: true, ReadOnly: true, Persistence: "provider_manifest", ValidationRules: []string{"domain"}},
+				{Key: "provider_family", Label: "Provider family", Type: "select", Required: false, Persistence: "profile_settings", Options: []integrationConfigSchemaOption{{Value: "auto", Label: "Auto-detect"}, {Value: "woo_store_api", Label: "Woo Store API"}, {Value: "bigcommerce", Label: "BigCommerce"}, {Value: "algolia", Label: "Algolia"}, {Value: "boost_shopify", Label: "Boost Shopify"}, {Value: "web_ingestion", Label: "Web ingestion"}}},
+				{Key: "crawl_interval_minutes", Label: "Polling interval", Type: "number", Required: false, Persistence: "profile_settings", Default: 1440, ValidationRules: []string{"min:60", "max:10080"}},
+			},
+		},
+		"integrations/assistant/placeholder": {
+			SchemaRef: "integrations/assistant/placeholder", PersistenceScope: "none", SubmitTarget: "", Fields: []integrationConfigSchemaField{
+				{Key: "adapter_status", Label: "Adapter status", Type: "text", ReadOnly: true, Persistence: "provider_manifest", Default: "not_supported"},
+			},
+		},
+	}
 }
 
 func (d integrationWorkflowActionDefinition) payload(availability string, nextAction any) map[string]any {

@@ -62,6 +62,29 @@ Use `read_only` for inspection-only workflows, `preview_only` when Cabinet recor
 
 Workflow failures and required user actions must advertise Inbox event metadata such as `workflow_failed`, `required_action`, `confirmation_pending`, or `result_inbox_updated` so UI, assistant, and automation consumers can route failures consistently. Do not add a provider `workflow_refs` entry for a workflow that has no registry definition.
 
+## Add Setup Schemas
+
+Setup schema definitions live next to provider manifests in `integrationConfigSchemaDefinitions`. Add or update a schema before pointing a provider manifest at its `config_schema_ref`.
+
+Every setup schema must define:
+
+- stable `schema_ref`
+- `persistence_scope`
+- `submit_target`
+- optional `secret_target`
+- optional `validate_action`
+- ordered fields with `key`, `label`, `type`, `required`, `write_only`, and `persistence`
+
+Use field types from the shared renderer vocabulary: `text`, `secret`, `url`, `number`, `select`, `multiselect`, `checkbox`, `textarea`, `file`, `oauth-connect`, and `browser-auth-status`. Fields may add placeholder text, helper text, default values, options, validation rules, documentation URLs, read-only state, and conditional rendering metadata.
+
+Persist non-secret fields through `profile_settings` or provider instance state. Persist secrets through `profile_secrets`; write-only fields must expose only the field metadata, secret key alias, and credential-presence state. Never return a saved secret value in `setup_schema`, `setup_status`, provider health, or registry payloads.
+
+At minimum, schema changes should keep these provider shapes covered:
+
+- API key provider: a `secret` field with `profile_secrets` persistence and a validate/test action.
+- Browser Auth provider: a read-only `browser-auth-status` field until Cabinet has verified callback/artifact and provider-test proof.
+- No-auth/static source provider: non-secret fields plus validate or provider-family detect action, without requiring a secret target.
+
 ## Consumer Contracts
 
 These consumers must derive provider identity, category, auth/setup state, capabilities, and workflow/action state from the registry manifest:
@@ -95,6 +118,7 @@ Each provider-authoring change should include the smallest useful set of evidenc
 
 - OpenSpec requirement or traceability update for new provider contracts.
 - Go/API contract coverage for registry payload, provider categories, capabilities, config schema references, workflow references, and secret redaction.
+- Go/API setup schema coverage for API-key, Browser Auth, and No-auth/static provider shapes; current guard: `TestProviderRegistryProjectsConfigSchemaShapes`.
 - UI template or Cypress coverage when Add Integration, provider details, or Market Watch projection behavior changes.
 - Provider-specific API/fixture tests when a new adapter, parser, or live-provider workflow is added.
 - `openspec validate --all --strict --no-interactive`.
