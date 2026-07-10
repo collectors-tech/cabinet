@@ -915,7 +915,7 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"shipping: { type: number }",
 		"seller: { type: string }",
 		"source: { type: string, enum: [ebay] }",
-		"stock_state: { type: string, description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown. }",
+		`stock_state: { type: string, description: "Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown." }`,
 		"stock_count: { type: integer }",
 		"listing_created_at: { type: string, description: Normalized eBay Browse itemCreationDate timestamp when provided. }",
 		"listing_updated_at: { type: string, description: Normalized eBay Browse itemEndDate timestamp when provided. }",
