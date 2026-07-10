@@ -574,17 +574,17 @@ func TestIntegrationsProviderConfigInputsHaveLabels(t *testing.T) {
 	}
 	src := string(b)
 	required := []string{
-		"htmlFor='provider-base-url'",
-		"Base URL",
-		"id='provider-base-url'",
-		"htmlFor='provider-marketplace'",
-		"Marketplace / Region",
-		"id='provider-marketplace'",
-		"htmlFor='provider-items-per-page'",
-		"Items per page",
-		"id='provider-items-per-page'",
+		"data-testid='integration-schema-form'",
+		"const fieldID = `provider-schema-${notificationHistoryID(field.key)}`",
+		"<Label htmlFor={fieldID}>",
+		"id={fieldID}",
+		"data-testid={`provider-schema-field-${field.key}`}",
+		"field.type === 'select'",
+		"field.type === 'textarea'",
+		"field.type === 'checkbox'",
+		"field.type === 'browser-auth-status'",
 		"htmlFor='provider-token'",
-		"New token / API key",
+		"OpenAI API key",
 		"id='provider-token'",
 	}
 	for _, token := range required {
