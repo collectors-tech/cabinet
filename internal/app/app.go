@@ -9077,41 +9077,7 @@ func openAIRegistryAssistantActions(ready bool, nextAction string) []map[string]
 		availability = "available"
 		requiredNextAction = nil
 	}
-	return []map[string]any{
-		{
-			"action_id":             "assistant.chat",
-			"label":                 "Assistant chat",
-			"workflow_ref":          "assistant.chat",
-			"capability_category":   "assistant",
-			"execution_mode":        "provider_workflow",
-			"classification":        "read_only",
-			"confirmation_required": false,
-			"availability_state":    availability,
-			"next_action":           requiredNextAction,
-		},
-		{
-			"action_id":             "assistant.image_help",
-			"label":                 "Image help",
-			"workflow_ref":          "assistant.image_help",
-			"capability_category":   "assistant",
-			"execution_mode":        "provider_workflow",
-			"classification":        "preview_only",
-			"confirmation_required": false,
-			"availability_state":    availability,
-			"next_action":           requiredNextAction,
-		},
-		{
-			"action_id":             "assistant.content_generation",
-			"label":                 "Content generation",
-			"workflow_ref":          "assistant.content_generation",
-			"capability_category":   "assistant",
-			"execution_mode":        "provider_workflow",
-			"classification":        "preview_only",
-			"confirmation_required": false,
-			"availability_state":    availability,
-			"next_action":           requiredNextAction,
-		},
-	}
+	return workflowActionsForRefs([]string{"assistant.chat", "assistant.image_help", "assistant.content_generation"}, availability, requiredNextAction)
 }
 
 func openAIRegistrySetupSchema() map[string]any {

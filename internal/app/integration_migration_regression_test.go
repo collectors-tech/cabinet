@@ -246,3 +246,73 @@ func TestProviderRegistryProjectsMarketWatchProviderScopes(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderRegistryProjectsWorkflowActionRegistryMetadata(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	ebay := findRegistryProvider(payload.Providers, "ebay")
+	if ebay == nil {
+		t.Fatalf("expected eBay provider in registry payload: %+v", payload.Providers)
+	}
+	actions, ok := ebay["actions"].([]any)
+	if !ok {
+		t.Fatalf("expected eBay registry actions list, got %#v", ebay["actions"])
+	}
+	for _, want := range []struct {
+		id                   string
+		sideEffect           string
+		confirmationRequired bool
+		scheduleSupport      string
+	}{
+		{id: "market_watch.run", sideEffect: "preview_only", scheduleSupport: "manual_and_scheduled"},
+		{id: "ebay.seller_operations", sideEffect: "write", confirmationRequired: true, scheduleSupport: "manual"},
+		{id: "ebay.listing_lifecycle", sideEffect: "destructive", confirmationRequired: true, scheduleSupport: "manual"},
+	} {
+		action := findRegistryAction(actions, want.id)
+		if action == nil {
+			t.Fatalf("eBay registry missing workflow action %q in %+v", want.id, actions)
+		}
+		if action["workflow_ref"] != want.id || action["side_effect_level"] != want.sideEffect || action["classification"] != want.sideEffect {
+			t.Fatalf("workflow action %q safety metadata drifted: %+v", want.id, action)
+		}
+		if got, _ := action["confirmation_required"].(bool); got != want.confirmationRequired {
+			t.Fatalf("workflow action %q confirmation_required got %v want %v: %+v", want.id, got, want.confirmationRequired, action)
+		}
+		if action["schedule_support"] != want.scheduleSupport || action["health_impact"] == "" {
+			t.Fatalf("workflow action %q missing schedule/health contract: %+v", want.id, action)
+		}
+		capabilities, ok := action["capabilities"].([]any)
+		if !ok || len(capabilities) == 0 {
+			t.Fatalf("workflow action %q must expose capability list, got %#v", want.id, action["capabilities"])
+		}
+		inboxEvents, ok := action["inbox_events"].([]any)
+		if !ok || !containsAnyString(inboxEvents, "required_action") {
+			t.Fatalf("workflow action %q must expose required-action Inbox event metadata, got %#v", want.id, action["inbox_events"])
+		}
+	}
+
+	telegram := findRegistryProvider(payload.Providers, "telegram")
+	if telegram == nil {
+		t.Fatalf("expected Telegram provider in registry payload: %+v", payload.Providers)
+	}
+	telegramActions, ok := telegram["actions"].([]any)
+	if !ok {
+		t.Fatalf("expected Telegram registry actions list, got %#v", telegram["actions"])
+	}
+	capture := findRegistryAction(telegramActions, "telegram.catalog_capture")
+	if capture == nil || capture["requires_auth"] != true || capture["requires_secrets"] != true || capture["execution_mode"] != "provider_workflow" {
+		t.Fatalf("Telegram catalog capture workflow registry metadata drifted: %+v", capture)
+	}
+}

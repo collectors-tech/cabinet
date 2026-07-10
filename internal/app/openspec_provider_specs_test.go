@@ -201,6 +201,69 @@ func TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow(t *testing.T) 
 	}
 }
 
+func TestIntegrationProviderAuthoringGuideCoversIssue1465WorkflowActions(t *testing.T) {
+	t.Parallel()
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+
+	requiredGuideTokens := []string{
+		"integrationWorkflowActionDefinitions",
+		"`workflow_refs`",
+		"`input_schema` and `output_schema`",
+		"`side_effect_level`",
+		"`confirmation_required`",
+		"`schedule_support`",
+		"`inbox_events`",
+		"`health_impact`",
+		"`execution_mode`",
+		"`read_only`, `preview_only`, `write`, or `destructive`",
+	}
+	for _, token := range requiredGuideTokens {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1465 workflow action token: %s", token)
+		}
+	}
+
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
+	if err != nil {
+		t.Fatalf("read provider registry spec: %v", err)
+	}
+	registry := string(registryBytes)
+	for _, token := range []string{
+		"INTEGRATION-064",
+		"Provider workflow registry MUST define execution contracts",
+		"`side_effect_level`",
+		"`inbox_events`",
+		"`health_impact`",
+		"`availability_state`",
+		"workflow failure and required-action outcomes MUST advertise Inbox event metadata",
+	} {
+		if !strings.Contains(registry, token) {
+			t.Fatalf("provider registry spec missing #1465 workflow action token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"`INTEGRATION-064`",
+		"#1465",
+		"TestProviderRegistryProjectsWorkflowActionRegistryMetadata",
+		"TestIntegrationProviderAuthoringGuideCoversIssue1465WorkflowActions",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1465 workflow action token: %s", token)
+		}
+	}
+}
+
 func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing.T) {
 	t.Parallel()
 
