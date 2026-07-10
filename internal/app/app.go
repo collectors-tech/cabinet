@@ -2842,6 +2842,14 @@ func New(cfg config.Config) (*App, error) {
 		}
 		searchResult, err := runBonzaSearch(r.Context(), http.DefaultClient, baseURL, qs, requested)
 		if err != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-bonzaslotcars-com-au", "bonzaslotcars.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_BONZA",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-bonzaslotcars-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_run_bonza"}`, http.StatusBadRequest)
 			return
 		}
