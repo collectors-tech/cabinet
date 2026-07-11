@@ -360,36 +360,12 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	previousPath := ""
-	if _, err := os.Stat(dst); err == nil {
-		previous, err := os.CreateTemp(dstDir, ".cabinet-restore-prev-*.db")
-		if err != nil {
-			return err
-		}
-		previousPath = previous.Name()
-		if err := previous.Close(); err != nil {
-			_ = os.Remove(previousPath)
-			return err
-		}
-		if err := os.Remove(previousPath); err != nil {
-			return err
-		}
-		if err := os.Rename(dst, previousPath); err != nil {
-			return overwriteFile(tmpPath, dst)
-		}
-	} else if !os.IsNotExist(err) {
+	if _, err := os.Stat(dst); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
-	if err := os.Rename(tmpPath, dst); err != nil {
-		if previousPath != "" {
-			_ = os.Rename(previousPath, dst)
-		}
+	if err := overwriteFile(tmpPath, dst); err != nil {
 		return err
-	}
-	cleanupTmp = false
-	if previousPath != "" {
-		_ = os.Remove(previousPath)
 	}
 	return nil
 }
