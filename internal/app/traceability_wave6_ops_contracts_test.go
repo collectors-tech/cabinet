@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -99,6 +100,58 @@ func TestDataExportsAreScopedToActiveProfile(t *testing.T) {
 	}
 	if body := csvExport.Body.String(); !strings.Contains(body, "EXPORT-P2-ONLY") || strings.Contains(body, "EXPORT-P1-ONLY") {
 		t.Fatalf("csv export should include only active profile records, got %s", body)
+	}
+}
+
+func TestDataExportsDoNotLeakProfileSecretsOrLicenses(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"SecretSafeExport"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	secretValue := "sk-1867-export-secret"
+	licenseValue := `{"tier":"pro","signature":"license-1867-secret"}`
+	putSecret := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/secrets", strings.NewReader(`{"key":"openai_api_key","value":"`+secretValue+`"}`), map[string]string{"Content-Type": "application/json"})
+	if putSecret.Code != http.StatusOK {
+		t.Fatalf("put secret status=%d body=%s", putSecret.Code, putSecret.Body.String())
+	}
+	putLicense := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/license", strings.NewReader(`{"license_json":`+strconv.Quote(licenseValue)+`}`), map[string]string{"Content-Type": "application/json"})
+	if putLicense.Code != http.StatusOK {
+		t.Fatalf("put license status=%d body=%s", putLicense.Code, putLicense.Body.String())
+	}
+	createItem := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"SECRET-SAFE-EXPORT","title":"Secret safe export item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if createItem.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", createItem.Code, createItem.Body.String())
+	}
+
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{name: "json snapshot", path: "/api/data/export/json"},
+		{name: "csv items", path: "/api/data/export/csv/items"},
+		{name: "diagnostic logs", path: "/api/logs/export"},
+	} {
+		resp := doRequest(t, a, http.MethodGet, tc.path, nil, nil)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s export status=%d body=%s", tc.name, resp.Code, resp.Body.String())
+		}
+		body := resp.Body.String()
+		for _, leaked := range []string{secretValue, licenseValue, "license-1867-secret"} {
+			if strings.Contains(body, leaked) {
+				t.Fatalf("%s export leaked sensitive material %q: %s", tc.name, leaked, body)
+			}
+		}
 	}
 }
 
