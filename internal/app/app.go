@@ -9166,6 +9166,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		if strings.EqualFold(providerID, "ebay") {
 			provider["setup_status"] = ebaySetupStatus(settings, healthStatus)
 		}
+		applyBetaMarketWatchReleaseStatus(provider, settings)
 		baseDomain := normalizeProviderDomain(fmt.Sprintf("%v", provider["base_domain"]))
 		if _, hasSetupSchema := provider["setup_schema"]; !hasSetupSchema {
 			if schema, ok := providerConfigSchemaForRef(fmt.Sprintf("%v", provider["config_schema_ref"])); ok {
@@ -9207,6 +9208,97 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 
 	return base
+}
+
+func applyBetaMarketWatchReleaseStatus(provider map[string]any, settings map[string]string) {
+	scope := strings.TrimSpace(fmt.Sprintf("%v", provider["market_watch_scope"]))
+	if scope == "" {
+		return
+	}
+
+	providerID := strings.TrimSpace(fmt.Sprintf("%v", provider["provider_id"]))
+	health := mapValue(provider["health"])
+	healthStatus := strings.TrimSpace(fmt.Sprintf("%v", health["status"]))
+	liveValidated := healthStatus == "ok" || healthStatus == "ready"
+	workflowRefs := providerWorkflowRefs(provider)
+
+	switch providerID {
+	case "ebay":
+		hasToken := strings.TrimSpace(settings["ebay_bearer_token"]) != ""
+		provider["live_evidence_required"] = true
+		if !hasToken {
+			provider["state"] = "needs_config"
+			provider["beta_release_status"] = "setup_required"
+			provider["live_evidence_state"] = "missing_credentials"
+			provider["setup_instructions"] = "Store eBay credentials and run live provider proof before using eBay for beta Market Watch."
+			provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "connect_ebay_credentials_and_run_live_provider_proof")
+			return
+		}
+		if liveValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		provider["beta_release_status"] = "live_evidence_required"
+		provider["live_evidence_state"] = "credentials_present_proof_pending"
+		provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "run_live_provider_proof_before_beta_release")
+	case "amazon":
+		if !strings.EqualFold(fmt.Sprintf("%v", provider["state"]), "ready") {
+			provider["beta_release_status"] = "disabled_unsupported"
+			provider["live_evidence_state"] = "unsupported_for_beta"
+			provider["actions"] = workflowActionsForRefs(workflowRefs, "disabled", "choose_supported_beta_market_watch_provider")
+		}
+	default:
+		provider["live_evidence_required"] = true
+		if liveValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		if strings.EqualFold(fmt.Sprintf("%v", provider["api_family"]), "woo_store_api") {
+			provider["beta_release_status"] = "manual_url_capture_only"
+			provider["live_evidence_state"] = "headless_or_manual_capture_required"
+			provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "use_manual_url_capture_or_attach_live_probe_evidence")
+			return
+		}
+		provider["beta_release_status"] = "beta_limited"
+		provider["live_evidence_state"] = "public_provider_probe_required"
+	}
+}
+
+func providerWorkflowRefs(provider map[string]any) []string {
+	rawRefs, ok := provider["workflow_refs"].([]string)
+	if ok {
+		return append([]string{}, rawRefs...)
+	}
+	refs := []string{}
+	for _, raw := range anySlice(provider["workflow_refs"]) {
+		if ref := strings.TrimSpace(fmt.Sprintf("%v", raw)); ref != "" {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
+}
+
+func mapValue(v any) map[string]any {
+	if value, ok := v.(map[string]any); ok {
+		return value
+	}
+	return map[string]any{}
+}
+
+func anySlice(v any) []any {
+	if values, ok := v.([]any); ok {
+		return values
+	}
+	if values, ok := v.([]string); ok {
+		out := make([]any, 0, len(values))
+		for _, value := range values {
+			out = append(out, value)
+		}
+		return out
+	}
+	return nil
 }
 
 func openAIRegistryAssistantActions(ready bool, nextAction string) []map[string]any {
