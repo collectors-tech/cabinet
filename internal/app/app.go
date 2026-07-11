@@ -763,6 +763,50 @@ func New(cfg config.Config) (*App, error) {
 			default:
 				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			}
+		case "integration-instances":
+			switch r.Method {
+			case http.MethodGet:
+				instances, err := profiles.ListIntegrationInstances(r.Context(), profileID)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_list_integration_instances"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"instances": instances})
+			case http.MethodPost:
+				var req profile.IntegrationInstancePatch
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				instance, err := profiles.UpsertIntegrationInstance(r.Context(), profileID, req)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_create_integration_instance"}`, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]any{"instance": instance})
+			case http.MethodPut:
+				var req profile.IntegrationInstancePatch
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				instance, err := profiles.UpsertIntegrationInstance(r.Context(), profileID, req)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_update_integration_instance"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"instance": instance})
+			case http.MethodDelete:
+				instanceID := strings.TrimSpace(r.URL.Query().Get("id"))
+				if err := profiles.DeleteIntegrationInstance(r.Context(), profileID, instanceID); err != nil {
+					http.Error(w, `{"error":"failed_to_delete_integration_instance"}`, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			default:
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			}
 		case "saved-filters":
 			switch r.Method {
 			case http.MethodGet:
