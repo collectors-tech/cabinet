@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -807,6 +808,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, err
 	}
+	if err := rebuildScannerMatchesWithoutLegacyCandidateFK(ctx, tx); err != nil {
+		conn.Close()
+		return nil, err
+	}
 	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_scanner_candidates_result_scope ON scanner_candidates(profile_id, query_set_id, source, listing_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates scoped result index: %w", err)
@@ -952,6 +957,98 @@ func rebuildScannerCandidatesWithoutGlobalListingUnique(ctx context.Context, tx 
 	}
 	if _, err := tx.ExecContext(ctx, `DROP TABLE scanner_candidates_legacy_unique_listing`); err != nil {
 		return fmt.Errorf("drop legacy scanner_candidates: %w", err)
+	}
+	return nil
+}
+
+func rebuildScannerMatchesWithoutLegacyCandidateFK(ctx context.Context, tx *sql.Tx) error {
+	repairs := []struct {
+		table   string
+		create  string
+		columns string
+	}{
+		{
+			table: "scanner_candidate_decision_history",
+			create: `CREATE TABLE scanner_candidate_decision_history (
+				id TEXT PRIMARY KEY,
+				candidate_id TEXT NOT NULL,
+				from_status TEXT NOT NULL DEFAULT '',
+				to_status TEXT NOT NULL,
+				reason TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "id, candidate_id, from_status, to_status, reason, created_at",
+		},
+		{
+			table: "scanner_matches",
+			create: `CREATE TABLE scanner_matches (
+				candidate_id TEXT PRIMARY KEY,
+				item_id TEXT NOT NULL DEFAULT '',
+				state TEXT NOT NULL,
+				confidence REAL NOT NULL DEFAULT 0,
+				needs_review INTEGER NOT NULL DEFAULT 1,
+				extracted_part_number TEXT NOT NULL DEFAULT '',
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at",
+		},
+		{
+			table: "discovery_actions",
+			create: `CREATE TABLE discovery_actions (
+				id TEXT PRIMARY KEY,
+				candidate_id TEXT NOT NULL,
+				action_type TEXT NOT NULL,
+				payload_json TEXT NOT NULL DEFAULT '{}',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "id, candidate_id, action_type, payload_json, created_at",
+		},
+		{
+			table: "ignored_candidates",
+			create: `CREATE TABLE ignored_candidates (
+				candidate_id TEXT PRIMARY KEY,
+				ignored_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "candidate_id, ignored_at",
+		},
+	}
+	for _, repair := range repairs {
+		if err := rebuildScannerCandidateReferenceTable(ctx, tx, repair.table, repair.create, repair.columns); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rebuildScannerCandidateReferenceTable(ctx context.Context, tx *sql.Tx, table, createSQL, columns string) error {
+	var ddl string
+	err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&ddl)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	if !strings.Contains(strings.ToLower(ddl), "scanner_candidates_legacy_unique_listing") {
+		return nil
+	}
+	legacyTable := table + "_legacy_candidate_fk"
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, table, legacyTable)); err != nil {
+		return fmt.Errorf("rename legacy %s: %w", table, err)
+	}
+	if _, err := tx.ExecContext(ctx, createSQL); err != nil {
+		return fmt.Errorf("create rebuilt %s: %w", table, err)
+	}
+	copySQL := fmt.Sprintf(`INSERT INTO %s(%s) SELECT %s FROM %s`, table, columns, columns, legacyTable)
+	if _, err := tx.ExecContext(ctx, copySQL); err != nil {
+		return fmt.Errorf("copy rebuilt %s: %w", table, err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DROP TABLE %s`, legacyTable)); err != nil {
+		return fmt.Errorf("drop legacy %s: %w", table, err)
 	}
 	return nil
 }

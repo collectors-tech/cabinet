@@ -188,9 +188,13 @@ func TestBigCommerceRunStorefrontHTMLModeRecordsLiveProof(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
+		if got := r.URL.Query().Get("search_query"); got != "slot car" {
+			http.Error(w, `{"error":"missing_search_query"}`, http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(`
-<article class="card" data-product-id="20849">
+<article class="card" data-entity-id="20849">
   <h3 class="card-title">
     <a href="https://www.voglers.com.au/cardinal-wooden-puzzle-m/?searchid=fixture&amp;search_query=slot+car">
       Cardinal Wooden Puzzle (M)

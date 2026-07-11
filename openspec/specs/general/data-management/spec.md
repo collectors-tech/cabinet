@@ -92,3 +92,4 @@ Cabinet SHALL upgrade a representative database created by the prior release bas
 - **WHEN** the current app opens and migrates that database
 - **THEN** those records SHALL remain present with the same key counts and relationships
 - **AND** newly required migration columns and indexes SHALL be added without deleting the existing data
+- **AND** scanner candidate dependent tables such as discovery actions and match records SHALL reference the rebuilt `scanner_candidates` table after legacy candidate uniqueness migrations so Market Watch handoffs continue to persist.

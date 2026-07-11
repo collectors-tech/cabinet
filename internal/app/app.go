@@ -3464,7 +3464,11 @@ func New(cfg config.Config) (*App, error) {
 			if runErr != nil {
 				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
 				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
-				http.Error(w, `{"error":"failed_to_run_bigcommerce_token_mode"}`, http.StatusBadRequest)
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "failed_to_run_bigcommerce_token_mode",
+					"message": runErr.Error(),
+				})
 				return
 			}
 			candidates = out
@@ -3477,7 +3481,11 @@ func New(cfg config.Config) (*App, error) {
 			if runErr != nil {
 				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
 				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
-				http.Error(w, `{"error":"failed_to_run_bigcommerce_storefront_mode"}`, http.StatusBadRequest)
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "failed_to_run_bigcommerce_storefront_mode",
+					"message": runErr.Error(),
+				})
 				return
 			}
 			candidates = out
@@ -3494,7 +3502,11 @@ func New(cfg config.Config) (*App, error) {
 			"",
 		)
 		if err != nil {
-			http.Error(w, `{"error":"failed_to_persist_bigcommerce_candidates"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_persist_bigcommerce_candidates",
+				"message": err.Error(),
+			})
 			return
 		}
 		scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "ok", "Live BigCommerce storefront Market Watch run succeeded with persisted candidates.")
@@ -3745,7 +3757,11 @@ func New(cfg config.Config) (*App, error) {
 		}
 		result, err := discoverySvc.ApplyActionWithResult(r.Context(), req)
 		if err != nil {
-			http.Error(w, `{"error":"failed_to_apply_discovery_action"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_apply_discovery_action",
+				"message": err.Error(),
+			})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(result)
@@ -10379,7 +10395,12 @@ func runBigCommerceStorefrontSearch(
 		return nil, fmt.Errorf("parse bigcommerce storefront url: %w", err)
 	}
 	params := parsed.Query()
-	params.Set("q", strings.TrimSpace(query))
+	if strings.EqualFold(path.Base(parsed.Path), "search.php") {
+		params.Set("search_query", strings.TrimSpace(query))
+		params.Set("section", "product")
+	} else {
+		params.Set("q", strings.TrimSpace(query))
+	}
 	params.Set("page", strconv.Itoa(page))
 	params.Set("limit", strconv.Itoa(pageSize))
 	parsed.RawQuery = params.Encode()
@@ -10437,7 +10458,7 @@ func runBigCommerceStorefrontSearch(
 }
 
 func bigCommerceCandidatesFromSearchHTML(body, providerDomain string) []map[string]any {
-	cardPattern := regexp.MustCompile(`(?is)data-product-id=["']([^"']+)["'].*?<h3[^>]*class=["'][^"']*card-title[^"']*["'][^>]*>.*?<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>.*?data-product-price-with-tax[^>]*class=["'][^"']*price[^"']*["'][^>]*>(.*?)</span>`)
+	cardPattern := regexp.MustCompile(`(?is)(?:data-product-id|data-entity-id)=["']([^"']+)["'].*?<h3[^>]*class=["'][^"']*card-title[^"']*["'][^>]*>.*?<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>.*?data-product-price-with-tax[^>]*class=["'][^"']*price[^"']*["'][^>]*>(.*?)</span>`)
 	matches := cardPattern.FindAllStringSubmatch(body, -1)
 	candidates := make([]map[string]any, 0, len(matches))
 	for _, match := range matches {
