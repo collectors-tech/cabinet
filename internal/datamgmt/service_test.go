@@ -113,6 +113,75 @@ func TestDryRunAndApplyImportUseMatchingPartNumberNormalization(t *testing.T) {
 	}
 }
 
+func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
+	t.Parallel()
+
+	sourcePath := filepath.Join(t.TempDir(), "source.db")
+	sourceConn, err := db.OpenAndMigrate(context.Background(), sourcePath)
+	if err != nil {
+		t.Fatalf("open source database: %v", err)
+	}
+	t.Cleanup(func() { _ = sourceConn.Close() })
+
+	if _, err := sourceConn.Exec(`
+		INSERT INTO canonical_items (id, brand, category, part_number, title, tags_json)
+		VALUES ('roundtrip-item','AFX','Slot Car','P-500','Relationship Roundtrip','["sealed","tracked"]')
+	`); err != nil {
+		t.Fatalf("seed source item: %v", err)
+	}
+	if _, err := sourceConn.Exec(`INSERT INTO item_barcodes (id, item_id, barcode) VALUES ('roundtrip-barcode', 'roundtrip-item', '0123456789012')`); err != nil {
+		t.Fatalf("seed source barcode: %v", err)
+	}
+	if _, err := sourceConn.Exec(`
+		INSERT INTO instances (id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes)
+		VALUES ('roundtrip-instance', 'roundtrip-item', 'mint', 'sealed', 2, 'Shelf A', 49.95, '2026-07-11', 'boxed pair')
+	`); err != nil {
+		t.Fatalf("seed source instance: %v", err)
+	}
+
+	snapshot, err := NewService(sourceConn).ExportSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("export source snapshot: %v", err)
+	}
+	if len(snapshot.Items) != 1 || len(snapshot.Items[0].Barcodes) != 1 || len(snapshot.Items[0].Instances) != 1 {
+		t.Fatalf("export snapshot missing relationship evidence: %#v", snapshot.Items)
+	}
+
+	targetPath := filepath.Join(t.TempDir(), "target.db")
+	targetConn, err := db.OpenAndMigrate(context.Background(), targetPath)
+	if err != nil {
+		t.Fatalf("open target database: %v", err)
+	}
+	t.Cleanup(func() { _ = targetConn.Close() })
+
+	apply, err := NewService(targetConn).ApplyImport(context.Background(), snapshot, ApplyOptions{DefaultAction: "merge"})
+	if err != nil {
+		t.Fatalf("apply snapshot into clean target: %v", err)
+	}
+	if apply.TotalItems != 1 || apply.Created != 1 || apply.Merged != 0 || apply.Skipped != 0 || apply.Failed != 0 {
+		t.Fatalf("unexpected clean target apply summary: %#v", apply)
+	}
+
+	roundTrip, err := NewService(targetConn).ExportSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("export round-trip snapshot: %v", err)
+	}
+	if len(roundTrip.Items) != 1 {
+		t.Fatalf("expected one round-trip item, got %#v", roundTrip.Items)
+	}
+	got := roundTrip.Items[0]
+	if got.PartNumber != "P-500" || len(got.Tags) != 2 || got.Tags[0] != "sealed" || len(got.Barcodes) != 1 || got.Barcodes[0] != "0123456789012" {
+		t.Fatalf("round-trip item metadata/barcodes mismatch: %#v", got)
+	}
+	if len(got.Instances) != 1 {
+		t.Fatalf("expected one round-trip instance, got %#v", got.Instances)
+	}
+	instance := got.Instances[0]
+	if instance.Quantity != 2 || instance.Condition != "mint" || instance.Status != "sealed" || instance.StorageLocation != "Shelf A" || instance.AcquisitionPrice != 49.95 || instance.AcquisitionDate != "2026-07-11" || instance.Notes != "boxed pair" {
+		t.Fatalf("round-trip instance relationship mismatch: %#v", instance)
+	}
+}
+
 func TestApplyImportReportsSkippedAndInvalidActionFailures(t *testing.T) {
 	t.Parallel()
 
