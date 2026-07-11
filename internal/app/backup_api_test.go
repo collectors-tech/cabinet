@@ -9,7 +9,7 @@ import (
 )
 
 func TestBackupRunAndRestoreEndpoints(t *testing.T) {
-	t.Parallel()
+	t.Setenv("CABINET_SEED_SAMPLE_DATA", "0")
 
 	a := newTestApp(t)
 	if _, err := a.db.Exec(`INSERT INTO canonical_items (id, brand, category, part_number, title) VALUES ('item-a','AFX','Slot Car','P-1','Car')`); err != nil {
