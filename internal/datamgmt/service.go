@@ -34,6 +34,7 @@ type SnapshotItem struct {
 	Tags        []string           `json:"tags"`
 	Barcodes    []string           `json:"barcodes"`
 	Instances   []SnapshotInstance `json:"instances"`
+	Photos      []SnapshotPhoto    `json:"photos"`
 }
 
 type SnapshotInstance struct {
@@ -44,6 +45,15 @@ type SnapshotInstance struct {
 	AcquisitionPrice float64 `json:"acquisition_price"`
 	AcquisitionDate  string  `json:"acquisition_date"`
 	Notes            string  `json:"notes"`
+}
+
+type SnapshotPhoto struct {
+	Filename      string `json:"filename"`
+	OriginalPath  string `json:"original_path"`
+	PreviewPath   string `json:"preview_path"`
+	ThumbnailPath string `json:"thumbnail_path"`
+	IsPrimary     bool   `json:"is_primary"`
+	DisplayOrder  int    `json:"display_order"`
 }
 
 type DryRunSummary struct {
@@ -141,6 +151,11 @@ func (s *Service) ExportSnapshotForProfile(ctx context.Context, profileID string
 			return Snapshot{}, err
 		}
 		item.Instances = instances
+		photos, err := s.loadPhotos(ctx, itemID)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		item.Photos = photos
 		out.Items = append(out.Items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -285,6 +300,7 @@ func (s *Service) ParseCSVToSnapshot(req CSVImportRequest) (Snapshot, error) {
 			Tags:        []string{},
 			Barcodes:    []string{},
 			Instances:   []SnapshotInstance{},
+			Photos:      []SnapshotPhoto{},
 		}
 		if item.Brand == "" || item.Category == "" || item.PartNumber == "" || item.Title == "" {
 			continue
@@ -459,6 +475,28 @@ func (s *Service) loadInstances(ctx context.Context, itemID string) ([]SnapshotI
 	return out, rows.Err()
 }
 
+func (s *Service) loadPhotos(ctx context.Context, itemID string) ([]SnapshotPhoto, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT filename, original_path, preview_path, thumbnail_path, is_primary, display_order
+		FROM item_photos WHERE item_id = ? ORDER BY display_order ASC, created_at ASC
+	`, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("load photos: %w", err)
+	}
+	defer rows.Close()
+	var out []SnapshotPhoto
+	for rows.Next() {
+		var ph SnapshotPhoto
+		var isPrimary int
+		if err := rows.Scan(&ph.Filename, &ph.OriginalPath, &ph.PreviewPath, &ph.ThumbnailPath, &isPrimary, &ph.DisplayOrder); err != nil {
+			return nil, fmt.Errorf("scan photo: %w", err)
+		}
+		ph.IsPrimary = isPrimary != 0
+		out = append(out, ph)
+	}
+	return out, rows.Err()
+}
+
 func (s *Service) findItemIDByPartNumber(ctx context.Context, partNumber string) (string, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx, `SELECT id FROM canonical_items WHERE part_number = ?`, partNumber).Scan(&id)
@@ -528,6 +566,33 @@ func (s *Service) mergeChildrenTx(ctx context.Context, tx *sql.Tx, itemID string
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, uuid.NewString(), itemID, in.Condition, in.Status, qty, in.StorageLocation, in.AcquisitionPrice, in.AcquisitionDate, in.Notes); err != nil {
 			return fmt.Errorf("insert import instance: %w", err)
+		}
+	}
+	for _, ph := range item.Photos {
+		filename := strings.TrimSpace(ph.Filename)
+		originalPath := strings.TrimSpace(ph.OriginalPath)
+		if filename == "" && originalPath == "" {
+			continue
+		}
+		var count int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(1) FROM item_photos
+			WHERE item_id = ? AND filename = ? AND original_path = ?
+		`, itemID, filename, originalPath).Scan(&count); err != nil {
+			return fmt.Errorf("check photo duplicate: %w", err)
+		}
+		if count != 0 {
+			continue
+		}
+		isPrimary := 0
+		if ph.IsPrimary {
+			isPrimary = 1
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, uuid.NewString(), itemID, filename, originalPath, ph.PreviewPath, ph.ThumbnailPath, isPrimary, ph.DisplayOrder); err != nil {
+			return fmt.Errorf("insert import photo reference: %w", err)
 		}
 	}
 	return nil

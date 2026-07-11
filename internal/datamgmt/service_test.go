@@ -138,12 +138,18 @@ func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("seed source instance: %v", err)
 	}
+	if _, err := sourceConn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('roundtrip-photo', 'roundtrip-item', 'front.jpg', 'media/items/roundtrip/front.jpg', 'media/items/roundtrip/front-preview.jpg', 'media/items/roundtrip/front-thumb.jpg', 1, 3)
+	`); err != nil {
+		t.Fatalf("seed source photo: %v", err)
+	}
 
 	snapshot, err := NewService(sourceConn).ExportSnapshot(context.Background())
 	if err != nil {
 		t.Fatalf("export source snapshot: %v", err)
 	}
-	if len(snapshot.Items) != 1 || len(snapshot.Items[0].Barcodes) != 1 || len(snapshot.Items[0].Instances) != 1 {
+	if len(snapshot.Items) != 1 || len(snapshot.Items[0].Barcodes) != 1 || len(snapshot.Items[0].Instances) != 1 || len(snapshot.Items[0].Photos) != 1 {
 		t.Fatalf("export snapshot missing relationship evidence: %#v", snapshot.Items)
 	}
 
@@ -179,6 +185,13 @@ func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
 	instance := got.Instances[0]
 	if instance.Quantity != 2 || instance.Condition != "mint" || instance.Status != "sealed" || instance.StorageLocation != "Shelf A" || instance.AcquisitionPrice != 49.95 || instance.AcquisitionDate != "2026-07-11" || instance.Notes != "boxed pair" {
 		t.Fatalf("round-trip instance relationship mismatch: %#v", instance)
+	}
+	if len(got.Photos) != 1 {
+		t.Fatalf("expected one round-trip photo reference, got %#v", got.Photos)
+	}
+	photo := got.Photos[0]
+	if photo.Filename != "front.jpg" || photo.OriginalPath != "media/items/roundtrip/front.jpg" || photo.PreviewPath != "media/items/roundtrip/front-preview.jpg" || photo.ThumbnailPath != "media/items/roundtrip/front-thumb.jpg" || !photo.IsPrimary || photo.DisplayOrder != 3 {
+		t.Fatalf("round-trip photo reference mismatch: %#v", photo)
 	}
 }
 
