@@ -9,6 +9,7 @@ type integrationProviderManifest struct {
 	MarketWatchScope  string
 	ProviderCategory  string
 	ProviderType      string
+	AdapterType       string
 	APIFamily         string
 	APISupportProfile string
 	ActiveMode        string
@@ -80,6 +81,7 @@ func (m integrationProviderManifest) payload() map[string]any {
 		"base_domain":         m.BaseDomain,
 		"provider_category":   m.ProviderCategory,
 		"provider_type":       m.ProviderType,
+		"adapter_type":        m.AdapterType,
 		"api_family":          m.APIFamily,
 		"api_support_profile": m.APISupportProfile,
 		"active_mode":         m.ActiveMode,
@@ -532,6 +534,14 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 		activeMode = "boost_api"
 		supportProfile = "boost_v2"
 	}
+	adapterType := apiFamily
+	if domain == "acercmodels.com" {
+		apiFamily = "lightspeed"
+		activeMode = "lightspeed_catalog"
+		integrationMode = "storefront_access"
+		supportProfile = "lightspeed_storefront_v1"
+		adapterType = "lightspeed-storefront"
+	}
 	return integrationProviderManifest{
 		ProviderID:        "au-webshop-" + strings.ReplaceAll(domain, ".", "-"),
 		DisplayName:       domain,
@@ -539,6 +549,7 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 		MarketWatchScope:  marketWatchScopeForAUWebshopDomain(domain),
 		ProviderCategory:  "storefront/source matcher",
 		ProviderType:      "retailer",
+		AdapterType:       adapterType,
 		APIFamily:         apiFamily,
 		APISupportProfile: supportProfile,
 		ActiveMode:        activeMode,

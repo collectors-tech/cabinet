@@ -10,6 +10,7 @@ Mapped reusable behavior:
 - Boost/Shopify runtime discovery + session handling semantics -> `PROVIDER-FAMILY-002`
 - Algolia runtime discovery + drift-safe fallback semantics -> `PROVIDER-FAMILY-003`
 - Shared pagination/stock normalization semantics -> `PROVIDER-FAMILY-004`
+- Lightspeed storefront catalogue parsing and health-check semantics -> `PROVIDER-FAMILY-005`
 
 ## Requirements
 ### Requirement INTEGRATION-011: AU webshop provider family MUST maintain domain catalog
@@ -195,6 +196,22 @@ Hobbytech integration SHALL support Shopify-backed search using Boost Commerce e
 - **GIVEN** domain policy declares `crawl_delay_ms` and `max_requests_per_minute`
 - **WHEN** scanner executes multiple AU webshop requests in one run window
 - **THEN** scheduler MUST enforce throttle policy and transition provider state to `degraded` after repeated policy violations
+
+### Requirement PROVIDER-AU-WEBSHOPS-LIGHTSPEED-001: Acer provider SHALL use a Lightspeed storefront adapter
+Cabinet SHALL register Acer RC Models (`acercmodels.com`) as a `lightspeed-storefront` catalogue/source-matching provider instead of a generic webshop fallback.
+
+#### Scenario: Acer Lightspeed registry metadata
+- **GIVEN** `/api/providers/registry` returns AU webshop providers
+- **WHEN** the Acer RC Models provider entry is projected
+- **THEN** it MUST expose `adapter_type: lightspeed-storefront`
+- **AND** it MUST expose `api_family: lightspeed`, `api_support_profile: lightspeed_storefront_v1`, `active_mode: lightspeed_catalog`, and `market_watch_scope: acercmodels`
+- **AND** it MUST expose source/matching/catalogue capabilities for search, pricing, stock observation, and health while keeping auth mode `none`
+
+#### Scenario: Lightspeed product fixture parser health
+- **GIVEN** a Lightspeed storefront product/category fixture contains product id, title, canonical URL, price, SKU/part number, category, image, availability, and description fields
+- **WHEN** parser normalization runs for Acer source matching
+- **THEN** Cabinet MUST emit normalized candidates with listing id, title, source URL, AUD price, seller domain, source scope `acercmodels`, stock state/count, and image URL
+- **AND** if a fixture has no parseable title, URL, id, or price for every product, parser health MUST fail rather than silently reporting an empty healthy result
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |

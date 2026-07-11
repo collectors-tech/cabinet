@@ -119,6 +119,24 @@ func TestShoppingProviderFixturesNormalizeSharedCandidateShape(t *testing.T) {
 				return frontlineCandidatesForScanner(candidates)
 			},
 		},
+		{
+			name:       "lightspeed storefront product fixture",
+			providerID: "acercmodels",
+			run: func(t *testing.T, serverURL string, client *http.Client) []scanner.CandidateInput {
+				t.Helper()
+				candidates, err := runLightspeedStorefrontSearch(
+					context.Background(),
+					client,
+					serverURL+"/lightspeed/products.json",
+					"NSR",
+					"acercmodels.com",
+				)
+				if err != nil {
+					t.Fatalf("runLightspeedStorefrontSearch() error = %v", err)
+				}
+				return lightspeedCandidatesForScanner(candidates)
+			},
+		},
 	}
 
 	server := shoppingFixtureServer(t)
@@ -159,6 +177,28 @@ func TestShoppingProviderFixturesRejectMissingRequiredFields(t *testing.T) {
 	}
 	if normalized := hobbytechCandidatesForScanner(candidates); len(normalized) != 0 {
 		t.Fatalf("expected missing title/url records to be rejected, got %+v", normalized)
+	}
+}
+
+func TestLightspeedStorefrontFixtureDetectsMissingCoreFields(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	candidates, err := runLightspeedStorefrontSearch(
+		context.Background(),
+		server.Client(),
+		server.URL+"/lightspeed/missing-fields.json",
+		"broken",
+		"acercmodels.com",
+	)
+	if err == nil {
+		t.Fatalf("expected Lightspeed missing-field health failure, got candidates=%+v", candidates)
+	}
+	if !strings.Contains(err.Error(), "lightspeed parser health failed") {
+		t.Fatalf("expected parser health failure, got %v", err)
+	}
+	if normalized := lightspeedCandidatesForScanner(candidates); len(normalized) != 0 {
+		t.Fatalf("expected missing required Lightspeed fields to be rejected, got %+v", normalized)
 	}
 }
 
@@ -278,14 +318,16 @@ func shoppingFixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	fixtures := map[string]string{
-		"/hobbytech/search":             readShoppingFixture(t, "hobbytech_success.json"),
-		"/bigcommerce/products/search":  readShoppingFixture(t, "bigcommerce_storefront_success.json"),
-		"/bigcommerce/graphql":          readShoppingFixture(t, "bigcommerce_graphql_stock_success.json"),
-		"/doofinder/search":             readShoppingFixture(t, "doofinder_success.json"),
-		"/frontline/algolia/query":      readShoppingFixture(t, "frontline_algolia_success.json"),
-		"/missing-fields/search":        readShoppingFixture(t, "missing_required_fields.json"),
-		"/wp-json/wc/store/v1/products": readShoppingFixture(t, "bonza_category_listing_success.json"),
-		"/unsupported/manual-fallback":  readShoppingFixture(t, "unsupported_manual_fallback.json"),
+		"/hobbytech/search":               readShoppingFixture(t, "hobbytech_success.json"),
+		"/bigcommerce/products/search":    readShoppingFixture(t, "bigcommerce_storefront_success.json"),
+		"/bigcommerce/graphql":            readShoppingFixture(t, "bigcommerce_graphql_stock_success.json"),
+		"/doofinder/search":               readShoppingFixture(t, "doofinder_success.json"),
+		"/frontline/algolia/query":        readShoppingFixture(t, "frontline_algolia_success.json"),
+		"/lightspeed/products.json":       readShoppingFixture(t, "lightspeed_success.json"),
+		"/lightspeed/missing-fields.json": readShoppingFixture(t, "lightspeed_missing_required_fields.json"),
+		"/missing-fields/search":          readShoppingFixture(t, "missing_required_fields.json"),
+		"/wp-json/wc/store/v1/products":   readShoppingFixture(t, "bonza_category_listing_success.json"),
+		"/unsupported/manual-fallback":    readShoppingFixture(t, "unsupported_manual_fallback.json"),
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := fixtures[r.URL.Path]
