@@ -1173,10 +1173,16 @@ describe('ui-screen-integrations', () => {
     cy.contains('Sender/chat state: authorized').should('be.visible')
     cy.contains('Bot token state: stored').should('be.visible')
     cy.contains('Webhook state: pending').should('be.visible')
-    cy.contains('Runtime proof: pending_live_channel_check').should('be.visible')
-    cy.contains('configure_webhook').should('be.visible')
-    cy.contains('production-channel validation').should('be.visible')
-    cy.contains('preview-before-apply channel intake').should('be.visible')
+    cy.get('[role="dialog"]')
+      .contains('Runtime proof: pending_live_channel_check')
+      .should('exist')
+    cy.get('[role="dialog"]').contains('configure_webhook').should('exist')
+    cy.get('[role="dialog"]')
+      .contains('production-channel validation')
+      .should('exist')
+    cy.get('[role="dialog"]')
+      .contains('preview-before-apply channel intake')
+      .should('exist')
     cy.get('[data-testid="telegram-sender-id"]')
       .should('have.value', '12345')
       .clear()
@@ -1968,10 +1974,16 @@ describe('ui-screen-integrations', () => {
         updated_at: '2026-03-01T00:01:00Z',
       },
     }).as('validate')
+    cy.intercept('PUT', '/api/profiles/*/secrets', (req) => {
+      expect(req.body).to.deep.equal({
+        key: 'ebay_bearer_token',
+        value: 'new-secret-token',
+      })
+      req.reply({ statusCode: 200, body: {} })
+    }).as('saveSecret')
     cy.intercept('PUT', '/api/profiles/*/settings', (req) => {
       expect(req.body.settings).to.have.property('ebay_base_url')
       expect(req.body.settings).to.have.property('ebay_marketplace')
-      expect(req.body.settings).to.have.property('ebay_bearer_token', 'new-secret-token')
       req.reply({
         statusCode: 200,
         body: {
@@ -1986,10 +1998,12 @@ describe('ui-screen-integrations', () => {
     signIn()
 
     cy.get('[data-testid="provider-open-ebay"]').click()
-    cy.contains('Token on file.').should('be.visible')
+    cy.contains('Credential on file.').should('be.visible')
     cy.contains('input[placeholder="New token / API key"]').should('not.exist')
     cy.get('[data-testid="replace-token"]').click()
-    cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
+    cy.get('[data-testid="provider-schema-field-ebay_bearer_token"]').type(
+      'new-secret-token'
+    )
     cy.contains('Health: unknown').scrollIntoView().should('be.visible')
     cy.contains('Last run: never').scrollIntoView().should('be.visible')
     cy.contains('Last checked: n/a').scrollIntoView().should('be.visible')
@@ -2008,10 +2022,15 @@ describe('ui-screen-integrations', () => {
     cy.contains('[data-testid="provider-row-ebay"]', 'Last run: success').should('be.visible')
     cy.get('[data-testid="provider-open-ebay"]').click()
     cy.get('[data-testid="replace-token"]').click()
-    cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
+    cy.get('[data-testid="provider-schema-field-ebay_bearer_token"]').type(
+      'new-secret-token'
+    )
     cy.contains('button', 'Save Integration').click()
+    cy.wait('@saveSecret')
     cy.wait('@saveSettings')
-    cy.contains('Provider configuration saved.').scrollIntoView().should('be.visible')
+    cy.contains('Provider schema configuration saved.')
+      .scrollIntoView()
+      .should('be.visible')
   })
 
   it('INTEGRATION-006 + #1289: displays eBay provider-health readiness aliases and recovery guidance', () => {

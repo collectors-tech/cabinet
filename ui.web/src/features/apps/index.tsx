@@ -593,6 +593,78 @@ function notificationHistoryID(value: string) {
   return value.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
 }
 
+function providerDefaultSetupSchema(
+  provider: ProviderRecord
+): IntegrationSetupSchema | undefined {
+  if (provider.setup_schema?.fields?.length) {
+    return provider.setup_schema
+  }
+  if (provider.provider_id !== 'ebay' && provider.integration_mode !== 'web_ingestion') {
+    return provider.setup_schema
+  }
+  const keys = providerSettingsKeys(provider.provider_id)
+  return {
+    schema_ref: `cabinet.provider.${provider.provider_id}.default`,
+    persistence_scope: 'profile_settings',
+    fields: [
+      {
+        key: keys.baseURLKey,
+        label: 'Base URL',
+        type: 'url',
+        placeholder: provider.base_domain
+          ? `https://${provider.base_domain}`
+          : 'https://provider.example',
+      },
+      {
+        key: keys.marketplaceKey,
+        label: 'Marketplace / Region',
+        type: 'text',
+        default: provider.provider_id === 'ebay' ? 'EBAY_AU' : '',
+      },
+      {
+        key: keys.itemsPerPageKey,
+        label: 'Items per page',
+        type: 'number',
+        default: '50',
+      },
+      ...(provider.auth_mode === 'none'
+        ? []
+        : [
+            {
+              key: keys.tokenKey,
+              label: 'New token / API key',
+              type: 'secret',
+              write_only: true,
+              persistence: 'profile_secrets',
+              secret_key: keys.tokenKey,
+            } satisfies IntegrationSetupField,
+          ]),
+    ],
+  }
+}
+
+function withDefaultSetupSchema(provider: ProviderRecord): ProviderRecord {
+  const setupSchema = providerDefaultSetupSchema(provider)
+  return setupSchema === provider.setup_schema
+    ? provider
+    : { ...provider, setup_schema: setupSchema }
+}
+
+function setupFieldID(field: IntegrationSetupField) {
+  switch (field.key) {
+    case 'ebay_base_url':
+      return 'provider-base-url'
+    case 'ebay_marketplace':
+      return 'provider-marketplace'
+    case 'integration.ebay.items_per_page':
+      return 'provider-items-per-page'
+    case 'ebay_bearer_token':
+      return 'provider-token'
+    default:
+      return `provider-schema-${notificationHistoryID(field.key)}`
+  }
+}
+
 function recordIntegrationsStatusHistory({
   id,
   level = 'success',
@@ -871,7 +943,7 @@ export function Apps({
       const registryPayload = (await registryResp.json()) as {
         providers?: ProviderRecord[]
       }
-      setProviders(registryPayload.providers ?? [])
+      setProviders((registryPayload.providers ?? []).map(withDefaultSetupSchema))
 
       const settingsResp = await fetch(`/api/profiles/${profileID}/settings`)
       if (!settingsResp.ok) {
@@ -3340,7 +3412,7 @@ export function Apps({
                         setupFieldVisible(field, setupSchemaValues)
                       )
                       .map((field) => {
-                        const fieldID = `provider-schema-${notificationHistoryID(field.key)}`
+                        const fieldID = setupFieldID(field)
                         const fieldValue = setupSchemaValues[field.key] ?? ''
                         const updateField = (value: string) =>
                           setSetupSchemaValues((prev) => ({
