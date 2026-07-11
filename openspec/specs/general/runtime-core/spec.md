@@ -39,7 +39,7 @@ Cabinet beta packaging SHALL use one canonical private-beta version source and S
 - **AND** the runtime binary SHALL embed the same semantic version, commit revision, and build date for `/api/runtime`
 - **AND** packaging SHALL create a SHA-256 checksum file and release notes
 - **AND** macOS artefacts SHALL NOT be claimed by the Windows beta package lane until separately signed and validated
-- **AND** docs SHALL describe install/start, data location, backup/upgrade, rollback/removal, signing limits, and release approval gates
+- **AND** OpenSpec release guidance SHALL describe install/start, data location, backup/upgrade, rollback/removal, signing limits, and release approval gates
 
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.

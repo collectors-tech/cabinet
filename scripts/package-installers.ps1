@@ -71,7 +71,7 @@ finally {
 }
 
 Copy-Item -Path (Join-Path $root "README.md") -Destination (Join-Path $stage "README.md") -Force
-Copy-Item -Path (Join-Path $root "docs\release\windows-portable-beta.md") -Destination (Join-Path $stage "WINDOWS-PORTABLE-BETA.md") -Force
+Copy-Item -Path (Join-Path $root "openspec\migration\windows-portable-beta.md") -Destination (Join-Path $stage "WINDOWS-PORTABLE-BETA.md") -Force
 
 @"
 # Cabinet $resolvedVersion private beta
