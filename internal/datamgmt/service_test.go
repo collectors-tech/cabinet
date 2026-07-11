@@ -123,9 +123,12 @@ func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sourceConn.Close() })
 
+	if _, err := sourceConn.Exec(`INSERT INTO profiles (id, name) VALUES ('profile-main', 'Main')`); err != nil {
+		t.Fatalf("seed source profile: %v", err)
+	}
 	if _, err := sourceConn.Exec(`
-		INSERT INTO canonical_items (id, brand, category, part_number, title, tags_json)
-		VALUES ('roundtrip-item','AFX','Slot Car','P-500','Relationship Roundtrip','["sealed","tracked"]')
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title, tags_json)
+		VALUES ('roundtrip-item','profile-main','AFX','Slot Car','P-500','Relationship Roundtrip','["sealed","tracked"]')
 	`); err != nil {
 		t.Fatalf("seed source item: %v", err)
 	}
@@ -144,6 +147,12 @@ func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("seed source photo: %v", err)
 	}
+	if _, err := sourceConn.Exec(`
+		INSERT INTO saved_filters (id, profile_id, name, query_json)
+		VALUES ('roundtrip-filter', 'profile-main', 'Sealed AFX', '{"brand":"AFX","status":"sealed","sort_by":"part_number"}')
+	`); err != nil {
+		t.Fatalf("seed source saved filter: %v", err)
+	}
 
 	snapshot, err := NewService(sourceConn).ExportSnapshot(context.Background())
 	if err != nil {
@@ -151,6 +160,9 @@ func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
 	}
 	if len(snapshot.Items) != 1 || len(snapshot.Items[0].Barcodes) != 1 || len(snapshot.Items[0].Instances) != 1 || len(snapshot.Items[0].Photos) != 1 {
 		t.Fatalf("export snapshot missing relationship evidence: %#v", snapshot.Items)
+	}
+	if len(snapshot.SavedFilters) != 1 || snapshot.SavedFilters[0].Name != "Sealed AFX" || !strings.Contains(snapshot.SavedFilters[0].QueryJSON, `"status":"sealed"`) {
+		t.Fatalf("export snapshot missing saved filter evidence: %#v", snapshot.SavedFilters)
 	}
 
 	targetPath := filepath.Join(t.TempDir(), "target.db")
@@ -192,6 +204,13 @@ func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
 	photo := got.Photos[0]
 	if photo.Filename != "front.jpg" || photo.OriginalPath != "media/items/roundtrip/front.jpg" || photo.PreviewPath != "media/items/roundtrip/front-preview.jpg" || photo.ThumbnailPath != "media/items/roundtrip/front-thumb.jpg" || !photo.IsPrimary || photo.DisplayOrder != 3 {
 		t.Fatalf("round-trip photo reference mismatch: %#v", photo)
+	}
+	if len(roundTrip.SavedFilters) != 1 {
+		t.Fatalf("expected one round-trip saved filter, got %#v", roundTrip.SavedFilters)
+	}
+	filter := roundTrip.SavedFilters[0]
+	if filter.Name != "Sealed AFX" || !strings.Contains(filter.QueryJSON, `"brand":"AFX"`) || !strings.Contains(filter.QueryJSON, `"sort_by":"part_number"`) {
+		t.Fatalf("round-trip saved filter mismatch: %#v", filter)
 	}
 }
 
