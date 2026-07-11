@@ -221,6 +221,7 @@ func TestProviderRegistryProjectsMarketWatchProviderScopes(t *testing.T) {
 		"au-webshop-frontlinehobbies-com-au": "frontlinehobbies",
 		"au-webshop-hobbytechtoys-com-au":    "hobbytechtoys",
 		"au-webshop-voglers-com-au":          "voglers",
+		"au-webshop-acercmodels-com":         "acercmodels",
 		"au-webshop-mrtoys-com-au":           "mrtoys",
 	} {
 		provider := findRegistryProvider(payload.Providers, providerID)
@@ -244,6 +245,69 @@ func TestProviderRegistryProjectsMarketWatchProviderScopes(t *testing.T) {
 		if !foundMarketWatchWorkflow {
 			t.Fatalf("provider %s must advertise market_watch.run for UI provider projection: %+v", providerID, workflowRefs)
 		}
+	}
+}
+
+func TestAcerLightspeedProviderRegistryMetadata(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	acer := findRegistryProvider(payload.Providers, "au-webshop-acercmodels-com")
+	if acer == nil {
+		t.Fatalf("Acer Lightspeed provider missing from registry payload: %+v", payload.Providers)
+	}
+	for field, want := range map[string]string{
+		"base_domain":         "acercmodels.com",
+		"market_watch_scope":  "acercmodels",
+		"provider_category":   "storefront/source matcher",
+		"provider_type":       "retailer",
+		"adapter_type":        "lightspeed-storefront",
+		"api_family":          "lightspeed",
+		"api_support_profile": "lightspeed_storefront_v1",
+		"active_mode":         "lightspeed_catalog",
+		"integration_mode":    "storefront_access",
+	} {
+		if got := fmt.Sprintf("%v", acer[field]); got != want {
+			t.Fatalf("Acer registry field %s got %q want %q: %+v", field, got, want, acer)
+		}
+	}
+	capabilities, ok := acer["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatalf("Acer capabilities got %T: %+v", acer["capabilities"], acer)
+	}
+	for _, key := range []string{"search", "stock_observation", "pricing", "health"} {
+		if capabilities[key] != true {
+			t.Fatalf("Acer capability %s must be true for source matching: %+v", key, capabilities)
+		}
+	}
+	actions, ok := acer["actions"].([]any)
+	if !ok {
+		t.Fatalf("Acer actions got %T: %+v", acer["actions"], acer)
+	}
+	foundMarketWatch := false
+	for _, raw := range actions {
+		action, ok := raw.(map[string]any)
+		if !ok || fmt.Sprintf("%v", action["action_id"]) != "market_watch.run" {
+			continue
+		}
+		foundMarketWatch = true
+		if got := fmt.Sprintf("%v", action["availability_state"]); got != "available" {
+			t.Fatalf("Acer market_watch.run availability got %q want available: %+v", got, action)
+		}
+	}
+	if !foundMarketWatch {
+		t.Fatalf("Acer registry missing market_watch.run action: %+v", actions)
 	}
 }
 

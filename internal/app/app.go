@@ -10375,6 +10375,104 @@ func runBigCommerceStorefrontSearch(
 	return candidates, nil
 }
 
+func runLightspeedStorefrontSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL, query, providerDomain string,
+) ([]map[string]any, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, fmt.Errorf("lightspeed storefront search url is required")
+	}
+	parsed, err := url.Parse(strings.TrimSpace(searchURL))
+	if err != nil {
+		return nil, fmt.Errorf("parse lightspeed storefront url: %w", err)
+	}
+	params := parsed.Query()
+	params.Set("q", strings.TrimSpace(query))
+	parsed.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build lightspeed storefront request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run lightspeed storefront request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("lightspeed storefront returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read lightspeed storefront response: %w", err)
+	}
+	var payload struct {
+		Products []struct {
+			ID           any      `json:"id"`
+			Title        string   `json:"title"`
+			FullTitle    string   `json:"fulltitle"`
+			URL          string   `json:"url"`
+			Image        string   `json:"image"`
+			Price        any      `json:"price"`
+			PriceIncl    any      `json:"price_incl"`
+			SKU          string   `json:"sku"`
+			ArticleCode  string   `json:"article_code"`
+			Brand        string   `json:"brand"`
+			Category     string   `json:"category"`
+			Categories   []string `json:"categories"`
+			StockLevel   any      `json:"stock_level"`
+			StockState   string   `json:"stock_state"`
+			Availability string   `json:"availability"`
+			Description  string   `json:"description"`
+		} `json:"products"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode lightspeed storefront response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Products))
+	missingCoreFields := 0
+	for _, product := range payload.Products {
+		id := firstNonEmptyString(strings.TrimSpace(fmt.Sprintf("%v", product.ID)), product.SKU, product.ArticleCode)
+		title := firstNonEmptyString(product.Title, product.FullTitle)
+		productURL := normalizeProviderProductURL("https://"+providerDomain, product.URL)
+		price := numericCurrencyValue(firstNonNil(product.Price, product.PriceIncl))
+		if id == "" || title == "" || productURL == "" || price <= 0 {
+			missingCoreFields++
+			continue
+		}
+		stockState := strings.TrimSpace(product.StockState)
+		if stockState == "" {
+			stockState = stockStateFromAvailability(product.Availability)
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id":  "lightspeed-" + id,
+			"title":       title,
+			"url":         productURL,
+			"price":       price,
+			"currency":    "AUD",
+			"image":       normalizeProviderProductURL("https://"+providerDomain, product.Image),
+			"sku":         strings.TrimSpace(product.SKU),
+			"brand":       strings.TrimSpace(product.Brand),
+			"category":    firstNonEmptyString(product.Category, firstString(product.Categories)),
+			"categories":  product.Categories,
+			"description": stripHTMLText(product.Description),
+			"stock_state": stockState,
+			"stock_count": int(numericCurrencyValue(product.StockLevel)),
+			"source":      "acercmodels",
+			"seller":      providerDomain,
+		})
+	}
+	if len(candidates) == 0 && missingCoreFields > 0 {
+		return candidates, fmt.Errorf("lightspeed parser health failed: %d product records missing title/url/price/id", missingCoreFields)
+	}
+	return candidates, nil
+}
+
 func runBigCommerceTokenSearch(
 	ctx context.Context,
 	client *http.Client,
@@ -11180,6 +11278,10 @@ func frontlineCandidatesForScanner(candidates []map[string]any) []scanner.Candid
 	return providerCandidatesForScanner(candidates, "frontlinehobbies")
 }
 
+func lightspeedCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "acercmodels")
+}
+
 func doofinderCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
 	return providerCandidatesForScanner(candidates, providerDomain)
 }
@@ -11321,6 +11423,53 @@ func firstNonNil(values ...any) any {
 		}
 	}
 	return nil
+}
+
+func firstString(values []string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func numericCurrencyValue(raw any) float64 {
+	switch value := raw.(type) {
+	case string:
+		cleaned := regexp.MustCompile(`[^0-9.\-]+`).ReplaceAllString(value, "")
+		parsed, _ := strconv.ParseFloat(cleaned, 64)
+		return parsed
+	default:
+		return numericCandidateValue(raw)
+	}
+}
+
+func normalizeProviderProductURL(baseURL, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(raw, "/")
+}
+
+func stockStateFromAvailability(raw string) string {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case normalized == "":
+		return "unknown"
+	case strings.Contains(normalized, "out of stock") || strings.Contains(normalized, "sold out"):
+		return "out_of_stock"
+	case strings.Contains(normalized, "low stock") || strings.Contains(normalized, "limited"):
+		return "low_stock"
+	case strings.Contains(normalized, "in stock") || strings.Contains(normalized, "available"):
+		return "in_stock"
+	default:
+		return "unknown"
+	}
 }
 
 func numericCandidateValue(raw any) float64 {
