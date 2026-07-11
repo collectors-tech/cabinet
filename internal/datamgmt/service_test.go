@@ -71,6 +71,48 @@ func TestDryRunAndApplyImport(t *testing.T) {
 	}
 }
 
+func TestDryRunAndApplyImportUseMatchingPartNumberNormalization(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items (id, brand, category, part_number, title) VALUES ('existing','AFX','Slot Car','P-400','Existing Car')`); err != nil {
+		t.Fatalf("seed existing item: %v", err)
+	}
+
+	svc := NewService(conn)
+	snap := Snapshot{
+		SchemaVersion: 1,
+		Items: []SnapshotItem{
+			{Brand: "AFX", Category: "Slot Car", PartNumber: " P-400 ", Title: "Whitespace Conflict"},
+		},
+	}
+
+	dryRun, err := svc.DryRunImport(context.Background(), snap)
+	if err != nil {
+		t.Fatalf("DryRunImport() error = %v", err)
+	}
+	if dryRun.TotalItems != 1 || dryRun.NewItems != 0 || dryRun.Conflicts != 1 {
+		t.Fatalf("expected dry run to match apply conflict normalization, got %#v", dryRun)
+	}
+	if len(dryRun.ConflictDetails) != 1 || dryRun.ConflictDetails[0].PartNumber != "P-400" || dryRun.ConflictDetails[0].ExistingID != "existing" {
+		t.Fatalf("unexpected normalized conflict detail: %#v", dryRun.ConflictDetails)
+	}
+
+	apply, err := svc.ApplyImport(context.Background(), snap, ApplyOptions{DefaultAction: "merge"})
+	if err != nil {
+		t.Fatalf("ApplyImport() error = %v", err)
+	}
+	if apply.TotalItems != 1 || apply.Created != 0 || apply.Merged != 1 || apply.Failed != 0 {
+		t.Fatalf("expected apply to merge the same conflict reported by dry run, got %#v", apply)
+	}
+}
+
 func TestApplyImportReportsSkippedAndInvalidActionFailures(t *testing.T) {
 	t.Parallel()
 

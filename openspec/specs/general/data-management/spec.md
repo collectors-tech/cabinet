@@ -9,6 +9,7 @@ Cabinet SHALL support JSON/CSV dry-run preview and merge/create/skip conflict re
 - **GIVEN** import payload is submitted
 - **WHEN** user runs dry-run import
 - **THEN** Cabinet SHALL report conflicts without mutating persisted records
+- **AND** dry-run conflict detection SHALL use the same normalized item identity fields as confirmed apply so reviewed actions match the eventual import result
 
 ### Requirement DATA-MANAGEMENT-002: Maintenance operations SHALL include reindex and repair
 Cabinet SHALL support search reindex and database repair endpoints.
