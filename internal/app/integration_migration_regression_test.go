@@ -247,6 +247,87 @@ func TestProviderRegistryProjectsMarketWatchProviderScopes(t *testing.T) {
 	}
 }
 
+func TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BetaProviderFailClosed"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	ebay := findRegistryProvider(payload.Providers, "ebay")
+	if ebay == nil {
+		t.Fatalf("eBay provider missing from registry payload: %+v", payload.Providers)
+	}
+	if got := fmt.Sprintf("%v", ebay["state"]); got != "needs_config" {
+		t.Fatalf("eBay must not appear ready without credentials/live proof, got state=%q provider=%+v", got, ebay)
+	}
+	if got := fmt.Sprintf("%v", ebay["beta_release_status"]); got != "setup_required" {
+		t.Fatalf("eBay beta release status got %q want setup_required: %+v", got, ebay)
+	}
+	if got := fmt.Sprintf("%v", ebay["live_evidence_state"]); got != "missing_credentials" {
+		t.Fatalf("eBay live evidence state got %q want missing_credentials: %+v", got, ebay)
+	}
+	assertRegistryActionAvailability(t, ebay, "market_watch.run", "setup_needed", "connect_ebay_credentials_and_run_live_provider_proof")
+
+	amazon := findRegistryProvider(payload.Providers, "amazon")
+	if amazon == nil {
+		t.Fatalf("Amazon provider missing from registry payload: %+v", payload.Providers)
+	}
+	if got := fmt.Sprintf("%v", amazon["beta_release_status"]); got != "disabled_unsupported" {
+		t.Fatalf("Amazon beta release status got %q want disabled_unsupported: %+v", got, amazon)
+	}
+	assertRegistryActionAvailability(t, amazon, "market_watch.run", "disabled", "choose_supported_beta_market_watch_provider")
+
+	bonza := findRegistryProvider(payload.Providers, "au-webshop-bonzaslotcars-com-au")
+	if bonza == nil {
+		t.Fatalf("Bonza provider missing from registry payload: %+v", payload.Providers)
+	}
+	if got := fmt.Sprintf("%v", bonza["beta_release_status"]); got != "manual_url_capture_only" {
+		t.Fatalf("Bonza beta release status got %q want manual_url_capture_only: %+v", got, bonza)
+	}
+
+	for _, id := range []string{
+		"au-webshop-frontlinehobbies-com-au",
+		"au-webshop-hobbytechtoys-com-au",
+		"au-webshop-voglers-com-au",
+		"au-webshop-mrtoys-com-au",
+	} {
+		provider := findRegistryProvider(payload.Providers, id)
+		if provider == nil {
+			t.Fatalf("provider %q missing from registry payload: %+v", id, payload.Providers)
+		}
+		if got := fmt.Sprintf("%v", provider["beta_release_status"]); got != "beta_limited" {
+			t.Fatalf("provider %s beta release status got %q want beta_limited: %+v", id, got, provider)
+		}
+		if got := fmt.Sprintf("%v", provider["live_evidence_state"]); got != "public_provider_probe_required" {
+			t.Fatalf("provider %s live evidence state got %q want public_provider_probe_required: %+v", id, got, provider)
+		}
+	}
+}
+
 func TestProviderRegistryProjectsWorkflowActionRegistryMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -315,6 +396,32 @@ func TestProviderRegistryProjectsWorkflowActionRegistryMetadata(t *testing.T) {
 	if capture == nil || capture["requires_auth"] != true || capture["requires_secrets"] != true || capture["execution_mode"] != "provider_workflow" {
 		t.Fatalf("Telegram catalog capture workflow registry metadata drifted: %+v", capture)
 	}
+}
+
+func assertRegistryActionAvailability(t *testing.T, provider map[string]any, actionID, availability, nextAction string) {
+	t.Helper()
+
+	actions, ok := provider["actions"].([]any)
+	if !ok {
+		t.Fatalf("provider %v actions got %T: %+v", provider["provider_id"], provider["actions"], provider)
+	}
+	for _, rawAction := range actions {
+		action, ok := rawAction.(map[string]any)
+		if !ok {
+			continue
+		}
+		if fmt.Sprintf("%v", action["action_id"]) != actionID {
+			continue
+		}
+		if got := fmt.Sprintf("%v", action["availability_state"]); got != availability {
+			t.Fatalf("provider %v action %s availability got %q want %q: %+v", provider["provider_id"], actionID, got, availability, action)
+		}
+		if got := fmt.Sprintf("%v", action["next_action"]); got != nextAction {
+			t.Fatalf("provider %v action %s next_action got %q want %q: %+v", provider["provider_id"], actionID, got, nextAction, action)
+		}
+		return
+	}
+	t.Fatalf("provider %v missing action %s: %+v", provider["provider_id"], actionID, actions)
 }
 
 func TestProviderRegistryProjectsConfigSchemaShapes(t *testing.T) {

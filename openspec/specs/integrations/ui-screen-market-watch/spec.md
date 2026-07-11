@@ -303,6 +303,17 @@ Market Watch SHALL frame the primary route as a collector-facing saved integrati
 - **AND** the primary create controls MUST use saved-watch/search terminology rather than raw query-set terminology
 - **AND** provider health, saved-watch table controls, result inbox controls, and secondary manual listing capture MUST be visible or reachable from the same dashboard surface
 
+### Requirement UI-SCREEN-MARKET-WATCH-019: Beta Market Watch providers SHALL fail closed until live proof exists
+Market Watch provider registry projection SHALL distinguish live-validated, setup-required, beta-limited, manual-capture-only, and disabled providers so beta users are not shown unsupported or unproven provider paths as connected production-ready integrations.
+
+#### Scenario: Beta provider registry status fails closed
+- **GIVEN** Cabinet is preparing the 0.1 beta Market Watch provider proof path
+- **WHEN** `/api/providers/registry` projects Market Watch-capable providers
+- **THEN** eBay MUST remain `setup_required` with unavailable Market Watch actions until credentials and live proof are present
+- **AND** disabled or unsupported providers MUST expose disabled actions and a next safe provider-selection action
+- **AND** public storefront providers without attached live proof MUST declare `beta_limited` or `manual_url_capture_only` status rather than `available_live_validated`
+- **AND** live evidence state MUST be visible in the registry response for release evidence review
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -327,3 +338,4 @@ Market Watch SHALL frame the primary route as a collector-facing saved integrati
 | UC-MW-19 | Result inbox lifecycle review | Output detail result inbox shows status/provider/match/wishlist filters, match rationale, seen timestamps, total price, lifecycle status, and decision history without losing dismissed or downstream-handoff results; candidate API supports status/provider pagination, profile-scoped lifecycle status persistence, and durable transition history | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-016 + #1548 renders result inbox lifecycle filters and match provenance`; `internal/scanner/service_test.go` `TestCandidateResultInboxFiltersPaginationAndLifecycleUpdate`; `internal/app/scanner_api_test.go` `TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbaySavedSearchHandoffContract`; `ui.web/src/features/scanner/index.tsx` `market-watch-results-inbox-*`; `docs/api/openapi.yaml` `CandidateDecisionHistoryRecord` |
 | UC-MW-20 | Provider health and run history | Unknown provider health stays actionable, provider health taxonomy includes label/guidance/retry timing, health transitions persist after run outcomes, and persisted run history lists provider outcomes after reload | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsClassifiedProviderHealthTransitions`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbayProviderHealthContract`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history`; `UI-SCREEN-MARKET-WATCH-017 shows provider health taxonomy labels guidance and retry timing` |
 | UC-MW-21 | Saved integration search dashboard shell | Header, top summary, create controls, provider health, saved-watch table, result inbox, and manual listing entry present Market Watch as a saved integration search dashboard | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-018 + #1540 presents saved integration search dashboard shell` |
+| UC-MW-22 | Beta provider registry fail-closed status | Registry marks eBay setup-required without credentials, disables unsupported provider actions, and labels unproven storefronts beta-limited/manual-capture-only until live evidence is attached | implemented: `internal/app/integration_migration_regression_test.go` `TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof` |
