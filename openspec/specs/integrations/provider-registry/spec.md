@@ -184,9 +184,10 @@ Cabinet SHALL persist per-profile integration instances and status independently
 
 #### Scenario: Profile-scoped instance persistence
 - **GIVEN** an active profile configures a registry provider
-- **WHEN** setup is saved, validated, disabled, or updated
+- **WHEN** setup is saved, validated, disabled, updated, listed, or deleted through `/api/profiles/:profileId/integration-instances`
 - **THEN** Cabinet MUST persist a profile-scoped integration instance containing provider ID, enabled state, non-secret configuration, credential-presence signals, validation status, health state, last-run summary, and required-action state
 - **AND** the stored instance MUST reference the provider manifest instead of duplicating mutable manifest fields
+- **AND** secret setup values MUST be written through the profile secrets path and represented in the instance payload only as secret reference keys
 - **AND** listing integrations MUST merge provider manifest data with the active profile instance state deterministically
 
 #### Scenario: Required-action state is preserved
