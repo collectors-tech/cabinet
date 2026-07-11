@@ -39,9 +39,11 @@ type BackupRunResult struct {
 }
 
 type RestoreResult struct {
-	RestoredPath   string `json:"restored_path"`
-	RestoredAt     string `json:"restored_at"`
-	IntegrityCheck string `json:"integrity_check"`
+	RestoredPath          string     `json:"restored_path"`
+	RestoredAt            string     `json:"restored_at"`
+	IntegrityCheck        string     `json:"integrity_check"`
+	PreRestoreBackup      BackupInfo `json:"pre_restore_backup"`
+	PreRestoreBackupTaken bool       `json:"pre_restore_backup_taken"`
 }
 
 func NewService(dbPath, backupDir string, intervalMinutes int) *Service {
@@ -76,7 +78,7 @@ func (s *Service) CreateBackup(ctx context.Context) (BackupRunResult, error) {
 		return BackupRunResult{}, fmt.Errorf("create backup dir: %w", err)
 	}
 	createdAt := time.Now().UTC()
-	name := "cabinet-backup-" + createdAt.Format("2006-01-02-150405") + ".zip"
+	name := "cabinet-backup-" + createdAt.Format("2006-01-02-150405.000000000") + ".zip"
 	target := filepath.Join(s.backupDir, name)
 	if err := createArchive(s.dbPath, target, createdAt); err != nil {
 		return BackupRunResult{}, fmt.Errorf("create backup archive: %w", err)
@@ -159,13 +161,19 @@ func (s *Service) RestoreBackup(backupPath string) (RestoreResult, error) {
 		cleanup = func() { _ = os.Remove(extracted) }
 	}
 	defer cleanup()
+	preRestoreBackup, err := s.CreateBackup(context.Background())
+	if err != nil {
+		return RestoreResult{}, fmt.Errorf("create pre-restore backup: %w", err)
+	}
 	if err := copyFile(sourcePath, s.dbPath); err != nil {
 		return RestoreResult{}, err
 	}
 	return RestoreResult{
-		RestoredPath:   backupPath,
-		RestoredAt:     time.Now().UTC().Format(time.RFC3339),
-		IntegrityCheck: ok,
+		RestoredPath:          backupPath,
+		RestoredAt:            time.Now().UTC().Format(time.RFC3339),
+		IntegrityCheck:        ok,
+		PreRestoreBackup:      preRestoreBackup.BackupInfo,
+		PreRestoreBackupTaken: true,
 	}, nil
 }
 

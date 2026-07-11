@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -69,6 +70,10 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	if restore.RestoredPath != backupRun.Path || restore.IntegrityCheck != "ok" || restore.RestoredAt == "" {
 		t.Fatalf("expected restore metadata, got %+v", restore)
 	}
+	if !restore.PreRestoreBackupTaken || restore.PreRestoreBackup.Path == "" || restore.PreRestoreBackup.FileName == backupRun.FileName {
+		t.Fatalf("expected distinct pre-restore backup metadata, got %+v", restore)
+	}
+	assertBackupArchiveContains(t, restore.PreRestoreBackup.Path, "database/cabinet.db")
 	conn3, _ := sql.Open("sqlite", "file:"+dbPath)
 	defer conn3.Close()
 	var count int
@@ -77,6 +82,23 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected 1 row after restore, got %d", count)
+	}
+	preRestoreDBPath, err := extractArchiveDatabase(restore.PreRestoreBackup.Path)
+	if err != nil {
+		t.Fatalf("extract pre-restore backup: %v", err)
+	}
+	defer os.Remove(preRestoreDBPath)
+	preRestoreConn, err := sql.Open("sqlite", "file:"+preRestoreDBPath)
+	if err != nil {
+		t.Fatalf("open pre-restore backup: %v", err)
+	}
+	defer preRestoreConn.Close()
+	var preRestoreCount int
+	if err := preRestoreConn.QueryRow(`SELECT COUNT(1) FROM t`).Scan(&preRestoreCount); err != nil {
+		t.Fatalf("count pre-restore backup: %v", err)
+	}
+	if preRestoreCount != 0 {
+		t.Fatalf("expected pre-restore backup to preserve mutated state, got %d rows", preRestoreCount)
 	}
 }
 
