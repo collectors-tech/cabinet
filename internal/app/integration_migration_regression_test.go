@@ -248,6 +248,97 @@ func TestProviderRegistryProjectsMarketWatchProviderScopes(t *testing.T) {
 	}
 }
 
+func TestMarketplaceProvidersExposeIssue1480RegistryContract(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	if _, err := a.db.Exec(`INSERT INTO app_state(key, value, updated_at) VALUES('provider.amazon.mode','program_api',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='program_api', updated_at=CURRENT_TIMESTAMP`); err != nil {
+		t.Fatalf("enable amazon program API mode: %v", err)
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	for providerID, want := range map[string]struct {
+		displayName     string
+		authMode        string
+		configSchemaRef string
+		workflows       []string
+		capabilities    []string
+	}{
+		"ebay": {
+			displayName:     "eBay",
+			authMode:        "api_key",
+			configSchemaRef: "integrations/ebay/setup",
+			workflows:       []string{"market_watch.run", "ebay.buyer_interest", "ebay.seller_operations", "ebay.listing_lifecycle"},
+			capabilities:    []string{"search", "import", "scanner_source_matching", "pricing", "price_checks", "order_reconciliation", "purchase_reconciliation", "listing_lookup", "seller_operations", "listing_lifecycle", "health"},
+		},
+		"amazon": {
+			displayName:     "Amazon",
+			authMode:        "hybrid",
+			configSchemaRef: "integrations/amazon/setup",
+			workflows:       []string{"market_watch.run"},
+			capabilities:    []string{"search", "import", "scanner_source_matching", "pricing", "price_checks", "order_reconciliation", "purchase_reconciliation", "listing_lookup", "health"},
+		},
+	} {
+		provider := findRegistryProvider(payload.Providers, providerID)
+		if provider == nil {
+			t.Fatalf("marketplace provider %q missing from registry payload: %+v", providerID, payload.Providers)
+		}
+		for field, value := range map[string]string{
+			"display_name":       want.displayName,
+			"provider_category":  "marketplace",
+			"provider_type":      "marketplace",
+			"auth_mode":          want.authMode,
+			"config_schema_ref":  want.configSchemaRef,
+			"market_watch_scope": providerID,
+		} {
+			if got := fmt.Sprintf("%v", provider[field]); got != value {
+				t.Fatalf("provider %s field %s got %q want %q: %+v", providerID, field, got, value, provider)
+			}
+		}
+		setupSchema, ok := provider["setup_schema"].(map[string]any)
+		if !ok {
+			t.Fatalf("provider %s missing setup schema payload: %+v", providerID, provider)
+		}
+		if got := fmt.Sprintf("%v", setupSchema["schema_ref"]); got != want.configSchemaRef {
+			t.Fatalf("provider %s setup schema ref got %q want %q: %+v", providerID, got, want.configSchemaRef, setupSchema)
+		}
+		workflowRefs := anySlice(provider["workflow_refs"])
+		for _, workflow := range want.workflows {
+			if !containsAnyString(workflowRefs, workflow) {
+				t.Fatalf("provider %s missing workflow ref %q in %+v", providerID, workflow, workflowRefs)
+			}
+		}
+		actions, ok := provider["actions"].([]any)
+		if !ok {
+			t.Fatalf("provider %s missing action metadata list: %+v", providerID, provider)
+		}
+		for _, workflow := range want.workflows {
+			if action := findRegistryAction(actions, workflow); action == nil {
+				t.Fatalf("provider %s missing action metadata for %q in %+v", providerID, workflow, actions)
+			}
+		}
+		capabilities, ok := provider["capabilities"].(map[string]any)
+		if !ok {
+			t.Fatalf("provider %s capabilities got %T: %+v", providerID, provider["capabilities"], provider)
+		}
+		for _, capability := range want.capabilities {
+			if capabilities[capability] != true {
+				t.Fatalf("provider %s capability %s must be true for #1480 migration: %+v", providerID, capability, capabilities)
+			}
+		}
+	}
+}
+
 func TestAcerLightspeedProviderRegistryMetadata(t *testing.T) {
 	t.Parallel()
 
