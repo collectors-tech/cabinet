@@ -311,6 +311,68 @@ func TestAcerLightspeedProviderRegistryMetadata(t *testing.T) {
 	}
 }
 
+func TestHobbyShopProviderRegistryAdapterMatrix(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	for providerID, want := range map[string]struct {
+		domain         string
+		adapterType    string
+		apiFamily      string
+		supportProfile string
+		activeMode     string
+		scope          string
+	}{
+		"au-webshop-acercmodels-com":         {domain: "acercmodels.com", adapterType: "lightspeed-storefront", apiFamily: "lightspeed", supportProfile: "lightspeed_storefront_v1", activeMode: "lightspeed_catalog", scope: "acercmodels"},
+		"au-webshop-andrewshobbies-com-au":   {domain: "andrewshobbies.com.au", adapterType: "shopify-storefront", apiFamily: "shopify", supportProfile: "shopify_storefront_candidate", activeMode: "shopify_storefront_catalog", scope: "andrewshobbies"},
+		"au-webshop-frontlinehobbies-com-au": {domain: "frontlinehobbies.com.au", adapterType: "generic-structured-storefront", apiFamily: "algolia", supportProfile: "algolia_runtime_v1", activeMode: "algolia_runtime", scope: "frontlinehobbies"},
+		"au-webshop-hobbyco-com-au":          {domain: "hobbyco.com.au", adapterType: "generic-storefront-crawler", apiFamily: "web_ingestion", supportProfile: "html_fallback", activeMode: "web_ingestion", scope: "hobbyco"},
+		"au-webshop-hobbytechtoys-com-au":    {domain: "hobbytechtoys.com.au", adapterType: "shopify-boost-storefront", apiFamily: "boost_shopify", supportProfile: "boost_v2", activeMode: "boost_api", scope: "hobbytechtoys"},
+		"au-webshop-metrohobbies-com-au":     {domain: "metrohobbies.com.au", adapterType: "shopify-storefront", apiFamily: "shopify", supportProfile: "shopify_storefront_candidate", activeMode: "shopify_storefront_catalog", scope: "metrohobbies"},
+		"au-webshop-mrtoys-com-au":           {domain: "mrtoys.com.au", adapterType: "generic-storefront-crawler", apiFamily: "doofinder", supportProfile: "doofinder_hashid_v1", activeMode: "hashid_search", scope: "mrtoys"},
+		"au-webshop-voglers-com-au":          {domain: "voglers.com.au", adapterType: "bigcommerce-storefront", apiFamily: "bigcommerce", supportProfile: "bigcommerce_storefront_v1", activeMode: "storefront_public", scope: "voglers"},
+		"au-webshop-bonzaslotcars-com-au":    {domain: "bonzaslotcars.com.au", adapterType: "woocommerce-store-api", apiFamily: "woo_store_api", supportProfile: "store_v1", activeMode: "store_api_first", scope: "bonzaslotcars"},
+	} {
+		provider := findRegistryProvider(payload.Providers, providerID)
+		if provider == nil {
+			t.Fatalf("provider %q missing from registry payload: %+v", providerID, payload.Providers)
+		}
+		for field, value := range map[string]string{
+			"base_domain":         want.domain,
+			"adapter_type":        want.adapterType,
+			"api_family":          want.apiFamily,
+			"api_support_profile": want.supportProfile,
+			"active_mode":         want.activeMode,
+			"market_watch_scope":  want.scope,
+			"auth_mode":           "none",
+		} {
+			if got := fmt.Sprintf("%v", provider[field]); got != value {
+				t.Fatalf("provider %s field %s got %q want %q: %+v", providerID, field, got, value, provider)
+			}
+		}
+		capabilities, ok := provider["capabilities"].(map[string]any)
+		if !ok {
+			t.Fatalf("provider %s capabilities got %T: %+v", providerID, provider["capabilities"], provider)
+		}
+		for _, key := range []string{"search", "stock_observation", "pricing", "health"} {
+			if capabilities[key] != true {
+				t.Fatalf("provider %s capability %s must be true for source matching: %+v", providerID, key, capabilities)
+			}
+		}
+	}
+}
+
 func TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof(t *testing.T) {
 	t.Parallel()
 

@@ -507,34 +507,46 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 	activeMode := "web_ingestion"
 	integrationMode := "web_ingestion"
 	supportProfile := "html_fallback"
+	adapterType := "generic-storefront-crawler"
 	if domain == "voglers.com.au" {
 		apiFamily = "bigcommerce"
 		activeMode = "storefront_public"
 		integrationMode = "storefront_access"
 		supportProfile = "bigcommerce_storefront_v1"
+		adapterType = "bigcommerce-storefront"
 	}
 	if domain == "mrtoys.com.au" {
 		apiFamily = "doofinder"
 		activeMode = "hashid_search"
 		integrationMode = "api_family_search"
 		supportProfile = "doofinder_hashid_v1"
+		adapterType = "generic-storefront-crawler"
 	}
 	if domain == "bonzaslotcars.com.au" {
 		apiFamily = "woo_store_api"
 		activeMode = "store_api_first"
 		supportProfile = "store_v1"
+		adapterType = "woocommerce-store-api"
 	}
 	if domain == "frontlinehobbies.com.au" {
 		apiFamily = "algolia"
 		activeMode = "algolia_runtime"
 		supportProfile = "algolia_runtime_v1"
+		adapterType = "generic-structured-storefront"
 	}
 	if domain == "hobbytechtoys.com.au" {
 		apiFamily = "boost_shopify"
 		activeMode = "boost_api"
 		supportProfile = "boost_v2"
+		adapterType = "shopify-boost-storefront"
 	}
-	adapterType := apiFamily
+	if domain == "andrewshobbies.com.au" || domain == "metrohobbies.com.au" {
+		apiFamily = "shopify"
+		activeMode = "shopify_storefront_catalog"
+		integrationMode = "storefront_access"
+		supportProfile = "shopify_storefront_candidate"
+		adapterType = "shopify-storefront"
+	}
 	if domain == "acercmodels.com" {
 		apiFamily = "lightspeed"
 		activeMode = "lightspeed_catalog"
@@ -585,6 +597,10 @@ func marketWatchScopeForAUWebshopDomain(domain string) string {
 		return "acercmodels"
 	case "mrtoys.com.au":
 		return "mrtoys"
+	case "hobbyco.com.au":
+		return "hobbyco"
+	case "metrohobbies.com.au":
+		return "metrohobbies"
 	default:
 		return normalizeProviderDomain(domain)
 	}

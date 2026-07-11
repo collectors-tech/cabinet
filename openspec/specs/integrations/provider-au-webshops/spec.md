@@ -63,6 +63,21 @@ Cabinet SHALL resolve AU webshop domain catalog from profile/runtime configurati
 - **THEN** runtime MUST fallback to default approved allowlist domain set
 - **AND** fallback behavior MUST be deterministic across repeated requests
 
+### Requirement PROVIDER-AU-WEBSHOPS-006: AU hobby shop registry entries MUST expose adapter-matrix metadata
+Cabinet SHALL classify each approved AU hobby shop provider with stable adapter metadata so Add Integration, source matching, Market Watch, and future parser health checks can route provider work without a duplicate hardcoded provider list.
+
+#### Scenario: Adapter matrix is projected through provider registry
+- **GIVEN** `/api/providers/registry` returns the approved AU hobby shop providers
+- **WHEN** registry consumers inspect provider metadata
+- **THEN** Acer RC Models MUST use a `lightspeed-storefront` adapter
+- **AND** Andrew's Hobbies and Metro Hobbies MUST use `shopify-storefront` candidate metadata
+- **AND** Voglers MUST use `bigcommerce-storefront`
+- **AND** Frontline Hobbies MUST use `generic-structured-storefront`
+- **AND** Hobbytech Toys MUST use `shopify-boost-storefront`
+- **AND** Hobbyco and Mr Toys MUST remain `generic-storefront-crawler` until implementation probes promote them
+- **AND** Bonza Slot Cars MUST expose its Woo Store API path as `woocommerce-store-api` while retaining manual/product-URL capture constraints elsewhere
+- **AND** every provider entry MUST expose stable `market_watch_scope`, `auth_mode: none`, and source/matching/catalogue capabilities for search, pricing, stock observation, and health
+
 ### Requirement INTEGRATION-012: AU webshop ingestion MUST extract stock observations
 Cabinet SHALL parse stock/availability from webshop listing pages where available and persist normalized stock observations.
 
