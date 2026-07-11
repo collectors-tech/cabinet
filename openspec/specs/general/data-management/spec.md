@@ -81,3 +81,12 @@ Cabinet SHALL explain import dry-run and apply failures without implying partial
 - **WHEN** the dry-run or apply request fails
 - **THEN** the UI SHALL state that no records were changed
 - **AND** failed apply feedback SHALL keep the reviewed dry-run summary visible for retry or conflict-action changes
+
+### Requirement DATA-MANAGEMENT-009: Database upgrade SHALL preserve representative release data
+Cabinet SHALL upgrade a representative database created by the prior release baseline without losing core local-first collection, profile, recovery, or market-watch data.
+
+#### Scenario: Upgrade representative prior-release database
+- **GIVEN** a Cabinet database contains profile settings, license state, saved filters, inventory item relationships, wishlist state, item photo references, and Market Watch query/results from the prior release baseline
+- **WHEN** the current app opens and migrates that database
+- **THEN** those records SHALL remain present with the same key counts and relationships
+- **AND** newly required migration columns and indexes SHALL be added without deleting the existing data
