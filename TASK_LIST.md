@@ -1,6 +1,6 @@
 # TASK_LIST
 
-Last reconciled from live GitHub/OpenSpec state: 2026-07-11 09:00 +10:00
+Last reconciled from live GitHub/OpenSpec state: 2026-07-11 13:48 +10:00
 
 This file is the Cabinet 0.1 private beta execution summary. Historical issue
 snapshots from April 2026 have been retired from this top-level queue; use
@@ -39,11 +39,11 @@ Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 
 ## Active OpenSpec Change Inventory
 
-Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive completed Agent-channel, Agent-skill registry, inventory grading, runtime startup, parity route-contract, and inventory accessibility selector changes.
+Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive completed Agent-channel, Agent-skill registry, inventory grading, runtime startup, parity route-contract, inventory accessibility selector, and Bonza URL changes, then reconcile the final active changes to explicit closed/deferred issue holders.
 
-- `finalize-onboarding-and-collector-ux`: 0/14 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
-- `complete-screen-api-parity-audits`: 0/15 tasks complete. Keep as post-beta unless #1864 release acceptance exposes one task as a beta blocker.
-- `stabilize-inventory-runtime-regressions`: 0/11 tasks complete. Triage against current release smoke evidence before treating old startup/runtime subtasks as active beta blockers.
+- `finalize-onboarding-and-collector-ux`: 14/14 tasks reconciled. Product remainder is post-beta and tracked by #1889 unless #1864/#1869 release acceptance exposes one task as a beta blocker.
+- `complete-screen-api-parity-audits`: 15/15 tasks reconciled. Original audit holders #143, #144, and #145 are closed; renewed parity failures should be filed from #1869 evidence as focused issues.
+- `stabilize-inventory-runtime-regressions`: 11/11 tasks reconciled. Legacy inventory non-500 holder #149 is closed; remaining concrete runtime/startup regressions are deferred to #1890 unless release acceptance exposes a beta blocker.
 Archived during #1872 reconciliation:
 
 - `ingest-bonza-product-urls`: archived into canonical provider-family, AU-webshop, and inventory specs after reconciling closed #811 live verification and #1077 QA evidence.
