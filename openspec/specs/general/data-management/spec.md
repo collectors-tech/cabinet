@@ -51,6 +51,7 @@ Cabinet SHALL expose profile-scoped JSON snapshot and CSV item exports as user-d
 - **THEN** the UI SHALL provide clear download actions for both formats
 - **AND** the export endpoints SHALL return attachment filenames that identify the Cabinet snapshot or item CSV export
 - **AND** JSON snapshot and CSV item exports SHALL include only records owned by the active profile
+- **AND** normal data and diagnostic exports SHALL NOT include stored profile secret values or raw license material
 
 ### Requirement DATA-MANAGEMENT-006: Import apply UI SHALL report mutation counts
 Cabinet SHALL show created, merged, skipped, and failed counts after a confirmed JSON or CSV import apply so users can verify the result before continuing recovery or portability work.
