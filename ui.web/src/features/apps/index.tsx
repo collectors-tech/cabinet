@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   Store,
 } from 'lucide-react'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -56,7 +57,6 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { recordNotificationHistory } from '@/lib/toast-history'
 
 const route = getRouteApi('/_authenticated/integrations/')
 
@@ -593,6 +593,78 @@ function notificationHistoryID(value: string) {
   return value.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
 }
 
+function providerDefaultSetupSchema(
+  provider: ProviderRecord
+): IntegrationSetupSchema | undefined {
+  if (provider.setup_schema?.fields?.length) {
+    return provider.setup_schema
+  }
+  if (provider.provider_id !== 'ebay' && provider.integration_mode !== 'web_ingestion') {
+    return provider.setup_schema
+  }
+  const keys = providerSettingsKeys(provider.provider_id)
+  return {
+    schema_ref: `cabinet.provider.${provider.provider_id}.default`,
+    persistence_scope: 'profile_settings',
+    fields: [
+      {
+        key: keys.baseURLKey,
+        label: 'Base URL',
+        type: 'url',
+        placeholder: provider.base_domain
+          ? `https://${provider.base_domain}`
+          : 'https://provider.example',
+      },
+      {
+        key: keys.marketplaceKey,
+        label: 'Marketplace / Region',
+        type: 'text',
+        default: provider.provider_id === 'ebay' ? 'EBAY_AU' : '',
+      },
+      {
+        key: keys.itemsPerPageKey,
+        label: 'Items per page',
+        type: 'number',
+        default: '50',
+      },
+      ...(provider.auth_mode === 'none'
+        ? []
+        : [
+            {
+              key: keys.tokenKey,
+              label: 'New token / API key',
+              type: 'secret',
+              write_only: true,
+              persistence: 'profile_secrets',
+              secret_key: keys.tokenKey,
+            } satisfies IntegrationSetupField,
+          ]),
+    ],
+  }
+}
+
+function withDefaultSetupSchema(provider: ProviderRecord): ProviderRecord {
+  const setupSchema = providerDefaultSetupSchema(provider)
+  return setupSchema === provider.setup_schema
+    ? provider
+    : { ...provider, setup_schema: setupSchema }
+}
+
+function setupFieldID(field: IntegrationSetupField) {
+  switch (field.key) {
+    case 'ebay_base_url':
+      return 'provider-base-url'
+    case 'ebay_marketplace':
+      return 'provider-marketplace'
+    case 'integration.ebay.items_per_page':
+      return 'provider-items-per-page'
+    case 'ebay_bearer_token':
+      return 'provider-token'
+    default:
+      return `provider-schema-${notificationHistoryID(field.key)}`
+  }
+}
+
 function recordIntegrationsStatusHistory({
   id,
   level = 'success',
@@ -776,6 +848,8 @@ export function Apps({
     null
   )
   const [providerSelectorOpen, setProviderSelectorOpen] = useState(false)
+  const [providerCatalogSearchTerm, setProviderCatalogSearchTerm] = useState('')
+  const [providerCatalogCategory, setProviderCatalogCategory] = useState('all')
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
@@ -869,7 +943,7 @@ export function Apps({
       const registryPayload = (await registryResp.json()) as {
         providers?: ProviderRecord[]
       }
-      setProviders(registryPayload.providers ?? [])
+      setProviders((registryPayload.providers ?? []).map(withDefaultSetupSchema))
 
       const settingsResp = await fetch(`/api/profiles/${profileID}/settings`)
       if (!settingsResp.ok) {
@@ -962,10 +1036,88 @@ export function Apps({
   const providerCatalogProviders = addableProviders.length
     ? addableProviders
     : sortedProviders
+  const providerCatalogCategories = useMemo(() => {
+    const categories = new Set<string>()
+    providerCatalogProviders.forEach((provider) => {
+      const category =
+        provider.provider_category?.trim() || provider.provider_type?.trim()
+      if (category) {
+        categories.add(category)
+      }
+    })
+    return [...categories].sort((a, b) => a.localeCompare(b))
+  }, [providerCatalogProviders])
+  const filteredProviderCatalogProviders = useMemo(() => {
+    const search = providerCatalogSearchTerm.trim().toLowerCase()
+    return providerCatalogProviders
+      .filter((provider) => {
+        if (providerCatalogCategory === 'all') {
+          return true
+        }
+        return (
+          provider.provider_category === providerCatalogCategory ||
+          provider.provider_type === providerCatalogCategory
+        )
+      })
+      .filter((provider) => {
+        if (!search) {
+          return true
+        }
+        const capabilityTerms = Object.entries(provider.capabilities ?? {})
+          .filter(([, enabled]) => enabled)
+          .map(([capability]) => capability)
+        return [
+          provider.display_name,
+          provider.base_domain,
+          provider.provider_category,
+          provider.provider_type,
+          provider.auth_mode,
+          provider.state,
+          provider.health?.status,
+          provider.health?.state,
+          provider.setup_instructions,
+          provider.setup_status?.next_action,
+          ...(provider.workflow_refs ?? []),
+          ...capabilityTerms,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(search)
+      })
+  }, [
+    providerCatalogCategory,
+    providerCatalogProviders,
+    providerCatalogSearchTerm,
+  ])
+  const providerCatalogStatusClassName = (provider: ProviderRecord) => {
+    const status = (
+      provider.health?.state ??
+      provider.health?.status ??
+      provider.state
+    ).toLowerCase()
+    if (status.includes('disabled') || status.includes('deprecated')) {
+      return 'border border-destructive/40 bg-destructive/10 text-destructive'
+    }
+    if (status.includes('degraded') || status.includes('repair')) {
+      return 'border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+    }
+    if (status.includes('beta')) {
+      return 'border border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
+    }
+    return 'bg-muted text-muted-foreground'
+  }
 
   useEffect(() => {
     setTablePage((page) => Math.min(page, tablePageCount))
   }, [tablePageCount])
+
+  useEffect(() => {
+    if (providerSelectorOpen) {
+      setProviderCatalogSearchTerm('')
+      setProviderCatalogCategory('all')
+    }
+  }, [providerSelectorOpen])
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -1502,8 +1654,9 @@ export function Apps({
           }
           settingsPayload[field.key] = value
         }
-        settingsPayload[providerSettingsKeys(editingProvider.provider_id).enabledKey] =
-          'true'
+        settingsPayload[
+          providerSettingsKeys(editingProvider.provider_id).enabledKey
+        ] = 'true'
         const settingsResponse = await fetch(
           `/api/profiles/${activeProfileId}/settings`,
           {
@@ -1907,10 +2060,9 @@ export function Apps({
       }
       const payload = (await response.json()) as SellerOperationPreviewResult
       setSellerOperationResult(payload)
-      const message =
-        payload.preview?.remote_write
-          ? 'Seller operation preview is allowed only after explicit confirmation.'
-          : 'Seller operation preview completed without remote write.'
+      const message = payload.preview?.remote_write
+        ? 'Seller operation preview is allowed only after explicit confirmation.'
+        : 'Seller operation preview completed without remote write.'
       setActionMessage(message)
       recordIntegrationsStatusHistory({
         id: `integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}preview-success`,
@@ -1971,10 +2123,9 @@ export function Apps({
             `seller_operation_execute_failed_${response.status}`
         )
       }
-      const message =
-        payload.execution?.local_only
-          ? 'Seller operation read-only sync completed locally without remote write.'
-          : 'Seller operation execute request returned without local completion.'
+      const message = payload.execution?.local_only
+        ? 'Seller operation read-only sync completed locally without remote write.'
+        : 'Seller operation execute request returned without local completion.'
       setActionMessage(message)
       recordIntegrationsStatusHistory({
         id: `integrations-seller-operation-${notificationHistoryID(status.operation)}-${confirmed ? 'confirmed-' : ''}execute-success`,
@@ -2041,10 +2192,9 @@ export function Apps({
             `listing_lifecycle_preview_failed_${response.status}`
         )
       }
-      const message =
-        payload.preview?.remote_write
-          ? 'Listing lifecycle preview requires explicit confirmation before any eBay write.'
-          : 'Listing lifecycle preview completed without remote write.'
+      const message = payload.preview?.remote_write
+        ? 'Listing lifecycle preview requires explicit confirmation before any eBay write.'
+        : 'Listing lifecycle preview completed without remote write.'
       setActionMessage(message)
       recordIntegrationsStatusHistory({
         id: `integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}preview-success`,
@@ -2098,10 +2248,9 @@ export function Apps({
             `listing_lifecycle_execute_failed_${response.status}`
         )
       }
-      const message =
-        payload.execution?.local_only
-          ? 'Listing draft was created locally without eBay remote write.'
-          : 'Listing lifecycle execute request returned without remote completion.'
+      const message = payload.execution?.local_only
+        ? 'Listing draft was created locally without eBay remote write.'
+        : 'Listing lifecycle execute request returned without remote completion.'
       setActionMessage(message)
       recordIntegrationsStatusHistory({
         id: `integrations-listing-lifecycle-${notificationHistoryID(command)}-${confirmed ? 'confirmed-' : ''}execute-success`,
@@ -2620,32 +2769,103 @@ export function Apps({
           <DialogHeader>
             <DialogTitle>Add Integration</DialogTitle>
             <DialogDescription>
-              Choose a provider before opening provider-specific setup.
+              Search registry providers and review setup requirements before
+              opening provider-specific setup.
             </DialogDescription>
           </DialogHeader>
-          <div className='grid gap-2'>
-            {providerCatalogProviders.map((provider) => (
-              <Button
-                key={provider.provider_id}
-                type='button'
-                variant='outline'
-                className='h-auto justify-start px-3 py-2 text-left'
-                data-testid={`integrations-provider-selector-option-${provider.provider_id}`}
-                onClick={() => {
-                  setProviderSelectorOpen(false)
-                  openIntegration(provider)
-                }}
+          <div className='grid gap-3'>
+            <div className='grid gap-2 sm:grid-cols-[1fr_12rem]'>
+              <div className='relative'>
+                <SearchCheck className='pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground' />
+                <Input
+                  className='pl-8'
+                  data-testid='integrations-provider-selector-search'
+                  placeholder='Search name, domain, capability, auth, or status'
+                  value={providerCatalogSearchTerm}
+                  onChange={(event) =>
+                    setProviderCatalogSearchTerm(event.target.value)
+                  }
+                />
+              </div>
+              <Select
+                value={providerCatalogCategory}
+                onValueChange={setProviderCatalogCategory}
               >
-                <span className='flex min-w-0 flex-col items-start'>
-                  <span className='truncate font-medium'>
-                    {provider.display_name}
-                  </span>
-                  <span className='truncate text-xs text-muted-foreground'>
-                    {provider.base_domain}
-                  </span>
-                </span>
-              </Button>
-            ))}
+                <SelectTrigger data-testid='integrations-provider-selector-category'>
+                  <SelectValue placeholder='Category' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>All categories</SelectItem>
+                  {providerCatalogCategories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='grid max-h-[58vh] gap-2 overflow-y-auto pr-1'>
+              {filteredProviderCatalogProviders.length ? (
+                filteredProviderCatalogProviders.map((provider) => (
+                  <Button
+                    key={provider.provider_id}
+                    type='button'
+                    variant='outline'
+                    className='h-auto justify-start px-3 py-3 text-left'
+                    data-testid={`integrations-provider-selector-option-${provider.provider_id}`}
+                    onClick={() => {
+                      setProviderSelectorOpen(false)
+                      openIntegration(provider)
+                    }}
+                  >
+                    <span className='flex min-w-0 flex-1 flex-col items-start gap-2'>
+                      <span className='flex w-full min-w-0 flex-wrap items-start justify-between gap-2'>
+                        <span className='min-w-0'>
+                          <span className='block truncate font-medium'>
+                            {provider.display_name}
+                          </span>
+                          <span className='block truncate text-xs text-muted-foreground'>
+                            {provider.base_domain || provider.provider_id}
+                          </span>
+                        </span>
+                        <span
+                          className={`rounded px-2 py-0.5 text-xs ${providerCatalogStatusClassName(provider)}`}
+                          data-testid={`integrations-provider-selector-status-${provider.provider_id}`}
+                        >
+                          {provider.health?.state ??
+                            provider.health?.status ??
+                            provider.state}
+                        </span>
+                      </span>
+                      <span className='flex flex-wrap gap-1 text-xs text-muted-foreground'>
+                        <span className='rounded bg-muted px-2 py-0.5'>
+                          {provider.provider_category ??
+                            provider.provider_type ??
+                            'uncategorized'}
+                        </span>
+                        <span className='rounded bg-muted px-2 py-0.5'>
+                          {provider.auth_mode}
+                        </span>
+                        <span className='rounded bg-muted px-2 py-0.5'>
+                          {provider.integration_mode}
+                        </span>
+                      </span>
+                      <span className='line-clamp-2 text-xs text-muted-foreground'>
+                        {provider.setup_instructions ??
+                          'Review provider setup requirements before saving.'}
+                      </span>
+                    </span>
+                  </Button>
+                ))
+              ) : (
+                <div
+                  className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
+                  data-testid='integrations-provider-selector-empty'
+                >
+                  No registry providers match current Add Integration filters.
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -2672,7 +2892,8 @@ export function Apps({
               <div className='rounded-md border bg-muted/20 p-3 text-xs'>
                 <p>Mode: {editingProvider.integration_mode}</p>
                 <p data-testid='provider-detail-category'>
-                  Category: {editingProvider.provider_category ?? 'uncategorized'}
+                  Category:{' '}
+                  {editingProvider.provider_category ?? 'uncategorized'}
                   {' / '}
                   Type: {editingProvider.provider_type ?? 'unknown'}
                 </p>
@@ -3123,8 +3344,7 @@ export function Apps({
                     </div>
                     <div className='space-y-2 sm:col-span-2'>
                       {editingProvider.auth_methods?.bot_token
-                        ?.credential_present &&
-                      !replaceToken ? (
+                        ?.credential_present && !replaceToken ? (
                         <div className='rounded-md border bg-muted/20 p-3 text-xs'>
                           <p>Bot token on file.</p>
                           <p className='text-muted-foreground'>
@@ -3144,9 +3364,7 @@ export function Apps({
                         </div>
                       ) : (
                         <>
-                          <Label htmlFor='telegram-bot-token'>
-                            Bot token
-                          </Label>
+                          <Label htmlFor='telegram-bot-token'>Bot token</Label>
                           <Input
                             id='telegram-bot-token'
                             type='password'
@@ -3194,14 +3412,18 @@ export function Apps({
                         setupFieldVisible(field, setupSchemaValues)
                       )
                       .map((field) => {
-                        const fieldID = `provider-schema-${notificationHistoryID(field.key)}`
+                        const fieldID = setupFieldID(field)
                         const fieldValue = setupSchemaValues[field.key] ?? ''
                         const updateField = (value: string) =>
                           setSetupSchemaValues((prev) => ({
                             ...prev,
                             [field.key]: value,
                           }))
-                        if (field.write_only && editingProvider.has_token && !replaceToken) {
+                        if (
+                          field.write_only &&
+                          editingProvider.has_token &&
+                          !replaceToken
+                        ) {
                           return (
                             <div
                               key={field.key}
@@ -3245,7 +3467,8 @@ export function Apps({
                               {field.label}
                               {field.required ? ' *' : ''}
                             </Label>
-                            {field.type === 'select' && field.options?.length ? (
+                            {field.type === 'select' &&
+                            field.options?.length ? (
                               <Select
                                 value={fieldValue}
                                 onValueChange={updateField}
@@ -3255,7 +3478,9 @@ export function Apps({
                                   id={fieldID}
                                   data-testid={`provider-schema-field-${field.key}`}
                                 >
-                                  <SelectValue placeholder={field.placeholder} />
+                                  <SelectValue
+                                    placeholder={field.placeholder}
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {field.options.map((option) => (
@@ -3286,7 +3511,9 @@ export function Apps({
                                 checked={fieldValue === 'true'}
                                 disabled={field.read_only}
                                 onChange={(e) =>
-                                  updateField(e.target.checked ? 'true' : 'false')
+                                  updateField(
+                                    e.target.checked ? 'true' : 'false'
+                                  )
                                 }
                               />
                             ) : field.type === 'oauth-connect' ||

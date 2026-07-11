@@ -70,6 +70,8 @@ Integrations screen SHALL expose the page header Add Integration action as an ic
 - **GIVEN** integrations route is loaded with a provider registry containing configured and catalog providers
 - **WHEN** user activates the header Add Integration action
 - **THEN** the screen MUST show provider selection/catalog UI first
+- **AND** the selector MUST support searching registry providers by name, domain, category/type, auth mode, capability, workflow, setup guidance, and status
+- **AND** the selector MUST show registry context before selection, including category/type, auth/setup mode, status, domain, and setup guidance
 - **AND** provider-specific setup fields such as Base URL or Items per page MUST NOT render until the user selects a provider
 - **WHEN** the user selects a provider from the selector
 - **THEN** the provider-specific setup dialog MUST open for that selected provider

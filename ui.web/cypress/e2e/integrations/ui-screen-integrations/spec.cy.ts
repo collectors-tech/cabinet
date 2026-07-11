@@ -1,9 +1,9 @@
 describe('ui-screen-integrations', () => {
-  function signIn() {
-    cy.visit('/sign-in?redirect=%2Fintegrations%2F')
-    cy.get('input[name="email"]').clear().type('e2e-inventory@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+  function signIn(
+    redirect = '%2Fintegrations%2F'
+  ) {
+    cy.visit(`/sign-in?redirect=${redirect}`)
+    cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/integrations\/?$/
@@ -116,7 +116,7 @@ describe('ui-screen-integrations', () => {
     cy.get('table').should('be.visible')
   })
 
-  it('UI-SCREEN-INTEGRATIONS-015 + #1435: Add Integration is icon-only and opens provider selection first', () => {
+  it('UI-SCREEN-INTEGRATIONS-015 + #1435 + #1466: Add Integration opens registry catalog before setup', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
@@ -129,6 +129,8 @@ describe('ui-screen-integrations', () => {
             provider_id: 'ebay',
             display_name: 'eBay',
             base_domain: 'ebay.com',
+            provider_category: 'marketplace',
+            provider_type: 'marketplace',
             integration_mode: 'official_api',
             auth_mode: 'api_key',
             state: 'ready',
@@ -147,6 +149,8 @@ describe('ui-screen-integrations', () => {
             provider_id: 'au-webshop-acercmodels-com',
             display_name: 'acercmodels.com',
             base_domain: 'acercmodels.com',
+            provider_category: 'retailer',
+            provider_type: 'source_matcher',
             integration_mode: 'web_ingestion',
             auth_mode: 'none',
             state: 'ready',
@@ -183,10 +187,29 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="integrations-provider-selector"]')
       .should('be.visible')
       .and('contain', 'Add Integration')
-      .and('contain', 'Choose a provider')
+      .and('contain', 'Search registry providers')
       .and('contain', 'acercmodels.com')
+      .and('contain', 'retailer')
+      .and('contain', 'none')
+      .and('contain', 'Configure Acerc Models catalog ingestion.')
       .and('not.contain', 'Base URL')
     cy.get('[role="dialog"]').should('not.contain', 'Items per page')
+    cy.get('[data-testid="integrations-provider-selector-search"]').type(
+      'pricing'
+    )
+    cy.get(
+      '[data-testid="integrations-provider-selector-option-au-webshop-acercmodels-com"]'
+    ).should('be.visible')
+    cy.get('[data-testid="integrations-provider-selector-search"]')
+      .clear()
+      .type('api_key')
+    cy.get(
+      '[data-testid="integrations-provider-selector-option-au-webshop-acercmodels-com"]'
+    ).should('not.exist')
+    cy.get('[data-testid="integrations-provider-selector-empty"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="integrations-provider-selector-search"]').clear()
 
     cy.get(
       '[data-testid="integrations-provider-selector-option-au-webshop-acercmodels-com"]'
@@ -832,15 +855,8 @@ describe('ui-screen-integrations', () => {
       body: { settings: { 'integration.au-webshop-bonzaslotcars-com-au.enabled': 'true' } },
     }).as('settings')
 
-    cy.visit(
-      '/sign-in?redirect=%2Fintegrations%2F%3Ffilter%3Dbonza%26type%3Dconnected%26sort%3Ddesc%26view%3Drows'
-    )
-    cy.get('input[name="email"]').clear().type('e2e-inventory@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/integrations\/?$/
+    signIn(
+      '%2Fintegrations%2F%3Ffilter%3Dbonza%26type%3Dconnected%26sort%3Ddesc%26view%3Drows'
     )
     cy.wait('@activeProfile')
     cy.wait('@registry')
@@ -915,15 +931,8 @@ describe('ui-screen-integrations', () => {
       body: { settings: { 'integration.connected-api.enabled': 'true' } },
     }).as('settings')
 
-    cy.visit(
-      '/sign-in?redirect=%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Drows'
-    )
-    cy.get('input[name="email"]').clear().type('e2e-inventory@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/integrations\/?$/
+    signIn(
+      '%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Drows'
     )
     cy.wait('@activeProfile')
     cy.wait('@registry')
@@ -1005,15 +1014,8 @@ describe('ui-screen-integrations', () => {
       body: { settings: { 'integration.connected-api.enabled': 'true' } },
     }).as('settings')
 
-    cy.visit(
-      '/sign-in?redirect=%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Dcards'
-    )
-    cy.get('input[name="email"]').clear().type('e2e-inventory@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/integrations\/?$/
+    signIn(
+      '%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Dcards'
     )
     cy.wait('@activeProfile')
     cy.wait('@registry')
@@ -1171,10 +1173,16 @@ describe('ui-screen-integrations', () => {
     cy.contains('Sender/chat state: authorized').should('be.visible')
     cy.contains('Bot token state: stored').should('be.visible')
     cy.contains('Webhook state: pending').should('be.visible')
-    cy.contains('Runtime proof: pending_live_channel_check').should('be.visible')
-    cy.contains('configure_webhook').should('be.visible')
-    cy.contains('production-channel validation').should('be.visible')
-    cy.contains('preview-before-apply channel intake').should('be.visible')
+    cy.get('[role="dialog"]')
+      .contains('Runtime proof: pending_live_channel_check')
+      .should('exist')
+    cy.get('[role="dialog"]').contains('configure_webhook').should('exist')
+    cy.get('[role="dialog"]')
+      .contains('production-channel validation')
+      .should('exist')
+    cy.get('[role="dialog"]')
+      .contains('preview-before-apply channel intake')
+      .should('exist')
     cy.get('[data-testid="telegram-sender-id"]')
       .should('have.value', '12345')
       .clear()
@@ -1966,10 +1974,16 @@ describe('ui-screen-integrations', () => {
         updated_at: '2026-03-01T00:01:00Z',
       },
     }).as('validate')
+    cy.intercept('PUT', '/api/profiles/*/secrets', (req) => {
+      expect(req.body).to.deep.equal({
+        key: 'ebay_bearer_token',
+        value: 'new-secret-token',
+      })
+      req.reply({ statusCode: 200, body: {} })
+    }).as('saveSecret')
     cy.intercept('PUT', '/api/profiles/*/settings', (req) => {
       expect(req.body.settings).to.have.property('ebay_base_url')
       expect(req.body.settings).to.have.property('ebay_marketplace')
-      expect(req.body.settings).to.have.property('ebay_bearer_token', 'new-secret-token')
       req.reply({
         statusCode: 200,
         body: {
@@ -1984,10 +1998,12 @@ describe('ui-screen-integrations', () => {
     signIn()
 
     cy.get('[data-testid="provider-open-ebay"]').click()
-    cy.contains('Token on file.').should('be.visible')
+    cy.contains('Credential on file.').should('be.visible')
     cy.contains('input[placeholder="New token / API key"]').should('not.exist')
     cy.get('[data-testid="replace-token"]').click()
-    cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
+    cy.get('[data-testid="provider-schema-field-ebay_bearer_token"]').type(
+      'new-secret-token'
+    )
     cy.contains('Health: unknown').scrollIntoView().should('be.visible')
     cy.contains('Last run: never').scrollIntoView().should('be.visible')
     cy.contains('Last checked: n/a').scrollIntoView().should('be.visible')
@@ -2006,10 +2022,15 @@ describe('ui-screen-integrations', () => {
     cy.contains('[data-testid="provider-row-ebay"]', 'Last run: success').should('be.visible')
     cy.get('[data-testid="provider-open-ebay"]').click()
     cy.get('[data-testid="replace-token"]').click()
-    cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
+    cy.get('[data-testid="provider-schema-field-ebay_bearer_token"]').type(
+      'new-secret-token'
+    )
     cy.contains('button', 'Save Integration').click()
+    cy.wait('@saveSecret')
     cy.wait('@saveSettings')
-    cy.contains('Provider configuration saved.').scrollIntoView().should('be.visible')
+    cy.contains('Provider schema configuration saved.')
+      .scrollIntoView()
+      .should('be.visible')
   })
 
   it('INTEGRATION-006 + #1289: displays eBay provider-health readiness aliases and recovery guidance', () => {
