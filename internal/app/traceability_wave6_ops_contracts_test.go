@@ -55,6 +55,53 @@ func TestWave6ProfilesIsolationStorageAndSecrets(t *testing.T) {
 	}
 }
 
+func TestDataExportsAreScopedToActiveProfile(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createP1 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"ExportP1"}`), map[string]string{"Content-Type": "application/json"})
+	createP2 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"ExportP2"}`), map[string]string{"Content-Type": "application/json"})
+	if createP1.Code != http.StatusCreated || createP2.Code != http.StatusCreated {
+		t.Fatalf("create profiles failed p1=%d p2=%d", createP1.Code, createP2.Code)
+	}
+	var p1 struct {
+		ID string `json:"id"`
+	}
+	var p2 struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createP1.Body).Decode(&p1)
+	_ = json.NewDecoder(createP2.Body).Decode(&p2)
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p1.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	createP1Item := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"EXPORT-P1-ONLY","title":"P1 export item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if createP1Item.Code != http.StatusCreated {
+		t.Fatalf("create p1 item status=%d body=%s", createP1Item.Code, createP1Item.Body.String())
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p2.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	createP2Item := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"EXPORT-P2-ONLY","title":"P2 export item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if createP2Item.Code != http.StatusCreated {
+		t.Fatalf("create p2 item status=%d body=%s", createP2Item.Code, createP2Item.Body.String())
+	}
+
+	jsonExport := doRequest(t, a, http.MethodGet, "/api/data/export/json", nil, nil)
+	if jsonExport.Code != http.StatusOK {
+		t.Fatalf("json export status=%d body=%s", jsonExport.Code, jsonExport.Body.String())
+	}
+	if body := jsonExport.Body.String(); !strings.Contains(body, "EXPORT-P2-ONLY") || strings.Contains(body, "EXPORT-P1-ONLY") {
+		t.Fatalf("json export should include only active profile records, got %s", body)
+	}
+
+	csvExport := doRequest(t, a, http.MethodGet, "/api/data/export/csv/items", nil, nil)
+	if csvExport.Code != http.StatusOK {
+		t.Fatalf("csv export status=%d body=%s", csvExport.Code, csvExport.Body.String())
+	}
+	if body := csvExport.Body.String(); !strings.Contains(body, "EXPORT-P2-ONLY") || strings.Contains(body, "EXPORT-P1-ONLY") {
+		t.Fatalf("csv export should include only active profile records, got %s", body)
+	}
+}
+
 func TestWave6CollectionMetadataInstancesAndNoAutoMerge(t *testing.T) {
 	t.Parallel()
 
