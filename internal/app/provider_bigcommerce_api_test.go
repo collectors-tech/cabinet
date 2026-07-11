@@ -180,6 +180,106 @@ func TestBigCommerceRunStorefrontModePersistsCandidatesAndSnapshot(t *testing.T)
 	}
 }
 
+func TestBigCommerceRunStorefrontHTMLModeRecordsLiveProof(t *testing.T) {
+	t.Parallel()
+
+	storefrontServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/search.php" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+<article class="card" data-product-id="20849">
+  <h3 class="card-title">
+    <a href="https://www.voglers.com.au/cardinal-wooden-puzzle-m/?searchid=fixture&amp;search_query=slot+car">
+      Cardinal Wooden Puzzle (M)
+    </a>
+  </h3>
+  <div class="card-text" data-test-info-type="price">
+    <span data-product-price-with-tax class="price">$32.00</span>
+  </div>
+</article>`))
+	}))
+	defer storefrontServer.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BigCommerceHTMLLiveProofProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"Slot car","keywords":["slot car"],"provider_scope":["voglers.com.au"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	run := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/providers/bigcommerce/run",
+		strings.NewReader(fmt.Sprintf(`{"query_set_id":"%s","provider_domain":"voglers.com.au","search_url":"%s/search.php"}`, qs.ID, storefrontServer.URL)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if run.Code != http.StatusOK {
+		t.Fatalf("bigcommerce html storefront run status=%d body=%s", run.Code, run.Body.String())
+	}
+	var payload struct {
+		AuthMode       string           `json:"auth_mode"`
+		CandidateCount int              `json:"candidate_count"`
+		Candidates     []map[string]any `json:"candidates"`
+	}
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode run payload: %v", err)
+	}
+	if payload.AuthMode != "storefront_public" || payload.CandidateCount != 1 || len(payload.Candidates) != 1 {
+		t.Fatalf("expected one storefront_public HTML candidate, got %+v", payload)
+	}
+	if got, _ := payload.Candidates[0]["source"].(string); got != "voglers.com.au" {
+		t.Fatalf("expected source=voglers.com.au, got %+v", payload.Candidates[0])
+	}
+	if got, _ := payload.Candidates[0]["title"].(string); got != "Cardinal Wooden Puzzle (M)" {
+		t.Fatalf("expected HTML title to be normalized, got %+v", payload.Candidates[0])
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var registryPayload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&registryPayload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	voglers := findRegistryProvider(registryPayload.Providers, "au-webshop-voglers-com-au")
+	if voglers == nil {
+		t.Fatalf("Voglers provider missing from registry payload: %+v", registryPayload.Providers)
+	}
+	if got := fmt.Sprintf("%v", voglers["beta_release_status"]); got != "available_live_validated" {
+		t.Fatalf("Voglers beta release status got %q want available_live_validated: %+v", got, voglers)
+	}
+	if got := fmt.Sprintf("%v", voglers["live_evidence_state"]); got != "validated" {
+		t.Fatalf("Voglers live evidence state got %q want validated: %+v", got, voglers)
+	}
+}
+
 func TestBigCommerceRunTokenModeUnlocksRicherDepth(t *testing.T) {
 	t.Parallel()
 

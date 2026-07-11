@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"log"
@@ -3461,6 +3462,8 @@ func New(cfg config.Config) (*App, error) {
 			}
 			out, runErr := runBigCommerceTokenSearch(r.Context(), http.DefaultClient, graphURL, token, query, providerDomain)
 			if runErr != nil {
+				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
+				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
 				http.Error(w, `{"error":"failed_to_run_bigcommerce_token_mode"}`, http.StatusBadRequest)
 				return
 			}
@@ -3472,6 +3475,8 @@ func New(cfg config.Config) (*App, error) {
 			}
 			out, runErr := runBigCommerceStorefrontSearch(r.Context(), http.DefaultClient, searchURL, query, page, pageSize, providerDomain)
 			if runErr != nil {
+				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
+				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
 				http.Error(w, `{"error":"failed_to_run_bigcommerce_storefront_mode"}`, http.StatusBadRequest)
 				return
 			}
@@ -3492,6 +3497,8 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_persist_bigcommerce_candidates"}`, http.StatusBadRequest)
 			return
 		}
+		scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "ok", "Live BigCommerce storefront Market Watch run succeeded with persisted candidates.")
+		scannerSvc.RecordProviderHealth(r.Context(), providerID, "ok", "Live BigCommerce storefront Market Watch run succeeded with persisted candidates.")
 		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_bigcommerce_candidates"}`, http.StatusBadRequest)
@@ -10404,6 +10411,10 @@ func runBigCommerceStorefrontSearch(
 		} `json:"products"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
+		candidates := bigCommerceCandidatesFromSearchHTML(string(body), providerDomain)
+		if len(candidates) > 0 {
+			return candidates, nil
+		}
 		return nil, fmt.Errorf("decode bigcommerce storefront response: %w", err)
 	}
 	candidates := make([]map[string]any, 0, len(payload.Products))
@@ -10423,6 +10434,37 @@ func runBigCommerceStorefrontSearch(
 		})
 	}
 	return candidates, nil
+}
+
+func bigCommerceCandidatesFromSearchHTML(body, providerDomain string) []map[string]any {
+	cardPattern := regexp.MustCompile(`(?is)data-product-id=["']([^"']+)["'].*?<h3[^>]*class=["'][^"']*card-title[^"']*["'][^>]*>.*?<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>.*?data-product-price-with-tax[^>]*class=["'][^"']*price[^"']*["'][^>]*>(.*?)</span>`)
+	matches := cardPattern.FindAllStringSubmatch(body, -1)
+	candidates := make([]map[string]any, 0, len(matches))
+	for _, match := range matches {
+		if len(match) < 5 {
+			continue
+		}
+		id := strings.TrimSpace(html.UnescapeString(match[1]))
+		rawURL := strings.TrimSpace(html.UnescapeString(match[2]))
+		title := strings.TrimSpace(stripHTMLTags(html.UnescapeString(match[3])))
+		price := strings.TrimSpace(stripHTMLTags(html.UnescapeString(match[4])))
+		if id == "" || title == "" || rawURL == "" {
+			continue
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id": "bigcommerce-" + id,
+			"title":      title,
+			"url":        rawURL,
+			"price":      price,
+			"source":     providerDomain,
+			"seller":     providerDomain,
+		})
+	}
+	return candidates
+}
+
+func stripHTMLTags(value string) string {
+	return strings.Join(strings.Fields(regexp.MustCompile(`(?is)<[^>]+>`).ReplaceAllString(value, " ")), " ")
 }
 
 func runLightspeedStorefrontSearch(
