@@ -292,7 +292,8 @@ func (s *Service) DryRunImport(ctx context.Context, snap Snapshot) (DryRunSummar
 	}
 
 	for _, item := range snap.Items {
-		existingID, err := s.findItemIDByPartNumber(ctx, item.PartNumber)
+		partNumber := strings.TrimSpace(item.PartNumber)
+		existingID, err := s.findItemIDByPartNumber(ctx, partNumber)
 		if err != nil {
 			return DryRunSummary{}, err
 		}
@@ -302,7 +303,7 @@ func (s *Service) DryRunImport(ctx context.Context, snap Snapshot) (DryRunSummar
 		}
 		sum.Conflicts++
 		sum.ConflictDetails = append(sum.ConflictDetails, ConflictDetails{
-			PartNumber: item.PartNumber,
+			PartNumber: partNumber,
 			ExistingID: existingID,
 		})
 	}
