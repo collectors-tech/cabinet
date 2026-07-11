@@ -5854,7 +5854,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		snap, err := dataService.ExportSnapshot(r.Context())
+		profileID := ""
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
+			profileID = active.ID
+		}
+		snap, err := dataService.ExportSnapshotForProfile(r.Context(), profileID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_export_snapshot"}`, http.StatusInternalServerError)
 			return
@@ -5867,7 +5871,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		csvText, err := dataService.ExportItemsCSV(r.Context())
+		profileID := ""
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
+			profileID = active.ID
+		}
+		csvText, err := dataService.ExportItemsCSVForProfile(r.Context(), profileID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_export_csv"}`, http.StatusInternalServerError)
 			return

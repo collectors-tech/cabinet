@@ -99,11 +99,17 @@ func NewService(db *sql.DB) *Service {
 }
 
 func (s *Service) ExportSnapshot(ctx context.Context) (Snapshot, error) {
+	return s.ExportSnapshotForProfile(ctx, "")
+}
+
+func (s *Service) ExportSnapshotForProfile(ctx context.Context, profileID string) (Snapshot, error) {
+	profileID = strings.TrimSpace(profileID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json
 		FROM canonical_items
+		WHERE (? = '' OR profile_id = ?)
 		ORDER BY created_at ASC
-	`)
+	`, profileID, profileID)
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("list items for export: %w", err)
 	}
@@ -144,10 +150,17 @@ func (s *Service) ExportSnapshot(ctx context.Context) (Snapshot, error) {
 }
 
 func (s *Service) ExportItemsCSV(ctx context.Context) (string, error) {
+	return s.ExportItemsCSVForProfile(ctx, "")
+}
+
+func (s *Service) ExportItemsCSVForProfile(ctx context.Context, profileID string) (string, error) {
+	profileID = strings.TrimSpace(profileID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT brand, category, part_number, title, make, model, year, scale, series, description
-		FROM canonical_items ORDER BY created_at ASC
-	`)
+		FROM canonical_items
+		WHERE (? = '' OR profile_id = ?)
+		ORDER BY created_at ASC
+	`, profileID, profileID)
 	if err != nil {
 		return "", fmt.Errorf("list items for csv: %w", err)
 	}
