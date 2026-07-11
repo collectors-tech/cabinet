@@ -314,6 +314,13 @@ Market Watch provider registry projection SHALL distinguish live-validated, setu
 - **AND** public storefront providers without attached live proof MUST declare `beta_limited` or `manual_url_capture_only` status rather than `available_live_validated`
 - **AND** live evidence state MUST be visible in the registry response for release evidence review
 
+#### Scenario: Bonza live proof upgrades beta provider status
+- **GIVEN** a Bonza-scoped saved Market Watch query runs successfully against the public Store API
+- **WHEN** Cabinet persists normalized candidates and records provider health for the Bonza registry provider
+- **THEN** `/api/providers/registry` MUST project Bonza as `available_live_validated`
+- **AND** Bonza MUST expose `live_evidence_state=validated` and an available `market_watch.run` action
+- **AND** the release evidence MUST remain non-secret and identify the access method, rate-limit/cache boundary, observed result provenance, and log path
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -339,3 +346,4 @@ Market Watch provider registry projection SHALL distinguish live-validated, setu
 | UC-MW-20 | Provider health and run history | Unknown provider health stays actionable, provider health taxonomy includes label/guidance/retry timing, health transitions persist after run outcomes, and persisted run history lists provider outcomes after reload | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsClassifiedProviderHealthTransitions`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbayProviderHealthContract`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history`; `UI-SCREEN-MARKET-WATCH-017 shows provider health taxonomy labels guidance and retry timing` |
 | UC-MW-21 | Saved integration search dashboard shell | Header, top summary, create controls, provider health, saved-watch table, result inbox, and manual listing entry present Market Watch as a saved integration search dashboard | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-018 + #1540 presents saved integration search dashboard shell` |
 | UC-MW-22 | Beta provider registry fail-closed status | Registry marks eBay setup-required without credentials, disables unsupported provider actions, and labels unproven storefronts beta-limited/manual-capture-only until live evidence is attached | implemented: `internal/app/integration_migration_regression_test.go` `TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof` |
+| UC-MW-23 | Bonza public provider beta proof | Successful Bonza Store API Market Watch run records provider health and upgrades registry status to live validated with non-secret release evidence | implemented: `internal/app/provider_bonza_run_api_test.go` `TestBonzaRunRecordsLiveProviderProofForBetaRegistry`; `openspec/migration/market-watch-beta-provider-proof.md` |

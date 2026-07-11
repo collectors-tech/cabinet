@@ -145,6 +145,91 @@ func TestBonzaRunAggregatesPagesAndEnrichesWatchedStock(t *testing.T) {
 	}
 }
 
+func TestBonzaRunRecordsLiveProviderProofForBetaRegistry(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/wp-json/wc/store/v1/products") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-WP-TotalPages", "1")
+		_, _ = w.Write([]byte(`[
+{"id":2001,"name":"AFX Mega-G+ Mustang","permalink":"` + r.Host + `/product/2001","prices":{"price":"7495","currency_code":"AUD"},"is_in_stock":true,"low_stock_remaining":null}
+]`))
+	}))
+	defer bonza.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BonzaLiveProofProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s","integration.bonzaslotcars.items_per_page":"36"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"Bonza AFX Live Proof","keywords":["AFX"],"provider_scope":["bonzaslotcars"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	run := doRequest(t, a, http.MethodPost, "/api/providers/bonza/run", strings.NewReader(`{"query_set_id":"`+qs.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusOK {
+		t.Fatalf("bonza run status=%d body=%s", run.Code, run.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	bonzaProvider := findRegistryProvider(payload.Providers, "au-webshop-bonzaslotcars-com-au")
+	if bonzaProvider == nil {
+		t.Fatalf("Bonza provider missing from registry payload: %+v", payload.Providers)
+	}
+	if got := fmt.Sprintf("%v", bonzaProvider["beta_release_status"]); got != "available_live_validated" {
+		t.Fatalf("Bonza beta release status got %q want available_live_validated: %+v", got, bonzaProvider)
+	}
+	if got := fmt.Sprintf("%v", bonzaProvider["live_evidence_state"]); got != "validated" {
+		t.Fatalf("Bonza live evidence state got %q want validated: %+v", got, bonzaProvider)
+	}
+	action := findRegistryAction(anySlice(bonzaProvider["actions"]), "market_watch.run")
+	if action == nil {
+		t.Fatalf("Bonza provider missing market_watch.run action after live proof: %+v", bonzaProvider)
+	}
+	if got := fmt.Sprintf("%v", action["availability_state"]); got != "available" {
+		t.Fatalf("Bonza market_watch.run availability got %q want available: %+v", got, action)
+	}
+	if action["next_action"] != nil {
+		t.Fatalf("Bonza market_watch.run next_action got %+v want nil after live proof: %+v", action["next_action"], action)
+	}
+}
+
 func TestBonzaRunFailureCreatesProviderWorkflowInboxEvent(t *testing.T) {
 	t.Parallel()
 

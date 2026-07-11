@@ -1376,6 +1376,10 @@ func (s *Service) ProviderHealth(ctx context.Context, provider string) (map[stri
 	return map[string]string{"provider": provider, "status": status, "message": msg, "updated_at": updated, "retry_after_seconds": fmt.Sprintf("%d", retryAfterSeconds)}, nil
 }
 
+func (s *Service) RecordProviderHealth(ctx context.Context, provider, status, message string, retryAfterSeconds ...int) {
+	s.recordProviderHealth(ctx, provider, status, message, retryAfterSeconds...)
+}
+
 func (s *Service) recordProviderHealth(ctx context.Context, provider, status, message string, retryAfterSeconds ...int) {
 	retryAfter := 0
 	if len(retryAfterSeconds) > 0 && retryAfterSeconds[0] > 0 {

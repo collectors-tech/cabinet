@@ -2886,6 +2886,8 @@ func New(cfg config.Config) (*App, error) {
 		}
 		searchResult, err := runBonzaSearch(r.Context(), http.DefaultClient, baseURL, qs, requested)
 		if err != nil {
+			scannerSvc.RecordProviderHealth(r.Context(), "bonzaslotcars", "failed", err.Error())
+			scannerSvc.RecordProviderHealth(r.Context(), "au-webshop-bonzaslotcars-com-au", "failed", err.Error())
 			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-bonzaslotcars-com-au", "bonzaslotcars.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
 				"query_set_id":        qs.ID,
 				"provider_error_code": "FAILED_TO_RUN_BONZA",
@@ -2911,6 +2913,8 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_persist_bonza_candidates"}`, http.StatusBadRequest)
 			return
 		}
+		scannerSvc.RecordProviderHealth(r.Context(), "bonzaslotcars", "ok", "Live Bonza Store API Market Watch run succeeded with persisted candidates.")
+		scannerSvc.RecordProviderHealth(r.Context(), "au-webshop-bonzaslotcars-com-au", "ok", "Live Bonza Store API Market Watch run succeeded with persisted candidates.")
 		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_bonza_candidates"}`, http.StatusBadRequest)
@@ -9138,6 +9142,30 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 					lastRunFinished = v
 				}
 			}
+			if healthStatus == "unknown" {
+				scopeHealthID := providerHealthIDForRegistry(provider)
+				if scopeHealthID != "" && scopeHealthID != providerID {
+					if health, err := scannerSvc.ProviderHealth(ctx, scopeHealthID); err == nil && strings.TrimSpace(health["status"]) != "unknown" {
+						healthPayload = providerHealthResponse(health)
+						healthPayload["provider"] = providerID
+						healthPayload["evidence_provider"] = scopeHealthID
+						healthPayload["last_checked_at"] = healthPayload["updated_at"]
+						if v := strings.TrimSpace(health["status"]); v != "" {
+							healthStatus = v
+							switch v {
+							case "ok", "ready":
+								lastRunStatus = "success"
+							default:
+								lastRunStatus = "failed"
+							}
+						}
+						if v := strings.TrimSpace(health["updated_at"]); v != "" {
+							lastChecked = v
+							lastRunFinished = v
+						}
+					}
+				}
+			}
 		}
 		healthPayload["last_checked_at"] = lastChecked
 		provider["health"] = healthPayload
@@ -9278,6 +9306,14 @@ func providerWorkflowRefs(provider map[string]any) []string {
 		}
 	}
 	return refs
+}
+
+func providerHealthIDForRegistry(provider map[string]any) string {
+	scope := strings.TrimSpace(fmt.Sprintf("%v", provider["market_watch_scope"]))
+	if scope != "" {
+		return strings.ToLower(scope)
+	}
+	return strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", provider["provider_id"])))
 }
 
 func mapValue(v any) map[string]any {
