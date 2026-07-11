@@ -123,6 +123,63 @@ func TestRestoreCopyRejectsActiveDatabaseAlias(t *testing.T) {
 	}
 }
 
+func TestRestoreRejectsIncompleteArchiveWithoutChangingActiveDatabase(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("open active sqlite: %v", err)
+	}
+	if _, err := conn.Exec(`CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT); INSERT INTO t(v) VALUES ('active');`); err != nil {
+		t.Fatalf("seed active sqlite: %v", err)
+	}
+	_ = conn.Close()
+
+	badArchive := filepath.Join(base, "incomplete-backup.zip")
+	out, err := os.Create(badArchive)
+	if err != nil {
+		t.Fatalf("create incomplete archive: %v", err)
+	}
+	zw := zip.NewWriter(out)
+	if err := addBytesToZip(zw, "manifest.json", []byte(`{"format":"cabinet-backup-zip-v1"}`)); err != nil {
+		t.Fatalf("write incomplete archive manifest: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close incomplete archive writer: %v", err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatalf("close incomplete archive file: %v", err)
+	}
+
+	backupDir := filepath.Join(base, "backups")
+	svc := NewService(dbPath, backupDir, 1)
+	if _, err := svc.RestoreBackup(badArchive); err == nil || !strings.Contains(err.Error(), "missing database/cabinet.db") {
+		t.Fatalf("expected incomplete archive restore to fail before replacement, got %v", err)
+	}
+
+	activeConn, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("open active sqlite after failed restore: %v", err)
+	}
+	defer activeConn.Close()
+	var value string
+	if err := activeConn.QueryRow(`SELECT v FROM t WHERE id = 1`).Scan(&value); err != nil {
+		t.Fatalf("read active sqlite after failed restore: %v", err)
+	}
+	if value != "active" {
+		t.Fatalf("active database was changed after failed restore: %q", value)
+	}
+	entries, err := os.ReadDir(backupDir)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("read backup dir after failed restore: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no pre-restore backup for rejected archive, got %d entries", len(entries))
+	}
+}
+
 func assertBackupArchiveContains(t *testing.T, path, name string) {
 	t.Helper()
 	zr, err := zip.OpenReader(path)
