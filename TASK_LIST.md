@@ -9,6 +9,7 @@ GitHub issues and OpenSpec change/task files for detailed execution history.
 ## Status Legend
 
 - `OPEN`: issue is open and needs focused implementation, validation, release evidence, or governance work.
+- `IN REVIEW`: issue implementation evidence is merged, but release-lane validation or final review still owns closure.
 - `DONE`: issue is closed with linked evidence on GitHub.
 - `POST-BETA`: issue/epic is intentionally outside Cabinet 0.1 private beta unless a release test exposes it as a direct blocker.
 - Work is executed one focused issue branch at a time, validated, merged into `develop`, then demo/release lanes are rebuilt from `develop`.
@@ -20,19 +21,19 @@ Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 1. [x] #1865 [DONE] Add develop CI and release-candidate quality gates.
    - Evidence: PR #1879 merged to `develop`; #1864 contains Develop Quality Gate and demo2 runtime evidence.
 2. [x] #1866 [DONE] Replace simulated local sign-in and passkey flows.
-3. [ ] #1867 [OPEN] Validate database upgrade, backup, export and restore round trip.
+3. [ ] #1867 [IN REVIEW] Validate database upgrade, backup, export and restore round trip.
+   - Source-level data-safety proof is summarized in `openspec/migration/beta-data-safety-evidence-matrix.md`; packaged Windows evidence remains owned by #1868/#1869 before beta release closure.
 4. [x] #1870 [DONE] Align Free, Plus and Pro entitlements and user-visible plan state.
-5. [ ] #1871 [OPEN] Prove one live Market Watch provider and fail closed for others.
+5. [x] #1871 [DONE] Prove one live Market Watch provider and fail closed for others.
+   - Evidence: PR #1908 merged to `develop`; #1864 contains the Voglers live Market Watch provider proof summary.
 6. [ ] #1868 [OPEN] Package versioned Windows beta artefact and GitHub release.
 7. [ ] #1869 [OPEN] Run packaged core-workflow release acceptance suite.
-8. [ ] #1872 [OPEN] Reconcile OpenSpec active changes and stale release tracking.
+8. [x] #1872 [DONE] Reconcile OpenSpec active changes and stale release tracking.
+   - Evidence: PR #1891 merged to `develop`; all active OpenSpec tasks reconciled to archive, closed issue evidence, or explicit deferred follow-ups.
 
 ## Current Release Governance Work
 
-- [ ] #1872: reconcile every unchecked OpenSpec task into one of:
-  - completed and archive-ready with validation evidence
-  - linked to an open focused issue
-  - explicitly deferred/post-beta with reason
+- [x] #1872: reconciled every unchecked OpenSpec task into completed/archive evidence, linked focused issue, or explicit deferred/post-beta reason.
 - [ ] Correct stale labels/status on release issues after each live issue is verified.
 - [ ] Keep #1864 as the single private beta release summary and evidence index.
 - [ ] Do not merge `develop` into `main` until Max explicitly approves the tested release candidate.
