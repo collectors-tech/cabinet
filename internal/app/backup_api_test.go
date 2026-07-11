@@ -91,9 +91,15 @@ func TestBackupRunAndRestoreEndpoints(t *testing.T) {
 	}
 	var restorePayload struct {
 		Restore struct {
-			RestoredPath   string `json:"restored_path"`
-			RestoredAt     string `json:"restored_at"`
-			IntegrityCheck string `json:"integrity_check"`
+			RestoredPath          string `json:"restored_path"`
+			RestoredAt            string `json:"restored_at"`
+			IntegrityCheck        string `json:"integrity_check"`
+			PreRestoreBackupTaken bool   `json:"pre_restore_backup_taken"`
+			PreRestoreBackup      struct {
+				FileName      string `json:"file_name"`
+				ArchiveFormat string `json:"archive_format"`
+				DownloadURL   string `json:"download_url"`
+			} `json:"pre_restore_backup"`
 		} `json:"restore"`
 	}
 	if err := json.NewDecoder(restoreResp.Body).Decode(&restorePayload); err != nil {
@@ -101,6 +107,9 @@ func TestBackupRunAndRestoreEndpoints(t *testing.T) {
 	}
 	if restorePayload.Restore.RestoredPath != runPayload.Backup.Path || restorePayload.Restore.IntegrityCheck != "ok" || restorePayload.Restore.RestoredAt == "" {
 		t.Fatalf("expected restore metadata, got %+v", restorePayload.Restore)
+	}
+	if !restorePayload.Restore.PreRestoreBackupTaken || restorePayload.Restore.PreRestoreBackup.FileName == "" || restorePayload.Restore.PreRestoreBackup.FileName == runPayload.Backup.FileName || restorePayload.Restore.PreRestoreBackup.ArchiveFormat != "zip" || restorePayload.Restore.PreRestoreBackup.DownloadURL == "" {
+		t.Fatalf("expected distinct pre-restore backup metadata, got %+v", restorePayload.Restore)
 	}
 
 	itemsResp := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
