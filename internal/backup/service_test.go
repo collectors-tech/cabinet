@@ -102,6 +102,27 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	}
 }
 
+func TestRestoreCopyRejectsActiveDatabaseAlias(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "cabinet.db")
+	original := []byte("active workspace database")
+	if err := os.WriteFile(dbPath, original, 0o644); err != nil {
+		t.Fatalf("seed active database: %v", err)
+	}
+
+	if err := copyFile(dbPath, dbPath); err == nil {
+		t.Fatal("expected alias copy to fail")
+	}
+	got, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("read active database: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("active database was changed after failed alias restore copy: %q", got)
+	}
+}
+
 func assertBackupArchiveContains(t *testing.T, path, name string) {
 	t.Helper()
 	zr, err := zip.OpenReader(path)

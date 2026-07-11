@@ -323,20 +323,113 @@ func extractArchiveDatabase(path string) (string, error) {
 }
 
 func copyFile(src, dst string) error {
+	if samePath, err := sameFilePath(src, dst); err != nil {
+		return err
+	} else if samePath {
+		return fmt.Errorf("restore source and active database destination must differ")
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
 
+	dstDir := filepath.Dir(dst)
+	tmp, err := os.CreateTemp(dstDir, ".cabinet-restore-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanupTmp := true
+	defer func() {
+		if cleanupTmp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := io.Copy(tmp, in); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	previousPath := ""
+	if _, err := os.Stat(dst); err == nil {
+		previous, err := os.CreateTemp(dstDir, ".cabinet-restore-prev-*.db")
+		if err != nil {
+			return err
+		}
+		previousPath = previous.Name()
+		if err := previous.Close(); err != nil {
+			_ = os.Remove(previousPath)
+			return err
+		}
+		if err := os.Remove(previousPath); err != nil {
+			return err
+		}
+		if err := os.Rename(dst, previousPath); err != nil {
+			return overwriteFile(tmpPath, dst)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.Rename(tmpPath, dst); err != nil {
+		if previousPath != "" {
+			_ = os.Rename(previousPath, dst)
+		}
+		return err
+	}
+	cleanupTmp = false
+	if previousPath != "" {
+		_ = os.Remove(previousPath)
+	}
+	return nil
+}
+
+func overwriteFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-
 	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
 	return out.Sync()
+}
+
+func sameFilePath(a, b string) (bool, error) {
+	aInfo, aErr := os.Stat(a)
+	bInfo, bErr := os.Stat(b)
+	if aErr == nil && bErr == nil {
+		return os.SameFile(aInfo, bInfo), nil
+	}
+	if aErr != nil && !os.IsNotExist(aErr) {
+		return false, aErr
+	}
+	if bErr != nil && !os.IsNotExist(bErr) {
+		return false, bErr
+	}
+	aAbs, err := filepath.Abs(a)
+	if err != nil {
+		return false, err
+	}
+	bAbs, err := filepath.Abs(b)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(filepath.Clean(aAbs), filepath.Clean(bAbs)), nil
 }

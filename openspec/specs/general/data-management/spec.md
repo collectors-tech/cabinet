@@ -38,6 +38,7 @@ Cabinet SHALL require explicit restore confirmation and SHALL return readable ba
 - **AND** restore SHALL fail without explicit confirmation before replacing the active database
 - **AND** newly created backups SHALL be timestamped ZIP archives containing the active database and app-owned backup metadata
 - **AND** confirmed restores SHALL take and report a pre-restore ZIP backup of the active database before replacing it
+- **AND** restore replacement SHALL reject active-database alias paths and SHALL preserve the active database when replacement cannot proceed
 - **AND** the Settings backup flow SHALL expose the generated ZIP filename and a download action
 - **AND** the Settings backup list SHALL render backup metadata in a sortable table that distinguishes generated ZIP archives from legacy database snapshots
 
