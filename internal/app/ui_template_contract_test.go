@@ -575,7 +575,9 @@ func TestIntegrationsProviderConfigInputsHaveLabels(t *testing.T) {
 	src := string(b)
 	required := []string{
 		"data-testid='integration-schema-form'",
-		"const fieldID = `provider-schema-${notificationHistoryID(field.key)}`",
+		"function setupFieldID(field: IntegrationSetupField)",
+		"return `provider-schema-${notificationHistoryID(field.key)}`",
+		"const fieldID = setupFieldID(field)",
 		"<Label htmlFor={fieldID}>",
 		"id={fieldID}",
 		"data-testid={`provider-schema-field-${field.key}`}",
