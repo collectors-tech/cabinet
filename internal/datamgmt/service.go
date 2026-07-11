@@ -15,9 +15,10 @@ import (
 )
 
 type Snapshot struct {
-	SchemaVersion int            `json:"schema_version"`
-	ExportedAt    string         `json:"exported_at"`
-	Items         []SnapshotItem `json:"items"`
+	SchemaVersion int                   `json:"schema_version"`
+	ExportedAt    string                `json:"exported_at"`
+	Items         []SnapshotItem        `json:"items"`
+	SavedFilters  []SnapshotSavedFilter `json:"saved_filters"`
 }
 
 type SnapshotItem struct {
@@ -56,6 +57,11 @@ type SnapshotPhoto struct {
 	DisplayOrder  int    `json:"display_order"`
 }
 
+type SnapshotSavedFilter struct {
+	Name      string `json:"name"`
+	QueryJSON string `json:"query_json"`
+}
+
 type DryRunSummary struct {
 	TotalItems      int               `json:"total_items"`
 	NewItems        int               `json:"new_items"`
@@ -71,6 +77,7 @@ type ConflictDetails struct {
 type ApplyOptions struct {
 	DefaultAction string            `json:"default_action"`
 	Overrides     map[string]string `json:"overrides"`
+	ProfileID     string            `json:"profile_id,omitempty"`
 }
 
 type ApplySummary struct {
@@ -129,6 +136,7 @@ func (s *Service) ExportSnapshotForProfile(ctx context.Context, profileID string
 		SchemaVersion: 1,
 		ExportedAt:    time.Now().UTC().Format(time.RFC3339),
 		Items:         []SnapshotItem{},
+		SavedFilters:  []SnapshotSavedFilter{},
 	}
 
 	for rows.Next() {
@@ -161,6 +169,11 @@ func (s *Service) ExportSnapshotForProfile(ctx context.Context, profileID string
 	if err := rows.Err(); err != nil {
 		return Snapshot{}, fmt.Errorf("iterate export items: %w", err)
 	}
+	savedFilters, err := s.loadSavedFilters(ctx, profileID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	out.SavedFilters = savedFilters
 	return out, nil
 }
 
@@ -350,6 +363,7 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 	if opts.Overrides == nil {
 		opts.Overrides = map[string]string{}
 	}
+	opts.ProfileID = strings.TrimSpace(opts.ProfileID)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -393,6 +407,18 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 		}
 
 		if err := s.mergeChildrenTx(ctx, tx, targetItemID, item); err != nil {
+			sum = failedApplySummary(sum)
+			return sum, err
+		}
+	}
+
+	if len(snap.SavedFilters) > 0 {
+		profileID, err := s.resolveImportProfileIDTx(ctx, tx, opts.ProfileID)
+		if err != nil {
+			sum = failedApplySummary(sum)
+			return sum, err
+		}
+		if err := s.mergeSavedFiltersTx(ctx, tx, profileID, snap.SavedFilters); err != nil {
 			sum = failedApplySummary(sum)
 			return sum, err
 		}
@@ -495,6 +521,93 @@ func (s *Service) loadPhotos(ctx context.Context, itemID string) ([]SnapshotPhot
 		out = append(out, ph)
 	}
 	return out, rows.Err()
+}
+
+func (s *Service) loadSavedFilters(ctx context.Context, profileID string) ([]SnapshotSavedFilter, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT name, query_json
+		FROM saved_filters
+		WHERE (? = '' OR profile_id = ?)
+		ORDER BY created_at ASC, name ASC
+	`, profileID, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("load saved filters: %w", err)
+	}
+	defer rows.Close()
+	var out []SnapshotSavedFilter
+	for rows.Next() {
+		var filter SnapshotSavedFilter
+		if err := rows.Scan(&filter.Name, &filter.QueryJSON); err != nil {
+			return nil, fmt.Errorf("scan saved filter: %w", err)
+		}
+		if strings.TrimSpace(filter.Name) == "" || !json.Valid([]byte(filter.QueryJSON)) {
+			continue
+		}
+		out = append(out, filter)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) resolveImportProfileIDTx(ctx context.Context, tx *sql.Tx, requested string) (string, error) {
+	requested = strings.TrimSpace(requested)
+	if requested != "" {
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM profiles WHERE id = ?`, requested).Scan(&count); err != nil {
+			return "", fmt.Errorf("check import profile: %w", err)
+		}
+		if count == 0 {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO profiles (id, name) VALUES (?, ?)`, requested, "Imported profile"); err != nil {
+				return "", fmt.Errorf("create import profile: %w", err)
+			}
+		}
+		return requested, nil
+	}
+
+	var existing string
+	err := tx.QueryRowContext(ctx, `SELECT id FROM profiles ORDER BY created_at ASC LIMIT 1`).Scan(&existing)
+	if err == nil {
+		return existing, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("load import profile: %w", err)
+	}
+	const fallbackProfileID = "snapshot-import"
+	if _, err := tx.ExecContext(ctx, `INSERT INTO profiles (id, name) VALUES (?, ?)`, fallbackProfileID, "Snapshot import"); err != nil {
+		return "", fmt.Errorf("create fallback import profile: %w", err)
+	}
+	return fallbackProfileID, nil
+}
+
+func (s *Service) mergeSavedFiltersTx(ctx context.Context, tx *sql.Tx, profileID string, filters []SnapshotSavedFilter) error {
+	for _, filter := range filters {
+		name := strings.TrimSpace(filter.Name)
+		queryJSON := strings.TrimSpace(filter.QueryJSON)
+		if name == "" || !json.Valid([]byte(queryJSON)) {
+			continue
+		}
+		var existingID string
+		err := tx.QueryRowContext(ctx, `SELECT id FROM saved_filters WHERE profile_id = ? AND name = ?`, profileID, name).Scan(&existingID)
+		if err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("check saved filter duplicate: %w", err)
+		}
+		if existingID != "" {
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE saved_filters
+				SET query_json = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+			`, queryJSON, existingID); err != nil {
+				return fmt.Errorf("update saved filter: %w", err)
+			}
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO saved_filters (id, profile_id, name, query_json)
+			VALUES (?, ?, ?, ?)
+		`, uuid.NewString(), profileID, name, queryJSON); err != nil {
+			return fmt.Errorf("insert saved filter: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) findItemIDByPartNumber(ctx context.Context, partNumber string) (string, error) {

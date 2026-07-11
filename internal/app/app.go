@@ -5919,6 +5919,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil && req.Options.ProfileID == "" {
+			req.Options.ProfileID = active.ID
+		}
 		sum, err := dataService.ApplyImport(r.Context(), req.Snapshot, req.Options)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_import"}`, http.StatusBadRequest)
@@ -5967,6 +5970,9 @@ func New(cfg config.Config) (*App, error) {
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_parse_csv"}`, http.StatusBadRequest)
 			return
+		}
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil && req.Options.ProfileID == "" {
+			req.Options.ProfileID = active.ID
 		}
 		sum, err := dataService.ApplyImport(r.Context(), snap, req.Options)
 		if err != nil {
