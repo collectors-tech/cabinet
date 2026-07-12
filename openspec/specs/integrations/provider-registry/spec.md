@@ -223,6 +223,14 @@ Cabinet SHALL treat `/api/providers/registry`, `/api/providers/:id/*`, the Add I
 - **AND** disabled assistant placeholders MUST expose no workflow refs or credential setup controls until a supported adapter, setup schema, health check, and workflow mapping exists
 - **AND** disabled placeholder capability flags MUST prevent assistant, image-help, and content-generation actions while still making the limitation visible in registry health/setup metadata
 
+#### Scenario: Telegram messaging provider exposes setup and workflow metadata
+- **GIVEN** Telegram is used as a Cabinet messaging, notification, catalog-capture, or external Agent channel
+- **WHEN** `GET /api/providers/registry` returns the Telegram provider entry
+- **THEN** Telegram MUST appear as a `provider_type=messaging` and `provider_category=notification` registry entry with the `integrations/telegram/channel` setup schema
+- **AND** the setup schema MUST expose sender ID, chat ID, write-only bot token, and webhook route metadata without returning secret token values
+- **AND** registry setup status and health MUST distinguish missing sender/chat authorization, missing bot token, pending webhook proof, and ready-for-live-channel-checklist states
+- **AND** Telegram catalog capture and Agent text workflows MUST expose action metadata with setup-needed or available state derived from the same registry readiness projection
+
 ### Requirement INTEGRATION-066: Marketplace providers MUST migrate through registry metadata
 Cabinet SHALL represent marketplace providers such as eBay and Amazon as manifest-backed registry entries with provider-specific auth, setup, health, workflow, and capability metadata instead of hardcoded Add Integration lists.
 
