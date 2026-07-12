@@ -155,6 +155,23 @@ func TestShoppingProviderFixturesNormalizeSharedCandidateShape(t *testing.T) {
 				return shopifyCandidatesForScanner(candidates, "andrewshobbies.com.au")
 			},
 		},
+		{
+			name:       "generic structured storefront product fixture",
+			providerID: "hobbyco",
+			run: func(t *testing.T, serverURL string, client *http.Client) []scanner.CandidateInput {
+				t.Helper()
+				candidates, err := runGenericStructuredStorefrontProduct(
+					context.Background(),
+					client,
+					serverURL+"/generic/product",
+					"hobbyco.com.au",
+				)
+				if err != nil {
+					t.Fatalf("runGenericStructuredStorefrontProduct() error = %v", err)
+				}
+				return genericStructuredStorefrontCandidatesForScanner(candidates, "hobbyco.com.au")
+			},
+		},
 	}
 
 	server := shoppingFixtureServer(t)
@@ -354,6 +371,27 @@ func TestShoppingProviderFixturesRejectUnsupportedManualFallbackResponse(t *test
 	}
 }
 
+func TestGenericStructuredStorefrontFixtureDetectsMissingCoreFields(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	candidates, err := runGenericStructuredStorefrontProduct(
+		context.Background(),
+		server.Client(),
+		server.URL+"/generic/missing-fields",
+		"hobbyco.com.au",
+	)
+	if err == nil {
+		t.Fatalf("expected generic structured missing-field health failure, got candidates=%+v", candidates)
+	}
+	if !strings.Contains(err.Error(), "generic structured storefront parser health failed") {
+		t.Fatalf("expected parser health failure, got %v", err)
+	}
+	if normalized := genericStructuredStorefrontCandidatesForScanner(candidates, "hobbyco.com.au"); len(normalized) != 0 {
+		t.Fatalf("expected missing required generic structured fields to be rejected, got %+v", normalized)
+	}
+}
+
 func shoppingFixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -367,6 +405,8 @@ func shoppingFixtureServer(t *testing.T) *httptest.Server {
 		"/lightspeed/missing-fields.json": readShoppingFixture(t, "lightspeed_missing_required_fields.json"),
 		"/shopify/products.json":          readShoppingFixture(t, "shopify_products_success.json"),
 		"/shopify/missing-fields.json":    readShoppingFixture(t, "shopify_missing_required_fields.json"),
+		"/generic/product":                readShoppingFixture(t, "generic_structured_product_success.html"),
+		"/generic/missing-fields":         readShoppingFixture(t, "generic_structured_missing_required_fields.html"),
 		"/missing-fields/search":          readShoppingFixture(t, "missing_required_fields.json"),
 		"/wp-json/wc/store/v1/products":   readShoppingFixture(t, "bonza_category_listing_success.json"),
 		"/unsupported/manual-fallback":    readShoppingFixture(t, "unsupported_manual_fallback.json"),
@@ -380,6 +420,11 @@ func shoppingFixtureServer(t *testing.T) *httptest.Server {
 		if r.URL.Path == "/unsupported/manual-fallback" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/generic/") {
+			w.Header().Set("Content-Type", "text/html")
 			_, _ = w.Write([]byte(body))
 			return
 		}

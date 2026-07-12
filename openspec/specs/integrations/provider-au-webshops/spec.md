@@ -246,6 +246,21 @@ Cabinet SHALL support Shopify public catalogue parsing for approved Shopify-back
 - **AND** reloading query sets MUST show the latest-run succeeded status and persisted candidate count
 - **AND** registry provider health and beta release status MUST reflect the successful public-storefront proof while keeping the no-login/no-cart/no-checkout/no-private/admin-API guardrails visible
 
+### Requirement PROVIDER-AU-WEBSHOPS-GENERIC-STRUCTURED-001: Generic structured storefront providers SHALL parse public product metadata safely
+Cabinet SHALL support a generic structured storefront parser for source-matching providers where public product pages expose structured product metadata but no safer platform-specific adapter has been confirmed.
+
+#### Scenario: JSON-LD product fixture parser health
+- **GIVEN** a public product page fixture contains schema.org Product JSON-LD with name, SKU, brand, category, image, canonical URL, offer price, offer currency, and availability
+- **WHEN** Cabinet parses the product page through the generic structured storefront adapter
+- **THEN** Cabinet MUST normalize the product into the shared source-matching candidate shape with listing ID, title, SKU, brand, category, price, currency, stock state, image, canonical URL, source, and seller
+- **AND** the adapter MUST remain public storefront/source-matching only: no customer login, cart, checkout, payment, private API, or admin API behavior
+
+#### Scenario: Missing core fields fail provider health
+- **GIVEN** a structured product fixture omits core product fields such as title, canonical URL, or price
+- **WHEN** Cabinet parses the fixture through the generic structured storefront adapter
+- **THEN** the adapter MUST return no normalized scanner candidates
+- **AND** it MUST surface a parser-health failure that can be routed to provider health/status output instead of silently accepting partial data
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -256,3 +271,4 @@ Cabinet SHALL support Shopify public catalogue parsing for approved Shopify-back
 | UC-AU-05 | Frontline config drift fallback | Provider uses last-known-good config on parse drift and emits warning event | planned: `ui.web/cypress/e2e/integrations/provider-frontline/spec.cy.ts` `frontline-config-drift-fallback` |
 | UC-AU-06 | Hobbytech Shopify/Boost search | Provider executes mybcapps endpoint and parses candidate products deterministically | planned: `ui.web/cypress/e2e/integrations/provider-hobbytech/spec.cy.ts` `hobbytech-mybcapps-search` |
 | UC-AU-07 | Hobbytech session drift recovery | Provider refreshes discovery/session params and retries boundedly on drift | planned: `ui.web/cypress/e2e/integrations/provider-hobbytech/spec.cy.ts` `hobbytech-session-drift-recovery` |
+| UC-AU-08 | Generic structured product parse | Provider parses public Product JSON-LD into shared source-matching candidates and fails health on missing core fields | implemented: `internal/app/shopping_provider_fixture_contract_test.go` `TestShoppingProviderFixturesNormalizeSharedCandidateShape`, `TestGenericStructuredStorefrontFixtureDetectsMissingCoreFields` |
