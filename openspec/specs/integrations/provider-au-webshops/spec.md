@@ -11,6 +11,7 @@ Mapped reusable behavior:
 - Algolia runtime discovery + drift-safe fallback semantics -> `PROVIDER-FAMILY-003`
 - Shared pagination/stock normalization semantics -> `PROVIDER-FAMILY-004`
 - Lightspeed storefront catalogue parsing and health-check semantics -> `PROVIDER-FAMILY-005`
+- Shopify public catalogue parsing and health-check semantics -> `PROVIDER-FAMILY-010`
 
 ## Requirements
 ### Requirement INTEGRATION-011: AU webshop provider family MUST maintain domain catalog
@@ -227,6 +228,16 @@ Cabinet SHALL register Acer RC Models (`acercmodels.com`) as a `lightspeed-store
 - **WHEN** parser normalization runs for Acer source matching
 - **THEN** Cabinet MUST emit normalized candidates with listing id, title, source URL, AUD price, seller domain, source scope `acercmodels`, stock state/count, and image URL
 - **AND** if a fixture has no parseable title, URL, id, or price for every product, parser health MUST fail rather than silently reporting an empty healthy result
+
+### Requirement PROVIDER-AU-WEBSHOPS-SHOPIFY-001: Andrew's Hobbies and Metro Hobbies SHALL use public Shopify storefront parsing
+Cabinet SHALL support Shopify public catalogue parsing for approved Shopify-backed AU hobby shop providers without requiring credentials or using private/admin Shopify APIs.
+
+#### Scenario: Shopify product fixture parser health
+- **GIVEN** a Shopify `/products.json` or collection-products fixture contains product id, title, handle, vendor, product type, variants, price, SKU, availability, image, tags, and description fields
+- **WHEN** parser normalization runs for Andrew's Hobbies or Metro Hobbies source matching
+- **THEN** Cabinet MUST emit normalized candidates with listing id, title, canonical source URL, AUD price, seller domain, source scope, SKU, brand, category, stock state/count, extraction method, and image URL
+- **AND** if a fixture has no parseable title, handle, id, or price for every product, parser health MUST fail rather than silently reporting an empty healthy result
+- **AND** the adapter MUST remain public-storefront only: no customer login, cart, checkout, payment, private API, or admin API behavior
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |

@@ -1,0 +1,19 @@
+{
+  "products": [
+    {
+      "id": 92001,
+      "title": "",
+      "handle": "",
+      "vendor": "Metro Hobbies",
+      "product_type": "Slot Cars",
+      "variants": [
+        {
+          "id": 92001001,
+          "sku": "BROKEN-SHOPIFY",
+          "price": "",
+          "available": false
+        }
+      ]
+    }
+  ]
+}

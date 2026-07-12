@@ -137,6 +137,24 @@ func TestShoppingProviderFixturesNormalizeSharedCandidateShape(t *testing.T) {
 				return lightspeedCandidatesForScanner(candidates)
 			},
 		},
+		{
+			name:       "shopify storefront product fixture",
+			providerID: "andrewshobbies",
+			run: func(t *testing.T, serverURL string, client *http.Client) []scanner.CandidateInput {
+				t.Helper()
+				candidates, err := runShopifyStorefrontSearch(
+					context.Background(),
+					client,
+					serverURL+"/shopify/products.json",
+					"tamiya",
+					"andrewshobbies.com.au",
+				)
+				if err != nil {
+					t.Fatalf("runShopifyStorefrontSearch() error = %v", err)
+				}
+				return shopifyCandidatesForScanner(candidates, "andrewshobbies.com.au")
+			},
+		},
 	}
 
 	server := shoppingFixtureServer(t)
@@ -199,6 +217,28 @@ func TestLightspeedStorefrontFixtureDetectsMissingCoreFields(t *testing.T) {
 	}
 	if normalized := lightspeedCandidatesForScanner(candidates); len(normalized) != 0 {
 		t.Fatalf("expected missing required Lightspeed fields to be rejected, got %+v", normalized)
+	}
+}
+
+func TestShopifyStorefrontFixtureDetectsMissingCoreFields(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	candidates, err := runShopifyStorefrontSearch(
+		context.Background(),
+		server.Client(),
+		server.URL+"/shopify/missing-fields.json",
+		"broken",
+		"metrohobbies.com.au",
+	)
+	if err == nil {
+		t.Fatalf("expected Shopify missing-field health failure, got candidates=%+v", candidates)
+	}
+	if !strings.Contains(err.Error(), "shopify parser health failed") {
+		t.Fatalf("expected parser health failure, got %v", err)
+	}
+	if normalized := shopifyCandidatesForScanner(candidates, "metrohobbies.com.au"); len(normalized) != 0 {
+		t.Fatalf("expected missing required Shopify fields to be rejected, got %+v", normalized)
 	}
 }
 
@@ -325,6 +365,8 @@ func shoppingFixtureServer(t *testing.T) *httptest.Server {
 		"/frontline/algolia/query":        readShoppingFixture(t, "frontline_algolia_success.json"),
 		"/lightspeed/products.json":       readShoppingFixture(t, "lightspeed_success.json"),
 		"/lightspeed/missing-fields.json": readShoppingFixture(t, "lightspeed_missing_required_fields.json"),
+		"/shopify/products.json":          readShoppingFixture(t, "shopify_products_success.json"),
+		"/shopify/missing-fields.json":    readShoppingFixture(t, "shopify_missing_required_fields.json"),
 		"/missing-fields/search":          readShoppingFixture(t, "missing_required_fields.json"),
 		"/wp-json/wc/store/v1/products":   readShoppingFixture(t, "bonza_category_listing_success.json"),
 		"/unsupported/manual-fallback":    readShoppingFixture(t, "unsupported_manual_fallback.json"),

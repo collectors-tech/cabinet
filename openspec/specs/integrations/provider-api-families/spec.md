@@ -86,6 +86,16 @@ WooCommerce-backed product URL ingestion SHALL resolve product detail from the p
 - **AND** runtime MUST include origin/referrer headers where required to avoid forbidden responses
 - **AND** provider-specific run output MUST persist normalized candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
 
+### Requirement PROVIDER-FAMILY-010: Shopify storefront family SHALL use public catalogue JSON without private APIs
+Shopify-backed source-matching providers SHALL use public storefront catalogue endpoints such as `/products.json` or collection product JSON responses for catalogue discovery.
+
+#### Scenario: Public Shopify catalogue parser normalizes source-matching candidates
+- **GIVEN** a Shopify public catalogue response contains product id, title, handle, vendor, type, variants, price, SKU, availability, images, tags, and description
+- **WHEN** Cabinet normalizes candidates for a source-matching provider such as Andrew's Hobbies or Metro Hobbies
+- **THEN** normalized output MUST include listing id, title, canonical product URL, AUD price, SKU, brand/vendor, category, source scope, seller domain, stock state/count, image URL, and extraction method `shopify_products_json`
+- **AND** the parser MUST reject all-empty/unusable product sets with a health failure rather than reporting a healthy zero-candidate run
+- **AND** the adapter MUST NOT use customer login, cart, checkout, payment, admin APIs, or private Shopify APIs
+
 #### Scenario: Doofinder discovery inputs
 - **GIVEN** onboarding detection scans provider assets
 - **WHEN** Doofinder scripts/config are present
