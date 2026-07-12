@@ -239,6 +239,13 @@ Cabinet SHALL support Shopify public catalogue parsing for approved Shopify-back
 - **AND** if a fixture has no parseable title, handle, id, or price for every product, parser health MUST fail rather than silently reporting an empty healthy result
 - **AND** the adapter MUST remain public-storefront only: no customer login, cart, checkout, payment, private API, or admin API behavior
 
+#### Scenario: Shopify provider run persists candidate and registry proof
+- **GIVEN** a saved Market Watch query is scoped to Andrew's Hobbies or Metro Hobbies
+- **WHEN** Cabinet runs the Shopify provider API against public `/products.json` catalogue data
+- **THEN** normalized candidates MUST persist to the shared scanner candidate store with the provider market-watch scope
+- **AND** reloading query sets MUST show the latest-run succeeded status and persisted candidate count
+- **AND** registry provider health and beta release status MUST reflect the successful public-storefront proof while keeping the no-login/no-cart/no-checkout/no-private/admin-API guardrails visible
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |

@@ -3550,6 +3550,119 @@ func New(cfg config.Config) (*App, error) {
 			},
 		})
 	})
+	mux.HandleFunc("/api/providers/shopify/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID     string `json:"query_set_id"`
+			ProviderDomain string `json:"provider_domain"`
+			SearchURL      string `json:"search_url"`
+			PageSize       int    `json:"page_size"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		providerDomain := strings.TrimSpace(strings.ToLower(req.ProviderDomain))
+		if providerDomain == "" {
+			providerDomain = "andrewshobbies.com.au"
+		}
+		providerID := "au-webshop-" + strings.ReplaceAll(providerDomain, ".", "-")
+		providerScope := marketWatchScopeForAUWebshopDomain(providerDomain)
+		pageSize := req.PageSize
+		if pageSize <= 0 {
+			pageSize = 24
+		}
+		if pageSize > 50 {
+			pageSize = 50
+		}
+		query := strings.TrimSpace(qs.Name)
+		if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+			query = strings.TrimSpace(qs.Keywords[0])
+		}
+		if query == "" {
+			query = "collectible"
+		}
+		searchURL := strings.TrimSpace(req.SearchURL)
+		if searchURL == "" {
+			searchURL = "https://" + providerDomain + "/products.json"
+		}
+
+		candidates, runErr := runShopifyStorefrontSearch(r.Context(), http.DefaultClient, searchURL, query, providerDomain)
+		if runErr != nil {
+			scannerSvc.RecordProviderHealth(r.Context(), providerScope, "failed", runErr.Error())
+			scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_run_shopify_storefront_mode",
+				"message": runErr.Error(),
+			})
+			return
+		}
+
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			shopifyCandidatesForScanner(candidates, providerDomain),
+			1,
+			pageSize,
+			pageSize,
+			"",
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_persist_shopify_candidates",
+				"message": err.Error(),
+			})
+			return
+		}
+		scannerSvc.RecordProviderHealth(r.Context(), providerScope, "ok", "Public Shopify storefront Market Watch run succeeded with persisted candidates.")
+		scannerSvc.RecordProviderHealth(r.Context(), providerID, "ok", "Public Shopify storefront Market Watch run succeeded with persisted candidates.")
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_shopify_candidates"}`, http.StatusBadRequest)
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id":      qs.ID,
+			"provider_domain":   providerDomain,
+			"provider_scope":    providerScope,
+			"auth_mode":         "storefront_public",
+			"data_depth_source": "shopify_products_json",
+			"capability_limits": []string{"public_catalogue_only", "no_login_cart_checkout_or_private_api"},
+			"candidate_count":   len(persisted),
+			"candidates":        persisted,
+			"run":               run,
+			"run_summary": map[string]any{
+				"auth_mode":           "storefront_public",
+				"data_depth_source":   "shopify_products_json",
+				"effective_page_size": pageSize,
+				"candidates_total":    run.Saved,
+			},
+		})
+	})
 	mux.HandleFunc("/api/providers/hobbytech/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
