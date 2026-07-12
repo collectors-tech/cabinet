@@ -368,6 +368,80 @@ func TestTelegramAgentTextUnauthorizedSenderCreatesSetupInboxEvent(t *testing.T)
 	}
 }
 
+func TestTelegramAgentTextAuthorizedRouteResolvesSetupInboxEvent(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Agent Auth Inbox Resolution"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	unauthorized := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"sender_id":"sender-agent-resolution",
+		"chat_id":"chat-agent-resolution",
+		"message_id":"agent-message-unauthorized-resolution",
+		"text":"show me my inventory",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"AFX"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if unauthorized.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized status=%d body=%s", unauthorized.Code, unauthorized.Body.String())
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"sender-agent-resolution",
+			"telegram.catalog_capture.chat_id":"chat-agent-resolution"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	authorized := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
+		"sender_id":"sender-agent-resolution",
+		"chat_id":"chat-agent-resolution",
+		"message_id":"agent-message-authorized-resolution",
+		"text":"show me my AFX inventory",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"AFX"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if authorized.Code != http.StatusCreated {
+		t.Fatalf("authorized status=%d body=%s", authorized.Code, authorized.Body.String())
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	body := inbox.Body.String()
+	for _, want := range []string{
+		`"source":"provider_workflow"`,
+		`"status":"read"`,
+		`"workflow_action_id":"telegram.agent_text"`,
+		`"required_action_code":"authorize_sender_chat"`,
+		`"resolution":"agent_text_authorized"`,
+		`"workflow_result":"routed"`,
+		`"sender_authorized":true`,
+		`"resolved_by_message":"agent-message-authorized-resolution"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected authorized Telegram Agent text to resolve setup Inbox evidence %q, body=%s", want, body)
+		}
+	}
+	if strings.Contains(body, "bot_token") {
+		t.Fatalf("resolved Telegram Agent text Inbox metadata must not expose token material, body=%s", body)
+	}
+}
+
 func TestTelegramExternalIntakeProofRequiresAuthorizedProviderEvidence(t *testing.T) {
 	t.Parallel()
 

@@ -5275,6 +5275,16 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_route_telegram_agent_text"}`, http.StatusBadRequest)
 			return
 		}
+		if resolveErr := chatSvc.ResolveProviderWorkflowInboxEvents(r.Context(), req.ProfileID, "telegram", "telegram.agent_text", "agent_text_authorized", map[string]any{
+			"source_channel":      "telegram",
+			"source_surface":      "telegram.agent.text",
+			"source_message_id":   req.MessageID,
+			"sender_authorized":   true,
+			"workflow_result":     "routed",
+			"resolved_by_message": req.MessageID,
+		}); resolveErr != nil {
+			logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_resolve_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.agent_text", "error": resolveErr.Error()})
+		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(result)
 	})
