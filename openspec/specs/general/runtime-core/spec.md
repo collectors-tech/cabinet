@@ -40,6 +40,7 @@ Cabinet beta packaging SHALL use one canonical private-beta version source and S
 - **AND** packaging SHALL create a SHA-256 checksum file and release notes
 - **AND** macOS artefacts SHALL NOT be claimed by the Windows beta package lane until separately signed and validated
 - **AND** OpenSpec release guidance SHALL describe install/start, data location, backup/upgrade, rollback/removal, signing limits, and release approval gates
+- **AND** release validation SHALL preserve non-publishing checklists for clean Windows portable start and existing data-directory upgrade proof before #1868 completion
 
 ### Requirement RUNTIME-CORE-020: Packaged beta acceptance SHALL use a stable release checklist
 Cabinet beta release acceptance SHALL be encoded as a stable checklist before packaged-candidate validation or remediation begins.
