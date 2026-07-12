@@ -100,6 +100,11 @@ func (m integrationProviderManifest) payload() map[string]any {
 	if strings.TrimSpace(m.MarketWatchScope) != "" {
 		payload["market_watch_scope"] = strings.TrimSpace(m.MarketWatchScope)
 	}
+	if strings.TrimSpace(m.BaseDomain) == "bonzaslotcars.com.au" {
+		payload["fallback_state"] = "manual_url_capture"
+		payload["headless_state"] = "opt_in_required"
+		payload["manual_capture_action"] = "provider_product_url_ingest"
+	}
 	return payload
 }
 
@@ -568,7 +573,7 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 		supportProfile = "lightspeed_storefront_v1"
 		adapterType = "lightspeed-storefront"
 	}
-	return integrationProviderManifest{
+	manifest := integrationProviderManifest{
 		ProviderID:        "au-webshop-" + strings.ReplaceAll(domain, ".", "-"),
 		DisplayName:       domain,
 		BaseDomain:        domain,
@@ -586,13 +591,19 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 		ConfigSchemaRef:   "integrations/au-webshop/setup",
 		WorkflowRefs:      []string{"market_watch.run", "provider.family_detect"},
 		CapabilityFlags: map[string]bool{
-			"search":            true,
-			"stock_observation": true,
-			"pricing":           true,
-			"health":            true,
+			"search":             true,
+			"stock_observation":  true,
+			"pricing":            true,
+			"health":             true,
+			"manual_url_capture": domain == "bonzaslotcars.com.au",
+			"headless_default":   false,
 		},
 		SetupInstructions: "Webshop ingestion uses crawl parsing and does not require API credentials.",
 	}
+	if domain == "bonzaslotcars.com.au" {
+		manifest.SetupInstructions = "Webshop ingestion uses Store API static extraction first. Product URLs can be captured for manual review; headless browsing is opt-in only."
+	}
+	return manifest
 }
 
 func marketWatchScopeForAUWebshopDomain(domain string) string {

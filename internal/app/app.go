@@ -2985,11 +2985,15 @@ func New(cfg config.Config) (*App, error) {
 		if route.Provider == "bonzaslotcars" && route.Action != "ingest_product_url" {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"mode":     "provider_product_url_ingest",
-				"error":    "supported_provider_unsupported_page",
-				"provider": route.Provider,
-				"family":   route.Family,
-				"route":    route,
+				"mode":                        "provider_product_url_ingest",
+				"error":                       "supported_provider_unsupported_page",
+				"provider":                    route.Provider,
+				"family":                      route.Family,
+				"route":                       route,
+				"fallback_state":              "manual_url_capture",
+				"static_extraction_attempted": false,
+				"next_action":                 "paste_a_supported_product_url",
+				"guidance":                    "Paste a Bonza product URL under /product/<slug>/ so Cabinet can attempt static Store API extraction before any manual review or headless fallback.",
 			})
 			return
 		}
@@ -3019,11 +3023,15 @@ func New(cfg config.Config) (*App, error) {
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"mode":     "provider_product_url_ingest",
-				"error":    "failed_to_ingest_bonza_product_url",
-				"provider": route.Provider,
-				"family":   route.Family,
-				"route":    route,
+				"mode":                        "provider_product_url_ingest",
+				"error":                       "failed_to_ingest_bonza_product_url",
+				"provider":                    route.Provider,
+				"family":                      route.Family,
+				"route":                       route,
+				"fallback_state":              "headless_required",
+				"static_extraction_attempted": true,
+				"next_action":                 "capture_url_for_manual_review",
+				"guidance":                    "Static product extraction was attempted first but the storefront did not return usable public product data. Keep the URL as a manual review item; do not run headless browsing unless this provider is explicitly opted in.",
 			})
 			return
 		}
