@@ -299,6 +299,120 @@ func TestAssistantPlaceholderProvidersAreDisabledRegistryEntries(t *testing.T) {
 	}
 }
 
+func TestTelegramRegistryExposesMessagingSetupContract(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"TelegramRegistryProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	telegram := findRegistryProvider(payload.Providers, "telegram")
+	if telegram == nil {
+		t.Fatalf("expected Telegram provider in registry payload: %+v", payload.Providers)
+	}
+	if telegram["provider_category"] != "notification" || telegram["provider_type"] != "messaging" || telegram["config_schema_ref"] != "integrations/telegram/channel" {
+		t.Fatalf("Telegram registry identity drifted: %+v", telegram)
+	}
+	setup, ok := telegram["setup_status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected Telegram setup_status map, got %#v", telegram["setup_status"])
+	}
+	health, ok := telegram["health"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected Telegram health map, got %#v", telegram["health"])
+	}
+	if telegram["state"] != "needs_config" || health["state"] != "setup_needed" || setup["next_action"] != "authorize_sender_chat" {
+		t.Fatalf("expected Telegram setup-needed state before sender/chat proof, provider=%+v setup=%+v health=%+v", telegram, setup, health)
+	}
+	schema := telegram["setup_schema"].(map[string]any)
+	fields := schema["fields"].([]any)
+	for _, want := range []struct {
+		key         string
+		fieldType   string
+		persistence string
+		writeOnly   bool
+		required    bool
+	}{
+		{key: "telegram.catalog_capture.sender_id", fieldType: "text", persistence: "profile_settings", required: true},
+		{key: "telegram.catalog_capture.chat_id", fieldType: "text", persistence: "profile_settings", required: true},
+		{key: "telegram.bot_token", fieldType: "secret", persistence: "profile_secrets", writeOnly: true, required: true},
+		{key: "telegram.webhook_route", fieldType: "url", persistence: "profile_settings"},
+	} {
+		field := findSetupSchemaField(fields, want.key)
+		if field == nil {
+			t.Fatalf("Telegram setup_schema missing field %q in %+v", want.key, fields)
+		}
+		if field["type"] != want.fieldType || field["persistence"] != want.persistence {
+			t.Fatalf("Telegram setup field %q metadata drifted: %+v", want.key, field)
+		}
+		if got, _ := field["write_only"].(bool); got != want.writeOnly {
+			t.Fatalf("Telegram setup field %q write_only got %v want %v: %+v", want.key, got, want.writeOnly, field)
+		}
+		if got, _ := field["required"].(bool); got != want.required {
+			t.Fatalf("Telegram setup field %q required got %v want %v: %+v", want.key, got, want.required, field)
+		}
+	}
+	actions := telegram["actions"].([]any)
+	for _, actionID := range []string{"telegram.catalog_capture", "telegram.agent_text"} {
+		action := findRegistryAction(actions, actionID)
+		if action == nil {
+			t.Fatalf("Telegram registry missing action %q in %+v", actionID, actions)
+		}
+		if action["availability_state"] != "setup_needed" || action["next_action"] != "authorize_sender_chat" || action["confirmation_required"] != true {
+			t.Fatalf("expected setup-needed Telegram action %q, got %+v", actionID, action)
+		}
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.bot_token_secret_present":"true","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	readyRegistry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if readyRegistry.Code != http.StatusOK {
+		t.Fatalf("ready registry status=%d body=%s", readyRegistry.Code, readyRegistry.Body.String())
+	}
+	var readyPayload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(readyRegistry.Body).Decode(&readyPayload); err != nil {
+		t.Fatalf("decode ready registry payload: %v", err)
+	}
+	readyTelegram := findRegistryProvider(readyPayload.Providers, "telegram")
+	readySetup := readyTelegram["setup_status"].(map[string]any)
+	readyHealth := readyTelegram["health"].(map[string]any)
+	if readyTelegram["state"] != "ready" || readyHealth["state"] != "connected" || readySetup["runtime_proof"] != "ready" || readySetup["next_action"] != "run_live_channel_checklist" {
+		t.Fatalf("expected Telegram ready-for-validation state, provider=%+v setup=%+v health=%+v", readyTelegram, readySetup, readyHealth)
+	}
+	for _, actionID := range []string{"telegram.catalog_capture", "telegram.agent_text"} {
+		action := findRegistryAction(readyTelegram["actions"].([]any), actionID)
+		if action["availability_state"] != "available" || action["next_action"] != nil {
+			t.Fatalf("expected available Telegram action %q after setup proof, got %+v", actionID, action)
+		}
+	}
+	if strings.Contains(readyRegistry.Body.String(), "bot_token_value") {
+		t.Fatalf("Telegram registry response must not leak bot tokens: %s", readyRegistry.Body.String())
+	}
+}
+
 func TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof(t *testing.T) {
 	t.Parallel()
 

@@ -9097,12 +9097,15 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"next_action": telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
 			}
 			provider["setup_status"] = map[string]any{
+				"auth_mode":         "sender_chat_bot_token",
 				"sender_chat_state": map[bool]string{true: "authorized", false: "missing"}[telegramSenderChatReady],
 				"bot_token_state":   map[bool]string{true: "stored", false: "missing"}[telegramBotReady],
 				"webhook_state":     map[bool]string{true: "configured", false: "pending"}[telegramWebhookReady],
 				"runtime_proof":     map[bool]string{true: "ready", false: "pending_live_channel_check"}[telegramReady],
+				"workflow_state":    map[bool]string{true: "telegram_channel_ready_for_validation", false: "telegram_setup_required"}[telegramReady],
 				"next_action":       telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
 			}
+			provider["actions"] = telegramRegistryActions(telegramReady, telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady))
 		case "ebay":
 			provider["has_token"] = strings.TrimSpace(settings["ebay_bearer_token"]) != ""
 			provider["setup_status"] = ebaySetupStatus(settings, "")
@@ -9223,6 +9226,15 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"message":     fmt.Sprintf("%s assistant provider adapter is not yet supported.", fmt.Sprintf("%v", provider["display_name"])),
 				"next_action": "wait_for_supported_assistant_provider_adapter",
 			}
+		}
+		if strings.EqualFold(providerID, "telegram") {
+			provider["health"] = map[string]any{
+				"status":      map[bool]string{true: "ready", false: "needs_config"}[telegramReady],
+				"state":       telegramConnectionState,
+				"message":     telegramSetupMessage(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+				"next_action": telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+			}
+			provider["actions"] = telegramRegistryActions(telegramReady, telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady))
 		}
 		provider["last_run"] = map[string]any{
 			"status":      lastRunStatus,
@@ -9382,6 +9394,16 @@ func openAIRegistryAssistantActions(ready bool, nextAction string) []map[string]
 		requiredNextAction = nil
 	}
 	return workflowActionsForRefs([]string{"assistant.chat", "assistant.image_help", "assistant.content_generation"}, availability, requiredNextAction)
+}
+
+func telegramRegistryActions(ready bool, nextAction string) []map[string]any {
+	availability := "setup_needed"
+	requiredNextAction := any(nextAction)
+	if ready {
+		availability = "available"
+		requiredNextAction = nil
+	}
+	return workflowActionsForRefs([]string{"telegram.catalog_capture", "telegram.agent_text"}, availability, requiredNextAction)
 }
 
 func openAIRegistrySetupSchema() map[string]any {
