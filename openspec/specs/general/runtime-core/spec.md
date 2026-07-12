@@ -41,6 +41,17 @@ Cabinet beta packaging SHALL use one canonical private-beta version source and S
 - **AND** macOS artefacts SHALL NOT be claimed by the Windows beta package lane until separately signed and validated
 - **AND** OpenSpec release guidance SHALL describe install/start, data location, backup/upgrade, rollback/removal, signing limits, and release approval gates
 
+### Requirement RUNTIME-CORE-020: Packaged beta acceptance SHALL use a stable release checklist
+Cabinet beta release acceptance SHALL be encoded as a stable checklist before packaged-candidate validation or remediation begins.
+
+#### Scenario: Packaged core workflow acceptance pack
+- **GIVEN** a Windows beta package, checksum, release commit, and app version are nominated for #1869 acceptance
+- **WHEN** Cabinet runs or reports packaged core-workflow release acceptance
+- **THEN** the acceptance evidence SHALL identify OS, artefact filename, checksum, commit SHA, app version, runtime metadata, and release notes source
+- **AND** the checklist SHALL cover onboarding, inventory, media, wishlist-to-inventory, collections, export, backup, restore, Market Watch, Discovery handoff, failed-provider recovery, invalid import/restore recovery, restart persistence, profile isolation, and version visibility
+- **AND** every failure SHALL create or link a focused issue before rerun
+- **AND** the final packaged journey SHALL use the packaged binary without test-only hooks, dirty worktree state, unapproved release publication, or `develop` to `main` promotion
+
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
 
