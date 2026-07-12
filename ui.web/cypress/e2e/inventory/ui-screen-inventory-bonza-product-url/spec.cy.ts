@@ -16,7 +16,7 @@ describe("inventory Bonza product URL ingest", () => {
     }).as("itemsBonzaPaste");
 
     cy.intercept("POST", "/api/providers/product-url/ingest", (req) => {
-      expect(req.body).to.deep.eq({ url: bonzaURL });
+      expect(req.body).to.deep.eq({ url: bonzaURL, capture_for_review: true });
       req.reply({
         statusCode: 200,
         body: {
@@ -115,12 +115,18 @@ describe("inventory Bonza product URL ingest", () => {
       statusCode: 200,
       body: { items: [] },
     }).as("itemsUnsupportedPaste");
-    cy.intercept("POST", "/api/providers/product-url/ingest", {
-      statusCode: 200,
-      body: {
+    cy.intercept("POST", "/api/providers/product-url/ingest", (req) => {
+      expect(req.body).to.deep.eq({
+        url: unsupportedURL,
+        capture_for_review: true,
+      });
+      req.reply({
+        statusCode: 200,
+        body: {
         mode: "provider_product_url_ingest",
         error: "unsupported_provider_url",
       },
+      });
     }).as("unsupportedProviderIngest");
 
     signIn();
@@ -145,12 +151,25 @@ describe("inventory Bonza product URL ingest", () => {
       statusCode: 200,
       body: { items: [] },
     }).as("itemsFailedBonzaPaste");
-    cy.intercept("POST", "/api/providers/product-url/ingest", {
-      statusCode: 502,
-      body: {
+    cy.intercept("POST", "/api/providers/product-url/ingest", (req) => {
+      expect(req.body).to.deep.eq({ url: bonzaURL, capture_for_review: true });
+      req.reply({
+        statusCode: 502,
+        body: {
         mode: "provider_product_url_ingest",
         error: "failed_to_ingest_bonza_product_url",
+        guidance:
+          "Static product extraction was attempted first but the storefront did not return usable public product data. Keep the URL as a manual review item; do not run headless browsing unless this provider is explicitly opted in.",
+        review_capture_persisted: true,
+        review_capture: {
+          item_id: "item-bonza-manual-review",
+          title: "Manual review: bonzaslotcars.com.au/product/bonza-mug-white",
+          status: "manual_review",
+          source_url: bonzaURL,
+          fallback_state: "headless_required",
+        },
       },
+      });
     }).as("failedBonzaProductIngest");
 
     signIn();
@@ -161,7 +180,11 @@ describe("inventory Bonza product URL ingest", () => {
     cy.wait("@failedBonzaProductIngest");
     cy.get('[data-testid="inventory-create-paste-error"]')
       .should("have.attr", "role", "alert")
-      .and("contain", "Bonza product data could not be loaded");
+      .and("contain", "Static product extraction was attempted first")
+      .and(
+        "contain",
+        "Captured for review as Manual review: bonzaslotcars.com.au/product/bonza-mug-white"
+      );
     cy.get('[data-testid="inventory-create-paste-input"]').should(
       "have.value",
       bonzaURL
@@ -196,9 +219,11 @@ describe("inventory Bonza product URL ingest", () => {
       statusCode: 200,
       body: { items: [existingItem] },
     }).as("itemsWithDuplicate");
-    cy.intercept("POST", "/api/providers/product-url/ingest", {
-      statusCode: 200,
-      body: {
+    cy.intercept("POST", "/api/providers/product-url/ingest", (req) => {
+      expect(req.body).to.deep.eq({ url: bonzaURL, capture_for_review: true });
+      req.reply({
+        statusCode: 200,
+        body: {
         mode: "provider_product_url_ingest",
         provider: "bonzaslotcars",
         family: "woocommerce",
@@ -224,6 +249,7 @@ describe("inventory Bonza product URL ingest", () => {
           },
         ],
       },
+      });
     }).as("duplicateProviderIngest");
 
     signIn();

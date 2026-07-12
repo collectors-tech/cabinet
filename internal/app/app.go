@@ -2968,7 +2968,8 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		var req struct {
-			URL string `json:"url"`
+			URL              string `json:"url"`
+			CaptureForReview bool   `json:"capture_for_review"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
@@ -2983,8 +2984,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if route.Provider == "bonzaslotcars" && route.Action != "ingest_product_url" {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			response := map[string]any{
 				"mode":                        "provider_product_url_ingest",
 				"error":                       "supported_provider_unsupported_page",
 				"provider":                    route.Provider,
@@ -2994,7 +2994,18 @@ func New(cfg config.Config) (*App, error) {
 				"static_extraction_attempted": false,
 				"next_action":                 "paste_a_supported_product_url",
 				"guidance":                    "Paste a Bonza product URL under /product/<slug>/ so Cabinet can attempt static Store API extraction before any manual review or headless fallback.",
-			})
+			}
+			if req.CaptureForReview {
+				if review, err := persistProviderURLManualReviewCapture(r.Context(), profiles, collectionRepo, req.URL, route.Provider, route.Family, "manual_url_capture", false, "Known Bonza URL is not a supported product page."); err != nil {
+					response["review_capture_persisted"] = false
+					response["review_capture_error"] = "failed_to_persist_manual_review_capture"
+				} else {
+					response["review_capture_persisted"] = true
+					response["review_capture"] = review
+				}
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 		if route.Provider != "bonzaslotcars" {
@@ -3021,8 +3032,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		draft, err := ingestBonzaProductURL(r.Context(), http.DefaultClient, baseURL, route)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			response := map[string]any{
 				"mode":                        "provider_product_url_ingest",
 				"error":                       "failed_to_ingest_bonza_product_url",
 				"provider":                    route.Provider,
@@ -3032,7 +3042,18 @@ func New(cfg config.Config) (*App, error) {
 				"static_extraction_attempted": true,
 				"next_action":                 "capture_url_for_manual_review",
 				"guidance":                    "Static product extraction was attempted first but the storefront did not return usable public product data. Keep the URL as a manual review item; do not run headless browsing unless this provider is explicitly opted in.",
-			})
+			}
+			if req.CaptureForReview {
+				if review, err := persistProviderURLManualReviewCapture(r.Context(), profiles, collectionRepo, req.URL, route.Provider, route.Family, "headless_required", true, "Static Store API extraction failed; headless browsing remains opt-in."); err != nil {
+					response["review_capture_persisted"] = false
+					response["review_capture_error"] = "failed_to_persist_manual_review_capture"
+				} else {
+					response["review_capture_persisted"] = true
+					response["review_capture"] = review
+				}
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 		existingItems, err := collectionRepo.ListItemsByProfile(r.Context(), strings.TrimSpace(active.ID))
@@ -11625,6 +11646,73 @@ func detectProviderProductURL(raw string) (providerProductURLRoute, error) {
 		route.NormalizedURL += "/"
 	}
 	return route, nil
+}
+
+func persistProviderURLManualReviewCapture(ctx context.Context, profiles *profile.Repository, collectionRepo *collection.Repository, rawURL, provider, family, fallbackState string, staticExtractionAttempted bool, reason string) (map[string]any, error) {
+	if profiles == nil || collectionRepo == nil {
+		return nil, fmt.Errorf("manual review capture dependencies are unavailable")
+	}
+	active, err := profiles.GetActiveProfile(ctx)
+	if err != nil || strings.TrimSpace(active.ID) == "" {
+		return nil, fmt.Errorf("active profile not set")
+	}
+	trimmedURL := strings.TrimSpace(rawURL)
+	item := collection.Item{
+		PartNumber:  providerURLManualReviewPartNumber(trimmedURL),
+		Title:       providerURLManualReviewTitle(trimmedURL),
+		Brand:       "Unknown",
+		Category:    "Provider URL Review",
+		ItemType:    "General",
+		Status:      "active",
+		Priority:    "medium",
+		Description: "Manual provider URL capture retained for review after Cabinet could not complete automatic static product extraction.",
+		Notes: strings.Join([]string{
+			"provider=" + strings.TrimSpace(provider),
+			"family=" + strings.TrimSpace(family),
+			"fallback_state=" + strings.TrimSpace(fallbackState),
+			fmt.Sprintf("static_extraction_attempted=%t", staticExtractionAttempted),
+			"reason=" + strings.TrimSpace(reason),
+		}, "\n"),
+		Tags: []string{
+			"provider-ingest",
+			"manual-url-capture",
+			"provider-review",
+			strings.ReplaceAll(strings.TrimSpace(fallbackState), "_", "-"),
+		},
+		SourceURLs: []string{trimmedURL},
+	}
+	created, err := collectionRepo.CreateItemForProfile(ctx, strings.TrimSpace(active.ID), item)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"status":                      "manual_review",
+		"item_id":                     created.ID,
+		"title":                       created.Title,
+		"source_url":                  trimmedURL,
+		"fallback_state":              fallbackState,
+		"static_extraction_attempted": staticExtractionAttempted,
+		"next_action":                 "review_captured_url_before_headless_opt_in",
+	}, nil
+}
+
+func providerURLManualReviewPartNumber(rawURL string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(rawURL)))
+	return "PROVIDER-URL-" + strings.ToUpper(fmt.Sprintf("%x", sum[:4]))
+}
+
+func providerURLManualReviewTitle(rawURL string) string {
+	trimmed := strings.TrimSpace(rawURL)
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Hostname() == "" {
+		return "Manual review: provider URL"
+	}
+	host := strings.ToLower(strings.TrimPrefix(parsed.Hostname(), "www."))
+	pathValue := strings.Trim(strings.TrimSpace(parsed.EscapedPath()), "/")
+	if pathValue == "" {
+		return "Manual review: " + host
+	}
+	return "Manual review: " + host + "/" + pathValue
 }
 
 func ingestBonzaProductURL(ctx context.Context, client *http.Client, baseURL string, route providerProductURLRoute) (providerProductDraft, error) {

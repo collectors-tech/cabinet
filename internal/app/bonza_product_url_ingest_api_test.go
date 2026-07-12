@@ -308,6 +308,60 @@ func TestProviderProductURLIngestRejectsKnownProviderNonProductURL(t *testing.T)
 	}
 }
 
+func TestProviderProductURLIngestPersistsManualReviewCaptureForUnsupportedPage(t *testing.T) {
+	t.Parallel()
+
+	a, _ := newBonzaIngestTestApp(t)
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/shop/","capture_for_review":true}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusBadRequest {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	body := ingest.Body.String()
+	for _, want := range []string{
+		`"fallback_state":"manual_url_capture"`,
+		`"review_capture_persisted":true`,
+		`"source_url":"https://bonzaslotcars.com.au/shop/"`,
+		`"status":"manual_review"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in manual review capture response, got %s", want, body)
+		}
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list items status=%d body=%s", list.Code, list.Body.String())
+	}
+	var listed struct {
+		Items []struct {
+			Title      string   `json:"title"`
+			Status     string   `json:"status"`
+			Notes      string   `json:"notes"`
+			Tags       []string `json:"tags"`
+			SourceURLs []string `json:"source_urls"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode items: %v", err)
+	}
+	if len(listed.Items) != 1 {
+		t.Fatalf("expected one persisted manual review item, got %d: %+v", len(listed.Items), listed.Items)
+	}
+	item := listed.Items[0]
+	if item.Title != "Manual review: bonzaslotcars.com.au/shop" || item.Status != "active" {
+		t.Fatalf("unexpected persisted item title/status: %+v", item)
+	}
+	if !stringSliceContains(item.Tags, "manual-url-capture") || !stringSliceContains(item.Tags, "provider-review") {
+		t.Fatalf("expected manual review tags, got %+v", item.Tags)
+	}
+	if len(item.SourceURLs) != 1 || item.SourceURLs[0] != "https://bonzaslotcars.com.au/shop/" {
+		t.Fatalf("expected source URL to be preserved, got %+v", item.SourceURLs)
+	}
+	if !strings.Contains(item.Notes, "fallback_state=manual_url_capture") || !strings.Contains(item.Notes, "static_extraction_attempted=false") {
+		t.Fatalf("expected fallback evidence in notes, got %q", item.Notes)
+	}
+}
+
 func TestProviderProductURLIngestReturnsHeadlessRequiredGuidanceAfterStaticFailure(t *testing.T) {
 	t.Parallel()
 
@@ -404,6 +458,15 @@ func newBonzaIngestTestApp(t *testing.T) (*App, string) {
 		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
 	}
 	return a, profile.ID
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func bonzaSucuriChallengeBody(t *testing.T, cookieName, cookieValue string) string {
