@@ -164,6 +164,25 @@ Bonza product URL ingestion SHALL check existing item source evidence before all
 - **THEN** runtime MUST return duplicate candidate information
 - **AND** Inventory UI MUST offer to open the existing item or continue only with explicit user confirmation
 
+### Requirement PROVIDER-AU-WEBSHOPS-FALLBACK-001: Manual URL capture fallback states SHALL be explicit and guarded
+AU webshop providers that cannot safely complete normal catalogue crawling SHALL expose explicit fallback state metadata and operator guidance before any headless workflow is considered.
+
+#### Scenario: Bonza registry exposes manual capture and headless guard state
+- **GIVEN** `/api/providers/registry` returns the Bonza provider entry
+- **WHEN** consumers inspect fallback metadata and capabilities
+- **THEN** the entry MUST expose `fallback_state: manual_url_capture`
+- **AND** the entry MUST expose `manual_capture_action: provider_product_url_ingest`
+- **AND** the entry MUST expose `headless_state: opt_in_required`
+- **AND** capabilities MUST include `manual_url_capture=true` and `headless_default=false`
+
+#### Scenario: Unsupported or failed product URL extraction returns actionable guidance
+- **GIVEN** a user submits a Bonza URL for manual product URL capture
+- **WHEN** the URL is not a supported product URL, or Store API static extraction cannot return usable public product data
+- **THEN** the response MUST identify whether static extraction was attempted
+- **AND** the response MUST include an explicit fallback state
+- **AND** the response MUST include a user-facing next action and guidance
+- **AND** the response MUST NOT imply default headless crawling, login, cart, checkout, payment, or purchase automation
+
 ### Requirement INTEGRATION-015: Frontline provider config discovery SHALL be runtime-resolved from site assets with safe fallback
 Frontline integration SHALL discover Algolia runtime config (application ID, search key, index names) from maintained site assets (e.g., `pd-search.js`) and use cached last-known-good config when discovery fails.
 

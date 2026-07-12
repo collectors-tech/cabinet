@@ -303,6 +303,86 @@ func TestProviderProductURLIngestRejectsKnownProviderNonProductURL(t *testing.T)
 	if !strings.Contains(ingest.Body.String(), "supported_provider_unsupported_page") {
 		t.Fatalf("expected unsupported-page envelope, got %s", ingest.Body.String())
 	}
+	if !strings.Contains(ingest.Body.String(), `"fallback_state":"manual_url_capture"`) || !strings.Contains(ingest.Body.String(), `"static_extraction_attempted":false`) {
+		t.Fatalf("expected manual URL capture guidance for known non-product page, got %s", ingest.Body.String())
+	}
+}
+
+func TestProviderProductURLIngestReturnsHeadlessRequiredGuidanceAfterStaticFailure(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/wp-json/wc/store/v1/products") {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`temporarily blocked by storefront challenge`))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusBadRequest {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	body := ingest.Body.String()
+	for _, want := range []string{
+		`"error":"failed_to_ingest_bonza_product_url"`,
+		`"fallback_state":"headless_required"`,
+		`"static_extraction_attempted":true`,
+		`"next_action":"capture_url_for_manual_review"`,
+		`"guidance":"Static product extraction was attempted first but the storefront did not return usable public product data. Keep the URL as a manual review item; do not run headless browsing unless this provider is explicitly opted in."`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in failure guidance, got %s", want, body)
+		}
+	}
+}
+
+func TestProviderRegistryPublishesManualURLFallbackStates(t *testing.T) {
+	t.Parallel()
+
+	a, _ := newBonzaIngestTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	var bonza map[string]any
+	for _, provider := range payload.Providers {
+		if fmt.Sprintf("%v", provider["provider_id"]) == "au-webshop-bonzaslotcars-com-au" {
+			bonza = provider
+			break
+		}
+	}
+	if bonza == nil {
+		t.Fatal("expected Bonza provider registry entry")
+	}
+	if got := fmt.Sprintf("%v", bonza["fallback_state"]); got != "manual_url_capture" {
+		t.Fatalf("Bonza fallback_state got %q want manual_url_capture: %+v", got, bonza)
+	}
+	if got := fmt.Sprintf("%v", bonza["headless_state"]); got != "opt_in_required" {
+		t.Fatalf("Bonza headless_state got %q want opt_in_required: %+v", got, bonza)
+	}
+	if got := fmt.Sprintf("%v", bonza["manual_capture_action"]); got != "provider_product_url_ingest" {
+		t.Fatalf("Bonza manual_capture_action got %q want provider_product_url_ingest: %+v", got, bonza)
+	}
+	capabilities, ok := bonza["capabilities"].(map[string]any)
+	if !ok || capabilities["manual_url_capture"] != true || capabilities["headless_default"] != false {
+		t.Fatalf("expected manual URL capture capability and no default headless crawling, got %+v", capabilities)
+	}
 }
 
 func newBonzaIngestTestApp(t *testing.T) (*App, string) {
