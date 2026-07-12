@@ -1,6 +1,6 @@
 # TASK_LIST
 
-Last reconciled from live GitHub/OpenSpec state: 2026-07-11 13:48 +10:00
+Last reconciled from live GitHub/OpenSpec state: 2026-07-12 12:19 +10:00
 
 This file is the Cabinet 0.1 private beta execution summary. Historical issue
 snapshots from April 2026 have been retired from this top-level queue; use
@@ -27,9 +27,9 @@ Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 5. [x] #1871 [DONE] Prove one live Market Watch provider and fail closed for others.
    - Evidence: PR #1908 merged to `develop`; #1864 contains the Voglers live Market Watch provider proof summary.
 6. [ ] #1868 [IN REVIEW] Package versioned Windows beta artefact and GitHub release.
-   - Source/package implementation is merged in PR #1910; prerelease publication remains gated on #1864 approval.
+   - Source/package implementation is merged in PR #1910; non-publishing artifact validation is merged in PR #1913; prerelease publication remains gated on #1864 approval.
 7. [ ] #1869 [IN PROGRESS] Run packaged core-workflow release acceptance suite.
-   - Acceptance pack is being encoded before packaged-candidate execution so failures can become focused blockers and reruns.
+   - Acceptance pack is encoded in `openspec/migration/beta-packaged-core-workflow-acceptance.md`; packaged-candidate execution remains gated on the approved artifact/release prerequisites.
 8. [x] #1872 [DONE] Reconcile OpenSpec active changes and stale release tracking.
    - Evidence: PR #1891 merged to `develop`; all active OpenSpec tasks reconciled to archive, closed issue evidence, or explicit deferred follow-ups.
 
@@ -38,6 +38,7 @@ Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 - [x] #1872: reconciled every unchecked OpenSpec task into completed/archive evidence, linked focused issue, or explicit deferred/post-beta reason.
 - [ ] Correct stale labels/status on release issues after each live issue is verified.
 - [ ] Keep #1864 as the single private beta release summary and evidence index.
+  - Current repo evidence index: `openspec/migration/beta-release-evidence-index.md`.
 - [ ] Do not merge `develop` into `main` until Max explicitly approves the tested release candidate.
 
 ## Active OpenSpec Change Inventory
