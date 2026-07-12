@@ -2376,6 +2376,15 @@ func New(cfg config.Config) (*App, error) {
 				}
 			}
 			w.WriteHeader(statusCode)
+			if statusCode == http.StatusOK {
+				profileID, _ := payload["profile_id"].(string)
+				if resolveErr := chatSvc.ResolveProviderWorkflowInboxEvents(r.Context(), profileID, "telegram", "telegram.provider_test", "provider_test_passed", map[string]any{
+					"provider_test_code": payload["code"],
+					"provider_status":    payload["status"],
+				}); resolveErr != nil {
+					logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_resolve_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.provider_test", "error": resolveErr.Error()})
+				}
+			}
 			_ = json.NewEncoder(w).Encode(payload)
 			return
 		}

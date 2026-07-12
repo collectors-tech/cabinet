@@ -1098,6 +1098,72 @@ func TestTelegramProviderTestCreatesSetupRequiredInboxEvent(t *testing.T) {
 	}
 }
 
+func TestTelegramProviderTestResolvesSetupRequiredInboxEvent(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"TelegramProviderTestResolveInbox"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	missingSetup := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"telegram","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if missingSetup.Code != http.StatusConflict {
+		t.Fatalf("expected initial Telegram setup-required conflict, status=%d body=%s", missingSetup.Code, missingSetup.Body.String())
+	}
+
+	secret := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/secrets", strings.NewReader(`{"key":"telegram_bot_token","value":"resolve-token-secret"}`), map[string]string{"Content-Type": "application/json"})
+	if secret.Code != http.StatusOK {
+		t.Fatalf("telegram secret status=%d body=%s", secret.Code, secret.Body.String())
+	}
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("telegram settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	ready := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"telegram","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if ready.Code != http.StatusOK {
+		t.Fatalf("expected ready Telegram provider test, status=%d body=%s", ready.Code, ready.Body.String())
+	}
+	for _, want := range []string{
+		`"provider":"telegram"`,
+		`"provider_test_passed":true`,
+		`"code":"TELEGRAM_CHANNEL_READY"`,
+		`"credential_returned":false`,
+	} {
+		if !strings.Contains(ready.Body.String(), want) {
+			t.Fatalf("ready Telegram provider test response missing %s, body=%s", want, ready.Body.String())
+		}
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	for _, want := range []string{
+		`"source":"provider_workflow"`,
+		`"status":"read"`,
+		`"provider_id":"telegram"`,
+		`"workflow_action_id":"telegram.provider_test"`,
+		`"required_action_code":"authorize_sender_chat"`,
+		`"resolution":"provider_test_passed"`,
+	} {
+		if !strings.Contains(inbox.Body.String(), want) {
+			t.Fatalf("Telegram provider test did not resolve expected Inbox evidence %s, body=%s", want, inbox.Body.String())
+		}
+	}
+	if strings.Contains(inbox.Body.String(), "resolve-token-secret") || strings.Contains(ready.Body.String(), "resolve-token-secret") {
+		t.Fatalf("Telegram provider test resolution leaked token material, ready=%s inbox=%s", ready.Body.String(), inbox.Body.String())
+	}
+}
+
 func findRegistryProvider(providers []map[string]any, id string) map[string]any {
 	for _, provider := range providers {
 		if fmt.Sprintf("%v", provider["provider_id"]) == id {
