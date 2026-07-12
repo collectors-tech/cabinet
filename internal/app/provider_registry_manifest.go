@@ -105,6 +105,17 @@ func (m integrationProviderManifest) payload() map[string]any {
 		payload["headless_state"] = "opt_in_required"
 		payload["manual_capture_action"] = "provider_product_url_ingest"
 	}
+	if strings.TrimSpace(m.BaseDomain) == "hobbytechtoys.com.au" {
+		payload["parts_finder_state"] = "public_page_discovery"
+		payload["parts_finder_path"] = "/pages/parts-finder"
+		payload["parts_finder_discovery"] = map[string]any{
+			"platform":              "shopify_page_plus_boost_search",
+			"robots_scope":          "public_page_allowed_search_query_disallowed",
+			"safe_workflow":         "catalogue_source_matching_only",
+			"manual_capture_action": "provider_product_url_ingest",
+			"blocked_actions":       []string{"login", "cart", "checkout", "payment", "purchase"},
+		}
+	}
 	return payload
 }
 
@@ -316,6 +327,11 @@ func integrationWorkflowActionDefinitions() map[string]integrationWorkflowAction
 			ID: "market_watch.run", Label: "Run Market Watch", Description: "Fetch or ingest provider search results into Cabinet's reviewable result inbox.", Type: "market_watch_scan",
 			InputSchema: "market_watch.run.request.v1", OutputSchema: "market_watch.run.result_inbox.v1", RequiresAuth: false, RequiresSecrets: false, Capabilities: []string{"search", "pricing", "stock_observation"},
 			SideEffectLevel: "preview_only", ScheduleSupport: "manual_and_scheduled", InboxEvents: []string{"workflow_failed", "required_action", "result_inbox_updated"}, HealthImpact: "updates_provider_health", ExecutionMode: "provider_workflow",
+		},
+		"hobbytech.parts_finder": {
+			ID: "hobbytech.parts_finder", Label: "Parts Finder review", Description: "Review Hobbytech Parts Finder catalogue paths and map public part candidates without login, cart, checkout, payment, or purchase automation.", Type: "storefront_parts_finder",
+			InputSchema: "hobbytech.parts_finder.request.v1", OutputSchema: "hobbytech.parts_finder.result.v1", RequiresAuth: false, RequiresSecrets: false, Capabilities: []string{"parts_finder", "search", "pricing", "stock_observation"},
+			SideEffectLevel: "preview_only", ScheduleSupport: "manual", InboxEvents: []string{"workflow_failed", "required_action", "result_inbox_updated"}, HealthImpact: "updates_provider_health", ExecutionMode: "provider_workflow",
 		},
 		"provider.family_detect": {
 			ID: "provider.family_detect", Label: "Detect provider family", Description: "Inspect a storefront and classify the supported adapter family for setup guidance.", Type: "provider_diagnostics",
@@ -595,10 +611,15 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 			"stock_observation":  true,
 			"pricing":            true,
 			"health":             true,
+			"parts_finder":       domain == "hobbytechtoys.com.au",
 			"manual_url_capture": domain == "bonzaslotcars.com.au",
 			"headless_default":   false,
 		},
 		SetupInstructions: "Webshop ingestion uses crawl parsing and does not require API credentials.",
+	}
+	if domain == "hobbytechtoys.com.au" {
+		manifest.WorkflowRefs = []string{"market_watch.run", "hobbytech.parts_finder", "provider.family_detect"}
+		manifest.SetupInstructions = "Hobbytech ingestion uses Boost search plus public Parts Finder page discovery for catalogue/source matching only; login, cart, checkout, payment, and purchase actions remain out of scope."
 	}
 	if domain == "bonzaslotcars.com.au" {
 		manifest.SetupInstructions = "Webshop ingestion uses Store API static extraction first. Product URLs can be captured for manual review; headless browsing is opt-in only."
