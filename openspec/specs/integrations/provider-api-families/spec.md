@@ -96,6 +96,13 @@ Shopify-backed source-matching providers SHALL use public storefront catalogue e
 - **AND** the parser MUST reject all-empty/unusable product sets with a health failure rather than reporting a healthy zero-candidate run
 - **AND** the adapter MUST NOT use customer login, cart, checkout, payment, admin APIs, or private Shopify APIs
 
+#### Scenario: Public Shopify catalogue run persists scanner evidence
+- **GIVEN** a provider-scoped Market Watch query targets an approved Shopify storefront provider such as Andrew's Hobbies or Metro Hobbies
+- **WHEN** Cabinet runs the Shopify provider route against public `/products.json` catalogue data
+- **THEN** runtime MUST persist normalized candidates into the shared scanner/Discoveries candidate store
+- **AND** the query-set latest-run snapshot MUST hydrate after reload with succeeded status and candidate count
+- **AND** provider health MUST record public storefront proof for the provider id and market-watch scope without claiming private API, login, cart, checkout, payment, or admin API support
+
 #### Scenario: Doofinder discovery inputs
 - **GIVEN** onboarding detection scans provider assets
 - **WHEN** Doofinder scripts/config are present
