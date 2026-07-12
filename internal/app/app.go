@@ -5245,6 +5245,16 @@ func New(cfg config.Config) (*App, error) {
 		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID)
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				if profileID := strings.TrimSpace(req.ProfileID); profileID != "" {
+					if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "telegram", "Telegram", "telegram.agent_text", "authorize_sender_chat", "Telegram Agent text needs an authorized sender/chat before Cabinet can route the message.", map[string]any{
+						"source_channel":    "telegram",
+						"source_surface":    "telegram.agent.text",
+						"source_message_id": req.MessageID,
+						"sender_known":      false,
+					}); inboxErr != nil {
+						logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.agent_text", "error": inboxErr.Error()})
+					}
+				}
 				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
 				return
 			}

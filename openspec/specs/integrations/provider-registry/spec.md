@@ -218,6 +218,12 @@ Cabinet SHALL surface integration failures and required user actions through dur
 - **THEN** Cabinet MUST mark the previous `telegram.provider_test` provider-workflow Inbox event read/resolved
 - **AND** the resolved Inbox event MUST retain provider/action/root-cause metadata and add non-secret resolution evidence without returning bot-token material
 
+#### Scenario: Unauthorized Telegram Agent text creates required-action Inbox evidence
+- **GIVEN** Telegram Agent text is called for a known profile by a sender/chat that has not been authorized
+- **WHEN** Cabinet rejects the message before routing an Agent workflow
+- **THEN** Cabinet MUST create or update a provider-workflow Inbox event for `telegram.agent_text`
+- **AND** the Inbox event MUST carry the `authorize_sender_chat` required action, target `/integrations`, and source message metadata without storing bot-token values
+
 ### Requirement INTEGRATION-063: Provider registry MUST be the canonical integration source for app consumers
 Cabinet SHALL treat `/api/providers/registry`, `/api/providers/:id/*`, the Add Integration UI list, and the Market Watch provider projection as consumers of one canonical registry definition rather than independent provider catalogs.
 

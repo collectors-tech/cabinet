@@ -321,6 +321,53 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 	}
 }
 
+func TestTelegramAgentTextUnauthorizedSenderCreatesSetupInboxEvent(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Agent Auth Inbox"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	unauthorized := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"sender_id":"sender-agent-unapproved",
+		"chat_id":"chat-agent-unapproved",
+		"message_id":"agent-message-unauthorized-inbox",
+		"text":"show me my inventory",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"AFX"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if unauthorized.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized status=%d body=%s", unauthorized.Code, unauthorized.Body.String())
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	body := inbox.Body.String()
+	for _, want := range []string{
+		`"source":"provider_workflow"`,
+		`"provider_id":"telegram"`,
+		`"workflow_action_id":"telegram.agent_text"`,
+		`"required_action_code":"authorize_sender_chat"`,
+		`"target_route":"/integrations"`,
+		`"source_message_id":"agent-message-unauthorized-inbox"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected unauthorized Telegram Agent text to create setup Inbox evidence %q, body=%s", want, body)
+		}
+	}
+}
+
 func TestTelegramExternalIntakeProofRequiresAuthorizedProviderEvidence(t *testing.T) {
 	t.Parallel()
 
