@@ -10655,6 +10655,148 @@ func runLightspeedStorefrontSearch(
 	return candidates, nil
 }
 
+func runShopifyStorefrontSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL, query, providerDomain string,
+) ([]map[string]any, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, fmt.Errorf("shopify storefront search url is required")
+	}
+	parsed, err := url.Parse(strings.TrimSpace(searchURL))
+	if err != nil {
+		return nil, fmt.Errorf("parse shopify storefront url: %w", err)
+	}
+	params := parsed.Query()
+	params.Set("q", strings.TrimSpace(query))
+	if params.Get("limit") == "" {
+		params.Set("limit", "24")
+	}
+	parsed.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build shopify storefront request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run shopify storefront request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("shopify storefront returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read shopify storefront response: %w", err)
+	}
+	var payload struct {
+		Products []shopifyStorefrontProduct `json:"products"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode shopify storefront response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Products))
+	missingCoreFields := 0
+	for _, product := range payload.Products {
+		id := strings.TrimSpace(fmt.Sprintf("%v", product.ID))
+		variant := firstShopifyVariant(product.Variants)
+		title := strings.TrimSpace(product.Title)
+		productURL := normalizeProviderProductURL("https://"+providerDomain, "/products/"+strings.TrimSpace(product.Handle))
+		price := numericCurrencyValue(variant.Price)
+		if id == "" || title == "" || strings.TrimSpace(product.Handle) == "" || price <= 0 {
+			missingCoreFields++
+			continue
+		}
+		imageURL := strings.TrimSpace(product.Image.Src)
+		if imageURL == "" && len(product.Images) > 0 {
+			imageURL = strings.TrimSpace(product.Images[0].Src)
+		}
+		stockState := "unknown"
+		if variant.Available {
+			stockState = "in_stock"
+		} else if strings.TrimSpace(fmt.Sprintf("%v", variant.ID)) != "" {
+			stockState = "out_of_stock"
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id":        "shopify-" + id,
+			"title":             title,
+			"url":               productURL,
+			"price":             price,
+			"sale_price":        numericCurrencyValue(variant.CompareAtPrice),
+			"currency":          "AUD",
+			"image":             normalizeProviderProductURL("https://"+providerDomain, imageURL),
+			"sku":               strings.TrimSpace(variant.SKU),
+			"brand":             strings.TrimSpace(product.Vendor),
+			"category":          strings.TrimSpace(product.ProductType),
+			"categories":        shopifyTags(product.Tags),
+			"description":       stripHTMLText(product.BodyHTML),
+			"stock_state":       stockState,
+			"stock_count":       int(numericCurrencyValue(variant.InventoryQuantity)),
+			"source":            marketWatchScopeForAUWebshopDomain(providerDomain),
+			"seller":            providerDomain,
+			"extraction_method": "shopify_products_json",
+		})
+	}
+	if len(candidates) == 0 && missingCoreFields > 0 {
+		return candidates, fmt.Errorf("shopify parser health failed: %d product records missing title/handle/price/id", missingCoreFields)
+	}
+	return candidates, nil
+}
+
+type shopifyStorefrontProduct struct {
+	ID          any                        `json:"id"`
+	Title       string                     `json:"title"`
+	Handle      string                     `json:"handle"`
+	Vendor      string                     `json:"vendor"`
+	ProductType string                     `json:"product_type"`
+	BodyHTML    string                     `json:"body_html"`
+	Tags        string                     `json:"tags"`
+	Variants    []shopifyStorefrontVariant `json:"variants"`
+	Images      []struct {
+		Src string `json:"src"`
+	} `json:"images"`
+	Image struct {
+		Src string `json:"src"`
+	} `json:"image"`
+}
+
+type shopifyStorefrontVariant struct {
+	ID                any    `json:"id"`
+	Title             string `json:"title"`
+	SKU               string `json:"sku"`
+	Price             any    `json:"price"`
+	CompareAtPrice    any    `json:"compare_at_price"`
+	Available         bool   `json:"available"`
+	InventoryQuantity any    `json:"inventory_quantity"`
+}
+
+func firstShopifyVariant(variants []shopifyStorefrontVariant) shopifyStorefrontVariant {
+	var zero shopifyStorefrontVariant
+	for _, variant := range variants {
+		if strings.TrimSpace(fmt.Sprintf("%v", variant.ID)) != "" || strings.TrimSpace(variant.SKU) != "" || numericCurrencyValue(variant.Price) > 0 {
+			return variant
+		}
+	}
+	return zero
+}
+
+func shopifyTags(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
 func runBigCommerceTokenSearch(
 	ctx context.Context,
 	client *http.Client,
@@ -11462,6 +11604,10 @@ func frontlineCandidatesForScanner(candidates []map[string]any) []scanner.Candid
 
 func lightspeedCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
 	return providerCandidatesForScanner(candidates, "acercmodels")
+}
+
+func shopifyCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, marketWatchScopeForAUWebshopDomain(providerDomain))
 }
 
 func doofinderCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
