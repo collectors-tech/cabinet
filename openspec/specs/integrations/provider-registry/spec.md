@@ -223,6 +223,16 @@ Cabinet SHALL treat `/api/providers/registry`, `/api/providers/:id/*`, the Add I
 - **AND** disabled assistant placeholders MUST expose no workflow refs or credential setup controls until a supported adapter, setup schema, health check, and workflow mapping exists
 - **AND** disabled placeholder capability flags MUST prevent assistant, image-help, and content-generation actions while still making the limitation visible in registry health/setup metadata
 
+### Requirement INTEGRATION-066: Marketplace providers MUST migrate through registry metadata
+Cabinet SHALL represent marketplace providers such as eBay and Amazon as manifest-backed registry entries with provider-specific auth, setup, health, workflow, and capability metadata instead of hardcoded Add Integration lists.
+
+#### Scenario: Marketplace providers expose migration metadata
+- **GIVEN** Cabinet builds `/api/providers/registry`
+- **WHEN** marketplace providers are returned
+- **THEN** eBay and Amazon MUST expose stable provider IDs, display names, marketplace category/type, auth mode, config schema refs, setup schema payloads, market-watch scopes, and workflow/action refs from the canonical registry manifest
+- **AND** marketplace capability flags MUST cover supported search/import/scanner matching, price checks, purchase/order reconciliation, listing lookup, seller operation, listing lifecycle, and health boundaries where applicable
+- **AND** Add Integration and workflow consumers MUST be able to route setup/config and supported marketplace actions from registry metadata without a separate hardcoded marketplace provider catalog
+
 ## Validation Coverage Required By Issue #1469
 - Provider registry entries and manifest fields: Go registry/OpenAPI contract tests.
 - Provider setup schemas and Add Integration form rendering: Go template contract tests plus targeted Cypress for registry-driven field rendering.
