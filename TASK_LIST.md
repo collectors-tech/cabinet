@@ -26,8 +26,10 @@ Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
 4. [x] #1870 [DONE] Align Free, Plus and Pro entitlements and user-visible plan state.
 5. [x] #1871 [DONE] Prove one live Market Watch provider and fail closed for others.
    - Evidence: PR #1908 merged to `develop`; #1864 contains the Voglers live Market Watch provider proof summary.
-6. [ ] #1868 [IN PROGRESS] Package versioned Windows beta artefact and GitHub release.
-7. [ ] #1869 [OPEN] Run packaged core-workflow release acceptance suite.
+6. [ ] #1868 [IN REVIEW] Package versioned Windows beta artefact and GitHub release.
+   - Source/package implementation is merged in PR #1910; prerelease publication remains gated on #1864 approval.
+7. [ ] #1869 [IN PROGRESS] Run packaged core-workflow release acceptance suite.
+   - Acceptance pack is being encoded before packaged-candidate execution so failures can become focused blockers and reruns.
 8. [x] #1872 [DONE] Reconcile OpenSpec active changes and stale release tracking.
    - Evidence: PR #1891 merged to `develop`; all active OpenSpec tasks reconciled to archive, closed issue evidence, or explicit deferred follow-ups.
 
