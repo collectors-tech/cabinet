@@ -737,6 +737,66 @@ func (s *Service) CreateProviderWorkflowInboxEvent(ctx context.Context, in Provi
 	})
 }
 
+func (s *Service) ResolveProviderWorkflowInboxEvents(ctx context.Context, profileID, providerID, workflowActionID, resolution string, metadata map[string]any) error {
+	profileID = strings.TrimSpace(profileID)
+	providerID = strings.TrimSpace(providerID)
+	workflowActionID = strings.TrimSpace(workflowActionID)
+	resolution = strings.TrimSpace(resolution)
+	if profileID == "" || providerID == "" || workflowActionID == "" {
+		return fmt.Errorf("profile_id, provider_id and workflow_action_id are required")
+	}
+	if resolution == "" {
+		resolution = "resolved"
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, metadata_json
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		  AND source = 'provider_workflow'
+		  AND json_extract(metadata_json, '$.provider_id') = ?
+		  AND json_extract(metadata_json, '$.workflow_action_id') = ?
+		  AND status != 'read'
+	`, profileID, providerID, workflowActionID)
+	if err != nil {
+		return fmt.Errorf("find provider workflow inbox events to resolve: %w", err)
+	}
+	defer rows.Close()
+
+	type pendingResolution struct {
+		id       string
+		metadata map[string]any
+	}
+	var pending []pendingResolution
+	for rows.Next() {
+		var id, metadataJSON string
+		if err := rows.Scan(&id, &metadataJSON); err != nil {
+			return err
+		}
+		merged := parseContextJSON(metadataJSON)
+		merged["resolved_at"] = time.Now().UTC().Format(time.RFC3339)
+		merged["resolution"] = resolution
+		for key, value := range metadata {
+			if _, exists := merged[key]; !exists {
+				merged[key] = value
+			}
+		}
+		pending = append(pending, pendingResolution{id: id, metadata: merged})
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, item := range pending {
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE chat_inbox_items
+			SET status = 'read', metadata_json = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND profile_id = ?
+		`, marshalContextJSON(item.metadata), item.id, profileID); err != nil {
+			return fmt.Errorf("resolve provider workflow inbox event: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *Service) notificationHistoryThread(ctx context.Context, profileID string) (Thread, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, profile_id, title, metadata_json, created_at, updated_at
