@@ -209,6 +209,15 @@ Hobbytech integration SHALL support Shopify-backed search using Boost Commerce e
 - **THEN** runtime MUST refresh discovery inputs from site assets/pages and retry with bounded attempts
 - **AND** emit drift warning with fallback status for operator review
 
+#### Scenario: Hobbytech Parts Finder discovery boundary
+- **GIVEN** Hobbytech exposes a public `/pages/parts-finder` page alongside Shopify/Boost product search
+- **WHEN** `/api/providers/registry` projects the Hobbytech provider
+- **THEN** the provider MUST expose `parts_finder=true` capability metadata
+- **AND** the provider MUST expose a `hobbytech.parts_finder` workflow/action classified as `preview_only`
+- **AND** the workflow MUST advertise catalogue/source-matching use only, without credentials, login, cart, checkout, payment, or purchase automation
+- **AND** registry metadata MUST distinguish the public Parts Finder page from robots-disallowed search-query paths so runtime probes stay rate-limited and read-only
+- **AND** manual product URL capture MUST remain the fallback when a parts path cannot be parsed safely
+
 #### Scenario: Frontline config discovery from asset
 - **GIVEN** Frontline provider run starts
 - **WHEN** runtime fetches configured discovery asset path(s)

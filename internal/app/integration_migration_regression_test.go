@@ -545,6 +545,95 @@ func TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof(t *testing.T
 	}
 }
 
+func TestHobbytechRegistryExposesPartsFinderDiscoveryContract(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+
+	hobbytech := findRegistryProvider(payload.Providers, "au-webshop-hobbytechtoys-com-au")
+	if hobbytech == nil {
+		t.Fatalf("expected Hobbytech provider in registry payload: %+v", payload.Providers)
+	}
+	for field, want := range map[string]string{
+		"adapter_type":        "shopify-boost-storefront",
+		"api_family":          "boost_shopify",
+		"parts_finder_state":  "public_page_discovery",
+		"parts_finder_path":   "/pages/parts-finder",
+		"auth_mode":           "none",
+		"integration_mode":    "web_ingestion",
+		"market_watch_scope":  "hobbytechtoys",
+		"api_support_profile": "boost_v2",
+	} {
+		if got := fmt.Sprintf("%v", hobbytech[field]); got != want {
+			t.Fatalf("Hobbytech registry field %s got %q want %q: %+v", field, got, want, hobbytech)
+		}
+	}
+	capabilities, ok := hobbytech["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatalf("Hobbytech capabilities got %T: %+v", hobbytech["capabilities"], hobbytech)
+	}
+	for _, capability := range []string{"search", "pricing", "stock_observation", "health", "parts_finder"} {
+		if capabilities[capability] != true {
+			t.Fatalf("Hobbytech capability %s must be true for parts-finder source matching: %+v", capability, capabilities)
+		}
+	}
+	discovery, ok := hobbytech["parts_finder_discovery"].(map[string]any)
+	if !ok {
+		t.Fatalf("Hobbytech parts_finder_discovery got %T: %+v", hobbytech["parts_finder_discovery"], hobbytech)
+	}
+	for field, want := range map[string]string{
+		"platform":              "shopify_page_plus_boost_search",
+		"robots_scope":          "public_page_allowed_search_query_disallowed",
+		"safe_workflow":         "catalogue_source_matching_only",
+		"manual_capture_action": "provider_product_url_ingest",
+	} {
+		if got := fmt.Sprintf("%v", discovery[field]); got != want {
+			t.Fatalf("Hobbytech parts-finder discovery field %s got %q want %q: %+v", field, got, want, discovery)
+		}
+	}
+	blocked, ok := discovery["blocked_actions"].([]any)
+	if !ok {
+		t.Fatalf("Hobbytech blocked_actions got %T: %+v", discovery["blocked_actions"], discovery)
+	}
+	for _, blockedAction := range []string{"login", "cart", "checkout", "payment", "purchase"} {
+		if !containsAnyString(blocked, blockedAction) {
+			t.Fatalf("Hobbytech blocked_actions missing %q: %+v", blockedAction, blocked)
+		}
+	}
+	actions, ok := hobbytech["actions"].([]any)
+	if !ok {
+		t.Fatalf("Hobbytech actions got %T: %+v", hobbytech["actions"], hobbytech)
+	}
+	action := findRegistryAction(actions, "hobbytech.parts_finder")
+	if action == nil {
+		t.Fatalf("Hobbytech parts-finder action missing: %+v", actions)
+	}
+	for field, want := range map[string]string{
+		"type":               "storefront_parts_finder",
+		"side_effect_level":  "preview_only",
+		"execution_mode":     "provider_workflow",
+		"schedule_support":   "manual",
+		"availability_state": "available",
+	} {
+		if got := fmt.Sprintf("%v", action[field]); got != want {
+			t.Fatalf("Hobbytech parts-finder action field %s got %q want %q: %+v", field, got, want, action)
+		}
+	}
+	if action["requires_auth"] != false || action["requires_secrets"] != false || action["confirmation_required"] != false {
+		t.Fatalf("Hobbytech parts-finder action must stay credential-free and preview-only: %+v", action)
+	}
+}
+
 func TestProviderRegistryProjectsWorkflowActionRegistryMetadata(t *testing.T) {
 	t.Parallel()
 
