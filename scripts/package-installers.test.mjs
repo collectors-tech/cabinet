@@ -64,4 +64,24 @@ describe("Cabinet beta packaging contract", () => {
     assert.match(checklist, /#1864 approval/);
     assert.match(checklist, /must not publish/i);
   });
+
+  it("keeps the install and existing-data upgrade validation checklist bound to the beta release gate", () => {
+    const checklist = readRepoFile("release/windows-portable-upgrade-validation.md");
+
+    assert.match(checklist, /cabinet-0\.1\.0-beta\.1-windows-amd64-portable\.zip/);
+    assert.match(checklist, /\.sha256/);
+    assert.match(checklist, /clean install and start/i);
+    assert.match(checklist, /existing data directory upgrade/i);
+    assert.match(checklist, /backup before replacing or reusing the existing data directory/i);
+    assert.match(checklist, /\/healthz/);
+    assert.match(checklist, /\/api\/runtime/);
+    assert.match(checklist, /app_version=0\.1\.0-beta\.1/);
+    assert.match(checklist, /inventory item count/i);
+    assert.match(checklist, /wishlist item count/i);
+    assert.match(checklist, /collection membership count/i);
+    assert.match(checklist, /saved filter\/view count/i);
+    assert.match(checklist, /rollback instructions/i);
+    assert.match(checklist, /#1864 approval/);
+    assert.match(checklist, /Do not publish/i);
+  });
 });
