@@ -49,4 +49,3 @@ This checklist is the stable packaged-candidate acceptance pack for Cabinet 0.1 
 - [ ] Final packaged acceptance does not require test-only hooks.
 - [ ] Final packaged acceptance does not rely on a dirty worktree or unpublished local changes.
 - [ ] Final packaged acceptance does not merge `develop` into `main` or publish a release without #1864 approval.
-
