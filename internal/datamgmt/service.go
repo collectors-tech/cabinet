@@ -364,6 +364,7 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 		opts.Overrides = map[string]string{}
 	}
 	opts.ProfileID = strings.TrimSpace(opts.ProfileID)
+	importProfileID := ""
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -371,6 +372,14 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 		return sum, fmt.Errorf("begin import tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if opts.ProfileID != "" || len(snap.SavedFilters) > 0 {
+		importProfileID, err = s.resolveImportProfileIDTx(ctx, tx, opts.ProfileID)
+		if err != nil {
+			sum = failedApplySummary(sum)
+			return sum, err
+		}
+	}
 
 	for _, item := range snap.Items {
 		partNumber := strings.TrimSpace(item.PartNumber)
@@ -392,7 +401,7 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 
 		targetItemID := existingID
 		if existingID == "" || action == "create" {
-			targetItemID, err = s.insertItemTx(ctx, tx, item, action == "create")
+			targetItemID, err = s.insertItemTx(ctx, tx, item, importProfileID, action == "create")
 			if err != nil {
 				sum = failedApplySummary(sum)
 				return sum, err
@@ -413,12 +422,7 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 	}
 
 	if len(snap.SavedFilters) > 0 {
-		profileID, err := s.resolveImportProfileIDTx(ctx, tx, opts.ProfileID)
-		if err != nil {
-			sum = failedApplySummary(sum)
-			return sum, err
-		}
-		if err := s.mergeSavedFiltersTx(ctx, tx, profileID, snap.SavedFilters); err != nil {
+		if err := s.mergeSavedFiltersTx(ctx, tx, importProfileID, snap.SavedFilters); err != nil {
 			sum = failedApplySummary(sum)
 			return sum, err
 		}
@@ -634,7 +638,7 @@ func (s *Service) findItemIDByPartNumberTx(ctx context.Context, tx *sql.Tx, part
 	return id, nil
 }
 
-func (s *Service) insertItemTx(ctx context.Context, tx *sql.Tx, item SnapshotItem, forceNewPartNumber bool) (string, error) {
+func (s *Service) insertItemTx(ctx context.Context, tx *sql.Tx, item SnapshotItem, profileID string, forceNewPartNumber bool) (string, error) {
 	itemID := uuid.NewString()
 	partNumber := strings.TrimSpace(item.PartNumber)
 	if partNumber == "" {
@@ -645,9 +649,9 @@ func (s *Service) insertItemTx(ctx context.Context, tx *sql.Tx, item SnapshotIte
 	}
 	tagsRaw, _ := json.Marshal(item.Tags)
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO canonical_items (id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, itemID, item.Brand, item.Category, partNumber, item.Title, item.Make, item.Model, item.Year, item.Scale, item.Series, item.Description, string(tagsRaw)); err != nil {
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, itemID, profileID, item.Brand, item.Category, partNumber, item.Title, item.Make, item.Model, item.Year, item.Scale, item.Series, item.Description, string(tagsRaw)); err != nil {
 		return "", fmt.Errorf("insert import item: %w", err)
 	}
 	return itemID, nil

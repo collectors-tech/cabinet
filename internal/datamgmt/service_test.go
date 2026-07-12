@@ -214,6 +214,77 @@ func TestExportSnapshotImportsIntoCleanDatabaseWithRelationships(t *testing.T) {
 	}
 }
 
+func TestApplyImportAssignsSnapshotToRequestedProfile(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO profiles (id, name) VALUES ('profile-a', 'Profile A'), ('profile-b', 'Profile B')`); err != nil {
+		t.Fatalf("seed profiles: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('profile-a-item', 'profile-a', 'AFX', 'Slot Car', 'P-601', 'Profile A item')
+	`); err != nil {
+		t.Fatalf("seed profile-a item: %v", err)
+	}
+
+	svc := NewService(conn)
+	snap := Snapshot{
+		SchemaVersion: 1,
+		Items: []SnapshotItem{
+			{
+				Brand:      "Tyco",
+				Category:   "Slot Car",
+				PartNumber: "P-602",
+				Title:      "Profile B imported item",
+				Barcodes:   []string{"imported-profile-b"},
+			},
+		},
+		SavedFilters: []SnapshotSavedFilter{
+			{Name: "Imported Profile B", QueryJSON: `{"brand":"Tyco","profile":"profile-b"}`},
+		},
+	}
+
+	apply, err := svc.ApplyImport(context.Background(), snap, ApplyOptions{DefaultAction: "merge", ProfileID: "profile-b"})
+	if err != nil {
+		t.Fatalf("ApplyImport() error = %v", err)
+	}
+	if apply.TotalItems != 1 || apply.Created != 1 || apply.Merged != 0 || apply.Skipped != 0 || apply.Failed != 0 {
+		t.Fatalf("unexpected profile import summary: %#v", apply)
+	}
+
+	exportA, err := svc.ExportSnapshotForProfile(context.Background(), "profile-a")
+	if err != nil {
+		t.Fatalf("export profile-a: %v", err)
+	}
+	if len(exportA.Items) != 1 || exportA.Items[0].PartNumber != "P-601" {
+		t.Fatalf("profile-a export should only include original item, got %#v", exportA.Items)
+	}
+	if len(exportA.SavedFilters) != 0 {
+		t.Fatalf("profile-a export should not include profile-b saved filters, got %#v", exportA.SavedFilters)
+	}
+
+	exportB, err := svc.ExportSnapshotForProfile(context.Background(), "profile-b")
+	if err != nil {
+		t.Fatalf("export profile-b: %v", err)
+	}
+	if len(exportB.Items) != 1 || exportB.Items[0].PartNumber != "P-602" {
+		t.Fatalf("profile-b export should include imported item only, got %#v", exportB.Items)
+	}
+	if len(exportB.Items[0].Barcodes) != 1 || exportB.Items[0].Barcodes[0] != "imported-profile-b" {
+		t.Fatalf("profile-b imported child relationships missing, got %#v", exportB.Items[0].Barcodes)
+	}
+	if len(exportB.SavedFilters) != 1 || exportB.SavedFilters[0].Name != "Imported Profile B" || !strings.Contains(exportB.SavedFilters[0].QueryJSON, `"profile":"profile-b"`) {
+		t.Fatalf("profile-b saved filter missing after import, got %#v", exportB.SavedFilters)
+	}
+}
+
 func TestApplyImportReportsSkippedAndInvalidActionFailures(t *testing.T) {
 	t.Parallel()
 
