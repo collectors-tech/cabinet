@@ -222,6 +222,18 @@ type ProviderProductURLIngestResponse = {
   error?: string
   provider?: string
   family?: string
+  guidance?: string
+  fallback_state?: string
+  next_action?: string
+  review_capture_persisted?: boolean
+  review_capture?: {
+    item_id?: string
+    title?: string
+    status?: string
+    source_url?: string
+    fallback_state?: string
+    next_action?: string
+  }
   draft?: ProviderProductURLDraft
   evidence?: Record<string, unknown>
   duplicates?: ProviderProductURLDuplicate[]
@@ -1171,6 +1183,16 @@ function providerProductIngestMessage(error?: string) {
     default:
       return 'Provider ingest could not process this URL. The pasted URL is still available for manual item creation.'
   }
+}
+
+function providerProductFallbackMessage(
+  payload: ProviderProductURLIngestResponse
+) {
+  const guidance = payload.guidance?.trim()
+  if (payload.review_capture_persisted && payload.review_capture?.title) {
+    return `${guidance || providerProductIngestMessage(payload.error)} Captured for review as ${payload.review_capture.title}.`
+  }
+  return guidance || providerProductIngestMessage(payload.error)
 }
 
 function buildQuickCreateDraft(value: string): InventoryItemDraft {
@@ -4632,7 +4654,7 @@ export function Collection({
           const response = await fetch('/api/providers/product-url/ingest', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: source }),
+            body: JSON.stringify({ url: source, capture_for_review: true }),
           })
           const payload = (await response
             .json()
@@ -4648,7 +4670,7 @@ export function Collection({
                 ? 'Provider data loaded. Review duplicate matches before creating another item.'
                 : 'Provider data loaded into the item draft.'
           } else {
-            setPasteCreateError(providerProductIngestMessage(payload.error))
+            setPasteCreateError(providerProductFallbackMessage(payload))
           }
         }
 

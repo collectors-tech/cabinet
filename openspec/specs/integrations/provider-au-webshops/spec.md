@@ -183,6 +183,13 @@ AU webshop providers that cannot safely complete normal catalogue crawling SHALL
 - **AND** the response MUST include a user-facing next action and guidance
 - **AND** the response MUST NOT imply default headless crawling, login, cart, checkout, payment, or purchase automation
 
+#### Scenario: Manual review capture preserves failed fallback URL evidence
+- **GIVEN** a user explicitly asks Cabinet to capture a failed or unsupported Bonza URL for review
+- **WHEN** static extraction cannot produce a supported product draft
+- **THEN** Cabinet MUST persist a profile-scoped review item with the original source URL
+- **AND** the review item MUST include manual URL capture tags and fallback evidence notes
+- **AND** the response MUST identify the persisted review item and continue to mark headless browsing as opt-in review work
+
 ### Requirement INTEGRATION-015: Frontline provider config discovery SHALL be runtime-resolved from site assets with safe fallback
 Frontline integration SHALL discover Algolia runtime config (application ID, search key, index names) from maintained site assets (e.g., `pd-search.js`) and use cached last-known-good config when discovery fails.
 
