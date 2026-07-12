@@ -2362,6 +2362,23 @@ func New(cfg config.Config) (*App, error) {
 		if provider == "" {
 			provider = "openai"
 		}
+		if strings.EqualFold(provider, "telegram") {
+			payload, statusCode := telegramProviderTest(r.Context(), profiles, strings.TrimSpace(req.ProfileID))
+			if statusCode >= 400 {
+				requiredAction, _ := payload["next_action"].(string)
+				statusMessage, _ := payload["message"].(string)
+				profileID, _ := payload["profile_id"].(string)
+				if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "telegram", "Telegram", "telegram.provider_test", requiredAction, statusMessage, map[string]any{
+					"provider_test_code": payload["code"],
+					"provider_status":    payload["status"],
+				}); inboxErr != nil {
+					logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.provider_test", "error": inboxErr.Error()})
+				}
+			}
+			w.WriteHeader(statusCode)
+			_ = json.NewEncoder(w).Encode(payload)
+			return
+		}
 		if !strings.EqualFold(provider, "openai") {
 			http.Error(w, `{"error":"unsupported_provider_test"}`, http.StatusBadRequest)
 			return
@@ -8693,6 +8710,10 @@ func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map
 }
 
 func telegramProviderHealth(ctx context.Context, profiles *profile.Repository) map[string]any {
+	return telegramProviderHealthForProfile(ctx, profiles, "")
+}
+
+func telegramProviderHealthForProfile(ctx context.Context, profiles *profile.Repository, profileID string) map[string]any {
 	base := map[string]any{
 		"provider": "telegram",
 	}
@@ -8704,8 +8725,19 @@ func telegramProviderHealth(ctx context.Context, profiles *profile.Repository) m
 		base["next_action"] = "select_profile"
 		return base
 	}
-	active, err := profiles.GetActiveProfile(ctx)
-	if err != nil || strings.TrimSpace(active.ID) == "" {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		active, err := profiles.GetActiveProfile(ctx)
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			base["status"] = "needs_config"
+			base["state"] = "disabled"
+			base["code"] = "TELEGRAM_PROFILE_REQUIRED"
+			base["message"] = "Select an active profile before validating Telegram channel setup."
+			base["next_action"] = "select_profile"
+			return base
+		}
+		profileID = strings.TrimSpace(active.ID)
+	} else if _, err := profiles.GetByID(ctx, profileID); err != nil {
 		base["status"] = "needs_config"
 		base["state"] = "disabled"
 		base["code"] = "TELEGRAM_PROFILE_REQUIRED"
@@ -8713,11 +8745,12 @@ func telegramProviderHealth(ctx context.Context, profiles *profile.Repository) m
 		base["next_action"] = "select_profile"
 		return base
 	}
-	settings, err := profiles.GetSettings(ctx, strings.TrimSpace(active.ID))
+	base["profile_id"] = profileID
+	settings, err := profiles.GetSettings(ctx, profileID)
 	if err != nil {
 		settings = map[string]string{}
 	}
-	if key, secretErr := profiles.GetSecret(ctx, strings.TrimSpace(active.ID), "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
+	if key, secretErr := profiles.GetSecret(ctx, profileID, "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
 		settings["telegram.bot_token_secret_present"] = "true"
 	}
 	senderChatReady := telegramCatalogCaptureConfigured(settings)
@@ -8756,6 +8789,20 @@ func telegramProviderHealth(ctx context.Context, profiles *profile.Repository) m
 		base["next_action"] = "run_live_channel_checklist"
 	}
 	return base
+}
+
+func telegramProviderTest(ctx context.Context, profiles *profile.Repository, profileID string) (map[string]any, int) {
+	health := telegramProviderHealthForProfile(ctx, profiles, profileID)
+	health["provider_test_passed"] = false
+	health["checked_at"] = time.Now().UTC().Format(time.RFC3339)
+	if health["code"] == "TELEGRAM_CHANNEL_READY" {
+		health["provider_test_passed"] = true
+		return health, http.StatusOK
+	}
+	if health["code"] == "TELEGRAM_PROFILE_REQUIRED" {
+		return health, http.StatusBadRequest
+	}
+	return health, http.StatusConflict
 }
 
 func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc *ai.Service, profileID string) (map[string]any, int) {

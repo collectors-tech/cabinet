@@ -1041,6 +1041,63 @@ func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
 	}
 }
 
+func TestTelegramProviderTestCreatesSetupRequiredInboxEvent(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"TelegramProviderTestInbox"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	testResp := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"telegram","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if testResp.Code != http.StatusConflict {
+		t.Fatalf("expected Telegram setup-required provider test conflict, status=%d body=%s", testResp.Code, testResp.Body.String())
+	}
+	for _, want := range []string{
+		`"provider":"telegram"`,
+		`"provider_test_passed":false`,
+		`"code":"TELEGRAM_SENDER_CHAT_REQUIRED"`,
+		`"next_action":"authorize_sender_chat"`,
+	} {
+		if !strings.Contains(testResp.Body.String(), want) {
+			t.Fatalf("Telegram provider test response missing %s, body=%s", want, testResp.Body.String())
+		}
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	for _, want := range []string{
+		`"source":"provider_workflow"`,
+		`"provider_id":"telegram"`,
+		`"workflow_action_id":"telegram.provider_test"`,
+		`"required_action_code":"authorize_sender_chat"`,
+		`"target_route":"/integrations"`,
+	} {
+		if !strings.Contains(inbox.Body.String(), want) {
+			t.Fatalf("Telegram provider test did not create expected Inbox evidence %s, body=%s", want, inbox.Body.String())
+		}
+	}
+
+	repeated := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"telegram","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if repeated.Code != http.StatusConflict {
+		t.Fatalf("repeat Telegram provider test status=%d body=%s", repeated.Code, repeated.Body.String())
+	}
+	repeatedInbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if count := strings.Count(repeatedInbox.Body.String(), `"provider_id":"telegram"`); count != 1 {
+		t.Fatalf("expected repeated Telegram setup-required provider test to coalesce Inbox event, count=%d body=%s", count, repeatedInbox.Body.String())
+	}
+}
+
 func findRegistryProvider(providers []map[string]any, id string) map[string]any {
 	for _, provider := range providers {
 		if fmt.Sprintf("%v", provider["provider_id"]) == id {

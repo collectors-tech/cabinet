@@ -205,6 +205,13 @@ Cabinet SHALL surface integration failures and required user actions through dur
 - **AND** repeated failures for the same provider/action/root cause SHOULD coalesce into an updated event rather than flooding duplicate notifications
 - **AND** resolving the provider issue MUST allow the inbox event to be marked resolved/read without deleting the durable provider-status history
 
+#### Scenario: Telegram setup validation creates required-action Inbox evidence
+- **GIVEN** Telegram is represented as a registry-backed messaging provider for the active profile
+- **WHEN** provider validation finds missing sender/chat authorization, bot token, or webhook proof
+- **THEN** Cabinet MUST return non-secret Telegram setup status and create or update a provider-workflow Inbox event for `telegram.provider_test`
+- **AND** the Inbox event MUST carry the required setup action, target `/integrations`, and no bot-token value
+- **AND** repeated setup-required validations MUST coalesce into one durable Inbox event for the same provider/action/root cause
+
 ### Requirement INTEGRATION-063: Provider registry MUST be the canonical integration source for app consumers
 Cabinet SHALL treat `/api/providers/registry`, `/api/providers/:id/*`, the Add Integration UI list, and the Market Watch provider projection as consumers of one canonical registry definition rather than independent provider catalogs.
 
