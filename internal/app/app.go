@@ -10862,6 +10862,199 @@ func runShopifyStorefrontSearch(
 	return candidates, nil
 }
 
+func runGenericStructuredStorefrontProduct(ctx context.Context, client *http.Client, productURL, providerDomain string) ([]map[string]any, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(productURL) == "" {
+		return nil, fmt.Errorf("generic structured storefront product url is required")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, productURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build generic structured storefront request: %w", err)
+	}
+	req.Header.Set("User-Agent", "Cabinet/0.1 source-matching")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run generic structured storefront request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("generic structured storefront returned status %d", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read generic structured storefront response: %w", err)
+	}
+
+	product, ok := firstJSONLDProduct(string(raw))
+	if !ok {
+		return nil, fmt.Errorf("generic structured storefront parser health failed: product JSON-LD not found")
+	}
+	candidate := genericStructuredProductCandidate(product, productURL, providerDomain)
+	if stringCandidateValue(candidate["title"]) == "" || stringCandidateValue(candidate["url"]) == "" || numericCandidateValue(candidate["price"]) == 0 {
+		return []map[string]any{candidate}, fmt.Errorf("generic structured storefront parser health failed: product record missing title/url/price")
+	}
+	return []map[string]any{candidate}, nil
+}
+
+func firstJSONLDProduct(body string) (map[string]any, bool) {
+	scriptPattern := regexp.MustCompile(`(?is)<script[^>]*type=["']application/ld\+json["'][^>]*>(.*?)</script>`)
+	for _, match := range scriptPattern.FindAllStringSubmatch(body, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		var payload any
+		decoded := html.UnescapeString(strings.TrimSpace(match[1]))
+		if err := json.Unmarshal([]byte(decoded), &payload); err != nil {
+			continue
+		}
+		if product, ok := findJSONLDProduct(payload); ok {
+			return product, true
+		}
+	}
+	return nil, false
+}
+
+func findJSONLDProduct(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			if product, ok := findJSONLDProduct(item); ok {
+				return product, true
+			}
+		}
+	case map[string]any:
+		if jsonLDTypeMatches(typed["@type"], "Product") {
+			return typed, true
+		}
+		for _, key := range []string{"@graph", "mainEntity", "itemListElement"} {
+			if nested, ok := typed[key]; ok {
+				if product, found := findJSONLDProduct(nested); found {
+					return product, true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+func jsonLDTypeMatches(value any, want string) bool {
+	switch typed := value.(type) {
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), want)
+	case []any:
+		for _, item := range typed {
+			if jsonLDTypeMatches(item, want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func genericStructuredProductCandidate(product map[string]any, requestURL, providerDomain string) map[string]any {
+	offers := firstMapValue(product["offers"])
+	title := stringCandidateValue(product["name"])
+	productURL := firstNonEmptyString(stringCandidateValue(offers["url"]), stringCandidateValue(product["url"]), requestURL)
+	resolvedURL := resolveStorefrontURL(productURL, requestURL)
+	sku := stringCandidateValue(product["sku"])
+	listingID := firstNonEmptyString(sku, path.Base(strings.TrimRight(resolvedURL, "/")), strings.ToLower(strings.ReplaceAll(title, " ", "-")))
+	brand := stringCandidateValue(product["brand"])
+	if brandMap := firstMapValue(product["brand"]); len(brandMap) > 0 {
+		brand = stringCandidateValue(brandMap["name"])
+	}
+	category := stringCandidateValue(product["category"])
+	availability := strings.ToLower(stringCandidateValue(offers["availability"]))
+	stockState := "unknown"
+	if strings.Contains(availability, "instock") {
+		stockState = "in_stock"
+	} else if strings.Contains(availability, "outofstock") || strings.Contains(availability, "soldout") {
+		stockState = "out_of_stock"
+	}
+
+	return map[string]any{
+		"listing_id":        "generic-structured-" + strings.ReplaceAll(normalizeProviderDomain(providerDomain), ".", "-") + "-" + listingID,
+		"title":             title,
+		"brand":             brand,
+		"sku":               sku,
+		"url":               resolvedURL,
+		"price":             numericCandidateValue(firstNonEmptyString(stringCandidateValue(offers["price"]), stringCandidateValue(product["price"]))),
+		"currency":          firstNonEmptyString(stringCandidateValue(offers["priceCurrency"]), "AUD"),
+		"image":             firstImageValue(product["image"]),
+		"description":       stripHTMLText(stringCandidateValue(product["description"])),
+		"category":          category,
+		"categories":        compactStringValues([]string{category, brand}),
+		"source":            marketWatchScopeForAUWebshopDomain(providerDomain),
+		"seller":            normalizeProviderDomain(providerDomain),
+		"stock_state":       stockState,
+		"extraction_method": "json_ld_product",
+	}
+}
+
+func firstMapValue(value any) map[string]any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed
+	case []any:
+		for _, item := range typed {
+			if mapped := firstMapValue(item); len(mapped) > 0 {
+				return mapped
+			}
+		}
+	}
+	return map[string]any{}
+}
+
+func firstImageValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []any:
+		for _, item := range typed {
+			if image := firstImageValue(item); image != "" {
+				return image
+			}
+		}
+	case map[string]any:
+		return stringCandidateValue(typed["url"])
+	}
+	return ""
+}
+
+func resolveStorefrontURL(raw, base string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil {
+		return strings.TrimSpace(raw)
+	}
+	if parsed.IsAbs() {
+		return parsed.String()
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil || baseURL == nil {
+		return strings.TrimSpace(raw)
+	}
+	return baseURL.ResolveReference(parsed).String()
+}
+
+func compactStringValues(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
 type shopifyStorefrontProduct struct {
 	ID          any                        `json:"id"`
 	Title       string                     `json:"title"`
@@ -11720,6 +11913,10 @@ func lightspeedCandidatesForScanner(candidates []map[string]any) []scanner.Candi
 }
 
 func shopifyCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, marketWatchScopeForAUWebshopDomain(providerDomain))
+}
+
+func genericStructuredStorefrontCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
 	return providerCandidatesForScanner(candidates, marketWatchScopeForAUWebshopDomain(providerDomain))
 }
 
