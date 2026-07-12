@@ -392,6 +392,86 @@ func TestGenericStructuredStorefrontFixtureDetectsMissingCoreFields(t *testing.T
 	}
 }
 
+func TestGenericStructuredStorefrontProviderFixturesCoverProviderSpecificShapes(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	tests := []struct {
+		name          string
+		path          string
+		provider      string
+		wantListingID string
+		wantSource    string
+		wantStock     string
+	}{
+		{
+			name:          "frontline graph product",
+			path:          "/generic/frontline-product",
+			provider:      "frontlinehobbies.com.au",
+			wantListingID: "generic-structured-frontlinehobbies-com-au-SICA47Z",
+			wantSource:    "frontlinehobbies",
+			wantStock:     "in_stock",
+		},
+		{
+			name:          "mrtoys array product",
+			path:          "/generic/mrtoys-product",
+			provider:      "mrtoys.com.au",
+			wantListingID: "generic-structured-mrtoys-com-au-CAR-64219",
+			wantSource:    "mrtoys",
+			wantStock:     "out_of_stock",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			candidates, err := runGenericStructuredStorefrontProduct(
+				context.Background(),
+				server.Client(),
+				server.URL+tt.path,
+				tt.provider,
+			)
+			if err != nil {
+				t.Fatalf("runGenericStructuredStorefrontProduct() error = %v", err)
+			}
+			normalized := genericStructuredStorefrontCandidatesForScanner(candidates, tt.provider)
+			if len(normalized) != 1 {
+				t.Fatalf("expected one normalized candidate, got %+v", normalized)
+			}
+			candidate := normalized[0]
+			assertSharedShoppingCandidateShape(t, tt.wantSource, candidate)
+			if candidate.ListingID != tt.wantListingID {
+				t.Fatalf("listing id got %q want %q; candidate=%+v", candidate.ListingID, tt.wantListingID, candidate)
+			}
+			if candidate.StockState != tt.wantStock {
+				t.Fatalf("stock state got %q want %q; candidate=%+v", candidate.StockState, tt.wantStock, candidate)
+			}
+		})
+	}
+}
+
+func TestGenericStructuredStorefrontFixtureRejectsUnsupportedPageForManualReview(t *testing.T) {
+	t.Parallel()
+
+	server := shoppingFixtureServer(t)
+	candidates, err := runGenericStructuredStorefrontProduct(
+		context.Background(),
+		server.Client(),
+		server.URL+"/generic/no-product-jsonld",
+		"hobbyco.com.au",
+	)
+	if err == nil {
+		t.Fatalf("expected unsupported generic structured page health failure, got candidates=%+v", candidates)
+	}
+	if !strings.Contains(err.Error(), "product JSON-LD not found") {
+		t.Fatalf("expected clear product JSON-LD health failure, got %v", err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("unsupported generic structured fixture must not return candidates, got %+v", candidates)
+	}
+}
+
 func shoppingFixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -407,6 +487,9 @@ func shoppingFixtureServer(t *testing.T) *httptest.Server {
 		"/shopify/missing-fields.json":    readShoppingFixture(t, "shopify_missing_required_fields.json"),
 		"/generic/product":                readShoppingFixture(t, "generic_structured_product_success.html"),
 		"/generic/missing-fields":         readShoppingFixture(t, "generic_structured_missing_required_fields.html"),
+		"/generic/frontline-product":      readShoppingFixture(t, "generic_structured_frontline_product.html"),
+		"/generic/mrtoys-product":         readShoppingFixture(t, "generic_structured_mrtoys_product.html"),
+		"/generic/no-product-jsonld":      readShoppingFixture(t, "generic_structured_no_product_jsonld.html"),
 		"/missing-fields/search":          readShoppingFixture(t, "missing_required_fields.json"),
 		"/wp-json/wc/store/v1/products":   readShoppingFixture(t, "bonza_category_listing_success.json"),
 		"/unsupported/manual-fallback":    readShoppingFixture(t, "unsupported_manual_fallback.json"),

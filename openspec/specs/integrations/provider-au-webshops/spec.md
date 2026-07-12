@@ -261,6 +261,12 @@ Cabinet SHALL support a generic structured storefront parser for source-matching
 - **THEN** the adapter MUST return no normalized scanner candidates
 - **AND** it MUST surface a parser-health failure that can be routed to provider health/status output instead of silently accepting partial data
 
+#### Scenario: Provider-shaped JSON-LD variants stay deterministic
+- **GIVEN** Frontline Hobbies and Mr Toys product fixtures expose Product JSON-LD through different public page shapes such as `@graph` nodes and top-level JSON-LD arrays
+- **WHEN** Cabinet parses those fixtures through the generic structured storefront adapter
+- **THEN** each provider-shaped fixture MUST normalize to one shared source-matching candidate with provider-specific source, seller, listing ID, SKU, stock state, price, image, and canonical URL metadata
+- **AND** unsupported public pages without Product JSON-LD MUST fail provider health clearly and remain manual-review/manual-URL-capture candidates
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -271,4 +277,4 @@ Cabinet SHALL support a generic structured storefront parser for source-matching
 | UC-AU-05 | Frontline config drift fallback | Provider uses last-known-good config on parse drift and emits warning event | planned: `ui.web/cypress/e2e/integrations/provider-frontline/spec.cy.ts` `frontline-config-drift-fallback` |
 | UC-AU-06 | Hobbytech Shopify/Boost search | Provider executes mybcapps endpoint and parses candidate products deterministically | planned: `ui.web/cypress/e2e/integrations/provider-hobbytech/spec.cy.ts` `hobbytech-mybcapps-search` |
 | UC-AU-07 | Hobbytech session drift recovery | Provider refreshes discovery/session params and retries boundedly on drift | planned: `ui.web/cypress/e2e/integrations/provider-hobbytech/spec.cy.ts` `hobbytech-session-drift-recovery` |
-| UC-AU-08 | Generic structured product parse | Provider parses public Product JSON-LD into shared source-matching candidates and fails health on missing core fields | implemented: `internal/app/shopping_provider_fixture_contract_test.go` `TestShoppingProviderFixturesNormalizeSharedCandidateShape`, `TestGenericStructuredStorefrontFixtureDetectsMissingCoreFields` |
+| UC-AU-08 | Generic structured product parse | Provider parses public Product JSON-LD into shared source-matching candidates and fails health on missing core fields or unsupported pages | implemented: `internal/app/shopping_provider_fixture_contract_test.go` `TestShoppingProviderFixturesNormalizeSharedCandidateShape`, `TestGenericStructuredStorefrontFixtureDetectsMissingCoreFields`, `TestGenericStructuredStorefrontProviderFixturesCoverProviderSpecificShapes`, `TestGenericStructuredStorefrontFixtureRejectsUnsupportedPageForManualReview` |
