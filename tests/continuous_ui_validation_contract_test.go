@@ -27,6 +27,32 @@ func TestContinuousUIValidationWorkflowContract(t *testing.T) {
 	}
 }
 
+func TestContinuousUIValidationUsesCanonicalCabinetBuild(t *testing.T) {
+	t.Parallel()
+
+	workflowPath := filepath.Join("..", ".github", "workflows", "continuous-ui-validation.yml")
+	raw, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("read workflow: %v", err)
+	}
+	content := string(raw)
+
+	buildIndex := strings.Index(content, "scripts/build-cabinet.ps1")
+	validationIndex := strings.Index(content, "scripts/hourly-ui-validation.ps1")
+	if buildIndex < 0 {
+		t.Fatalf("continuous UI validation must use scripts/build-cabinet.ps1 so UI assets are built before the Go runtime")
+	}
+	if validationIndex < 0 {
+		t.Fatalf("expected workflow to execute scripts/hourly-ui-validation.ps1")
+	}
+	if buildIndex > validationIndex {
+		t.Fatalf("continuous UI validation must build Cabinet before running hourly validation")
+	}
+	if strings.Contains(content, "go build -o bin/cabinet.exe ./cmd/cabinet") {
+		t.Fatalf("continuous UI validation must not bypass the canonical Cabinet build entrypoint")
+	}
+}
+
 func TestHourlyUIValidationScriptContract(t *testing.T) {
 	t.Parallel()
 

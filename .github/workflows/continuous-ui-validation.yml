@@ -36,7 +36,7 @@ jobs:
 
       - name: Build Cabinet runtime
         shell: pwsh
-        run: go build -o bin/cabinet.exe ./cmd/cabinet
+        run: pwsh -NoLogo -NoProfile -File ./scripts/build-cabinet.ps1
 
       - name: Authenticate gh
         shell: pwsh
