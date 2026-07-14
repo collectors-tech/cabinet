@@ -2915,12 +2915,22 @@ func New(cfg config.Config) (*App, error) {
 		if err != nil {
 			scannerSvc.RecordProviderHealth(r.Context(), "bonzaslotcars", "failed", err.Error())
 			scannerSvc.RecordProviderHealth(r.Context(), "au-webshop-bonzaslotcars-com-au", "failed", err.Error())
-			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-bonzaslotcars-com-au", "bonzaslotcars.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+			requiredAction := "check_provider_health_and_retry"
+			metadata := map[string]any{
 				"query_set_id":        qs.ID,
 				"provider_error_code": "FAILED_TO_RUN_BONZA",
 				"health_impact":       "updates_provider_health",
 				"base_url":            baseURL,
-			}); inboxErr != nil {
+			}
+			if statusCode, ok := bonzaBlockedStatusCode(err); ok {
+				requiredAction = "document_provider_access_challenge"
+				metadata["provider_blocker"] = "access_control_or_challenge"
+				metadata["release_gate"] = "hold_mvp_release"
+				metadata["live_evidence_state"] = "blocked_no_public_catalogue_body"
+				metadata["blocked_status_code"] = fmt.Sprintf("%d", statusCode)
+				metadata["blocked_public_endpoint"] = "/wp-json/wc/store/v1/products"
+			}
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-bonzaslotcars-com-au", "bonzaslotcars.com.au", "market_watch.run", requiredAction, err.Error(), metadata); inboxErr != nil {
 				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-bonzaslotcars-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
 			}
 			http.Error(w, `{"error":"failed_to_run_bonza"}`, http.StatusBadRequest)
@@ -11489,9 +11499,7 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 	if baseURL == "" {
 		return bonzaSearchResult{}, fmt.Errorf("bonza base_url is required")
 	}
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client = bonzaNoRedirectClient(client)
 	if itemsPerPage <= 0 {
 		itemsPerPage = 36
 	}
@@ -11532,7 +11540,7 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 		if err != nil {
 			return bonzaSearchResult{}, fmt.Errorf("request bonza products: %w", err)
 		}
-		if resp.StatusCode >= http.StatusBadRequest {
+		if resp.StatusCode >= http.StatusMultipleChoices {
 			resp.Body.Close()
 			return bonzaSearchResult{}, fmt.Errorf("bonza products returned status %d", resp.StatusCode)
 		}
@@ -11605,6 +11613,35 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 		ItemsPerPageUsed: itemsPerPage,
 		Candidates:       candidates,
 	}, nil
+}
+
+func bonzaNoRedirectClient(client *http.Client) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	clone := *client
+	clone.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &clone
+}
+
+func bonzaBlockedStatusCode(err error) (int, bool) {
+	if err == nil {
+		return 0, false
+	}
+	match := regexp.MustCompile(`status\s+(\d{3})`).FindStringSubmatch(err.Error())
+	if len(match) != 2 {
+		return 0, false
+	}
+	statusCode, parseErr := strconv.Atoi(match[1])
+	if parseErr != nil {
+		return 0, false
+	}
+	if (statusCode >= http.StatusMultipleChoices && statusCode < http.StatusBadRequest) || statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return statusCode, true
+	}
+	return 0, false
 }
 
 func detectProviderProductURL(raw string) (providerProductURLRoute, error) {

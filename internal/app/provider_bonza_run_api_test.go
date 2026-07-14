@@ -339,3 +339,108 @@ func TestBonzaRunFailureCreatesProviderWorkflowInboxEvent(t *testing.T) {
 		t.Fatalf("expected repeated Bonza provider workflow failures to coalesce into one Inbox item, got %+v", repeatedPayload.Items)
 	}
 }
+
+func TestBonzaRunRedirectChallengeRecordsReleaseBlockerEvidence(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/wp-json/wc/store/v1/products") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Location", "/.sucuri-cloudproxy")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		_, _ = w.Write([]byte(`Javascript is required`))
+	}))
+	defer bonza.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BonzaRedirectChallengeProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s","integration.bonzaslotcars.items_per_page":"36"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"AFX","keywords":["AFX"],"provider_scope":["bonzaslotcars"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	run := doRequest(t, a, http.MethodPost, "/api/providers/bonza/run", strings.NewReader(`{"query_set_id":"`+qs.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("expected Bonza redirect challenge to fail closed with 400, got=%d body=%s", run.Code, run.Body.String())
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	var inboxPayload struct {
+		Items []struct {
+			Summary  string         `json:"summary"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(inbox.Body).Decode(&inboxPayload); err != nil {
+		t.Fatalf("decode inbox payload: %v", err)
+	}
+	if len(inboxPayload.Items) != 1 {
+		t.Fatalf("expected one Bonza blocker Inbox item, got %+v", inboxPayload.Items)
+	}
+	item := inboxPayload.Items[0]
+	if !strings.Contains(strings.ToLower(item.Summary), "status 307") {
+		t.Fatalf("expected Inbox summary to preserve redirect status, got %q", item.Summary)
+	}
+	expectedMetadata := map[string]string{
+		"required_action_code":    "document_provider_access_challenge",
+		"provider_blocker":        "access_control_or_challenge",
+		"release_gate":            "hold_mvp_release",
+		"live_evidence_state":     "blocked_no_public_catalogue_body",
+		"provider_error_code":     "FAILED_TO_RUN_BONZA",
+		"health_impact":           "updates_provider_health",
+		"blocked_status_code":     "307",
+		"blocked_public_endpoint": "/wp-json/wc/store/v1/products",
+	}
+	for key, want := range expectedMetadata {
+		if got := fmt.Sprintf("%v", item.Metadata[key]); got != want {
+			t.Fatalf("Inbox metadata[%s] got %q want %q; metadata=%+v", key, got, want, item.Metadata)
+		}
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var registryPayload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&registryPayload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	bonzaProvider := findRegistryProvider(registryPayload.Providers, "au-webshop-bonzaslotcars-com-au")
+	if bonzaProvider == nil {
+		t.Fatalf("Bonza provider missing from registry payload: %+v", registryPayload.Providers)
+	}
+	if got := fmt.Sprintf("%v", bonzaProvider["beta_release_status"]); got == "available_live_validated" {
+		t.Fatalf("Bonza redirect challenge must not publish live validation: %+v", bonzaProvider)
+	}
+}
