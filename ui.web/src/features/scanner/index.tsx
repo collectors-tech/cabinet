@@ -1186,6 +1186,8 @@ export function Scanner() {
         candidates?: Candidate[]
         run_summary?: RunSummary
         run?: ProviderRunSnapshot
+        drift_recovered?: boolean
+        warning?: string
       }
       const candidates = payload.candidates ?? []
       setCandidatesByQuerySet((current) => ({
@@ -1208,7 +1210,19 @@ export function Scanner() {
         }))
       }
       setActionStatus(`${providerRunRoute.provider}_run_started_${querySet.id}`)
-      setActionFeedback(null)
+      const providerWarning =
+        payload.drift_recovered && payload.warning?.trim()
+          ? payload.warning.trim()
+          : ''
+      setActionFeedback(
+        providerWarning
+          ? {
+              summary: providerWarning,
+              actions: ['Review recovered provider results before handoff.'],
+              diagnosticCode: `${providerRunRoute.provider}_drift_recovered`,
+            }
+          : null
+      )
       setRunMetaByQuerySet((current) => ({
         ...current,
         [querySet.id]: {
