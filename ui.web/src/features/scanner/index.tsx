@@ -1140,7 +1140,10 @@ export function Scanner() {
           ? { provider: 'ebay', url: '/api/providers/ebay/run' }
           : providerScope[0] === 'bonzaslotcars' || providerScope[0] === 'bonza'
             ? { provider: 'bonza', url: '/api/providers/bonza/run' }
-            : null
+            : providerScope[0] === 'hobbytechtoys' ||
+                providerScope[0] === 'hobbytech'
+              ? { provider: 'hobbytech', url: '/api/providers/hobbytech/run' }
+              : null
         : null
     if (providerRunRoute) {
       const providerResponse = await fetch(providerRunRoute.url, {
