@@ -14,14 +14,47 @@
     "idVariable": "CABINET_ZITADEL_CLIENT_ID",
     "type": "oidc-web",
     "flow": "authorization-code-pkce",
+    "pkceRequired": true,
+    "tokenEndpointAuthMethod": "client_secret_basic",
+    "rolesInIdToken": true,
+    "userInfoAssertion": true,
+    "checkAuthorizationOnAuthentication": true,
     "redirectUris": ["${CABINET_PUBLIC_ORIGIN}/api/auth/zitadel/callback"],
     "postLogoutUris": ["${CABINET_PUBLIC_ORIGIN}/sign-in"]
   },
   "roles": ["cabinet.user", "cabinet.demo", "cabinet.admin"],
-  "scopes": ["openid", "profile", "email", "offline_access"],
+  "scopes": ["openid", "profile", "email", "offline_access", "urn:zitadel:iam:org:project:roles"],
   "issuerVariable": "CABINET_ZITADEL_ISSUER",
   "audienceVariable": "CABINET_ZITADEL_AUDIENCE",
   "secretBoundary": "approved-platform-secrets-service",
+  "loginExperience": {
+    "kind": "shared-reference",
+    "implementation": "zitadel-login-v2",
+    "brand": "Cabinet",
+    "baseUrlVariable": "CABINET_ZITADEL_LOGIN_V2_BASE_URL",
+    "applicationSetting": {
+      "useNewLoginUI": true,
+      "customBaseUrl": "${CABINET_ZITADEL_LOGIN_V2_BASE_URL}"
+    },
+    "trustedDomainRequired": true,
+    "organisationBranding": {
+      "projectPrivateLabeling": true,
+      "lightLogoSource": "ui.web/public/images/favicon.svg",
+      "darkLogoSource": "ui.web/public/images/favicon_light.svg",
+      "primaryColour": "#0E4A4A",
+      "backgroundColour": "#F4EFE6",
+      "warningColour": "#B42318",
+      "fontColour": "#102828",
+      "disableWatermark": true
+    },
+    "credentialHandling": "shared-login-ui-session-api-only",
+    "mustNotExposeGenericVendorBranding": true,
+    "readinessGate": "${CABINET_ZITADEL_LOGIN_V2_BASE_URL}"
+  },
   "customLoginPath": "/sign-in",
-  "readinessGate": "${CABINET_ZITADEL_ISSUER}/.well-known/openid-configuration"
+  "readinessGate": "${CABINET_ZITADEL_ISSUER}/.well-known/openid-configuration",
+  "acceptanceGates": {
+    "readiness": ["issuer-discovery", "jwks", "login-v2", "callback", "provider-logout"],
+    "deniedIdentities": ["wrong-issuer", "wrong-audience", "wrong-authorised-party", "expired-token", "missing-role", "unknown-signing-key"]
+  }
 }

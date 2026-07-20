@@ -38,6 +38,9 @@ func TestParseStartupArgsBuildsEnvOverrides(t *testing.T) {
 	if overrides.Env["CABINET_AUTH_MODE"] != "clerk" {
 		t.Fatalf("expected CABINET_AUTH_MODE override")
 	}
+	if overrides.Env["CABINET_AUTH_IDENTITY_MODE"] != "clerk" {
+		t.Fatalf("expected CABINET_AUTH_IDENTITY_MODE override")
+	}
 	if overrides.Env["CABINET_BASE_URL"] != "http://127.0.0.1:19090" {
 		t.Fatalf("expected CABINET_BASE_URL override")
 	}
@@ -79,6 +82,16 @@ func TestParseStartupArgsRejectsInvalidAuthMode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "auth-mode") {
 		t.Fatalf("expected auth-mode error, got %v", err)
+	}
+}
+
+func TestParseStartupArgsAcceptsZitadelAuthMode(t *testing.T) {
+	overrides, err := parseStartupArgs([]string{"--auth-mode", "zitadel"})
+	if err != nil {
+		t.Fatalf("expected zitadel auth mode to parse: %v", err)
+	}
+	if overrides.Env["CABINET_AUTH_IDENTITY_MODE"] != "zitadel" {
+		t.Fatalf("expected CABINET_AUTH_IDENTITY_MODE=zitadel")
 	}
 }
 

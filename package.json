@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:infra": "node --test scripts/deployment-infrastructure-contract.test.mjs",
+    "test:auth-infra": "node --test scripts/zitadel-auth-contract.test.mjs",
     "smoke:inventory-folder-tree-drag": "node scripts/inventory_folder_tree_drag_smoke.mjs"
   },
   "devDependencies": {

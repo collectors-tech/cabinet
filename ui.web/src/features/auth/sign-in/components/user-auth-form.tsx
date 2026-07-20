@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Loader2, LogIn, MonitorCheck } from 'lucide-react'
+import { Loader2, LogIn, MonitorCheck, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   IconApple,
@@ -49,6 +49,8 @@ type ProviderOption = {
 
 type ProviderOptionsPayload = {
   identity_mode?: string
+  zitadel_configured?: boolean
+  zitadel_login_path?: string
   providers?: ProviderOption[]
 }
 
@@ -101,7 +103,11 @@ export function UserAuthForm({
   const [isLoading, setIsLoading] = useState(false)
   const [passkeyLoading, setPasskeyLoading] = useState(false)
   const [passkeyError, setPasskeyError] = useState<string | null>(null)
-  const [identityMode, setIdentityMode] = useState('local')
+  const [identityMode, setIdentityMode] = useState('loading')
+  const [zitadelConfigured, setZitadelConfigured] = useState(false)
+  const [zitadelLoginPath, setZitadelLoginPath] = useState(
+    '/api/auth/zitadel/login'
+  )
   const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([
     { id: 'google', label: 'Google', enabled: true },
     { id: 'apple', label: 'Apple', enabled: true },
@@ -161,6 +167,16 @@ export function UserAuthForm({
     setIsLoading(false)
   }
 
+  function startZitadelLogin() {
+    setIsLoading(true)
+    const query = new URLSearchParams()
+    if (redirectTo) {
+      query.set('return_to', redirectTo)
+    }
+    const target = query.size > 0 ? `${zitadelLoginPath}?${query}` : zitadelLoginPath
+    window.location.assign(target)
+  }
+
   async function signInWithPasskey() {
     setPasskeyError(null)
     setPasskeyLoading(true)
@@ -190,14 +206,26 @@ export function UserAuthForm({
       try {
         const response = await fetch('/api/auth/provider-options')
         if (!response.ok) {
+          if (!cancelled) {
+            setIdentityMode('unavailable')
+          }
           return
         }
         const payload = (await response.json()) as ProviderOptionsPayload
         if (cancelled) {
           return
         }
-        const nextMode = payload.identity_mode === 'clerk' ? 'clerk' : 'local'
+        const nextMode =
+          payload.identity_mode === 'zitadel'
+            ? 'zitadel'
+            : payload.identity_mode === 'clerk'
+              ? 'clerk'
+              : 'local'
         setIdentityMode(nextMode)
+        setZitadelConfigured(Boolean(payload.zitadel_configured))
+        if (payload.zitadel_login_path?.startsWith('/')) {
+          setZitadelLoginPath(payload.zitadel_login_path)
+        }
         if (Array.isArray(payload.providers) && payload.providers.length > 0) {
           setProviderOptions(
             payload.providers.map((provider) => ({
@@ -208,7 +236,9 @@ export function UserAuthForm({
           )
         }
       } catch {
-        // Keep deterministic local defaults on fetch failure.
+        if (!cancelled) {
+          setIdentityMode('unavailable')
+        }
       }
     }
     void loadProviderOptions()
@@ -216,6 +246,80 @@ export function UserAuthForm({
       cancelled = true
     }
   }, [])
+
+  if (identityMode === 'loading' || identityMode === 'unavailable') {
+    return (
+      <div className={cn('grid gap-3', className)}>
+        <div
+          className='rounded-md border bg-muted/40 p-4 text-sm'
+          role={identityMode === 'unavailable' ? 'alert' : 'status'}
+        >
+          <div className='flex items-center gap-2 font-medium'>
+            {identityMode === 'loading' ? (
+              <Loader2 className='h-4 w-4 animate-spin' aria-hidden='true' />
+            ) : (
+              <ShieldCheck className='h-4 w-4' aria-hidden='true' />
+            )}
+            {identityMode === 'loading'
+              ? 'Checking identity configuration'
+              : 'Identity configuration unavailable'}
+          </div>
+          <p className='mt-2 text-muted-foreground'>
+            {identityMode === 'loading'
+              ? 'Cabinet is verifying this environment before offering a sign-in method.'
+              : 'Cabinet could not verify a safe sign-in method. Refresh after the runtime is available.'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (identityMode === 'zitadel') {
+    return (
+      <div className={cn('grid gap-3', className)}>
+        <div
+          className='rounded-md border bg-muted/40 p-4 text-sm'
+          data-testid='zitadel-auth-boundary'
+        >
+          <div className='flex items-center gap-2 font-medium'>
+            <ShieldCheck className='h-4 w-4' aria-hidden='true' />
+            Cabinet secure account
+          </div>
+          <p className='mt-2 text-muted-foreground'>
+            Continue to the Cabinet-branded identity service. Cabinet never
+            stores your password or provider tokens in this browser; it
+            receives only an opaque secure session cookie.
+          </p>
+        </div>
+        <Button
+          className='mt-2'
+          type='button'
+          disabled={isLoading || !zitadelConfigured}
+          data-testid='zitadel-sign-in'
+          onClick={startZitadelLogin}
+        >
+          {isLoading ? <Loader2 className='animate-spin' /> : <ShieldCheck />}
+          Continue securely
+        </Button>
+        {!zitadelConfigured ? (
+          <p className='text-sm text-destructive' role='alert'>
+            Secure account sign-in is not configured for this environment.
+          </p>
+        ) : (
+          <p className='text-xs text-muted-foreground'>
+            Account creation and recovery are available in the next secure
+            step.
+          </p>
+        )}
+        <p
+          className='text-xs text-muted-foreground'
+          data-testid='identity-mode-indicator'
+        >
+          Identity mode: zitadel
+        </p>
+      </div>
+    )
+  }
 
   if (identityMode === 'local') {
     return (

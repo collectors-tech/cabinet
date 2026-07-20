@@ -30,6 +30,8 @@ jobs:
         run: npm run test:infra
       - name: Validate Docker Compose deployments
         run: bash scripts/validate-compose-deployments.sh
+      - name: Verify ZITADEL application auth contracts
+        run: npm run test:auth-infra
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

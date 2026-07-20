@@ -39,6 +39,26 @@ describe("ui-login-session", () => {
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
   });
 
+  it("UI-LOGIN-SESSION-011 presents the Cabinet ZITADEL boundary without password fields", () => {
+    cy.request("POST", "/api/test/auth/provider-options", {
+      identity_mode: "zitadel",
+      zitadel_configured: true,
+      zitadel_login_path: "/api/auth/zitadel/login",
+      providers: [],
+    })
+      .its("status")
+      .should("eq", 200);
+
+    cy.visit("/sign-in?redirect=%2Fsettings%2Fdisplay");
+
+    cy.get('[data-testid="zitadel-auth-boundary"]').should("be.visible");
+    cy.contains("Cabinet secure account").should("be.visible");
+    cy.contains("button", "Continue securely").should("be.enabled");
+    cy.get('input[name="email"]').should("not.exist");
+    cy.get('input[name="password"]').should("not.exist");
+    cy.contains(/opaque secure session cookie/i).should("be.visible");
+  });
+
   it("UI-LOGIN-SESSION-003 switches active profile after login and uses selected profile scope for subsequent API calls", () => {
     let activeProfile = { id: "p1", name: "Default" };
 

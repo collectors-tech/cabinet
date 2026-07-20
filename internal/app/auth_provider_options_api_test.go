@@ -76,6 +76,29 @@ func TestAuthProviderOptionsRespectsEnv(t *testing.T) {
 	}
 }
 
+func TestAuthProviderOptionsReportsConfiguredZitadel(t *testing.T) {
+	t.Setenv("CABINET_AUTH_IDENTITY_MODE", "zitadel")
+	t.Setenv("CABINET_ZITADEL_ISSUER", "https://identity.example.com")
+	t.Setenv("CABINET_ZITADEL_CLIENT_ID", "cabinet-client")
+	t.Setenv("CABINET_ZITADEL_AUDIENCE", "cabinet-project")
+	t.Setenv("CABINET_PUBLIC_ORIGIN", "https://cabinet.example.com")
+
+	a := newTestApp(t)
+	resp := doRequest(t, a, http.MethodGet, "/api/auth/provider-options", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("provider-options expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	for _, fragment := range []string{`"identity_mode":"zitadel"`, `"zitadel_configured":true`, `"zitadel_login_path":"/api/auth/zitadel/login"`} {
+		if !strings.Contains(resp.Body.String(), fragment) {
+			t.Fatalf("configured ZITADEL response missing %s: %s", fragment, resp.Body.String())
+		}
+	}
+	setup := doRequest(t, a, http.MethodGet, "/api/runtime/setup-status", nil, nil)
+	if setup.Code != http.StatusOK || !strings.Contains(setup.Body.String(), `"setup_required":false`) {
+		t.Fatalf("configured remote identity must bypass the unauthenticated local setup wizard: status=%d body=%s", setup.Code, setup.Body.String())
+	}
+}
+
 func TestAuthProviderOptionsE2EOverrideHook(t *testing.T) {
 	if err := os.Setenv("CABINET_E2E_MODE", "1"); err != nil {
 		t.Fatalf("set CABINET_E2E_MODE: %v", err)
