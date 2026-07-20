@@ -26,6 +26,10 @@ jobs:
       - name: Build runtime UI static bundle for contract tests
         run: npm run build
         working-directory: ui.web
+      - name: Verify deployment infrastructure contracts
+        run: npm run test:infra
+      - name: Validate Docker Compose deployments
+        run: bash scripts/validate-compose-deployments.sh
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

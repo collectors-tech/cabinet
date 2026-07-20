@@ -68,6 +68,20 @@ This repo is currently worked **direct/manual**.
 - Runbook: `references/demo-instance-plan.md`
 - One-command helper launcher: `./scripts/runtime/start-demo2.ps1`
 
+### Docker Compose and Coolify
+
+- Deployment runbook: `infra/deployments/README.md`
+- Local Docker Compose:
+  `infra/deployments/local/developer-machine/docker-compose/compose.yaml`
+- Self-hosted demo:
+  `infra/deployments/demo/selfhost-server/coolify/compose.yaml`
+- Self-hosted production:
+  `infra/deployments/production/selfhost-server/coolify/compose.yaml`
+
+Local, demo and production use separate profiles, instance names and persistent
+volumes. Coolify deployments run one replica and require an approved access
+gate while Cabinet is operating in local-device identity mode.
+
 ## Branch / Demo Promotion Workflow
 - Create one focused branch per issue/fix.
 - Validate on that issue branch first.

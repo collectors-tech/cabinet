@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "environment": "production",
+  "kind": "shared-reference-project-configuration",
+  "service": "zitadel",
+  "owner": "platform-infrastructure",
+  "contractRevision": "creator-signal/sales-pulse:infrastructure-deployment-convention@973bda4acdd3b4c81356dc2145ac34a6397222d0",
+  "project": {
+    "name": "Cabinet Production",
+    "idVariable": "CABINET_ZITADEL_PROJECT_ID"
+  },
+  "application": {
+    "name": "Cabinet Production Web",
+    "idVariable": "CABINET_ZITADEL_CLIENT_ID",
+    "type": "oidc-web",
+    "flow": "authorization-code-pkce",
+    "redirectUris": ["${CABINET_PUBLIC_ORIGIN}/api/auth/zitadel/callback"],
+    "postLogoutUris": ["${CABINET_PUBLIC_ORIGIN}/sign-in"]
+  },
+  "roles": ["cabinet.user", "cabinet.demo", "cabinet.admin"],
+  "scopes": ["openid", "profile", "email", "offline_access"],
+  "issuerVariable": "CABINET_ZITADEL_ISSUER",
+  "audienceVariable": "CABINET_ZITADEL_AUDIENCE",
+  "secretBoundary": "approved-platform-secrets-service",
+  "customLoginPath": "/sign-in",
+  "readinessGate": "${CABINET_ZITADEL_ISSUER}/.well-known/openid-configuration"
+}

@@ -1,0 +1,13 @@
+name: cabinet-demo
+
+services:
+  cabinet:
+    extends:
+      file: ../../../../services/cabinet/compose.yaml
+      service: cabinet
+    volumes:
+      - cabinet-demo-data:/data
+
+volumes:
+  cabinet-demo-data:
+    name: cabinet-demo-data

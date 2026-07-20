@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "environment": "demo",
+  "deployment": "cabinet-demo",
+  "repository": "ghcr.io/collectors-tech/cabinet",
+  "referenceVariable": "CABINET_IMAGE",
+  "requiredFormat": "ghcr.io/collectors-tech/cabinet@sha256:<64-lowercase-hex-characters>",
+  "lockedReference": null,
+  "sourceRevision": null,
+  "status": "unlocked-until-first-approved-deployment"
+}

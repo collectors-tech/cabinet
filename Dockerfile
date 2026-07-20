@@ -14,13 +14,19 @@ RUN npm run build
 FROM golang:1.24-bookworm AS app-build
 WORKDIR /src
 
+ARG CABINET_BUILD_VERSION
+ARG CABINET_BUILD_REVISION
+ARG CABINET_BUILD_DATE
+
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 COPY --from=ui-build /src/internal/ui/static ./internal/ui/static
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/cabinet ./cmd/cabinet
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+  -ldflags="-s -w -X github.com/collectors-tech/cabinet/internal/app.buildVersion=${CABINET_BUILD_VERSION} -X github.com/collectors-tech/cabinet/internal/app.buildRevision=${CABINET_BUILD_REVISION} -X github.com/collectors-tech/cabinet/internal/app.buildDate=${CABINET_BUILD_DATE}" \
+  -o /out/cabinet ./cmd/cabinet
 
 FROM debian:bookworm-slim AS runtime
 
@@ -42,4 +48,4 @@ HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=12 CMD curl 
 
 USER cabinet
 ENTRYPOINT ["/app/cabinet"]
-CMD ["--no-open-browser", "--listen", "0.0.0.0:17880", "--data-dir", "/data", "--profile", "e2e-cypress", "--instance-name", "cypress-container", "--allow-parallel"]
+CMD ["--no-open-browser", "--listen", "0.0.0.0:17880", "--data-dir", "/data", "--profile", "cabinet", "--instance-name", "cabinet-container"]

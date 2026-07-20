@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "environment": "demo",
+  "purpose": "Production-built self-hosted Cabinet review environment deployed by Coolify from validated develop revisions.",
+  "deployments": [
+    {
+      "id": "cabinet-demo",
+      "target": "selfhost-server",
+      "orchestrator": "coolify",
+      "source": {"type": "service", "id": "cabinet"},
+      "compose": "infra/deployments/demo/selfhost-server/coolify/compose.yaml",
+      "environmentExample": "infra/deployments/demo/selfhost-server/coolify/.env.example",
+      "imageLock": "infra/deployments/demo/selfhost-server/coolify/image-lock.json",
+      "dependencies": [],
+      "replicas": 1,
+      "zeroDowntime": false,
+      "imagePolicy": "immutable-digest",
+      "accessBoundary": "approved-edge-access-gate-required",
+      "persistence": "cabinet-demo-data"
+    }
+  ],
+  "consumes": [
+    {
+      "id": "shared-identity-demo",
+      "capability": "oidc",
+      "service": "zitadel",
+      "owner": "platform-infrastructure",
+      "mode": "shared-reference",
+      "contractRevision": "creator-signal/sales-pulse:infrastructure-deployment-convention@973bda4acdd3b4c81356dc2145ac34a6397222d0",
+      "projectConfiguration": "infra/shared/identity/demo.json",
+      "readinessGate": "${CABINET_ZITADEL_ISSUER}/.well-known/openid-configuration"
+    }
+  ],
+  "layers": [
+    {"id": "product", "order": 0, "deployments": ["cabinet-demo"]}
+  ]
+}
