@@ -24,9 +24,15 @@ func TestCabinetContainerImageContract(t *testing.T) {
 		"COPY docs/help-center/ /src/docs/help-center/",
 		"RUN npm run build",
 		"FROM golang:1.24-bookworm AS app-build",
+		"ARG CABINET_BUILD_VERSION",
+		"ARG CABINET_BUILD_REVISION",
+		"ARG CABINET_BUILD_DATE",
 		"RUN go mod download",
 		"COPY --from=ui-build /src/internal/ui/static ./internal/ui/static",
 		"CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build",
+		"internal/app.buildVersion=${CABINET_BUILD_VERSION}",
+		"internal/app.buildRevision=${CABINET_BUILD_REVISION}",
+		"internal/app.buildDate=${CABINET_BUILD_DATE}",
 		"FROM debian:bookworm-slim AS runtime",
 		"COPY docs/api/openapi.yaml /app/docs/api/openapi.yaml",
 		"ca-certificates curl tzdata",
@@ -44,15 +50,20 @@ func TestCabinetContainerImageContract(t *testing.T) {
 		"--data-dir",
 		"/data",
 		"--profile",
-		"e2e-cypress",
+		"cabinet",
 		"--instance-name",
-		"cypress-container",
-		"--allow-parallel",
+		"cabinet-container",
 	}
 
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {
 			t.Fatalf("Dockerfile missing required fragment %q", fragment)
+		}
+	}
+
+	for _, forbidden := range []string{"e2e-cypress", "cypress-container", "--allow-parallel"} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("production Dockerfile contains E2E-only default %q", forbidden)
 		}
 	}
 }

@@ -1,0 +1,23 @@
+name: cabinet-local
+
+services:
+  cabinet:
+    extends:
+      file: ../../../../services/cabinet/compose.yaml
+      service: cabinet
+    image: ${CABINET_IMAGE:-cabinet:local}
+    build:
+      context: ../../../../..
+      dockerfile: Dockerfile
+      args:
+        CABINET_BUILD_VERSION: ${CABINET_BUILD_VERSION:-local}
+        CABINET_BUILD_REVISION: ${CABINET_BUILD_REVISION:-local-checkout}
+        CABINET_BUILD_DATE: ${CABINET_BUILD_DATE:-unknown}
+    ports:
+      - "127.0.0.1:${CABINET_HOST_PORT:-17880}:17880"
+    volumes:
+      - cabinet-local-data:/data
+
+volumes:
+  cabinet-local-data:
+    name: cabinet-local-data

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "services": [
+    {
+      "id": "cabinet",
+      "kind": "owned-service",
+      "name": "Cabinet",
+      "canonicalCompose": "infra/services/cabinet/compose.yaml",
+      "image": {
+        "repository": "ghcr.io/collectors-tech/cabinet",
+        "variable": "CABINET_IMAGE",
+        "immutableEnvironments": ["demo", "production"]
+      },
+      "ports": [
+        {
+          "name": "http",
+          "containerPort": 17880,
+          "visibility": "internal"
+        }
+      ],
+      "persistence": [
+        {
+          "id": "data",
+          "mountPath": "/data",
+          "contents": [
+            "SQLite database",
+            "media and chat attachments",
+            "application backups",
+            "runtime state"
+          ]
+        }
+      ],
+      "health": {
+        "liveness": {
+          "type": "http",
+          "path": "/healthz",
+          "expectedStatus": 200
+        },
+        "readiness": {
+          "type": "http-json",
+          "path": "/api/runtime",
+          "expectedStatus": 200,
+          "requiredFields": ["app_version", "build_date", "data_dir", "runtime_port"]
+        }
+      },
+      "oneShots": [],
+      "dependencies": [],
+      "constraints": {
+        "replicas": 1,
+        "sharedDataReplicaOverlapAllowed": false,
+        "reason": "Cabinet uses one SQLite workspace and one persistent data root per deployment."
+      }
+    }
+  ],
+  "sharedReferences": [
+    {
+      "id": "shared-zitadel",
+      "kind": "shared-reference",
+      "name": "Shared ZITADEL identity",
+      "capability": "oidc",
+      "service": "zitadel",
+      "owner": "platform-infrastructure",
+      "contractRevision": "creator-signal/sales-pulse:infrastructure-deployment-convention@973bda4acdd3b4c81356dc2145ac34a6397222d0",
+      "configurationRoot": "infra/shared/identity",
+      "readiness": {
+        "type": "oidc-discovery",
+        "path": "/.well-known/openid-configuration"
+      },
+      "constraints": {
+        "deployFromCabinet": false,
+        "reuseAnotherProjectApplication": false,
+        "environmentIsolationRequired": true
+      }
+    }
+  ]
+}

@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "test:infra": "node --test scripts/deployment-infrastructure-contract.test.mjs",
     "smoke:inventory-folder-tree-drag": "node scripts/inventory_folder_tree_drag_smoke.mjs"
   },
   "devDependencies": {

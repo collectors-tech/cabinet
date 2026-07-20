@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "environment": "local",
+  "kind": "shared-reference-project-configuration",
+  "service": "zitadel",
+  "owner": "platform-infrastructure",
+  "contractRevision": "creator-signal/sales-pulse:infrastructure-deployment-convention@973bda4acdd3b4c81356dc2145ac34a6397222d0",
+  "project": {
+    "name": "Cabinet Local",
+    "idVariable": "CABINET_ZITADEL_PROJECT_ID"
+  },
+  "application": {
+    "name": "Cabinet Local Web",
+    "idVariable": "CABINET_ZITADEL_CLIENT_ID",
+    "type": "oidc-web",
+    "flow": "authorization-code-pkce",
+    "redirectUris": ["http://127.0.0.1:17880/api/auth/zitadel/callback"],
+    "postLogoutUris": ["http://127.0.0.1:17880/sign-in"]
+  },
+  "roles": ["cabinet.user", "cabinet.demo", "cabinet.admin"],
+  "scopes": ["openid", "profile", "email", "offline_access"],
+  "issuerVariable": "CABINET_ZITADEL_ISSUER",
+  "audienceVariable": "CABINET_ZITADEL_AUDIENCE",
+  "secretBoundary": "approved-local-secret-store",
+  "customLoginPath": "/sign-in",
+  "readinessGate": "${CABINET_ZITADEL_ISSUER}/.well-known/openid-configuration"
+}
