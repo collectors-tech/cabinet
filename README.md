@@ -70,7 +70,7 @@ This repo is currently worked **direct/manual**.
 
 ### Docker Compose and Coolify
 
-- Deployment runbook: `docs/operations/deployments.md`
+- Deployment runbook: `infra/deployments/README.md`
 - Local Docker Compose:
   `infra/deployments/local/developer-machine/docker-compose/compose.yaml`
 - Self-hosted demo:

@@ -8,4 +8,4 @@ machine-readable sources of truth.
 - `deployments/demo/` defines the self-hosted Coolify review environment.
 - `deployments/production/` defines the explicitly approved Coolify release.
 
-Operational instructions live in `docs/operations/deployments.md`.
+Operational instructions live in `infra/deployments/README.md`.

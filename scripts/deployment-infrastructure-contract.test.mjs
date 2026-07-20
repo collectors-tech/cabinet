@@ -186,7 +186,7 @@ test('container defaults are deployment-neutral and accept build metadata', () =
 })
 
 test('operator documentation covers all environment safety boundaries', () => {
-  const docs = read('docs/operations/deployments.md')
+  const docs = read('infra/deployments/README.md')
 
   for (const fragment of [
     'Local Docker Compose',
