@@ -206,3 +206,27 @@ test('operator documentation covers all environment safety boundaries', () => {
     assert.match(docs.toLowerCase(), new RegExp(fragment.toLowerCase()))
   }
 })
+
+test('Docker-capable gates render every Compose deployment', () => {
+  const validator = read('scripts/validate-compose-deployments.sh')
+  assert.match(validator, /docker compose/)
+  for (const environment of environments) {
+    assert.ok(
+      validator.includes(environment.compose),
+      `Compose validator missing ${environment.compose}`,
+    )
+    assert.ok(
+      validator.includes(environment.envExample),
+      `Compose validator missing ${environment.envExample}`,
+    )
+  }
+
+  for (const workflow of [
+    '.github/workflows/develop-quality-gate.yml',
+    '.github/workflows/main-gate.yml',
+  ]) {
+    const content = read(workflow)
+    assert.match(content, /Validate Docker Compose deployments/)
+    assert.match(content, /bash scripts\/validate-compose-deployments\.sh/)
+  }
+})

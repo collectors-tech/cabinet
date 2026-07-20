@@ -18,4 +18,4 @@
 - [x] 3.3 Validate OpenSpec, the infrastructure contracts and the production UI
   build. Docker and Go contracts remain CI evidence because those runtimes are
   unavailable in this workspace.
-- [ ] 3.4 Commit, push and attach PR/issue evidence.
+- [x] 3.4 Commit, push and attach PR/issue evidence.

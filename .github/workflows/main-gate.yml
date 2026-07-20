@@ -75,6 +75,8 @@ jobs:
         working-directory: ui.web
       - name: Verify deployment infrastructure contracts
         run: npm run test:infra
+      - name: Validate Docker Compose deployments
+        run: bash scripts/validate-compose-deployments.sh
 
   cypress:
     name: Cypress
