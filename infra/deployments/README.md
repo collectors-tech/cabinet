@@ -22,17 +22,28 @@ does not reuse another product's project, application, roles or credentials.
 
 The per-environment contracts are under `infra/shared/identity/`. Local, demo
 and production each require a distinct ZITADEL application, redirect URI,
-post-logout URI, audience and role assignment. The shared issuer readiness
-gate is `/.well-known/openid-configuration`.
+post-logout URI, project audience and role assignment. Set
+`CABINET_ZITADEL_AUDIENCE` to that environment's project ID so it matches the
+requested project audience scope. The shared issuer readiness gate is
+`/.well-known/openid-configuration`.
 
-Application authentication is delivered under issue #1952. Until it lands,
-`CABINET_AUTH_IDENTITY_MODE` remains `local` and every remote route requires
-the external access gate. After #1952, set the mode to `zitadel` only after
-the corresponding environment application and denied-identity tests pass.
+Application authentication is delivered under issue #1952. Set
+`CABINET_AUTH_IDENTITY_MODE=zitadel` only after the corresponding environment
+application, role grants, branded login and denied-identity tests pass. The
+backend owns discovery, Authorization Code with PKCE, token validation,
+refresh and logout; provider tokens never enter browser storage.
 
-The user-facing route remains the custom Cabinet login at `/sign-in`. Provider
-tokens and secrets must not be stored in browser local storage, committed
-environment examples, URLs, logs or exported Cabinet data.
+The user-facing route remains the custom Cabinet login at `/sign-in`. The
+shared identity owner must configure ZITADEL Login V2 on the Cabinet custom
+domain with Cabinet branding. For every application, enable **Use new login
+UI**, set its custom base URL to `CABINET_ZITADEL_LOGIN_V2_BASE_URL`, add that
+host to ZITADEL trusted domains, apply the organisation/project private-label
+settings from the environment identity contract, and verify the URL before
+cutover. Retain a break-glass `IAM_OWNER` identity so a bad Login V2 route can
+be reverted. Cabinet does not collect the user's ZITADEL password and does not
+deploy the shared login service. Provider tokens and secrets must not be stored
+in browser local storage, committed environment examples, URLs, logs or
+exported Cabinet data.
 
 ## Security and concurrency boundary
 
@@ -41,9 +52,10 @@ Every deployment runs a single replica. Coolify zero-downtime replacement must
 be disabled so an old and a new container never overlap against the same
 volume.
 
-Local-device mode is not remote account authentication. Demo and production
-must remain behind an approved access gate, such as Tailscale or Cloudflare
-Access, until Cabinet has validated remote identity and tenant isolation. The
+Local-device mode is not remote account authentication. A remote deployment
+must not be exposed until ZITADEL readiness, exact redirects, role grants and
+denied-identity checks pass. An approved access gate such as Tailscale or
+Cloudflare Access remains recommended defence in depth. The
 Compose services do not publish a host port on Coolify and must not mount the
 Docker socket, repository checkout, host root or another environment's data.
 
@@ -129,7 +141,8 @@ Create one Docker Compose resource:
 Copy the keys from the adjacent `.env.example` into Coolify and replace every
 placeholder. Set `CABINET_PUBLIC_ORIGIN` to the exact HTTPS URL and
 `CABINET_WEBAUTHN_RP_ID` to its hostname. Configure the domain to proxy to
-port `17880`, then apply the access gate before allowing remote traffic.
+port `17880`, provision the matching Cabinet Demo ZITADEL application and
+roles, then apply the access gate before allowing remote traffic.
 
 Demo promotion is from a green `develop` revision only. It does not authorise
 merging `develop` into `main`.
@@ -149,6 +162,12 @@ Production must use its own domain, access boundary, environment values and
 volume. It must not reuse the demo resource or data. Deployment requires Max's
 explicit release approval; creating this resource does not grant approval to
 merge `develop` into `main`.
+
+For each remote environment, verify that the issuer discovery document, JWKS,
+`CABINET_ZITADEL_LOGIN_V2_BASE_URL`, Cabinet-branded login, callback and
+provider logout are reachable before deployment. A user with the wrong
+audience, authorised party, issuer, expired token or missing Cabinet role must
+be denied.
 
 ## Backup and restore
 

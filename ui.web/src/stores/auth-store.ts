@@ -19,6 +19,8 @@ interface AuthState {
   auth: {
     user: AuthUser | null
     setUser: (user: AuthUser | null) => void
+    setRemoteUser: (user: AuthUser) => void
+    remoteSession: boolean
     accessToken: string
     setAccessToken: (accessToken: string) => void
     resetAccessToken: () => void
@@ -65,6 +67,15 @@ export const useAuthStore = create<AuthState>()((set) => {
           }
           return { ...state, auth: { ...state.auth, user } }
         }),
+      setRemoteUser: (user) =>
+        set((state) => {
+          removeCookie(AUTH_USER)
+          return {
+            ...state,
+            auth: { ...state.auth, user, remoteSession: true },
+          }
+        }),
+      remoteSession: false,
       accessToken: initToken,
       setAccessToken: (accessToken) =>
         set((state) => {
@@ -82,7 +93,12 @@ export const useAuthStore = create<AuthState>()((set) => {
           removeCookie(AUTH_USER)
           return {
             ...state,
-            auth: { ...state.auth, user: null, accessToken: '' },
+            auth: {
+              ...state.auth,
+              user: null,
+              accessToken: '',
+              remoteSession: false,
+            },
           }
         }),
     },

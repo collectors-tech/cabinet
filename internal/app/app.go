@@ -169,9 +169,11 @@ func New(cfg config.Config) (*App, error) {
 	}
 	cloudLeases := newCloudLeaseStore()
 	cloudEntitlements := newCloudEntitlementStore()
+	zitadelAuth := newZitadelAuthFromEnv()
 	runtimeStopCh := make(chan string, 1)
 
 	mux := http.NewServeMux()
+	registerZitadelAuthRoutes(mux, zitadelAuth)
 	if isE2EHooksEnabled(cfg) {
 		registerE2ETestHooks(mux, conn, cfg)
 	}
@@ -330,8 +332,12 @@ func New(cfg config.Config) (*App, error) {
 		if port <= 0 {
 			port = 17880
 		}
+		setupRequired := runtimeSetupRequired(cfg)
+		if zitadelAuth.configured() {
+			setupRequired = false
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"setup_required":              runtimeSetupRequired(cfg),
+			"setup_required":              setupRequired,
 			"config_path":                 configPath,
 			"default_storage_data_dir":    defaultStorageDataDir,
 			"default_storage_media_dir":   filepath.Join(defaultStorageDataDir, "media"),
@@ -342,6 +348,7 @@ func New(cfg config.Config) (*App, error) {
 			"default_runtime_port":        port,
 			"default_runtime_port_mode":   "auto",
 			"default_runtime_url":         fmt.Sprintf("http://%s:%d", host, port),
+			"default_auth_mode":           resolveAuthProviderOptions().IdentityMode,
 		})
 	})
 	mux.HandleFunc("/api/runtime/setup-complete", func(w http.ResponseWriter, r *http.Request) {
@@ -7355,6 +7362,21 @@ func New(cfg config.Config) (*App, error) {
 	})
 
 	protectedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requiresZitadelSession(zitadelAuth, r) {
+			remoteSession, err := zitadelAuth.validateZitadelRequestSession(r)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				http.Error(w, `{"error":"authentication_required"}`, http.StatusUnauthorized)
+				return
+			}
+			if requiresZitadelAdminRole(r) && !remoteSession.Identity.hasRole("cabinet.admin") {
+				w.Header().Set("Content-Type", "application/json")
+				http.Error(w, `{"error":"insufficient_role"}`, http.StatusForbidden)
+				return
+			}
+			mux.ServeHTTP(w, r)
+			return
+		}
 		if !requiresUnlockedSession(r) {
 			mux.ServeHTTP(w, r)
 			return
@@ -7648,10 +7670,10 @@ func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidatio
 	if authMode == "" {
 		authMode = "local"
 	}
-	if authMode != "local" && authMode != "clerk" {
+	if authMode != "local" && authMode != "clerk" && authMode != "zitadel" {
 		return &runtimeSetupValidationError{
 			Code:    "SETUP_AUTH_MODE_INVALID",
-			Message: "Auth mode must be local or clerk.",
+			Message: "Auth mode must be local, clerk or zitadel.",
 			Field:   "auth_mode",
 		}
 	}
@@ -7863,8 +7885,8 @@ func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {
 	if authMode == "" {
 		return fmt.Errorf("auth.mode is required")
 	}
-	if authMode != "local" && authMode != "clerk" {
-		return fmt.Errorf("auth.mode must be local or clerk")
+	if authMode != "local" && authMode != "clerk" && authMode != "zitadel" {
+		return fmt.Errorf("auth.mode must be local, clerk or zitadel")
 	}
 	if authMode == "clerk" && strings.TrimSpace(payload.Auth.Clerk.PublishableKey) == "" {
 		return fmt.Errorf("auth.clerk.publishableKey is required for clerk mode")

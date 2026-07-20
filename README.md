@@ -79,8 +79,9 @@ This repo is currently worked **direct/manual**.
   `infra/deployments/production/selfhost-server/coolify/compose.yaml`
 
 Local, demo and production use separate profiles, instance names and persistent
-volumes. Coolify deployments run one replica and require an approved access
-gate while Cabinet is operating in local-device identity mode.
+volumes. Coolify deployments run one replica, consume isolated applications
+from the shared ZITADEL foundation and retain an approved access gate as
+defence in depth.
 
 ## Branch / Demo Promotion Workflow
 - Create one focused branch per issue/fix.

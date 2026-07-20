@@ -2931,6 +2931,116 @@ paths:
                         type: string
         "400":
           $ref: "#/components/responses/Error"
+  /api/auth/zitadel/login:
+    get:
+      tags: [Auth]
+      summary: Start Cabinet remote account sign-in
+      description: Creates one-time state, nonce and PKCE verifier state on the server, then redirects to the environment's Cabinet-branded shared ZITADEL login.
+      parameters:
+        - in: query
+          name: return_to
+          schema: { type: string }
+          description: Optional same-origin Cabinet route used after successful sign-in.
+        - in: query
+          name: intent
+          schema:
+            type: string
+            enum: [register, recover]
+      responses:
+        "302":
+          description: Redirect to the discovered OIDC authorisation endpoint.
+        "405":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/auth/zitadel/callback:
+    get:
+      tags: [Auth]
+      summary: Complete Cabinet remote account sign-in
+      description: Consumes state once, exchanges the authorisation code and creates an opaque HTTP-only Cabinet application session after strict token and role validation.
+      parameters:
+        - in: query
+          name: code
+          schema: { type: string }
+        - in: query
+          name: state
+          schema: { type: string }
+        - in: query
+          name: error
+          schema: { type: string }
+      responses:
+        "302":
+          description: Redirect to the requested Cabinet route or the stable sign-in error state.
+        "405":
+          $ref: "#/components/responses/Error"
+  /api/auth/zitadel/session:
+    get:
+      tags: [Auth]
+      summary: Get the current Cabinet remote application session
+      security:
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Non-secret remote identity and application role context.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated, identity_mode, user, expires_at]
+                properties:
+                  authenticated: { type: boolean, const: true }
+                  identity_mode: { type: string, const: zitadel }
+                  user:
+                    type: object
+                    required: [subject, roles]
+                    properties:
+                      subject: { type: string }
+                      email: { type: string }
+                      name: { type: string }
+                      roles:
+                        type: array
+                        items: { type: string }
+                  expires_at: { type: string, format: date-time }
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/auth/zitadel/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh the server-owned Cabinet remote session
+      security:
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Refreshed without returning provider tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refreshed: { type: boolean }
+                  expires_at: { type: string, format: date-time }
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/auth/zitadel/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the Cabinet remote session and begin provider logout
+      security:
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Local session revoked and safe provider logout URL returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logged_out: { type: boolean }
+                  provider_logout_url: { type: string, format: uri-reference }
+        "403":
+          $ref: "#/components/responses/Error"
   /api/auth/webauthn/register/begin:
     post:
       tags: [Auth]
@@ -3356,6 +3466,12 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
 components:
+  securitySchemes:
+    CabinetOIDCSession:
+      type: apiKey
+      in: cookie
+      name: cabinet_oidc_session
+      description: Opaque HTTP-only Cabinet application session. Provider tokens remain server-side.
   parameters:
     ProfileID:
       in: path

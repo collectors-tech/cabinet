@@ -27,6 +27,8 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 		"npm run test:infra",
 		"Validate Docker Compose deployments",
 		"bash scripts/validate-compose-deployments.sh",
+		"Verify ZITADEL application auth contracts",
+		"npm run test:auth-infra",
 		"openspec validate --all --strict --no-interactive",
 		"npm run build",
 		"fetch-depth: 0",

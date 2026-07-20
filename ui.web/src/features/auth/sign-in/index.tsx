@@ -20,6 +20,7 @@ type RuntimeSetupStatus = {
   default_runtime_port?: number
   default_runtime_port_mode?: 'auto' | 'fixed'
   default_runtime_url?: string
+  default_auth_mode?: 'local' | 'clerk' | 'zitadel'
 }
 
 type RuntimeSetupCompletePayload = {
@@ -27,7 +28,7 @@ type RuntimeSetupCompletePayload = {
   instance_name?: string
   profile_key?: string
   config_path?: string
-  auth_mode?: 'local' | 'clerk'
+  auth_mode?: 'local' | 'clerk' | 'zitadel'
   local_login_username?: string
   local_login_password?: string
   data_dir?: string
@@ -44,7 +45,7 @@ type SetupFormState = {
   portableMode: boolean
   runtimePortMode: 'auto' | 'fixed'
   runtimeFixedPort: number
-  authMode: 'local' | 'clerk'
+  authMode: 'local' | 'clerk' | 'zitadel'
   clerkPublishableKey: string
   featureChat: boolean
   featureProviders: boolean
@@ -57,7 +58,9 @@ const BUILT_IN_CLERK_PUBLISHABLE_KEY =
   'pk_test_Y2FyZWZ1bC1vd2wtNTYuY2xlcmsuYWNjb3VudHMuZGV2JA'
 
 export function SignIn() {
-  const { redirect } = useSearch({ from: '/(auth)/sign-in' })
+  const { redirect, auth_error: authError } = useSearch({
+    from: '/(auth)/sign-in',
+  })
   const [setupLoading, setSetupLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
@@ -116,6 +119,12 @@ export function SignIn() {
             ...previous,
             runtimePortMode: payload.default_runtime_port_mode ?? 'auto',
             runtimeFixedPort: payload.default_runtime_port ?? 17880,
+            authMode:
+              payload.default_auth_mode === 'zitadel'
+                ? 'zitadel'
+                : payload.default_auth_mode === 'clerk'
+                  ? 'clerk'
+                  : 'local',
           }))
         }
       } catch (error) {
@@ -166,6 +175,9 @@ export function SignIn() {
   function authReadinessLabel() {
     if (setupForm.authMode === 'local') {
       return 'Ready: local-device mode; no password, passkey, cloud account, or encrypted-at-rest lock is verified.'
+    }
+    if (setupForm.authMode === 'zitadel') {
+      return 'Ready when this environment has its isolated Cabinet ZITADEL application, exact callback and required role grants.'
     }
     return 'Built-in Clerk key configured and not editable'
   }
@@ -801,7 +813,11 @@ export function SignIn() {
                       setSetupForm((previous) => ({
                         ...previous,
                         authMode:
-                          event.target.value === 'clerk' ? 'clerk' : 'local',
+                          event.target.value === 'zitadel'
+                            ? 'zitadel'
+                            : event.target.value === 'clerk'
+                              ? 'clerk'
+                              : 'local',
                         clerkPublishableKey:
                           event.target.value === 'clerk'
                             ? BUILT_IN_CLERK_PUBLISHABLE_KEY
@@ -812,6 +828,7 @@ export function SignIn() {
                   >
                     <option value='local'>local</option>
                     <option value='clerk'>clerk</option>
+                    <option value='zitadel'>zitadel</option>
                   </select>
                 </label>
                 <p
@@ -986,11 +1003,20 @@ export function SignIn() {
         <CardHeader>
           <CardTitle className='text-lg tracking-tight'>Sign in</CardTitle>
           <CardDescription>
-            Enter your email and password below to <br />
-            log into your account
+            Use the identity method configured for this Cabinet environment.
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
+          {authError ? (
+            <div
+              className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+              role='alert'
+              data-testid='zitadel-auth-error'
+            >
+              Secure sign-in could not be completed. Please try again or ask
+              the environment administrator to check its identity setup.
+            </div>
+          ) : null}
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>
