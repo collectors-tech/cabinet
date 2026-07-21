@@ -3769,14 +3769,24 @@ func New(cfg config.Config) (*App, error) {
 			req.FallbackDiscoveryAssetURLs,
 			searchURL,
 		)
-		if err != nil {
-			http.Error(w, `{"error":"failed_to_discover_hobbytech_config"}`, http.StatusBadRequest)
-			return
-		}
-		candidates, pageCount, runErr := runHobbytechSearch(r.Context(), http.DefaultClient, qs, cfg, itemsPerPage)
+		var candidates []map[string]any
+		var pageCount int
+		dataDepthSource := "boost_mybcapps_search"
+		var runErr error
 		driftRecovered := false
 		warning := discoveryWarning
-		if runErr != nil {
+		if err != nil {
+			candidates, pageCount, runErr = runHobbytechShopifySuggestSearch(r.Context(), http.DefaultClient, baseURL, qs, itemsPerPage)
+			if runErr != nil {
+				http.Error(w, `{"error":"failed_to_discover_hobbytech_config"}`, http.StatusBadRequest)
+				return
+			}
+			dataDepthSource = "shopify_search_suggest_json"
+			warning = "hobbytech Boost discovery unavailable; used public Shopify search suggest fallback"
+		} else {
+			candidates, pageCount, runErr = runHobbytechSearch(r.Context(), http.DefaultClient, qs, cfg, itemsPerPage)
+		}
+		if runErr != nil && dataDepthSource == "boost_mybcapps_search" {
 			recoveryAssetURL := discoveryAssetURL
 			recoveryFallbackAssets := req.FallbackDiscoveryAssetURLs
 			if len(req.FallbackDiscoveryAssetURLs) > 0 {
@@ -3802,6 +3812,18 @@ func New(cfg config.Config) (*App, error) {
 					} else {
 						warning = "hobbytech session drift recovered via fallback discovery"
 					}
+				}
+			}
+		}
+		if runErr != nil && dataDepthSource == "boost_mybcapps_search" {
+			fallbackCandidates, fallbackPageCount, fallbackErr := runHobbytechShopifySuggestSearch(r.Context(), http.DefaultClient, baseURL, qs, itemsPerPage)
+			if fallbackErr == nil {
+				candidates = fallbackCandidates
+				pageCount = fallbackPageCount
+				runErr = nil
+				dataDepthSource = "shopify_search_suggest_json"
+				if strings.TrimSpace(warning) == "" {
+					warning = "hobbytech Boost search unavailable; used public Shopify search suggest fallback"
 				}
 			}
 		}
@@ -3840,8 +3862,9 @@ func New(cfg config.Config) (*App, error) {
 			"discovery_config": cfg,
 			"run":              run,
 			"run_summary": map[string]any{
-				"page_count":       pageCount,
-				"candidates_total": run.Saved,
+				"page_count":        pageCount,
+				"candidates_total":  run.Saved,
+				"data_depth_source": dataDepthSource,
 			},
 		})
 	})
@@ -11504,6 +11527,114 @@ func runHobbytechSearch(
 		candidates = append(candidates, candidate)
 	}
 	return candidates, pageCount, nil
+}
+
+func runHobbytechShopifySuggestSearch(
+	ctx context.Context,
+	client *http.Client,
+	baseURL string,
+	qs scanner.QuerySet,
+	itemsPerPage int,
+) ([]map[string]any, int, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return nil, 0, fmt.Errorf("hobbytech Shopify suggest base URL is required")
+	}
+	if itemsPerPage <= 0 {
+		itemsPerPage = 24
+	}
+	if itemsPerPage > 50 {
+		itemsPerPage = 50
+	}
+	query := strings.TrimSpace(qs.Name)
+	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+		query = strings.TrimSpace(qs.Keywords[0])
+	}
+	if query == "" {
+		query = "collectible"
+	}
+	suggestURL, err := url.Parse(baseURL + "/search/suggest.json")
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse hobbytech Shopify suggest URL: %w", err)
+	}
+	params := suggestURL.Query()
+	params.Set("q", query)
+	params.Set("resources[type]", "product")
+	params.Set("resources[limit]", strconv.Itoa(itemsPerPage))
+	suggestURL.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, suggestURL.String(), nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("build hobbytech Shopify suggest request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Cabinet/0.1 source-matching")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("run hobbytech Shopify suggest request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, 0, fmt.Errorf("hobbytech Shopify suggest returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read hobbytech Shopify suggest response: %w", err)
+	}
+	var payload struct {
+		Resources struct {
+			Results struct {
+				Products []struct {
+					ID        any    `json:"id"`
+					Title     string `json:"title"`
+					URL       string `json:"url"`
+					Price     any    `json:"price"`
+					Available bool   `json:"available"`
+					Image     string `json:"image"`
+					Body      string `json:"body"`
+				} `json:"products"`
+			} `json:"results"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, 0, fmt.Errorf("decode hobbytech Shopify suggest response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Resources.Results.Products))
+	missingCoreFields := 0
+	for _, product := range payload.Resources.Results.Products {
+		id := strings.TrimSpace(fmt.Sprintf("%v", product.ID))
+		title := strings.TrimSpace(product.Title)
+		productURL := normalizeProviderProductURL(baseURL, product.URL)
+		price := numericCurrencyValue(product.Price)
+		if id == "" || title == "" || productURL == "" || price <= 0 {
+			missingCoreFields++
+			continue
+		}
+		stockState := "out_of_stock"
+		if product.Available {
+			stockState = "in_stock"
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id":        "shopify-suggest-" + id,
+			"title":             title,
+			"url":               productURL,
+			"price":             price,
+			"currency":          "AUD",
+			"image":             normalizeProviderProductURL(baseURL, product.Image),
+			"description":       stripHTMLText(product.Body),
+			"stock_state":       stockState,
+			"source":            "hobbytechtoys",
+			"seller":            "hobbytechtoys.com.au",
+			"extraction_method": "shopify_search_suggest_json",
+		})
+	}
+	if len(candidates) == 0 && missingCoreFields > 0 {
+		return candidates, 1, fmt.Errorf("hobbytech Shopify suggest parser health failed: %d product records missing title/url/price/id", missingCoreFields)
+	}
+	return candidates, 1, nil
 }
 
 func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs scanner.QuerySet, itemsPerPage int) (bonzaSearchResult, error) {

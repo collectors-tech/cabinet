@@ -1140,7 +1140,10 @@ export function Scanner() {
           ? { provider: 'ebay', url: '/api/providers/ebay/run' }
           : providerScope[0] === 'bonzaslotcars' || providerScope[0] === 'bonza'
             ? { provider: 'bonza', url: '/api/providers/bonza/run' }
-            : null
+            : providerScope[0] === 'hobbytechtoys' ||
+                providerScope[0] === 'hobbytech'
+              ? { provider: 'hobbytech', url: '/api/providers/hobbytech/run' }
+              : null
         : null
     if (providerRunRoute) {
       const providerResponse = await fetch(providerRunRoute.url, {
@@ -1183,6 +1186,8 @@ export function Scanner() {
         candidates?: Candidate[]
         run_summary?: RunSummary
         run?: ProviderRunSnapshot
+        drift_recovered?: boolean
+        warning?: string
       }
       const candidates = payload.candidates ?? []
       setCandidatesByQuerySet((current) => ({
@@ -1205,7 +1210,19 @@ export function Scanner() {
         }))
       }
       setActionStatus(`${providerRunRoute.provider}_run_started_${querySet.id}`)
-      setActionFeedback(null)
+      const providerWarning =
+        payload.drift_recovered && payload.warning?.trim()
+          ? payload.warning.trim()
+          : ''
+      setActionFeedback(
+        providerWarning
+          ? {
+              summary: providerWarning,
+              actions: ['Review recovered provider results before handoff.'],
+              diagnosticCode: `${providerRunRoute.provider}_drift_recovered`,
+            }
+          : null
+      )
       setRunMetaByQuerySet((current) => ({
         ...current,
         [querySet.id]: {
