@@ -207,3 +207,96 @@ func TestHobbytechRunRecoversFromSessionDriftWithFallbackDiscovery(t *testing.T)
 		t.Fatalf("expected one candidate after recovery got=%d", len(payload.Candidates))
 	}
 }
+
+func TestHobbytechRunFallsBackToPublicShopifySuggestWhenBoostDiscoveryIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/assets/hobby-search.js":
+			http.NotFound(w, r)
+		case "/services.mybcapps.com/bc-sf-filter/search":
+			http.Error(w, "boost direct public request forbidden", http.StatusForbidden)
+		case "/search/suggest.json":
+			if got := r.URL.Query().Get("q"); got != "AFX" {
+				t.Fatalf("expected suggest query AFX, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"resources": {
+					"results": {
+						"products": [
+							{
+								"id": 70615,
+								"title": "AFX Low Bridge Supports",
+								"url": "/products/afx-low-bridge-supports",
+								"price": "12.95",
+								"available": true,
+								"image": "https://hobbytechtoys.com.au/cdn/afx-low-bridge.jpg"
+							}
+						]
+					}
+				}
+			}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"HobbySuggestProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.hobbytechtoys.base_url":"%s","integration.hobbytechtoys.items_per_page":"12"}}`, server.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"AFX","keywords":["AFX"],"provider_scope":["hobbytechtoys"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	runBody := fmt.Sprintf(`{"query_set_id":"%s"}`, qs.ID)
+	run := doRequest(t, a, http.MethodPost, "/api/providers/hobbytech/run", strings.NewReader(runBody), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusOK {
+		t.Fatalf("hobbytech run should fall back to public Shopify suggest, status=%d body=%s", run.Code, run.Body.String())
+	}
+	var payload struct {
+		Candidates []map[string]any `json:"candidates"`
+		RunSummary map[string]any   `json:"run_summary"`
+	}
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if len(payload.Candidates) != 1 {
+		t.Fatalf("expected one Shopify suggest fallback candidate, got %+v", payload.Candidates)
+	}
+	candidate := payload.Candidates[0]
+	if source, _ := candidate["source"].(string); source != "hobbytechtoys" {
+		t.Fatalf("expected Hobbytech source from fallback, got %+v", candidate)
+	}
+	if method, _ := payload.RunSummary["data_depth_source"].(string); method != "shopify_search_suggest_json" {
+		t.Fatalf("expected Shopify suggest fallback run summary, got %+v", payload.RunSummary)
+	}
+}
