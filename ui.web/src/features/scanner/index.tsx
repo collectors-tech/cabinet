@@ -1190,6 +1190,7 @@ export function Scanner() {
         run_summary?: RunSummary
         run?: ProviderRunSnapshot
         drift_recovered?: boolean
+        fallback_used?: boolean
         warning?: string
       }
       const candidates = payload.candidates ?? []
@@ -1213,16 +1214,18 @@ export function Scanner() {
         }))
       }
       setActionStatus(`${providerRunRoute.provider}_run_started_${querySet.id}`)
-      const providerWarning =
-        payload.drift_recovered && payload.warning?.trim()
-          ? payload.warning.trim()
-          : ''
+      const providerWarning = payload.warning?.trim() ?? ''
+      const providerWarningCode = payload.drift_recovered
+        ? `${providerRunRoute.provider}_drift_recovered`
+        : payload.fallback_used
+          ? `${providerRunRoute.provider}_fallback_used`
+          : `${providerRunRoute.provider}_warning`
       setActionFeedback(
         providerWarning
           ? {
               summary: providerWarning,
               actions: ['Review recovered provider results before handoff.'],
-              diagnosticCode: `${providerRunRoute.provider}_drift_recovered`,
+              diagnosticCode: providerWarningCode,
             }
           : null
       )
