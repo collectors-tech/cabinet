@@ -118,4 +118,75 @@ describe('integrations/provider-frontline', () => {
       cy.contains('td', 'wishlist_inventory_ready').should('be.visible')
     })
   })
+
+  it('UC-AU-05 surfaces Frontline config-drift fallback warnings after cached recovery', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-frontline-drift-1',
+            name: 'Frontline drift watch',
+            keywords: ['AFX Mustang'],
+            provider_scope: ['frontlinehobbies'],
+            enabled: true,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', {
+      statusCode: 200,
+      body: { failures: [] },
+    }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/frontline/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-frontline-drift-1')
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'frontlinehobbies',
+          query_set_id: 'qs-frontline-drift-1',
+          fallback_used: true,
+          warning: 'Frontline discovery fallback used cached config.',
+          candidates: [
+            {
+              id: 'cand-frontline-drift-1',
+              query_set_id: 'qs-frontline-drift-1',
+              listing_id: 'frontline-afx-mustang',
+              title: 'AFX Mustang Frontline Recovered Candidate',
+              source: 'frontlinehobbies',
+              price: 49.95,
+              currency: 'AUD',
+              url: 'https://frontlinehobbies.com.au/products/afx-mustang',
+              seller: 'frontlinehobbies.com.au',
+              stock_status: 'in_stock',
+              handoff_state: 'wishlist_inventory_ready',
+            },
+          ],
+          run_summary: {
+            page_count: 1,
+            observed_page_size: 1,
+            candidates_total: 1,
+          },
+        },
+      })
+    }).as('frontlineProviderRun')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-frontline-drift-1"]').click()
+    cy.wait('@frontlineProviderRun')
+    cy.get('[data-testid="scanner-action-status"]').should(
+      'contain',
+      'frontline_run_started_qs-frontline-drift-1'
+    )
+    cy.get('[data-testid="scanner-action-feedback"]').should(
+      'contain',
+      'Frontline discovery fallback used cached config.'
+    )
+  })
 })
