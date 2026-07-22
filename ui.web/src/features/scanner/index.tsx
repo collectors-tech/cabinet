@@ -1143,6 +1143,9 @@ export function Scanner() {
             : providerScope[0] === 'hobbytechtoys' ||
                 providerScope[0] === 'hobbytech'
               ? { provider: 'hobbytech', url: '/api/providers/hobbytech/run' }
+              : providerScope[0] === 'frontlinehobbies' ||
+                  providerScope[0] === 'frontline'
+                ? { provider: 'frontline', url: '/api/providers/frontline/run' }
               : null
         : null
     if (providerRunRoute) {
