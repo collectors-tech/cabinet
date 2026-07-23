@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const installerRelative = "scripts/github-actions-runner/install-wsl-runner.ps1";
-const docsRelative = "docs/ci/self-hosted-runner.md";
+const docsRelative = "openspec/changes/add-wsl-runner-pool/design.md";
 
 function readRequired(relativePath) {
   const absolutePath = join(repoRoot, relativePath);

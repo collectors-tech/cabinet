@@ -30,5 +30,5 @@ which makes capacity failures and VHDX growth difficult to diagnose or contain.
 
 - Affected code: `scripts/github-actions-runner/install-wsl-runner.ps1`.
 - Affected tests: `scripts/github-actions-wsl-runner.issue-1949.test.mjs`.
-- Affected docs: `docs/ci/self-hosted-runner.md`.
+- Affected documentation: `openspec/changes/add-wsl-runner-pool/design.md`.
 - Related issue: `#1949`.
