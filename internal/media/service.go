@@ -1161,9 +1161,9 @@ func (s *Service) Delete(ctx context.Context, itemID, photoID string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM item_photos WHERE id = ?`, photoID); err != nil {
 		return fmt.Errorf("delete photo record: %w", err)
 	}
-	_ = os.Remove(p.OriginalPath)
-	_ = os.Remove(p.PreviewPath)
-	_ = os.Remove(p.ThumbnailPath)
+	if err := s.cleanupDeletedPhotoFiles(ctx, itemID, p); err != nil {
+		return err
+	}
 
 	photos, err := s.ListByItem(ctx, itemID)
 	if err == nil && len(photos) > 0 {
@@ -1179,6 +1179,66 @@ func (s *Service) Delete(ctx context.Context, itemID, photoID string) error {
 		}
 	}
 	return nil
+}
+
+func (s *Service) cleanupDeletedPhotoFiles(ctx context.Context, itemID string, p Photo) error {
+	mediaRoot, err := s.resolveMediaDirForItem(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	assetDir := filepath.Join(mediaRoot, "assets", p.ID)
+	if pathWithinDir(mediaRoot, assetDir) {
+		if _, err := os.Stat(filepath.Join(assetDir, "manifest.json")); err == nil {
+			references, err := s.countAssetReferences(ctx, p.ID)
+			if err != nil {
+				return err
+			}
+			if references > 0 {
+				return nil
+			}
+			if err := os.RemoveAll(assetDir); err != nil {
+				return fmt.Errorf("remove orphan asset folder: %w", err)
+			}
+			return nil
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("stat asset manifest: %w", err)
+		}
+	}
+
+	_ = os.Remove(p.OriginalPath)
+	_ = os.Remove(p.PreviewPath)
+	_ = os.Remove(p.ThumbnailPath)
+	return nil
+}
+
+func (s *Service) countAssetReferences(ctx context.Context, assetID string) (int, error) {
+	var photoRefs, attachmentRefs, linkRefs int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM item_photos WHERE id = ?`, assetID).Scan(&photoRefs); err != nil {
+		return 0, fmt.Errorf("count item photo asset references: %w", err)
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM chat_attachments WHERE id = ?`, assetID).Scan(&attachmentRefs); err != nil {
+		return 0, fmt.Errorf("count chat attachment asset references: %w", err)
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM media_asset_links WHERE asset_id = ?`, assetID).Scan(&linkRefs); err != nil {
+		return 0, fmt.Errorf("count media asset link references: %w", err)
+	}
+	return photoRefs + attachmentRefs + linkRefs, nil
+}
+
+func pathWithinDir(root, candidate string) bool {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	candidateAbs, err := filepath.Abs(candidate)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(rootAbs, candidateAbs)
+	if err != nil {
+		return false
+	}
+	return rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
 }
 
 func (s *Service) Rotate(ctx context.Context, itemID, photoID, direction string) (Photo, error) {

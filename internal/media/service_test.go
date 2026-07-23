@@ -355,6 +355,64 @@ func TestUploadSetPrimaryDeleteAndRebuild(t *testing.T) {
 	}
 }
 
+func TestDeletePreservesSharedCanonicalAssetAndCleansOrphan(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-1','profile-1','AFX','Slot Car','P-1','Car');
+	`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+
+	svc := NewService(conn, filepath.Join(base, "media"))
+	img := sampleJPEG(t)
+
+	shared, err := svc.Upload(context.Background(), "item-1", "shared.jpg", bytes.NewReader(img))
+	if err != nil {
+		t.Fatalf("Upload() shared error = %v", err)
+	}
+	sharedAssetDir := filepath.Dir(filepath.Dir(shared.OriginalPath))
+	if _, err := conn.Exec(`
+		INSERT INTO media_asset_links(id, profile_id, asset_id, asset_type, target_type, target_id, source)
+		VALUES ('link-1','profile-1',?,'item_photo','wishlist','wish-1','test')
+	`, shared.ID); err != nil {
+		t.Fatalf("seed shared link: %v", err)
+	}
+
+	orphan, err := svc.Upload(context.Background(), "item-1", "orphan.jpg", bytes.NewReader(img))
+	if err != nil {
+		t.Fatalf("Upload() orphan error = %v", err)
+	}
+	orphanAssetDir := filepath.Dir(filepath.Dir(orphan.OriginalPath))
+
+	if err := svc.Delete(context.Background(), "item-1", shared.ID); err != nil {
+		t.Fatalf("Delete() shared error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sharedAssetDir, "manifest.json")); err != nil {
+		t.Fatalf("shared canonical asset folder should survive while linked: %v", err)
+	}
+	if _, err := os.Stat(shared.OriginalPath); err != nil {
+		t.Fatalf("shared original should survive while linked: %v", err)
+	}
+
+	if err := svc.Delete(context.Background(), "item-1", orphan.ID); err != nil {
+		t.Fatalf("Delete() orphan error = %v", err)
+	}
+	if _, err := os.Stat(orphanAssetDir); !os.IsNotExist(err) {
+		t.Fatalf("orphan canonical asset folder should be removed, stat err=%v", err)
+	}
+}
+
 func TestReorderPersistsListOrder(t *testing.T) {
 	t.Parallel()
 
