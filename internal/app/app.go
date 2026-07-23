@@ -133,7 +133,7 @@ func New(cfg config.Config) (*App, error) {
 	barcodeRepo := barcode.NewRepository(conn)
 	mediaService := media.NewService(conn, filepath.Join(cfg.DataDir, "media"))
 	dataService := datamgmt.NewService(conn)
-	backupSvc := backup.NewService(cfg.DBPath, filepath.Join(cfg.DataDir, "backups"), cfg.BackupInterval)
+	backupSvc := backup.NewServiceWithDataDir(cfg.DBPath, filepath.Join(cfg.DataDir, "backups"), cfg.BackupInterval, cfg.DataDir)
 	searchRepo := search.NewRepository(conn)
 	scannerSvc := scanner.NewService(conn)
 	matchingSvc := matching.NewService(conn)
