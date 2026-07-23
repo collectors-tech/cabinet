@@ -211,7 +211,7 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, photoID, itemID, filename, origPath, previewPath, thumbPath, isPrimary, nextOrder); err != nil {
+	`, photoID, itemID, filename, mediaRootRelativePath(rootMediaDir, origPath), mediaRootRelativePath(rootMediaDir, previewPath), mediaRootRelativePath(rootMediaDir, thumbPath), isPrimary, nextOrder); err != nil {
 		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
 		return Photo{}, fmt.Errorf("insert photo record: %w", err)
 	}
@@ -261,7 +261,7 @@ func (s *Service) SaveWorkspaceAttachment(ctx context.Context, profileID, thread
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO chat_attachments(id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, assetID, profileID, threadID, filename, mimeType, info.Size(), origPath); err != nil {
+	`, assetID, profileID, threadID, filename, mimeType, info.Size(), mediaRootRelativePath(mediaRoot, origPath)); err != nil {
 		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
 		return WorkspaceAttachment{}, fmt.Errorf("save workspace media attachment: %w", err)
 	}
@@ -281,6 +281,11 @@ func (s *Service) getWorkspaceAttachment(ctx context.Context, profileID, attachm
 		}
 		return WorkspaceAttachment{}, fmt.Errorf("get workspace attachment: %w", err)
 	}
+	mediaRoot, err := s.resolveMediaDirForProfile(ctx, a.ProfileID)
+	if err != nil {
+		return WorkspaceAttachment{}, err
+	}
+	a.Path = resolveMediaRootPath(mediaRoot, a.Path)
 	return a, nil
 }
 
@@ -468,6 +473,7 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		}
 		link := links[assetID]
 		linkageState := linkageStateForAsset(true, link)
+		originalPath = s.resolveStoredPhotoPath(ctx, itemID, originalPath)
 		asset := WorkspaceAsset{
 			ID:                  assetID,
 			Title:               displayTitle,
@@ -508,6 +514,12 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 			return WorkspaceList{}, fmt.Errorf("scan unlinked media asset: %w", err)
 		}
 		link := links[assetID]
+		mediaRoot, err := s.resolveMediaDirForProfile(ctx, profileID)
+		if err != nil {
+			attachmentRows.Close()
+			return WorkspaceList{}, err
+		}
+		storedPath = resolveMediaRootPath(mediaRoot, storedPath)
 		asset := WorkspaceAsset{
 			ID:                  assetID,
 			Title:               strings.TrimSpace(filename),
@@ -1043,6 +1055,25 @@ func (s *Service) resolveMediaDirForProfile(ctx context.Context, profileID strin
 	return s.mediaDir, nil
 }
 
+func (s *Service) resolvePhotoPaths(ctx context.Context, p *Photo) error {
+	mediaRoot, err := s.resolveMediaDirForItem(ctx, p.ItemID)
+	if err != nil {
+		return err
+	}
+	p.OriginalPath = resolveMediaRootPath(mediaRoot, p.OriginalPath)
+	p.PreviewPath = resolveMediaRootPath(mediaRoot, p.PreviewPath)
+	p.ThumbnailPath = resolveMediaRootPath(mediaRoot, p.ThumbnailPath)
+	return nil
+}
+
+func (s *Service) resolveStoredPhotoPath(ctx context.Context, itemID, storedPath string) string {
+	mediaRoot, err := s.resolveMediaDirForItem(ctx, itemID)
+	if err != nil {
+		return storedPath
+	}
+	return resolveMediaRootPath(mediaRoot, storedPath)
+}
+
 func (s *Service) ListByItem(ctx context.Context, itemID string) ([]Photo, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order, created_at
@@ -1061,6 +1092,9 @@ func (s *Service) ListByItem(ctx context.Context, itemID string) ([]Photo, error
 		var isPrimary int
 		if err := rows.Scan(&p.ID, &p.ItemID, &p.Filename, &p.OriginalPath, &p.PreviewPath, &p.ThumbnailPath, &isPrimary, &p.DisplayOrder, &p.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan photo: %w", err)
+		}
+		if err := s.resolvePhotoPaths(ctx, &p); err != nil {
+			return nil, err
 		}
 		p.IsPrimary = isPrimary == 1
 		out = append(out, p)
@@ -1083,6 +1117,9 @@ func (s *Service) GetByID(ctx context.Context, photoID string) (Photo, error) {
 			return Photo{}, fmt.Errorf("photo not found")
 		}
 		return Photo{}, fmt.Errorf("get photo: %w", err)
+	}
+	if err := s.resolvePhotoPaths(ctx, &p); err != nil {
+		return Photo{}, err
 	}
 	p.IsPrimary = isPrimary == 1
 	return p, nil
@@ -1509,6 +1546,27 @@ func contentTypeForFilename(filename string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+func mediaRootRelativePath(mediaRoot, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || strings.Contains(path, "://") {
+		return path
+	}
+	if filepath.IsAbs(path) {
+		if rel, err := filepath.Rel(mediaRoot, path); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+func resolveMediaRootPath(mediaRoot, storedPath string) string {
+	storedPath = strings.TrimSpace(storedPath)
+	if storedPath == "" || strings.Contains(storedPath, "://") || filepath.IsAbs(storedPath) {
+		return storedPath
+	}
+	return filepath.Join(mediaRoot, filepath.FromSlash(storedPath))
 }
 
 func uniqueDownloadName(filename string, used map[string]int) string {

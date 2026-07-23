@@ -160,8 +160,8 @@ func TestMediaWorkspaceCreateAssetPersistsUnlinkedUploadMetadata(t *testing.T) {
 		t.Fatalf("query stored media path: %v", err)
 	}
 	assetDir := filepath.Join(a.cfg.DataDir, "profiles", profile.ID, "media", "assets", created.AssetID)
-	if storedPath != filepath.Join(assetDir, "original", "loose-chassis.jpg") {
-		t.Fatalf("expected canonical media workspace stored path, got %s", storedPath)
+	if storedPath != filepath.ToSlash(filepath.Join("assets", created.AssetID, "original", "loose-chassis.jpg")) {
+		t.Fatalf("expected relative canonical media workspace stored path, got %s", storedPath)
 	}
 	if _, err := os.Stat(filepath.Join(assetDir, "original")); err != nil {
 		t.Fatalf("expected canonical original dir: %v", err)

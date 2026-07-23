@@ -83,6 +83,15 @@ func TestPhotoUploadCreatesCanonicalAssetFolderAndManifest(t *testing.T) {
 	if created.ThumbnailPath != filepath.Join(assetDir, "renditions", "thumbnail.jpg") {
 		t.Fatalf("expected deterministic thumbnail path, got %s", created.ThumbnailPath)
 	}
+	var storedOriginal, storedPreview, storedThumbnail string
+	if err := a.db.QueryRow(`SELECT original_path, preview_path, thumbnail_path FROM item_photos WHERE id = ?`, created.ID).Scan(&storedOriginal, &storedPreview, &storedThumbnail); err != nil {
+		t.Fatalf("query stored canonical photo paths: %v", err)
+	}
+	if storedOriginal != filepath.ToSlash(filepath.Join("assets", created.ID, "original", "front_angle.jpg")) ||
+		storedPreview != filepath.ToSlash(filepath.Join("assets", created.ID, "renditions", "preview.jpg")) ||
+		storedThumbnail != filepath.ToSlash(filepath.Join("assets", created.ID, "renditions", "thumbnail.jpg")) {
+		t.Fatalf("expected DB paths to be relative to media root, got original=%q preview=%q thumbnail=%q", storedOriginal, storedPreview, storedThumbnail)
+	}
 	for _, dir := range []string{"original", "renditions", "variations"} {
 		info, err := os.Stat(filepath.Join(assetDir, dir))
 		if err != nil || !info.IsDir() {

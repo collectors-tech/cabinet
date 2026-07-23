@@ -129,6 +129,13 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if attachment.Path != filepath.Join(attachmentAssetDir, "original", "notes.txt") {
 		t.Fatalf("expected chat attachment canonical original path, got %s", attachment.Path)
 	}
+	var storedAttachmentPath string
+	if err := a.db.QueryRow(`SELECT stored_path FROM chat_attachments WHERE profile_id = ? AND id = ?`, p.ID, attachment.ID).Scan(&storedAttachmentPath); err != nil {
+		t.Fatalf("query stored chat attachment path: %v", err)
+	}
+	if storedAttachmentPath != filepath.ToSlash(filepath.Join("assets", attachment.ID, "original", "notes.txt")) {
+		t.Fatalf("expected DB chat attachment path to be relative to media root, got %q", storedAttachmentPath)
+	}
 	for _, dir := range []string{"original", "renditions", "variations"} {
 		if _, err := os.Stat(filepath.Join(attachmentAssetDir, dir)); err != nil {
 			t.Fatalf("expected canonical chat attachment %s dir: %v", dir, err)
