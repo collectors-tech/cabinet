@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -57,7 +58,7 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 			"filename":"front.jpg",
 			"mime_type":"image/jpeg",
 			"kind":"photo",
-			"content_base64":"ZnJvbnQtaW1hZ2UtYnl0ZXM="
+			"content_base64":"`+base64.StdEncoding.EncodeToString(sampleJPEG(t))+`"
 		}]
 	}`), map[string]string{"Content-Type": "application/json"})
 	if capture.Code != http.StatusCreated {

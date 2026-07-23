@@ -236,10 +236,14 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 			return CaptureResult{}, fmt.Errorf("telegram media filename or file_id is required")
 		}
 		reader := media.Reader
+		mimeType := strings.TrimSpace(media.MIMEType)
 		if reader == nil {
 			reader = strings.NewReader("")
+			if s.media != nil && strings.HasPrefix(strings.ToLower(mimeType), "image/") {
+				mimeType = "application/octet-stream"
+			}
 		}
-		attachment, err := s.saveAttachment(ctx, profileID, thread.ID, filename, strings.TrimSpace(media.MIMEType), reader)
+		attachment, err := s.saveAttachment(ctx, profileID, thread.ID, filename, mimeType, reader)
 		if err != nil {
 			return CaptureResult{}, err
 		}

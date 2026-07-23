@@ -1408,6 +1408,13 @@ func (s *Service) Reorder(ctx context.Context, itemID string, orderedIDs []strin
 }
 
 func encodeOriginalImage(path, format string, img image.Image) error {
+	originalMode := os.FileMode(0)
+	if info, err := os.Stat(path); err == nil {
+		originalMode = info.Mode().Perm()
+		if originalMode&0o200 == 0 {
+			_ = os.Chmod(path, originalMode|0o200)
+		}
+	}
 	tmpPath := path + ".rotate-tmp"
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
@@ -1432,6 +1439,9 @@ func encodeOriginalImage(path, format string, img image.Image) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("replace rotated original: %w", err)
+	}
+	if originalMode != 0 && originalMode&0o200 == 0 {
+		_ = os.Chmod(path, originalMode)
 	}
 	return nil
 }
