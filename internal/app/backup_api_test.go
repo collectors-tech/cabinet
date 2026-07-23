@@ -1,9 +1,13 @@
 package app
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -125,4 +129,91 @@ func TestBackupRunAndRestoreEndpoints(t *testing.T) {
 	if len(itemsPayload.Items) != 1 {
 		t.Fatalf("expected 1 item after restore, got %d", len(itemsPayload.Items))
 	}
+}
+
+func TestBackupRunAndRestorePreservesCanonicalMediaAssets(t *testing.T) {
+	t.Setenv("CABINET_SEED_SAMPLE_DATA", "0")
+
+	a := newTestApp(t)
+	if _, err := a.db.Exec(`INSERT INTO canonical_items (id, brand, category, part_number, title) VALUES ('item-media','AFX','Slot Car','MEDIA-BACKUP','Media Backup')`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+	body, contentType := buildMultipartPhoto(t, "front.jpg", sampleJPEG(t))
+	uploadResp := doRequest(t, a, http.MethodPost, "/api/items/item-media/photos", body, map[string]string{"Content-Type": contentType})
+	if uploadResp.Code != http.StatusCreated {
+		t.Fatalf("upload photo status=%d body=%s", uploadResp.Code, uploadResp.Body.String())
+	}
+	var uploaded struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(uploadResp.Body).Decode(&uploaded); err != nil {
+		t.Fatalf("decode upload: %v", err)
+	}
+
+	runResp := doRequest(t, a, http.MethodPost, "/api/backup/run", nil, nil)
+	if runResp.Code != http.StatusOK {
+		t.Fatalf("backup run status=%d body=%s", runResp.Code, runResp.Body.String())
+	}
+	var runPayload struct {
+		Backup struct {
+			Path string `json:"path"`
+		} `json:"backup"`
+	}
+	if err := json.NewDecoder(runResp.Body).Decode(&runPayload); err != nil {
+		t.Fatalf("decode backup run: %v", err)
+	}
+	manifestEntry := filepath.ToSlash(filepath.Join("media", "assets", uploaded.ID, "manifest.json"))
+	originalEntry := filepath.ToSlash(filepath.Join("media", "assets", uploaded.ID, "original", "front.jpg"))
+	manifestBefore := archiveEntryBytes(t, runPayload.Backup.Path, manifestEntry)
+	originalBefore := archiveEntryBytes(t, runPayload.Backup.Path, originalEntry)
+	if len(manifestBefore) == 0 || !strings.Contains(string(manifestBefore), `"asset_id": "`+uploaded.ID+`"`) || len(originalBefore) == 0 {
+		t.Fatalf("backup archive did not preserve canonical media asset manifest/original")
+	}
+
+	assetDir := filepath.Join(a.cfg.DataDir, "media", "assets", uploaded.ID)
+	if err := os.RemoveAll(assetDir); err != nil {
+		t.Fatalf("remove media asset before restore: %v", err)
+	}
+	restoreBody := bytes.NewBufferString(`{"backup_path":"` + strings.ReplaceAll(runPayload.Backup.Path, `\`, `\\`) + `","confirm_restore":true}`)
+	restoreResp := doRequest(t, a, http.MethodPost, "/api/backup/restore", restoreBody, map[string]string{"Content-Type": "application/json"})
+	if restoreResp.Code != http.StatusOK {
+		t.Fatalf("backup restore status=%d body=%s", restoreResp.Code, restoreResp.Body.String())
+	}
+	restoredManifest, err := os.ReadFile(filepath.Join(assetDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read restored manifest: %v", err)
+	}
+	restoredOriginal, err := os.ReadFile(filepath.Join(assetDir, "original", "front.jpg"))
+	if err != nil {
+		t.Fatalf("read restored original: %v", err)
+	}
+	if !bytes.Equal(restoredManifest, manifestBefore) || !bytes.Equal(restoredOriginal, originalBefore) {
+		t.Fatalf("restore did not round-trip canonical media manifest/original bytes")
+	}
+}
+
+func archiveEntryBytes(t *testing.T, path, name string) []byte {
+	t.Helper()
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatalf("open backup archive: %v", err)
+	}
+	defer zr.Close()
+	for _, file := range zr.File {
+		if file.Name != name {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open archive entry %s: %v", name, err)
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("read archive entry %s: %v", name, err)
+		}
+		return data
+	}
+	t.Fatalf("backup archive missing %s", name)
+	return nil
 }

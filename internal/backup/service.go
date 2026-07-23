@@ -19,6 +19,7 @@ import (
 type Service struct {
 	dbPath     string
 	backupDir  string
+	dataDir    string
 	interval   time.Duration
 	mu         sync.Mutex
 	lastBackup string
@@ -47,12 +48,17 @@ type RestoreResult struct {
 }
 
 func NewService(dbPath, backupDir string, intervalMinutes int) *Service {
+	return NewServiceWithDataDir(dbPath, backupDir, intervalMinutes, "")
+}
+
+func NewServiceWithDataDir(dbPath, backupDir string, intervalMinutes int, dataDir string) *Service {
 	if intervalMinutes <= 0 {
 		intervalMinutes = 60
 	}
 	return &Service{
 		dbPath:    dbPath,
 		backupDir: backupDir,
+		dataDir:   strings.TrimSpace(dataDir),
 		interval:  time.Duration(intervalMinutes) * time.Minute,
 	}
 }
@@ -80,7 +86,7 @@ func (s *Service) CreateBackup(ctx context.Context) (BackupRunResult, error) {
 	createdAt := time.Now().UTC()
 	name := "cabinet-backup-" + createdAt.Format("2006-01-02-150405.000000000") + ".zip"
 	target := filepath.Join(s.backupDir, name)
-	if err := createArchive(s.dbPath, target, createdAt); err != nil {
+	if err := createArchive(s.dbPath, target, createdAt, s.dataDir); err != nil {
 		return BackupRunResult{}, fmt.Errorf("create backup archive: %w", err)
 	}
 	ok, err := validateSQLiteFile(target)
@@ -168,6 +174,11 @@ func (s *Service) RestoreBackup(backupPath string) (RestoreResult, error) {
 	if err := copyFile(sourcePath, s.dbPath); err != nil {
 		return RestoreResult{}, err
 	}
+	if strings.EqualFold(filepath.Ext(backupPath), ".zip") && strings.TrimSpace(s.dataDir) != "" {
+		if err := restoreArchiveMedia(backupPath, s.dataDir); err != nil {
+			return RestoreResult{}, err
+		}
+	}
 	return RestoreResult{
 		RestoredPath:          backupPath,
 		RestoredAt:            time.Now().UTC().Format(time.RFC3339),
@@ -218,7 +229,7 @@ func validateSQLiteFile(path string) (string, error) {
 	return result, nil
 }
 
-func createArchive(dbPath, target string, createdAt time.Time) error {
+func createArchive(dbPath, target string, createdAt time.Time, dataDir string) error {
 	tmp := target + ".tmp"
 	if err := os.RemoveAll(tmp); err != nil {
 		return err
@@ -251,6 +262,14 @@ func createArchive(dbPath, target string, createdAt time.Time) error {
 		_ = out.Close()
 		_ = os.Remove(tmp)
 		return err
+	}
+	if strings.TrimSpace(dataDir) != "" {
+		if err := addMediaDirsToZip(zw, dataDir); err != nil {
+			_ = zw.Close()
+			_ = out.Close()
+			_ = os.Remove(tmp)
+			return err
+		}
 	}
 	if err := zw.Close(); err != nil {
 		_ = out.Close()
@@ -287,6 +306,48 @@ func addFileToZip(zw *zip.Writer, src, name string) error {
 	return err
 }
 
+func addMediaDirsToZip(zw *zip.Writer, dataDir string) error {
+	for _, root := range mediaArchiveRoots(dataDir) {
+		if _, err := os.Stat(root); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(dataDir, path)
+			if err != nil {
+				return err
+			}
+			return addFileToZip(zw, path, filepath.ToSlash(rel))
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mediaArchiveRoots(dataDir string) []string {
+	roots := []string{filepath.Join(dataDir, "media")}
+	profilesDir := filepath.Join(dataDir, "profiles")
+	entries, err := os.ReadDir(profilesDir)
+	if err != nil {
+		return roots
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			roots = append(roots, filepath.Join(profilesDir, entry.Name(), "media"))
+		}
+	}
+	return roots
+}
+
 func extractArchiveDatabase(path string) (string, error) {
 	zr, err := zip.OpenReader(path)
 	if err != nil {
@@ -320,6 +381,65 @@ func extractArchiveDatabase(path string) (string, error) {
 		return tmp.Name(), nil
 	}
 	return "", fmt.Errorf("backup archive missing database/cabinet.db")
+}
+
+func restoreArchiveMedia(path, dataDir string) error {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return fmt.Errorf("open backup archive: %w", err)
+	}
+	defer zr.Close()
+	for _, file := range zr.File {
+		if !isMediaArchiveEntry(file.Name) {
+			continue
+		}
+		cleanName := filepath.Clean(filepath.FromSlash(file.Name))
+		target := filepath.Join(dataDir, cleanName)
+		if !pathWithin(dataDir, target) {
+			return fmt.Errorf("backup media path escapes data dir: %s", file.Name)
+		}
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		in, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("open archive media file: %w", err)
+		}
+		out, err := os.Create(target)
+		if err != nil {
+			_ = in.Close()
+			return err
+		}
+		_, copyErr := io.Copy(out, in)
+		closeInErr := in.Close()
+		closeOutErr := out.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeInErr != nil {
+			return closeInErr
+		}
+		if closeOutErr != nil {
+			return closeOutErr
+		}
+	}
+	return nil
+}
+
+func isMediaArchiveEntry(name string) bool {
+	name = filepath.ToSlash(strings.TrimSpace(name))
+	return strings.HasPrefix(name, "media/") || (strings.HasPrefix(name, "profiles/") && strings.Contains(name, "/media/"))
+}
+
+func pathWithin(root, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	return err == nil && rel != "." && !strings.HasPrefix(rel, "..")
 }
 
 func copyFile(src, dst string) error {

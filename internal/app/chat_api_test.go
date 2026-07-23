@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -122,6 +124,50 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	}
 	if attachment.ID == "" || attachment.ProfileID != p.ID || attachment.ThreadID != thread.ID || attachment.Filename != "notes.txt" || attachment.SizeBytes != int64(len("sample attachment")) {
 		t.Fatalf("expected scoped attachment metadata, got %+v", attachment)
+	}
+	attachmentAssetDir := filepath.Join(a.cfg.DataDir, "profiles", p.ID, "media", "assets", attachment.ID)
+	if attachment.Path != filepath.Join(attachmentAssetDir, "original", "notes.txt") {
+		t.Fatalf("expected chat attachment canonical original path, got %s", attachment.Path)
+	}
+	var storedAttachmentPath string
+	if err := a.db.QueryRow(`SELECT stored_path FROM chat_attachments WHERE profile_id = ? AND id = ?`, p.ID, attachment.ID).Scan(&storedAttachmentPath); err != nil {
+		t.Fatalf("query stored chat attachment path: %v", err)
+	}
+	if storedAttachmentPath != filepath.ToSlash(filepath.Join("assets", attachment.ID, "original", "notes.txt")) {
+		t.Fatalf("expected DB chat attachment path to be relative to media root, got %q", storedAttachmentPath)
+	}
+	for _, dir := range []string{"original", "renditions", "variations"} {
+		if _, err := os.Stat(filepath.Join(attachmentAssetDir, dir)); err != nil {
+			t.Fatalf("expected canonical chat attachment %s dir: %v", dir, err)
+		}
+	}
+	rawAttachmentManifest, err := os.ReadFile(filepath.Join(attachmentAssetDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read chat attachment manifest: %v", err)
+	}
+	var attachmentManifest struct {
+		Version  int    `json:"version"`
+		AssetID  string `json:"asset_id"`
+		Original struct {
+			Filename     string `json:"filename"`
+			RelativePath string `json:"relative_path"`
+			ContentHash  string `json:"content_hash"`
+			MIMEType     string `json:"mime_type"`
+			Immutable    bool   `json:"immutable"`
+		} `json:"original"`
+		Owners []struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"owners"`
+	}
+	if err := json.Unmarshal(rawAttachmentManifest, &attachmentManifest); err != nil {
+		t.Fatalf("decode chat attachment manifest: %v", err)
+	}
+	if attachmentManifest.Version != 1 || attachmentManifest.AssetID != attachment.ID || attachmentManifest.Original.Filename != "notes.txt" || attachmentManifest.Original.RelativePath != "original/notes.txt" || attachmentManifest.Original.MIMEType != "application/octet-stream" || !attachmentManifest.Original.Immutable || !strings.HasPrefix(attachmentManifest.Original.ContentHash, "sha256:") {
+		t.Fatalf("unexpected chat attachment manifest: %+v", attachmentManifest)
+	}
+	if len(attachmentManifest.Owners) != 1 || attachmentManifest.Owners[0].Type != "chat_thread" || attachmentManifest.Owners[0].ID != thread.ID {
+		t.Fatalf("unexpected chat attachment manifest owners: %+v", attachmentManifest.Owners)
 	}
 
 	msgWithAttachment := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"use this explicit attachment","attachment_ids":["`+attachment.ID+`"],"context":{"route":{"pathname":"/chats/"},"profile":{"id":"`+p.ID+`"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})

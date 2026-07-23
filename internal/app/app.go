@@ -133,7 +133,7 @@ func New(cfg config.Config) (*App, error) {
 	barcodeRepo := barcode.NewRepository(conn)
 	mediaService := media.NewService(conn, filepath.Join(cfg.DataDir, "media"))
 	dataService := datamgmt.NewService(conn)
-	backupSvc := backup.NewService(cfg.DBPath, filepath.Join(cfg.DataDir, "backups"), cfg.BackupInterval)
+	backupSvc := backup.NewServiceWithDataDir(cfg.DBPath, filepath.Join(cfg.DataDir, "backups"), cfg.BackupInterval, cfg.DataDir)
 	searchRepo := search.NewRepository(conn)
 	scannerSvc := scanner.NewService(conn)
 	matchingSvc := matching.NewService(conn)
@@ -5191,7 +5191,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_telegram_media"}`, http.StatusBadRequest)
 			return
 		}
-		svc := telegramcapture.NewService(profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}, chatSvc)
+		svc := telegramcapture.NewServiceWithMedia(profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}, chatSvc, mediaService)
 		result, err := svc.IngestCatalogCapture(r.Context(), telegramcapture.CaptureInput{
 			SenderID:       req.SenderID,
 			ChatID:         req.ChatID,
@@ -5265,7 +5265,7 @@ func New(cfg config.Config) (*App, error) {
 		} else if ok {
 			input.Draft = draft
 		}
-		svc := telegramcapture.NewService(authorizer, chatSvc)
+		svc := telegramcapture.NewServiceWithMedia(authorizer, chatSvc, mediaService)
 		result, err := svc.IngestCatalogCapture(r.Context(), input)
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
@@ -5386,7 +5386,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		svc := telegramcapture.NewService(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc)
+		svc := telegramcapture.NewServiceWithMedia(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc, mediaService)
 		result, err := svc.HandleCatalogCaptureCallback(r.Context(), telegramcapture.CallbackInput{
 			SenderID:     req.SenderID,
 			ChatID:       req.ChatID,
@@ -6015,7 +6015,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		defer file.Close()
-		attachment, err := chatSvc.SaveAttachment(r.Context(), profileID, threadID, hdr.Filename, hdr.Header.Get("Content-Type"), file)
+		attachment, err := mediaService.SaveWorkspaceAttachment(r.Context(), profileID, threadID, hdr.Filename, hdr.Header.Get("Content-Type"), file)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_save_attachment"}`, http.StatusBadRequest)
 			return
@@ -6304,7 +6304,7 @@ func New(cfg config.Config) (*App, error) {
 				}
 				threadID = thread.ID
 			}
-			attachment, err := chatSvc.SaveAttachment(r.Context(), active.ID, threadID, hdr.Filename, mimeType, file)
+			attachment, err := mediaService.SaveWorkspaceAttachment(r.Context(), active.ID, threadID, hdr.Filename, mimeType, file)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_save_media_asset"}`, http.StatusBadRequest)
 				return
