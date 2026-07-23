@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/chat"
+	"github.com/collectors-tech/cabinet/internal/media"
 )
 
 var ErrUnauthorizedSender = errors.New("telegram sender is not authorized for Cabinet capture")
@@ -35,13 +36,22 @@ type ChatService interface {
 	CreateInboxItem(ctx context.Context, item chat.InboxItem) (chat.InboxItem, error)
 }
 
+type MediaAttachmentService interface {
+	SaveWorkspaceAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (media.WorkspaceAttachment, error)
+}
+
 type Service struct {
 	authorizer Authorizer
 	chat       ChatService
+	media      MediaAttachmentService
 }
 
 func NewService(authorizer Authorizer, chatSvc ChatService) *Service {
 	return &Service{authorizer: authorizer, chat: chatSvc}
+}
+
+func NewServiceWithMedia(authorizer Authorizer, chatSvc ChatService, mediaSvc MediaAttachmentService) *Service {
+	return &Service{authorizer: authorizer, chat: chatSvc, media: mediaSvc}
 }
 
 type CaptureInput struct {
@@ -229,7 +239,7 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		if reader == nil {
 			reader = strings.NewReader("")
 		}
-		attachment, err := s.chat.SaveAttachment(ctx, profileID, thread.ID, filename, strings.TrimSpace(media.MIMEType), reader)
+		attachment, err := s.saveAttachment(ctx, profileID, thread.ID, filename, strings.TrimSpace(media.MIMEType), reader)
 		if err != nil {
 			return CaptureResult{}, err
 		}
@@ -362,6 +372,26 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		WorkflowRun:   workflowRun,
 		InboxItem:     inboxItem,
 		TelegramReply: telegramReply,
+	}, nil
+}
+
+func (s *Service) saveAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, reader io.Reader) (chat.Attachment, error) {
+	if s.media == nil {
+		return s.chat.SaveAttachment(ctx, profileID, threadID, filename, mimeType, reader)
+	}
+	attachment, err := s.media.SaveWorkspaceAttachment(ctx, profileID, threadID, filename, mimeType, reader)
+	if err != nil {
+		return chat.Attachment{}, err
+	}
+	return chat.Attachment{
+		ID:        attachment.ID,
+		ProfileID: attachment.ProfileID,
+		ThreadID:  attachment.ThreadID,
+		Filename:  attachment.Filename,
+		MimeType:  attachment.MimeType,
+		SizeBytes: attachment.SizeBytes,
+		Path:      attachment.Path,
+		CreatedAt: attachment.CreatedAt,
 	}, nil
 }
 

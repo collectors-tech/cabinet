@@ -5191,7 +5191,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_telegram_media"}`, http.StatusBadRequest)
 			return
 		}
-		svc := telegramcapture.NewService(profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}, chatSvc)
+		svc := telegramcapture.NewServiceWithMedia(profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}, chatSvc, mediaService)
 		result, err := svc.IngestCatalogCapture(r.Context(), telegramcapture.CaptureInput{
 			SenderID:       req.SenderID,
 			ChatID:         req.ChatID,
@@ -5265,7 +5265,7 @@ func New(cfg config.Config) (*App, error) {
 		} else if ok {
 			input.Draft = draft
 		}
-		svc := telegramcapture.NewService(authorizer, chatSvc)
+		svc := telegramcapture.NewServiceWithMedia(authorizer, chatSvc, mediaService)
 		result, err := svc.IngestCatalogCapture(r.Context(), input)
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
@@ -5386,7 +5386,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		svc := telegramcapture.NewService(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc)
+		svc := telegramcapture.NewServiceWithMedia(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc, mediaService)
 		result, err := svc.HandleCatalogCaptureCallback(r.Context(), telegramcapture.CallbackInput{
 			SenderID:     req.SenderID,
 			ChatID:       req.ChatID,

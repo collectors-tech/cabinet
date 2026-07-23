@@ -1,15 +1,22 @@
 package telegramcapture
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/db"
+	"github.com/collectors-tech/cabinet/internal/media"
 )
 
 type staticAuthorizer map[string]string
@@ -158,6 +165,90 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 		Confirm:   false,
 	}); err == nil {
 		t.Fatalf("expected confirmation-required apply error")
+	}
+}
+
+func TestTelegramCaptureStoresResolvedMediaAsCanonicalAssets(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(root, "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	profileID := "profile-telegram-canonical"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, "Telegram Canonical Media"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	chatSvc := chat.NewService(conn, filepath.Join(root, "attachments"))
+	mediaSvc := media.NewService(conn, filepath.Join(root, "media"))
+	svc := NewServiceWithMedia(staticAuthorizer{"sender-media|chat-media": profileID}, chatSvc, mediaSvc)
+	result, err := svc.IngestCatalogCapture(ctx, CaptureInput{
+		SenderID: "sender-media",
+		ChatID:   "chat-media",
+		Barcode:  "4904810900999",
+		Draft:    Draft{Title: "Canonical Telegram Capture"},
+		Media: []MediaInput{
+			{
+				FileID:       "telegram-canonical-photo",
+				FileUniqueID: "telegram-canonical-unique",
+				FileSize:     len(telegramCaptureJPEG(t)),
+				Filename:     "box-front.jpg",
+				MIMEType:     "image/jpeg",
+				Kind:         "photo",
+				Reader:       bytes.NewReader(telegramCaptureJPEG(t)),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() error = %v", err)
+	}
+	if len(result.Attachments) != 1 {
+		t.Fatalf("expected one attachment, got %d", len(result.Attachments))
+	}
+	attachment := result.Attachments[0]
+	assetDir := filepath.Join(root, "media", "assets", attachment.ID)
+	if attachment.Path != filepath.Join(assetDir, "original", "box-front.jpg") {
+		t.Fatalf("expected Telegram attachment canonical path, got %s", attachment.Path)
+	}
+	for _, dir := range []string{"original", "renditions", "variations"} {
+		if _, err := os.Stat(filepath.Join(assetDir, dir)); err != nil {
+			t.Fatalf("expected Telegram canonical %s dir: %v", dir, err)
+		}
+	}
+	rawManifest, err := os.ReadFile(filepath.Join(assetDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read Telegram asset manifest: %v", err)
+	}
+	var manifest struct {
+		Version  int    `json:"version"`
+		AssetID  string `json:"asset_id"`
+		Original struct {
+			Filename     string `json:"filename"`
+			RelativePath string `json:"relative_path"`
+			ContentHash  string `json:"content_hash"`
+			MIMEType     string `json:"mime_type"`
+			Immutable    bool   `json:"immutable"`
+		} `json:"original"`
+		Owners []struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"owners"`
+	}
+	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
+		t.Fatalf("decode Telegram asset manifest: %v", err)
+	}
+	if manifest.Version != 1 || manifest.AssetID != attachment.ID || manifest.Original.Filename != "box-front.jpg" || manifest.Original.RelativePath != "original/box-front.jpg" || manifest.Original.MIMEType != "image/jpeg" || !manifest.Original.Immutable || !strings.HasPrefix(manifest.Original.ContentHash, "sha256:") {
+		t.Fatalf("unexpected Telegram asset manifest: %+v", manifest)
+	}
+	if len(manifest.Owners) != 1 || manifest.Owners[0].Type != "chat_thread" || manifest.Owners[0].ID != result.Thread.ID {
+		t.Fatalf("unexpected Telegram asset owners: %+v", manifest.Owners)
+	}
+	if _, err := os.Stat(filepath.Join(root, "attachments")); !os.IsNotExist(err) {
+		t.Fatalf("legacy attachment directory should not be used, stat err=%v", err)
 	}
 }
 
@@ -766,4 +857,18 @@ func mediaFileSizeEquals(value any, expected int) bool {
 	default:
 		return false
 	}
+}
+
+func telegramCaptureJPEG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img.Set(0, 0, color.RGBA{R: 240, A: 255})
+	img.Set(1, 0, color.RGBA{G: 180, A: 255})
+	img.Set(0, 1, color.RGBA{B: 220, A: 255})
+	img.Set(1, 1, color.RGBA{R: 230, G: 230, B: 230, A: 255})
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatalf("encode jpeg fixture: %v", err)
+	}
+	return buf.Bytes()
 }
