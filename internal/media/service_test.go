@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -413,6 +414,36 @@ func TestDeletePreservesSharedCanonicalAssetAndCleansOrphan(t *testing.T) {
 	}
 }
 
+func TestCreateCanonicalAssetCleansStagingAfterInterruptedRead(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	svc := NewService(nil, mediaRoot)
+	readErr := errors.New("interrupted upload")
+
+	_, _, _, err := svc.createCanonicalAsset(
+		context.Background(),
+		mediaRoot,
+		"asset-interrupted",
+		"broken.bin",
+		"broken.bin",
+		"application/octet-stream",
+		&interruptingReader{data: []byte("partial original bytes"), err: readErr},
+		[]AssetManifestOwner{{Type: "chat_thread", ID: "thread-1"}},
+		map[string]string{"source": "test"},
+	)
+	if !errors.Is(err, readErr) {
+		t.Fatalf("createCanonicalAsset() error = %v, want %v", err, readErr)
+	}
+	if _, err := os.Stat(filepath.Join(mediaRoot, "assets", "asset-interrupted")); !os.IsNotExist(err) {
+		t.Fatalf("interrupted ingestion should not leave visible asset folder, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(mediaRoot, ".staging", "asset-interrupted")); !os.IsNotExist(err) {
+		t.Fatalf("interrupted ingestion should remove staging folder, stat err=%v", err)
+	}
+}
+
 func TestReorderPersistsListOrder(t *testing.T) {
 	t.Parallel()
 
@@ -472,6 +503,20 @@ func sampleJPEG(t *testing.T) []byte {
 		t.Fatalf("encode sample jpeg: %v", err)
 	}
 	return b.Bytes()
+}
+
+type interruptingReader struct {
+	data []byte
+	err  error
+	read bool
+}
+
+func (r *interruptingReader) Read(p []byte) (int, error) {
+	if r.read {
+		return 0, r.err
+	}
+	r.read = true
+	return copy(p, r.data), nil
 }
 
 func containsAssetState(assets []WorkspaceAsset, id, state string) bool {
