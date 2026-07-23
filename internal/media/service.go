@@ -328,13 +328,20 @@ func (s *Service) createCanonicalAsset(ctx context.Context, mediaRoot, assetID, 
 
 	previewPath := filepath.Join(stagingDir, "renditions", "preview.jpg")
 	thumbPath := filepath.Join(stagingDir, "renditions", "thumbnail.jpg")
-	if err := generateScaledJPEG(origPath, previewPath, 1024); err != nil {
-		_ = os.RemoveAll(stagingDir)
-		return "", "", "", fmt.Errorf("generate preview: %w", err)
-	}
-	if err := generateScaledJPEG(origPath, thumbPath, 256); err != nil {
-		_ = os.RemoveAll(stagingDir)
-		return "", "", "", fmt.Errorf("generate thumbnail: %w", err)
+	renditions := []AssetManifestVariant{}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(mimeType)), "image/") {
+		if err := generateScaledJPEG(origPath, previewPath, 1024); err != nil {
+			_ = os.RemoveAll(stagingDir)
+			return "", "", "", fmt.Errorf("generate preview: %w", err)
+		}
+		if err := generateScaledJPEG(origPath, thumbPath, 256); err != nil {
+			_ = os.RemoveAll(stagingDir)
+			return "", "", "", fmt.Errorf("generate thumbnail: %w", err)
+		}
+		renditions = []AssetManifestVariant{
+			{Name: "preview", RelativePath: "renditions/preview.jpg", Generator: "cabinet.media.generateScaledJPEG", GeneratorVersion: "1"},
+			{Name: "thumbnail", RelativePath: "renditions/thumbnail.jpg", Generator: "cabinet.media.generateScaledJPEG", GeneratorVersion: "1"},
+		}
 	}
 
 	width, height := imageDimensions(origPath)
@@ -356,10 +363,7 @@ func (s *Service) createCanonicalAsset(ctx context.Context, mediaRoot, assetID, 
 			Height:       height,
 			Immutable:    true,
 		},
-		Renditions: []AssetManifestVariant{
-			{Name: "preview", RelativePath: "renditions/preview.jpg", Generator: "cabinet.media.generateScaledJPEG", GeneratorVersion: "1"},
-			{Name: "thumbnail", RelativePath: "renditions/thumbnail.jpg", Generator: "cabinet.media.generateScaledJPEG", GeneratorVersion: "1"},
-		},
+		Renditions: renditions,
 		Variations: []AssetManifestVariant{},
 		Owners:     owners,
 		Provenance: provenance,

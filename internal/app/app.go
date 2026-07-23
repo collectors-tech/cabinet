@@ -6015,7 +6015,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		defer file.Close()
-		attachment, err := chatSvc.SaveAttachment(r.Context(), profileID, threadID, hdr.Filename, hdr.Header.Get("Content-Type"), file)
+		attachment, err := mediaService.SaveWorkspaceAttachment(r.Context(), profileID, threadID, hdr.Filename, hdr.Header.Get("Content-Type"), file)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_save_attachment"}`, http.StatusBadRequest)
 			return
