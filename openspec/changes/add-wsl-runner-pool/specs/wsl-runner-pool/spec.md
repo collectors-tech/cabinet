@@ -76,3 +76,17 @@ configure a hidden per-distro current-user logon task unless explicitly skipped.
 - **THEN** provisioning SHALL stop before creating a distribution
 - **AND** the error SHALL explain how to change the location, ceiling, count, or
   explicit override
+
+### Requirement: CABINET-CI-RUNNER-006 Organisation runner access SHALL be bounded
+
+The installer SHALL retain repository scope by default and MAY register new
+runners into an organisation-scoped runner group limited to selected
+repositories. Access updates SHALL be additive, and public repositories SHALL
+require explicit operator opt-in.
+
+#### Scenario: Add trusted repositories to a shared runner group
+
+- **GIVEN** an authenticated organisation runner administrator
+- **WHEN** organisation scope names a runner group and repositories
+- **THEN** the installer SHALL create or reuse the selected-repositories group
+- **AND** it SHALL register new runners into that group without silently converting existing repository-scoped registrations

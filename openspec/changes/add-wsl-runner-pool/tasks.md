@@ -19,3 +19,11 @@
   - Strict OpenSpec: 11 passed. Pre-push Go API docs smoke: passed.
 - [x] 3.4 Commit, push, and open a pull request to `develop`.
   - Commit `eeae83ad`; pull request `#1950`.
+
+## 4. Organisation runner groups
+
+- [x] 4.1 Add the selected-repository organisation runner-group contract.
+- [x] 4.2 Add repository-default and organisation-scope installer paths.
+- [x] 4.3 Document permissions, public-repository opt-in, and safe migration.
+- [x] 4.4 Validate the contract test, PowerShell and embedded Bash syntax,
+  repository and organisation `WhatIf` plans, and strict OpenSpec checks.

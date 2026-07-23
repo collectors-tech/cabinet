@@ -50,6 +50,18 @@ param(
     [ValidateRange(1, 16)]
     [int]$RunnerCount = 1,
 
+    [Alias("Scope")]
+    [ValidateSet("Repository", "Organization")]
+    [string]$RunnerScope = "Repository",
+
+    [ValidatePattern('^$|^[A-Za-z0-9_.-]+$')]
+    [string]$Organization = "",
+
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$')]
+    [string]$RunnerGroupName = "cabinet-wsl",
+
+    [string[]]$RunnerGroupRepositories = @(),
+
     [ValidatePattern('^[1-9][0-9]*(MB|GB|TB)$')]
     [string]$VhdSize = "60GB",
 
@@ -87,6 +99,7 @@ param(
 
     [switch]$ForceRecreate,
     [switch]$AllowLowDiskSpace,
+    [switch]$AllowPublicRepositories,
     [switch]$SkipAutostart
 )
 
@@ -199,17 +212,154 @@ function Invoke-WslBootstrap {
     }
 }
 
-function Get-GhRunnerRegistrationToken {
+function Get-GitHubRepositorySlug {
     param([Parameter(Mandatory = $true)][string]$RepoUrl)
 
     $uri = [Uri]$RepoUrl
     $repoSlug = $uri.AbsolutePath.Trim('/').TrimEnd('/')
-    Write-Step "Requesting a fresh runner registration token with GitHub CLI"
-    $tokenOutput = & gh.exe api --method POST "repos/$repoSlug/actions/runners/registration-token" --jq .token
-    if ($LASTEXITCODE -ne 0) {
-        throw "GitHub CLI could not create a runner token for $repoSlug. Confirm gh auth and repository administration access."
+    if ($repoSlug.EndsWith('.git', [StringComparison]::OrdinalIgnoreCase)) {
+        $repoSlug = $repoSlug.Substring(0, $repoSlug.Length - 4)
     }
-    $tokenValue = ([string]($tokenOutput | Select-Object -First 1)).Trim()
+    if ($repoSlug.Split('/').Count -ne 2) {
+        throw "Could not derive owner/repository from '$RepoUrl'."
+    }
+    return $repoSlug
+}
+
+function Invoke-GhApiJson {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments, [Parameter(Mandatory = $true)][string]$FailureMessage)
+    $output = & gh.exe api -H "Accept: application/vnd.github+json" `
+        -H "X-GitHub-Api-Version: 2022-11-28" @Arguments
+    if ($LASTEXITCODE -ne 0) { throw $FailureMessage }
+    $json = ([string[]]$output) -join [Environment]::NewLine
+    if ([string]::IsNullOrWhiteSpace($json)) { return $null }
+    return ($json | ConvertFrom-Json)
+}
+
+function Invoke-GhApiNoContent {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments, [Parameter(Mandatory = $true)][string]$FailureMessage)
+    & gh.exe api -H "Accept: application/vnd.github+json" `
+        -H "X-GitHub-Api-Version: 2022-11-28" @Arguments | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw $FailureMessage }
+}
+
+function Resolve-RunnerGroupRepositorySlugs {
+    param(
+        [Parameter(Mandatory = $true)][string]$OrganizationName,
+        [Parameter(Mandatory = $true)][string]$DefaultRepositorySlug,
+        [string[]]$AdditionalRepositories = @()
+    )
+    $slugs = @($DefaultRepositorySlug)
+    foreach ($repository in $AdditionalRepositories) {
+        if ([string]::IsNullOrWhiteSpace($repository)) { continue }
+        $value = $repository.Trim()
+        if ($value -match '^https://github\.com/') {
+            $value = Get-GitHubRepositorySlug -RepoUrl $value
+        } elseif ($value -notmatch '/') {
+            $value = "{0}/{1}" -f $OrganizationName, $value
+        }
+        if ($value -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+            throw "Runner group repository '$repository' must be a repository name, owner/repository slug, or GitHub repository URL."
+        }
+        if (-not $value.Split('/')[0].Equals($OrganizationName, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Runner group repository '$value' is not owned by organisation '$OrganizationName'."
+        }
+        $slugs += $value
+    }
+    return @($slugs | Sort-Object -Unique)
+}
+
+function Ensure-GhOrganizationRunnerGroup {
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = "Medium")]
+    param(
+        [Parameter(Mandatory = $true)][string]$OrganizationName,
+        [Parameter(Mandatory = $true)][string]$GroupName,
+        [Parameter(Mandatory = $true)][string[]]$RepositorySlugs,
+        [switch]$AllowPublic
+    )
+    Write-Step "Inspecting GitHub organisation runner group '$GroupName'"
+    $groupsResponse = Invoke-GhApiJson -Arguments @(
+        "orgs/$OrganizationName/actions/runner-groups?per_page=100"
+    ) -FailureMessage "GitHub CLI could not list runner groups for '$OrganizationName'."
+    $group = @($groupsResponse.runner_groups) | Where-Object { $_.name -eq $GroupName } | Select-Object -First 1
+    $repositoryMetadata = @()
+    foreach ($slug in $RepositorySlugs) {
+        $repository = Invoke-GhApiJson -Arguments @("repos/$slug") `
+            -FailureMessage "GitHub CLI could not inspect repository '$slug'."
+        if ($repository.owner.login -ne $OrganizationName) {
+            throw "Repository '$slug' is not owned by organisation '$OrganizationName'."
+        }
+        if ($repository.visibility -eq "public" -and -not $AllowPublic) {
+            throw "Repository '$slug' is public. Re-run with -AllowPublicRepositories only after reviewing the self-hosted runner security risk."
+        }
+        $repositoryMetadata += $repository
+    }
+    if ($null -eq $group) {
+        if ($PSCmdlet.ShouldProcess(
+                "$OrganizationName/$GroupName",
+                "Create organisation runner group with selected-repository access")) {
+            $group = Invoke-GhApiJson -Arguments @(
+                "--method", "POST",
+                "orgs/$OrganizationName/actions/runner-groups",
+                "-f", "name=$GroupName",
+                "-f", "visibility=selected",
+                "-F", ("allows_public_repositories={0}" -f $AllowPublic.IsPresent.ToString().ToLowerInvariant())
+            ) -FailureMessage "GitHub CLI could not create runner group '$GroupName' in '$OrganizationName'."
+        } else {
+            foreach ($repository in $repositoryMetadata) {
+                $null = $PSCmdlet.ShouldProcess($repository.full_name, "Grant repository access to planned runner group '$GroupName'")
+            }
+            return
+        }
+    }
+    if ($group.visibility -ne "selected") {
+        throw "Runner group '$GroupName' already exists with '$($group.visibility)' repository visibility. The installer will not narrow an existing group's access automatically."
+    }
+    if ($AllowPublic -and -not $group.allows_public_repositories) {
+        if ($PSCmdlet.ShouldProcess("$OrganizationName/$GroupName", "Allow selected public repositories to use the runner group")) {
+            Invoke-GhApiNoContent -Arguments @(
+                "--method", "PATCH",
+                "orgs/$OrganizationName/actions/runner-groups/$($group.id)",
+                "-F", "allows_public_repositories=true"
+            ) -FailureMessage "GitHub CLI could not enable public-repository access for runner group '$GroupName'."
+        }
+    }
+    $accessResponse = Invoke-GhApiJson -Arguments @(
+        "orgs/$OrganizationName/actions/runner-groups/$($group.id)/repositories?per_page=100"
+    ) -FailureMessage "GitHub CLI could not inspect repository access for runner group '$GroupName'."
+    $currentRepositoryIds = @($accessResponse.repositories | ForEach-Object { [Int64]$_.id })
+    foreach ($repository in $repositoryMetadata) {
+        if ($currentRepositoryIds -contains [Int64]$repository.id) { continue }
+        if ($PSCmdlet.ShouldProcess($repository.full_name, "Grant repository access to runner group '$GroupName'")) {
+            Invoke-GhApiNoContent -Arguments @(
+                "--method", "PUT",
+                "orgs/$OrganizationName/actions/runner-groups/$($group.id)/repositories/$($repository.id)"
+            ) -FailureMessage "GitHub CLI could not grant '$($repository.full_name)' access to runner group '$GroupName'."
+        }
+    }
+}
+
+function Get-GhRunnerRegistrationToken {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet("Repository", "Organization")][string]$Scope,
+        [Parameter(Mandatory = $true)][string]$RepoUrl,
+        [string]$OrganizationName = ""
+    )
+    if ($Scope -eq "Organization") {
+        if ([string]::IsNullOrWhiteSpace($OrganizationName)) {
+            throw "OrganizationName is required for an organisation runner registration token."
+        }
+        $tokenEndpoint = "orgs/$OrganizationName/actions/runners/registration-token"
+        $targetDescription = $OrganizationName
+    } else {
+        $repoSlug = Get-GitHubRepositorySlug -RepoUrl $RepoUrl
+        $tokenEndpoint = "repos/$repoSlug/actions/runners/registration-token"
+        $targetDescription = $repoSlug
+    }
+    Write-Step "Requesting a fresh $($Scope.ToLowerInvariant()) runner registration token with GitHub CLI"
+    $tokenResponse = Invoke-GhApiJson -Arguments @("--method", "POST", $tokenEndpoint) `
+        -FailureMessage "GitHub CLI could not create a runner token for $targetDescription."
+    $tokenValue = ([string]$tokenResponse.token).Trim()
     if ([string]::IsNullOrWhiteSpace($tokenValue)) {
         throw "GitHub CLI returned an empty runner registration token."
     }
@@ -312,15 +462,47 @@ if (-not [string]::IsNullOrWhiteSpace($GitHubTokenFile)) {
         throw "GitHubTokenFile must not be empty."
     }
 }
+$repositorySlug = Get-GitHubRepositorySlug -RepoUrl $RepositoryUrl
+$repositoryOwner = $repositorySlug.Split('/')[0]
+$resolvedOrganization = ""
+$runnerRegistrationUrl = $RepositoryUrl.TrimEnd('/')
+$runnerGroupRepositorySlugs = @()
+if ($RunnerScope -eq "Organization") {
+    $resolvedOrganization = if ([string]::IsNullOrWhiteSpace($Organization)) { $repositoryOwner } else { $Organization }
+    if (-not $repositoryOwner.Equals($resolvedOrganization, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "RepositoryUrl owner '$repositoryOwner' does not match organisation '$resolvedOrganization'."
+    }
+    $runnerRegistrationUrl = "https://github.com/$resolvedOrganization"
+    $runnerGroupRepositorySlugs = Resolve-RunnerGroupRepositorySlugs `
+        -OrganizationName $resolvedOrganization `
+        -DefaultRepositorySlug $repositorySlug `
+        -AdditionalRepositories $RunnerGroupRepositories
+} elseif (
+    $PSBoundParameters.ContainsKey("Organization") -or
+    $PSBoundParameters.ContainsKey("RunnerGroupName") -or
+    $PSBoundParameters.ContainsKey("RunnerGroupRepositories") -or
+    $AllowPublicRepositories
+) {
+    throw "Organization, RunnerGroupName, RunnerGroupRepositories, and AllowPublicRepositories require -RunnerScope Organization."
+}
 $useGitHubCli = -not $GitHubToken -and [string]::IsNullOrWhiteSpace($GitHubTokenFile)
-if ($useGitHubCli) {
+$requiresGitHubCli = $useGitHubCli -or $RunnerScope -eq "Organization"
+if ($requiresGitHubCli) {
     if (-not (Get-Command gh.exe -ErrorAction SilentlyContinue)) {
-        throw "gh.exe is required when no token is supplied."
+        throw "gh.exe is required when no token is supplied or organisation runner scope is requested."
     }
     & gh.exe auth status --hostname github.com *> $null
     if ($LASTEXITCODE -ne 0) {
         throw "GitHub CLI is not authenticated. Run 'gh auth login' and retry."
     }
+}
+if ($RunnerScope -eq "Organization" -and $WhatIfPreference) {
+    Ensure-GhOrganizationRunnerGroup `
+        -OrganizationName $resolvedOrganization `
+        -GroupName $RunnerGroupName `
+        -RepositorySlugs $runnerGroupRepositorySlugs `
+        -AllowPublic:$AllowPublicRepositories `
+        -WhatIf
 }
 if ([string]::IsNullOrWhiteSpace($GoVersion)) {
     $goMod = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "go.mod"
@@ -361,6 +543,9 @@ if ($RunnerCount -gt 1) {
         $memberConfigured = $false
         if ($memberExists -and -not $ForceRecreate) {
             $memberConfigured = Test-WslRunnerConfigured -Distribution $memberDistroName
+            if ($memberConfigured -and $RunnerScope -eq "Organization") {
+                Write-Warning ("{0} is already configured. It will be left unchanged; this installer does not silently convert an existing repository-scoped registration to organisation scope." -f $memberDistroName)
+            }
         }
         $poolMembers += [pscustomobject]@{
             Index = $index
@@ -393,6 +578,7 @@ if ($RunnerCount -gt 1) {
             LinuxUser = $member.LinuxUser
             LinuxPassword = $LinuxPassword
             RepositoryUrl = $RepositoryUrl
+            RunnerScope = $RunnerScope
             RunnerName = $member.RunnerName
             RunnerLabels = $member.RunnerLabels
             RunnerVersion = $RunnerVersion
@@ -402,10 +588,16 @@ if ($RunnerCount -gt 1) {
             PruneUntil = $PruneUntil
             PruneIntervalSeconds = $PruneIntervalSeconds
         }
+        if ($RunnerScope -eq "Organization") {
+            $childParameters.Organization = $resolvedOrganization
+            $childParameters.RunnerGroupName = $RunnerGroupName
+            $childParameters.RunnerGroupRepositories = $RunnerGroupRepositories
+        }
         if ($GitHubToken) { $childParameters.GitHubToken = $GitHubToken }
         elseif ($GitHubTokenFile) { $childParameters.GitHubTokenFile = $GitHubTokenFile }
         if ($ForceRecreate) { $childParameters.ForceRecreate = $true }
         if ($AllowLowDiskSpace) { $childParameters.AllowLowDiskSpace = $true }
+        if ($AllowPublicRepositories) { $childParameters.AllowPublicRepositories = $true }
         if ($SkipAutostart) { $childParameters.SkipAutostart = $true }
         if ($WhatIfPreference) { $childParameters.WhatIf = $true }
         if ($PSBoundParameters.ContainsKey('Confirm')) { $childParameters.Confirm = $PSBoundParameters['Confirm'] }
@@ -417,6 +609,10 @@ if ($RunnerCount -gt 1) {
 }
 
 $distroExists = (Get-WslDistributionNames) -contains $DistroName
+if ($distroExists -and -not $ForceRecreate -and $RunnerScope -eq "Organization" -and
+    (Test-WslRunnerConfigured -Distribution $DistroName)) {
+    throw "$DistroName is already configured; this installer does not silently convert an existing repository-scoped registration to organisation scope. Use a new distro/name or deliberately use -ForceRecreate after confirming the runner is idle."
+}
 $resolvedInstallLocation = [IO.Path]::GetFullPath($InstallLocation)
 if ($distroExists -and $ForceRecreate) {
     if ($PSCmdlet.ShouldProcess($DistroName, "Permanently unregister and delete the WSL distribution")) {
@@ -541,9 +737,22 @@ rm -rf /var/lib/apt/lists/*
     Start-Sleep -Seconds 2
     Invoke-NativeChecked wsl.exe @("--distribution", $DistroName, "--user", "root", "--exec", "systemctl", "start", "docker.service") "Docker did not start in $DistroName"
 
+    if ($RunnerScope -eq "Organization") {
+        Ensure-GhOrganizationRunnerGroup `
+            -OrganizationName $resolvedOrganization `
+            -GroupName $RunnerGroupName `
+            -RepositorySlugs $runnerGroupRepositorySlugs `
+            -AllowPublic:$AllowPublicRepositories
+    }
+
     if ($GitHubToken) { $plainToken = ConvertFrom-SecureValue $GitHubToken }
     elseif ($GitHubTokenFile) { $plainToken = [IO.File]::ReadAllText((Resolve-Path $GitHubTokenFile).Path).Trim() }
-    else { $plainToken = Get-GhRunnerRegistrationToken -RepoUrl $RepositoryUrl }
+    else {
+        $plainToken = Get-GhRunnerRegistrationToken `
+            -Scope $RunnerScope `
+            -RepoUrl $RepositoryUrl `
+            -OrganizationName $resolvedOrganization
+    }
     if ([string]::IsNullOrWhiteSpace($plainToken)) { throw "The runner registration token is empty." }
     $tokenTemp = New-RestrictedTemporaryFile $plainToken
     $plainToken = ""
@@ -553,14 +762,30 @@ rm -rf /var/lib/apt/lists/*
 set -Eeuo pipefail
 linux_user="$1"
 token_source_file="$2"
-repo_url="$3"
+registration_url="$3"
 runner_name="$4"
 runner_labels="$5"
 runner_version="$6"
 runner_sha256="$7"
 prune_until="$8"
 prune_interval_seconds="$9"
+runner_scope="${10}"
+runner_group="${11}"
 [[ "${runner_sha256}" == "-" ]] && runner_sha256=""
+[[ "${runner_group}" == "-" ]] && runner_group=""
+case "${runner_scope}" in
+  Repository)
+    [[ "${registration_url}" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?$ ]] \
+      || { echo "Invalid repository registration URL" >&2; exit 2; }
+    [[ -z "${runner_group}" ]] || { echo "Repository runners cannot specify a runner group" >&2; exit 2; }
+    ;;
+  Organization)
+    [[ "${registration_url}" =~ ^https://github\.com/[A-Za-z0-9_.-]+/?$ ]] \
+      || { echo "Invalid organisation registration URL" >&2; exit 2; }
+    [[ -n "${runner_group}" ]] || { echo "Organisation runner group is required" >&2; exit 2; }
+    ;;
+  *) echo "Invalid runner scope: ${runner_scope}" >&2; exit 2 ;;
+esac
 runner_home="/home/${linux_user}/actions-runner"
 work_root="${runner_home}/_work"
 runtime_dir="/run/cabinet-runner"
@@ -570,7 +795,7 @@ install -o "${linux_user}" -g "${linux_user}" -m 0400 /dev/null "${token_file}"
 tr -d '\r\n' < "${token_source_file}" > "${token_file}"
 trap 'rm -f "${token_file}"' EXIT
 registration_token="$(cat "${token_file}")"
-payload="$(jq -nc --arg url "${repo_url}" '{url: $url, runner_event: "registration"}')"
+payload="$(jq -nc --arg url "${registration_url}" '{url: $url, runner_event: "registration"}')"
 http_status="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 15 --max-time 30 \
   --request POST --header "Authorization: RemoteAuth ${registration_token}" \
   --header 'Content-Type: application/json' --data "${payload}" \
@@ -652,9 +877,11 @@ chmod 0755 /usr/local/libexec/cabinet-runner-*
 sudo -u "${linux_user}" bash -Eeuo pipefail -c '
   cd "$1"
   token_value="$(tr -d "\r\n" < "$3")"
-  ./config.sh --unattended --url "$2" --token "${token_value}" --name "$4" --labels "$5" --work _work --replace
+  config_args=(--unattended --url "$2" --token "${token_value}" --name "$4" --labels "$5" --work _work --replace)
+  if [[ -n "$6" ]]; then config_args+=(--runnergroup "$6"); fi
+  ./config.sh "${config_args[@]}"
   unset token_value
-' _ "${runner_home}" "${repo_url}" "${token_file}" "${runner_name}" "${runner_labels}"
+' _ "${runner_home}" "${registration_url}" "${token_file}" "${runner_name}" "${runner_labels}" "${runner_group}"
 [[ -x "${runner_home}/svc.sh" ]] || { echo "Runner configuration did not create svc.sh" >&2; exit 6; }
 cd "${runner_home}"
 ./svc.sh install "${linux_user}"
@@ -709,10 +936,11 @@ systemctl daemon-reload
 systemctl enable --now docker.service cabinet-runner-reaper.timer "${runner_service}"
 '@
     $shaArgument = if ($RunnerSha256) { $RunnerSha256 } else { "-" }
+    $runnerGroupArgument = if ($RunnerScope -eq "Organization") { $RunnerGroupName } else { "-" }
     Invoke-WslBootstrap $DistroName $runnerBootstrap @(
-        $LinuxUser, $tokenWslPath, $RepositoryUrl.TrimEnd('/'), $RunnerName,
+        $LinuxUser, $tokenWslPath, $runnerRegistrationUrl, $RunnerName,
         $RunnerLabels, $RunnerVersion, $shaArgument, $PruneUntil,
-        [string]$PruneIntervalSeconds
+        [string]$PruneIntervalSeconds, $RunnerScope, $runnerGroupArgument
     ) "GitHub runner provisioning failed"
 } finally {
     $plainPassword = ""
@@ -726,5 +954,10 @@ if (-not $SkipAutostart) {
 }
 Write-Host "Dedicated Cabinet WSL runner installed." -ForegroundColor Green
 Write-Host ("Distribution: {0}`nRunner: {1}`nLocation: {2}" -f $DistroName, $RunnerName, $resolvedInstallLocation)
+Write-Host ("Scope: {0}" -f $RunnerScope)
+if ($RunnerScope -eq "Organization") {
+    Write-Host ("Runner group: {0}/{1}" -f $resolvedOrganization, $RunnerGroupName)
+    Write-Host ("Repositories: {0}" -f ($runnerGroupRepositorySlugs -join ", "))
+}
 Write-Host ("Verify: wsl -d {0} -- systemctl status 'actions.runner.*'" -f $DistroName)
 Write-Host ("Cleanup: wsl -d {0} -- systemctl list-timers cabinet-runner-reaper.timer" -f $DistroName)

@@ -4,6 +4,9 @@ Cabinet can use one dedicated WSL 2 distribution per self-hosted GitHub Actions
 runner. Each member has its own bounded VHDX, Docker daemon, Linux account,
 workspace, cleanup timer, GitHub registration, and Windows autostart task.
 
+Repository scope remains the default. Organisation scope can place new runners
+in a runner group restricted to selected repositories.
+
 The installer does not change workflow `runs-on` selectors. Merge and provision
 the runners first, confirm that they are online, then change selected workflows
 in a separately reviewed issue.
@@ -119,6 +122,31 @@ against a general-purpose distribution.
 To rebuild through the installer, use the matching member parameters with
 `-ForceRecreate`. The switch is deliberately destructive and prompts unless
 confirmation is suppressed explicitly.
+
+## Create an organisation runner group
+
+GitHub CLI needs organisation runner administration permission (`gh auth
+refresh --hostname github.com --scopes admin:org` when needed). This example
+creates or reuses `cabinet-wsl` and adds selected repositories without removing
+existing access:
+
+```powershell
+$password = Read-Host "Linux runner password" -AsSecureString
+.\scripts\github-actions-runner\install-wsl-runner.ps1 `
+  -LinuxPassword $password `
+  -DistroName cabinet-org-02 `
+  -InstallLocation C:\WSL\cabinet-org-02 `
+  -LinuxUser cabinet-org-02 `
+  -RunnerName "$($env:COMPUTERNAME.ToLowerInvariant())-cabinet-org-02" `
+  -RunnerScope Organization `
+  -Organization collectors-tech `
+  -RunnerGroupName cabinet-wsl `
+  -RunnerGroupRepositories collectors-tech/another-trusted-repository
+```
+
+Cabinet is always included. Public repositories require
+`-AllowPublicRepositories`. Existing configured runners are left unchanged
+instead of being silently converted to organisation scope.
 
 ## Reclaim Windows VHDX space
 
