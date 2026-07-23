@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -16,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -112,6 +115,47 @@ type DownloadBundle struct {
 	AssetIDs    []string
 }
 
+type AssetManifest struct {
+	Version    int                    `json:"version"`
+	AssetID    string                 `json:"asset_id"`
+	Files      AssetManifestFiles     `json:"files"`
+	Original   AssetManifestOriginal  `json:"original"`
+	Renditions []AssetManifestVariant `json:"renditions"`
+	Variations []AssetManifestVariant `json:"variations"`
+	Owners     []AssetManifestOwner   `json:"owners"`
+	Provenance map[string]string      `json:"provenance"`
+	CreatedAt  string                 `json:"created_at"`
+}
+
+type AssetManifestFiles struct {
+	OriginalDir   string `json:"original_dir"`
+	RenditionsDir string `json:"renditions_dir"`
+	VariationsDir string `json:"variations_dir"`
+}
+
+type AssetManifestOriginal struct {
+	Filename     string `json:"filename"`
+	RelativePath string `json:"relative_path"`
+	ContentHash  string `json:"content_hash"`
+	MIMEType     string `json:"mime_type"`
+	ByteSize     int64  `json:"byte_size"`
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	Immutable    bool   `json:"immutable"`
+}
+
+type AssetManifestVariant struct {
+	Name             string `json:"name"`
+	RelativePath     string `json:"relative_path"`
+	Generator        string `json:"generator"`
+	GeneratorVersion string `json:"generator_version"`
+}
+
+type AssetManifestOwner struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
 func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Reader) (Photo, error) {
 	itemID = strings.TrimSpace(itemID)
 	if itemID == "" {
@@ -126,36 +170,18 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	if err != nil {
 		return Photo{}, err
 	}
-	itemDir := filepath.Join(rootMediaDir, itemID)
-	if err := os.MkdirAll(itemDir, 0o755); err != nil {
-		return Photo{}, fmt.Errorf("create item media dir: %w", err)
-	}
 
 	ext := strings.ToLower(filepath.Ext(filename))
 	if ext == "" {
 		ext = ".jpg"
 	}
-	origPath := filepath.Join(itemDir, photoID+"_orig"+ext)
-	previewPath := filepath.Join(itemDir, photoID+"_preview.jpg")
-	thumbPath := filepath.Join(itemDir, photoID+"_thumb.jpg")
-
-	origFile, err := os.Create(origPath)
+	safeName := safeMediaFilename(filename)
+	if filepath.Ext(safeName) == "" {
+		safeName += ext
+	}
+	origPath, previewPath, thumbPath, err := s.createCanonicalInventoryAsset(ctx, rootMediaDir, photoID, itemID, safeName, filename, r)
 	if err != nil {
-		return Photo{}, fmt.Errorf("create original file: %w", err)
-	}
-	if _, err := io.Copy(origFile, r); err != nil {
-		origFile.Close()
-		return Photo{}, fmt.Errorf("save original file: %w", err)
-	}
-	if err := origFile.Close(); err != nil {
-		return Photo{}, fmt.Errorf("close original file: %w", err)
-	}
-
-	if err := generateScaledJPEG(origPath, previewPath, 1024); err != nil {
-		return Photo{}, fmt.Errorf("generate preview: %w", err)
-	}
-	if err := generateScaledJPEG(origPath, thumbPath, 256); err != nil {
-		return Photo{}, fmt.Errorf("generate thumbnail: %w", err)
+		return Photo{}, err
 	}
 
 	var existingCount int
@@ -175,10 +201,146 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, photoID, itemID, filename, origPath, previewPath, thumbPath, isPrimary, nextOrder); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
 		return Photo{}, fmt.Errorf("insert photo record: %w", err)
 	}
 
 	return s.GetByID(ctx, photoID)
+}
+
+func (s *Service) createCanonicalInventoryAsset(ctx context.Context, mediaRoot, assetID, itemID, safeName, originalFilename string, src io.Reader) (string, string, string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", "", "", err
+	}
+	assetsRoot := filepath.Join(mediaRoot, "assets")
+	stagingRoot := filepath.Join(mediaRoot, ".staging")
+	if err := os.MkdirAll(stagingRoot, 0o755); err != nil {
+		return "", "", "", fmt.Errorf("create asset staging root: %w", err)
+	}
+	stagingDir := filepath.Join(stagingRoot, assetID)
+	assetDir := filepath.Join(assetsRoot, assetID)
+	_ = os.RemoveAll(stagingDir)
+	if err := os.MkdirAll(filepath.Join(stagingDir, "original"), 0o755); err != nil {
+		return "", "", "", fmt.Errorf("create asset original dir: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(stagingDir, "renditions"), 0o755); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("create asset renditions dir: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(stagingDir, "variations"), 0o755); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("create asset variations dir: %w", err)
+	}
+
+	origPath := filepath.Join(stagingDir, "original", safeName)
+	origFile, err := os.Create(origPath)
+	if err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("create original file: %w", err)
+	}
+	hasher := sha256.New()
+	size, copyErr := io.Copy(io.MultiWriter(origFile, hasher), src)
+	closeErr := origFile.Close()
+	if copyErr != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("save original file: %w", copyErr)
+	}
+	if closeErr != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("close original file: %w", closeErr)
+	}
+
+	previewPath := filepath.Join(stagingDir, "renditions", "preview.jpg")
+	thumbPath := filepath.Join(stagingDir, "renditions", "thumbnail.jpg")
+	if err := generateScaledJPEG(origPath, previewPath, 1024); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("generate preview: %w", err)
+	}
+	if err := generateScaledJPEG(origPath, thumbPath, 256); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("generate thumbnail: %w", err)
+	}
+
+	width, height := imageDimensions(origPath)
+	manifest := AssetManifest{
+		Version: 1,
+		AssetID: assetID,
+		Files: AssetManifestFiles{
+			OriginalDir:   "original",
+			RenditionsDir: "renditions",
+			VariationsDir: "variations",
+		},
+		Original: AssetManifestOriginal{
+			Filename:     originalFilename,
+			RelativePath: filepath.ToSlash(filepath.Join("original", safeName)),
+			ContentHash:  "sha256:" + hex.EncodeToString(hasher.Sum(nil)),
+			MIMEType:     contentTypeForFilename(safeName),
+			ByteSize:     size,
+			Width:        width,
+			Height:       height,
+			Immutable:    true,
+		},
+		Renditions: []AssetManifestVariant{
+			{Name: "preview", RelativePath: "renditions/preview.jpg", Generator: "cabinet.media.generateScaledJPEG", GeneratorVersion: "1"},
+			{Name: "thumbnail", RelativePath: "renditions/thumbnail.jpg", Generator: "cabinet.media.generateScaledJPEG", GeneratorVersion: "1"},
+		},
+		Variations: []AssetManifestVariant{},
+		Owners:     []AssetManifestOwner{{Type: "inventory_item", ID: itemID}},
+		Provenance: map[string]string{"source": "inventory.photo.upload"},
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("marshal asset manifest: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.json"), manifestBytes, 0o644); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("write asset manifest: %w", err)
+	}
+	_ = os.Chmod(origPath, 0o444)
+
+	if err := os.MkdirAll(assetsRoot, 0o755); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("create assets root: %w", err)
+	}
+	_ = os.RemoveAll(assetDir)
+	if err := os.Rename(stagingDir, assetDir); err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return "", "", "", fmt.Errorf("promote asset folder: %w", err)
+	}
+	return filepath.Join(assetDir, "original", safeName), filepath.Join(assetDir, "renditions", "preview.jpg"), filepath.Join(assetDir, "renditions", "thumbnail.jpg"), nil
+}
+
+func imageDimensions(path string) (int, int) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return 0, 0
+	}
+	return cfg.Width, cfg.Height
+}
+
+func safeMediaFilename(filename string) string {
+	filename = filepath.Base(strings.TrimSpace(filename))
+	if filename == "." || filename == string(filepath.Separator) || filename == "" {
+		filename = "original"
+	}
+	safe := strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' || r < 32 {
+			return '_'
+		}
+		return r
+	}, filename)
+	safe = strings.TrimSpace(safe)
+	if safe == "" {
+		return "original"
+	}
+	return safe
 }
 
 func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter string) (WorkspaceList, error) {
