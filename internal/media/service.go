@@ -69,6 +69,17 @@ type WorkspaceAssetMetadataUpdate struct {
 	Notes            string `json:"notes"`
 }
 
+type WorkspaceAttachment struct {
+	ID        string `json:"id"`
+	ProfileID string `json:"profile_id"`
+	ThreadID  string `json:"thread_id"`
+	Filename  string `json:"filename"`
+	MimeType  string `json:"mime_type"`
+	SizeBytes int64  `json:"size_bytes"`
+	Path      string `json:"path"`
+	CreatedAt string `json:"created_at"`
+}
+
 type WorkspaceSummary struct {
 	Total           int `json:"total"`
 	Unlinked        int `json:"unlinked"`
@@ -179,7 +190,7 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	if filepath.Ext(safeName) == "" {
 		safeName += ext
 	}
-	origPath, previewPath, thumbPath, err := s.createCanonicalInventoryAsset(ctx, rootMediaDir, photoID, itemID, safeName, filename, r)
+	origPath, previewPath, thumbPath, err := s.createCanonicalAsset(ctx, rootMediaDir, photoID, safeName, filename, contentTypeForFilename(safeName), r, []AssetManifestOwner{{Type: "inventory_item", ID: itemID}}, map[string]string{"source": "inventory.photo.upload"})
 	if err != nil {
 		return Photo{}, err
 	}
@@ -208,7 +219,72 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	return s.GetByID(ctx, photoID)
 }
 
-func (s *Service) createCanonicalInventoryAsset(ctx context.Context, mediaRoot, assetID, itemID, safeName, originalFilename string, src io.Reader) (string, string, string, error) {
+func (s *Service) SaveWorkspaceAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (WorkspaceAttachment, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID = strings.TrimSpace(threadID)
+	filename = strings.TrimSpace(filename)
+	mimeType = strings.TrimSpace(mimeType)
+	if profileID == "" || threadID == "" {
+		return WorkspaceAttachment{}, fmt.Errorf("profile_id and thread_id are required")
+	}
+	if filename == "" {
+		return WorkspaceAttachment{}, fmt.Errorf("filename is required")
+	}
+	var threadCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM chat_threads WHERE id = ? AND profile_id = ?`, threadID, profileID).Scan(&threadCount); err != nil {
+		return WorkspaceAttachment{}, fmt.Errorf("check media upload thread: %w", err)
+	}
+	if threadCount == 0 {
+		return WorkspaceAttachment{}, fmt.Errorf("media upload thread not found")
+	}
+	mediaRoot, err := s.resolveMediaDirForProfile(ctx, profileID)
+	if err != nil {
+		return WorkspaceAttachment{}, err
+	}
+	assetID := uuid.NewString()
+	safeName := safeMediaFilename(filename)
+	if filepath.Ext(safeName) == "" {
+		safeName += ".bin"
+	}
+	if mimeType == "" {
+		mimeType = contentTypeForFilename(safeName)
+	}
+	origPath, _, _, err := s.createCanonicalAsset(ctx, mediaRoot, assetID, safeName, filename, mimeType, src, []AssetManifestOwner{{Type: "chat_thread", ID: threadID}}, map[string]string{"source": "media.workspace.upload"})
+	if err != nil {
+		return WorkspaceAttachment{}, err
+	}
+	info, err := os.Stat(origPath)
+	if err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
+		return WorkspaceAttachment{}, fmt.Errorf("stat workspace asset original: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_attachments(id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, assetID, profileID, threadID, filename, mimeType, info.Size(), origPath); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
+		return WorkspaceAttachment{}, fmt.Errorf("save workspace media attachment: %w", err)
+	}
+	return s.getWorkspaceAttachment(ctx, profileID, assetID)
+}
+
+func (s *Service) getWorkspaceAttachment(ctx context.Context, profileID, attachmentID string) (WorkspaceAttachment, error) {
+	var a WorkspaceAttachment
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path, created_at
+		FROM chat_attachments
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(attachmentID), strings.TrimSpace(profileID)).Scan(&a.ID, &a.ProfileID, &a.ThreadID, &a.Filename, &a.MimeType, &a.SizeBytes, &a.Path, &a.CreatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return WorkspaceAttachment{}, fmt.Errorf("workspace attachment not found")
+		}
+		return WorkspaceAttachment{}, fmt.Errorf("get workspace attachment: %w", err)
+	}
+	return a, nil
+}
+
+func (s *Service) createCanonicalAsset(ctx context.Context, mediaRoot, assetID, safeName, originalFilename, mimeType string, src io.Reader, owners []AssetManifestOwner, provenance map[string]string) (string, string, string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", "", "", err
 	}
@@ -274,7 +350,7 @@ func (s *Service) createCanonicalInventoryAsset(ctx context.Context, mediaRoot, 
 			Filename:     originalFilename,
 			RelativePath: filepath.ToSlash(filepath.Join("original", safeName)),
 			ContentHash:  "sha256:" + hex.EncodeToString(hasher.Sum(nil)),
-			MIMEType:     contentTypeForFilename(safeName),
+			MIMEType:     mimeType,
 			ByteSize:     size,
 			Width:        width,
 			Height:       height,
@@ -285,8 +361,8 @@ func (s *Service) createCanonicalInventoryAsset(ctx context.Context, mediaRoot, 
 			{Name: "thumbnail", RelativePath: "renditions/thumbnail.jpg", Generator: "cabinet.media.generateScaledJPEG", GeneratorVersion: "1"},
 		},
 		Variations: []AssetManifestVariant{},
-		Owners:     []AssetManifestOwner{{Type: "inventory_item", ID: itemID}},
-		Provenance: map[string]string{"source": "inventory.photo.upload"},
+		Owners:     owners,
+		Provenance: provenance,
 		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
@@ -919,6 +995,40 @@ func (s *Service) resolveMediaDirForItem(ctx context.Context, itemID string) (st
 			return "", fmt.Errorf("item not found")
 		}
 		return "", fmt.Errorf("resolve item media dir: %w", err)
+	}
+
+	mediaDir := strings.TrimSpace(configuredMediaDir.String)
+	if mediaDir != "" {
+		return mediaDir, nil
+	}
+
+	return s.mediaDir, nil
+}
+
+func (s *Service) resolveMediaDirForProfile(ctx context.Context, profileID string) (string, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return "", fmt.Errorf("profile_id is required")
+	}
+
+	var configuredMediaDir sql.NullString
+	err := s.db.QueryRowContext(
+		ctx,
+		`
+		SELECT ps.value
+		FROM profiles p
+		LEFT JOIN profile_settings ps
+			ON ps.profile_id = p.id
+			AND ps.key = 'storage.media_dir'
+		WHERE p.id = ?
+		`,
+		profileID,
+	).Scan(&configuredMediaDir)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("profile not found")
+		}
+		return "", fmt.Errorf("resolve profile media dir: %w", err)
 	}
 
 	mediaDir := strings.TrimSpace(configuredMediaDir.String)

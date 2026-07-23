@@ -155,6 +155,51 @@ func TestMediaWorkspaceCreateAssetPersistsUnlinkedUploadMetadata(t *testing.T) {
 	if created.AssetID == "" || created.Filename != "loose-chassis.jpg" || created.Title != "Loose chassis reference" || created.Source != "Bench intake" || created.Notes != "Rear axle detail" {
 		t.Fatalf("unexpected created media asset response: %+v", created)
 	}
+	var storedPath, uploadThreadID string
+	if err := a.db.QueryRow(`SELECT stored_path, thread_id FROM chat_attachments WHERE profile_id = ? AND id = ?`, profile.ID, created.AssetID).Scan(&storedPath, &uploadThreadID); err != nil {
+		t.Fatalf("query stored media path: %v", err)
+	}
+	assetDir := filepath.Join(a.cfg.DataDir, "profiles", profile.ID, "media", "assets", created.AssetID)
+	if storedPath != filepath.Join(assetDir, "original", "loose-chassis.jpg") {
+		t.Fatalf("expected canonical media workspace stored path, got %s", storedPath)
+	}
+	if _, err := os.Stat(filepath.Join(assetDir, "original")); err != nil {
+		t.Fatalf("expected canonical original dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(assetDir, "renditions")); err != nil {
+		t.Fatalf("expected canonical renditions dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(assetDir, "variations")); err != nil {
+		t.Fatalf("expected canonical variations dir: %v", err)
+	}
+	rawManifest, err := os.ReadFile(filepath.Join(assetDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read canonical media manifest: %v", err)
+	}
+	var manifest struct {
+		Version  int    `json:"version"`
+		AssetID  string `json:"asset_id"`
+		Original struct {
+			Filename     string `json:"filename"`
+			RelativePath string `json:"relative_path"`
+			ContentHash  string `json:"content_hash"`
+			MIMEType     string `json:"mime_type"`
+			Immutable    bool   `json:"immutable"`
+		} `json:"original"`
+		Owners []struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"owners"`
+	}
+	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
+		t.Fatalf("decode canonical media manifest: %v", err)
+	}
+	if manifest.Version != 1 || manifest.AssetID != created.AssetID || manifest.Original.Filename != "loose-chassis.jpg" || manifest.Original.RelativePath != "original/loose-chassis.jpg" || manifest.Original.MIMEType != "image/jpeg" || !manifest.Original.Immutable || !strings.HasPrefix(manifest.Original.ContentHash, "sha256:") {
+		t.Fatalf("unexpected canonical media manifest: %+v", manifest)
+	}
+	if len(manifest.Owners) != 1 || manifest.Owners[0].Type != "chat_thread" || manifest.Owners[0].ID != uploadThreadID {
+		t.Fatalf("unexpected canonical media manifest owners: %+v", manifest.Owners)
+	}
 
 	assetsResp := doRequest(t, a, http.MethodGet, "/api/media/assets?filter=unlinked", nil, nil)
 	if assetsResp.Code != http.StatusOK {
