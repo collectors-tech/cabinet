@@ -229,6 +229,80 @@ func TestToolCallTimeoutCancelsOnlyInFlightOperationAndKeepsSessionAlive(t *test
 	}
 }
 
+func TestServerRecordsRedactedDiagnosticReceiptsForMaterialOperations(t *testing.T) {
+	var receipts []OperationReceipt
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:abc123",
+		SessionIDSeed: "mcp-receipt-test-session",
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "cabinet.test.receipt"}, func(ctx context.Context, _ *mcp.CallToolRequest, _ map[string]any) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "ok"}}}, nil, nil
+	})
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-receipt-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	_, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.test.receipt",
+		Arguments: map[string]any{
+			"query":   "Nintendo",
+			"token":   "mcp-super-secret",
+			"api_key": "provider-secret",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+
+	if len(receipts) < 2 {
+		t.Fatalf("expected initialize and tool receipts, got %+v", receipts)
+	}
+	initReceipt := receipts[0]
+	if initReceipt.Method != "initialize" || initReceipt.Capability != "session.initialize" || initReceipt.Outcome != "ok" {
+		t.Fatalf("unexpected initialize receipt: %+v", initReceipt)
+	}
+	if initReceipt.ProfileID != "profile-main" || initReceipt.ProfileLabel != "Main collection" || initReceipt.ClientName != "cabinet-receipt-client" || initReceipt.VersionDigest != "git:abc123" {
+		t.Fatalf("initialize receipt missing trust-boundary fields: %+v", initReceipt)
+	}
+
+	toolReceipt := receipts[len(receipts)-1]
+	if toolReceipt.Method != "tools/call" || toolReceipt.Capability != "tool:cabinet.test.receipt" || toolReceipt.InputClass != "tool_arguments" || toolReceipt.Outcome != "ok" {
+		t.Fatalf("unexpected tool receipt: %+v", toolReceipt)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal receipts: %v", err)
+	}
+	for _, forbidden := range []string{"mcp-super-secret", "provider-secret", "Nintendo"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("receipt leaked sensitive input %q: %s", forbidden, body)
+		}
+	}
+}
+
 func rawProtocolConnection(t *testing.T) (mcp.Connection, func()) {
 	t.Helper()
 	server, err := NewServer(Config{

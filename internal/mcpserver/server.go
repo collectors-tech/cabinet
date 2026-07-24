@@ -1,9 +1,12 @@
 package mcpserver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -20,6 +23,7 @@ type Config struct {
 	Version       string
 	VersionDigest string
 	SessionIDSeed string
+	ReceiptSink   ReceiptSink
 }
 
 func NewServer(cfg Config) (*mcp.Server, error) {
@@ -44,9 +48,31 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 	if seed := strings.TrimSpace(cfg.SessionIDSeed); seed != "" {
 		options.GetSessionID = func() string { return seed }
 	}
-	return mcp.NewServer(&mcp.Implementation{
+	server := mcp.NewServer(&mcp.Implementation{
 		Name:    ServerName,
 		Title:   ServerTitle,
 		Version: version,
-	}, options), nil
+	}, options)
+	if cfg.ReceiptSink != nil {
+		server.AddReceivingMiddleware(receiptMiddleware(cfg, profileID, version))
+	}
+	return server, nil
+}
+
+func receiptMiddleware(cfg Config, profileID string, version string) mcp.Middleware {
+	profileLabel := strings.TrimSpace(cfg.ProfileLabel)
+	versionDigest := strings.TrimSpace(cfg.VersionDigest)
+	seed := strings.TrimSpace(cfg.SessionIDSeed)
+	var sequence atomic.Uint64
+	var clients sync.Map
+
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			result, err := next(ctx, method, req)
+			if receipt, ok := buildReceipt(req, method, err, profileID, profileLabel, version, versionDigest, seed, sequence.Add(1), &clients); ok {
+				cfg.ReceiptSink.RecordMCPReceipt(ctx, receipt)
+			}
+			return result, err
+		}
+	}
 }
