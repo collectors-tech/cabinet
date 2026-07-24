@@ -2,7 +2,14 @@ package main
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/collectors-tech/cabinet/internal/mcpserver"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestParseLauncherArgsRequiresExplicitProfile(t *testing.T) {
@@ -30,5 +37,56 @@ func TestRunLauncherRejectsMissingProfileBeforeTransport(t *testing.T) {
 	err := runLauncher(context.Background(), launcherConfig{})
 	if err == nil {
 		t.Fatal("runLauncher() should reject missing profile binding")
+	}
+}
+
+func TestLauncherStdioInitializeSmoke(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestLauncherStdioHelperProcess", "--",
+		"--profile-id", "profile-main",
+		"--profile-label", "Main collection",
+		"--version", "0.1.0-smoke",
+		"--version-digest", "git:stdio-smoke",
+	)
+	cmd.Env = append(os.Environ(), "CABINET_MCP_TEST_HELPER_PROCESS=1")
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-stdio-smoke", Version: "0.1.0"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd, TerminateDuration: time.Second}, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer session.Close()
+
+	result := session.InitializeResult()
+	if result == nil {
+		t.Fatal("InitializeResult() is nil")
+	}
+	if result.ServerInfo == nil || result.ServerInfo.Name != mcpserver.ServerName || result.ServerInfo.Version != "0.1.0-smoke" {
+		t.Fatalf("unexpected server info from stdio launcher: %#v", result.ServerInfo)
+	}
+	if !strings.Contains(result.Instructions, "profile-main") {
+		t.Fatalf("stdio launcher initialize instructions should include profile binding, got %q", result.Instructions)
+	}
+}
+
+func TestLauncherStdioHelperProcess(t *testing.T) {
+	if os.Getenv("CABINET_MCP_TEST_HELPER_PROCESS") != "1" {
+		return
+	}
+	args := os.Args
+	for i, arg := range args {
+		if arg == "--" {
+			args = args[i+1:]
+			break
+		}
+	}
+	cfg, err := parseLauncherArgs(args)
+	if err != nil {
+		t.Fatalf("parseLauncherArgs() error = %v", err)
+	}
+	if err := runLauncher(context.Background(), cfg); err != nil {
+		t.Fatalf("runLauncher() error = %v", err)
 	}
 }
