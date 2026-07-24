@@ -51,6 +51,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/licensing"
 	"github.com/collectors-tech/cabinet/internal/logging"
 	"github.com/collectors-tech/cabinet/internal/matching"
+	"github.com/collectors-tech/cabinet/internal/mcpserver"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/pricing"
 	"github.com/collectors-tech/cabinet/internal/profile"
@@ -771,6 +772,21 @@ func New(cfg config.Config) (*App, error) {
 			default:
 				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			}
+		case "mcp-http-status":
+			if r.Method != http.MethodGet {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			settings, err := profiles.GetSettings(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_get_mcp_http_status"}`, http.StatusBadRequest)
+				return
+			}
+			status := mcpserver.HTTPTransportStatus(r.Context(), profiles, profileID, mcpserver.HTTPTransportConfig{
+				Enabled:    boolSetting(settings["mcp.http.enabled"]),
+				ListenAddr: settings["mcp.http.listen_addr"],
+			})
+			_ = json.NewEncoder(w).Encode(status)
 		case "integration-instances":
 			switch r.Method {
 			case http.MethodGet:
@@ -13713,6 +13729,15 @@ func truthy(value any) bool {
 		return typed
 	case string:
 		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
+}
+
+func boolSetting(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
 	default:
 		return false
 	}

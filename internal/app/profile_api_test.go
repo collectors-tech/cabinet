@@ -101,6 +101,74 @@ func TestProfileStorageSecretAndLicenseEndpoints(t *testing.T) {
 	}
 }
 
+func TestProfileMCPHTTPStatusEndpointDoesNotExposeCredential(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Status"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	disabled := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if disabled.Code != http.StatusOK {
+		t.Fatalf("disabled status=%d body=%s", disabled.Code, disabled.Body.String())
+	}
+	var disabledPayload map[string]any
+	if err := json.NewDecoder(disabled.Body).Decode(&disabledPayload); err != nil {
+		t.Fatalf("decode disabled payload: %v", err)
+	}
+	if disabledPayload["state"] != "disabled" || disabledPayload["enabled"] != false || disabledPayload["credential_configured"] != false {
+		t.Fatalf("unexpected disabled payload: %+v", disabledPayload)
+	}
+
+	putSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{"settings":{"mcp.http.enabled":"true","mcp.http.listen_addr":"127.0.0.1:17890"}}`), map[string]string{"Content-Type": "application/json"})
+	if putSettings.Code != http.StatusOK {
+		t.Fatalf("put mcp settings status=%d body=%s", putSettings.Code, putSettings.Body.String())
+	}
+	missingCredential := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if missingCredential.Code != http.StatusOK {
+		t.Fatalf("missing credential status=%d body=%s", missingCredential.Code, missingCredential.Body.String())
+	}
+	var missingPayload map[string]any
+	if err := json.NewDecoder(missingCredential.Body).Decode(&missingPayload); err != nil {
+		t.Fatalf("decode missing payload: %v", err)
+	}
+	if missingPayload["state"] != "misconfigured" || missingPayload["credential_configured"] != false || missingPayload["recovery_action"] != "generate_mcp_http_credential" {
+		t.Fatalf("unexpected missing credential payload: %+v", missingPayload)
+	}
+
+	const credential = "mcp-status-secret"
+	putSecret := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/secrets", strings.NewReader(`{"key":"mcp_http_transport_token","value":"`+credential+`"}`), map[string]string{"Content-Type": "application/json"})
+	if putSecret.Code != http.StatusOK {
+		t.Fatalf("put mcp credential status=%d body=%s", putSecret.Code, putSecret.Body.String())
+	}
+	ready := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if ready.Code != http.StatusOK {
+		t.Fatalf("ready status=%d body=%s", ready.Code, ready.Body.String())
+	}
+	body := ready.Body.String()
+	if strings.Contains(body, credential) {
+		t.Fatalf("mcp status leaked credential in response: %s", body)
+	}
+	var readyPayload map[string]any
+	if err := json.NewDecoder(strings.NewReader(body)).Decode(&readyPayload); err != nil {
+		t.Fatalf("decode ready payload: %v", err)
+	}
+	if readyPayload["state"] != "ready" || readyPayload["credential_configured"] != true || readyPayload["listen_addr"] != "127.0.0.1:17890" {
+		t.Fatalf("unexpected ready payload: %+v", readyPayload)
+	}
+	if _, ok := readyPayload["credential"]; ok {
+		t.Fatalf("status payload included credential field: %+v", readyPayload)
+	}
+}
+
 func TestStorageMaintenanceEndpoints(t *testing.T) {
 	t.Parallel()
 
