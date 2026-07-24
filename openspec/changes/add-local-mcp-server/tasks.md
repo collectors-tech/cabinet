@@ -19,7 +19,7 @@
 
 - [ ] 3.1 Add Settings > Integrations > MCP status, enable/disable, selected
   profile, client configuration guidance, and diagnostics.
-- [ ] 3.2 Package the launcher with the Windows desktop application.
+- [x] 3.2 Package the launcher with the Windows desktop application.
 
 ## 4. Evidence
 

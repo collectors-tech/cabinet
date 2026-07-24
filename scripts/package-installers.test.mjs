@@ -24,6 +24,8 @@ describe("Cabinet beta packaging contract", () => {
 
     assert.match(script, /cabinet-beta-version\.json/);
     assert.match(script, /windows-amd64-portable\.zip/);
+    assert.match(script, /cabinet-mcp\.exe/);
+    assert.match(script, /\.\/cmd\/cabinet-mcp/);
     assert.doesNotMatch(script, /macos-(amd64|arm64)\.zip/);
     assert.match(script, /Get-FileHash.+SHA256/s);
     assert.match(script, /\.sha256/);
@@ -58,6 +60,7 @@ describe("Cabinet beta packaging contract", () => {
     assert.match(checklist, /cabinet-0\.1\.0-beta\.1-windows-amd64-portable\.zip\.sha256/);
     assert.match(checklist, /cabinet-0\.1\.0-beta\.1-release-notes\.md/);
     assert.match(checklist, /WINDOWS-PORTABLE-BETA\.md/);
+    assert.match(checklist, /cabinet-mcp\.exe/);
     assert.match(checklist, /\/healthz/);
     assert.match(checklist, /\/api\/runtime/);
     assert.match(checklist, /app_version=0\.1\.0-beta\.1/);

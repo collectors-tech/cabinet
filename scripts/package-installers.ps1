@@ -64,6 +64,10 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "go build failed for windows/amd64"
   }
+  go build -ldflags ($ldflags -join " ") -o (Join-Path $stage "cabinet-mcp.exe") ./cmd/cabinet-mcp
+  if ($LASTEXITCODE -ne 0) {
+    throw "go build failed for windows/amd64 MCP launcher"
+  }
 }
 finally {
   $env:GOOS = $previousGoos

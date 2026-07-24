@@ -12,7 +12,7 @@ This checklist records the non-publishing proof required before the private beta
 - Confirm the generated package is `dist/cabinet-0.1.0-beta.1-windows-amd64-portable.zip`.
 - Confirm the generated checksum file is `dist/cabinet-0.1.0-beta.1-windows-amd64-portable.zip.sha256`.
 - Confirm release notes are generated at `dist/cabinet-0.1.0-beta.1-release-notes.md`.
-- Confirm the ZIP contains `cabinet.exe`, `README.md`, and `WINDOWS-PORTABLE-BETA.md`.
+- Confirm the ZIP contains `cabinet.exe`, `cabinet-mcp.exe`, `README.md`, and `WINDOWS-PORTABLE-BETA.md`.
 
 ## Runtime Smoke
 
