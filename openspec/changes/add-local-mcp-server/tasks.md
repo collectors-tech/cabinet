@@ -8,7 +8,7 @@
 
 ## 2. Server foundation
 
-- [ ] 2.1 Add the Cabinet MCP server package and packaged stdio launcher.
+- [x] 2.1 Add the Cabinet MCP server package and packaged stdio launcher.
 - [ ] 2.2 Bind sessions to one explicit profile and reject missing or mismatched
   profile authority.
 - [ ] 2.3 Add structured redacted receipts for material protocol operations.
