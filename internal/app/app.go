@@ -803,6 +803,44 @@ func New(cfg config.Config) (*App, error) {
 				"secret_key":             mcpserver.HTTPTransportCredentialSecretKey,
 				"configuration_guidance": "Use this bearer token only with loopback MCP clients for the selected Cabinet profile.",
 			})
+		case "mcp-http-config":
+			if r.Method != http.MethodPut {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			var req struct {
+				Enabled    bool   `json:"enabled"`
+				ListenAddr string `json:"listen_addr"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			settings := map[string]string{
+				"mcp.http.enabled": "false",
+			}
+			if req.Enabled {
+				listenAddr := strings.TrimSpace(req.ListenAddr)
+				if listenAddr == "" {
+					listenAddr = "127.0.0.1:17890"
+				}
+				settings["mcp.http.enabled"] = "true"
+				settings["mcp.http.listen_addr"] = listenAddr
+			}
+			if err := profiles.PutSettings(r.Context(), profileID, settings); err != nil {
+				http.Error(w, `{"error":"failed_to_update_mcp_http_config"}`, http.StatusBadRequest)
+				return
+			}
+			updated, err := profiles.GetSettings(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_get_mcp_http_status"}`, http.StatusBadRequest)
+				return
+			}
+			status := mcpserver.HTTPTransportStatus(r.Context(), profiles, profileID, mcpserver.HTTPTransportConfig{
+				Enabled:    boolSetting(updated["mcp.http.enabled"]),
+				ListenAddr: updated["mcp.http.listen_addr"],
+			})
+			_ = json.NewEncoder(w).Encode(status)
 		case "integration-instances":
 			switch r.Method {
 			case http.MethodGet:

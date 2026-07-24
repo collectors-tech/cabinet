@@ -217,6 +217,62 @@ func TestProfileMCPHTTPCredentialEndpointStoresSecretOnly(t *testing.T) {
 	}
 }
 
+func TestProfileMCPHTTPConfigEndpointEnablesAndDisablesTransport(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Config"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	enable := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/mcp-http-config", strings.NewReader(`{"enabled":true,"listen_addr":"127.0.0.1:17890"}`), map[string]string{"Content-Type": "application/json"})
+	if enable.Code != http.StatusOK {
+		t.Fatalf("enable config status=%d body=%s", enable.Code, enable.Body.String())
+	}
+	var enabledPayload map[string]any
+	if err := json.NewDecoder(enable.Body).Decode(&enabledPayload); err != nil {
+		t.Fatalf("decode enable payload: %v", err)
+	}
+	if enabledPayload["enabled"] != true || enabledPayload["listen_addr"] != "127.0.0.1:17890" || enabledPayload["state"] != "misconfigured" {
+		t.Fatalf("unexpected enabled payload before credential: %+v", enabledPayload)
+	}
+
+	credential := doRequest(t, a, http.MethodPost, "/api/profiles/"+p.ID+"/mcp-http-credential", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
+	if credential.Code != http.StatusOK {
+		t.Fatalf("credential status=%d body=%s", credential.Code, credential.Body.String())
+	}
+	ready := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if ready.Code != http.StatusOK {
+		t.Fatalf("ready status=%d body=%s", ready.Code, ready.Body.String())
+	}
+	var readyPayload map[string]any
+	if err := json.NewDecoder(ready.Body).Decode(&readyPayload); err != nil {
+		t.Fatalf("decode ready payload: %v", err)
+	}
+	if readyPayload["state"] != "ready" || readyPayload["enabled"] != true {
+		t.Fatalf("unexpected ready payload: %+v", readyPayload)
+	}
+
+	disable := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/mcp-http-config", strings.NewReader(`{"enabled":false}`), map[string]string{"Content-Type": "application/json"})
+	if disable.Code != http.StatusOK {
+		t.Fatalf("disable config status=%d body=%s", disable.Code, disable.Body.String())
+	}
+	var disabledPayload map[string]any
+	if err := json.NewDecoder(disable.Body).Decode(&disabledPayload); err != nil {
+		t.Fatalf("decode disabled payload: %v", err)
+	}
+	if disabledPayload["state"] != "disabled" || disabledPayload["enabled"] != false || disabledPayload["credential_configured"] != false {
+		t.Fatalf("unexpected disabled payload: %+v", disabledPayload)
+	}
+}
+
 func TestStorageMaintenanceEndpoints(t *testing.T) {
 	t.Parallel()
 
