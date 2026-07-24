@@ -8,6 +8,7 @@ import {
   Cog,
   CreditCard,
   HardDrive,
+  PlugZap,
   Settings as SettingsIcon,
   Sparkles,
   Tags,
@@ -52,6 +53,11 @@ const sidebarNavItems = [
     title: 'Storage',
     href: '/settings/storage',
     icon: <HardDrive size={18} />,
+  },
+  {
+    title: 'Integrations',
+    href: '/settings/integrations',
+    icon: <PlugZap size={18} />,
   },
   {
     title: 'Skills',
