@@ -75,16 +75,7 @@ func TestRawProtocolUnknownMethodReturnsStructuredErrorAndKeepsSessionAlive(t *t
 	if got := resp.ID.Raw(); got != "unknown-1" {
 		t.Fatalf("unknown-method response ID = %v, want unknown-1", got)
 	}
-	var rpcErr *jsonrpc.Error
-	if !errors.As(resp.Error, &rpcErr) {
-		t.Fatalf("unknown-method response should contain JSON-RPC error, got %T %[1]v", resp.Error)
-	}
-	if strings.TrimSpace(rpcErr.Message) == "" {
-		t.Fatalf("unknown-method JSON-RPC error should include a message: %#v", rpcErr)
-	}
-	if strings.Contains(strings.ToLower(rpcErr.Message), "profile-main") {
-		t.Fatalf("protocol error leaked profile details: %q", rpcErr.Message)
-	}
+	assertStructuredProtocolErrorDoesNotLeakProfile(t, resp, "unknown-method")
 
 	writeRequest(t, conn, "ping-1", "ping", `{}`)
 	resp = readResponse(t, conn)
@@ -93,6 +84,46 @@ func TestRawProtocolUnknownMethodReturnsStructuredErrorAndKeepsSessionAlive(t *t
 	}
 	if got := strings.TrimSpace(string(resp.Result)); got != "{}" {
 		t.Fatalf("ping result = %s, want {}", got)
+	}
+}
+
+func TestRawProtocolInvalidNonPingMethodBeforeInitializeReturnsStructuredErrorThenInitializes(t *testing.T) {
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:abc123",
+		SessionIDSeed: "mcp-invalid-init-test-session",
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+	conn, err := clientTransport.Connect(ctx)
+	if err != nil {
+		t.Fatalf("client transport Connect() error = %v", err)
+	}
+	defer conn.Close()
+
+	writeRequest(t, conn, "early-tools", "tools/list", `{}`)
+	resp := readResponse(t, conn)
+	if got := resp.ID.Raw(); got != "early-tools" {
+		t.Fatalf("pre-initialize invalid method response ID = %v, want early-tools", got)
+	}
+	assertStructuredProtocolErrorDoesNotLeakProfile(t, resp, "pre-initialize invalid method")
+
+	writeRequest(t, conn, "init-1", "initialize", `{"clientInfo":{"name":"cabinet-raw-test","version":"0.1.0"},"protocolVersion":"2025-06-18","capabilities":{}}`)
+	resp = readResponse(t, conn)
+	if resp.Error != nil {
+		t.Fatalf("initialize after invalid method returned error: %v", resp.Error)
 	}
 }
 
@@ -135,6 +166,20 @@ func rawProtocolConnection(t *testing.T) (mcp.Connection, func()) {
 		cancel()
 	}
 	return conn, cleanup
+}
+
+func assertStructuredProtocolErrorDoesNotLeakProfile(t *testing.T, resp *jsonrpc.Response, label string) {
+	t.Helper()
+	var rpcErr *jsonrpc.Error
+	if !errors.As(resp.Error, &rpcErr) {
+		t.Fatalf("%s response should contain JSON-RPC error, got %T %[1]v", label, resp.Error)
+	}
+	if strings.TrimSpace(rpcErr.Message) == "" {
+		t.Fatalf("%s JSON-RPC error should include a message: %#v", label, rpcErr)
+	}
+	if strings.Contains(strings.ToLower(rpcErr.Message), "profile-main") {
+		t.Fatalf("%s leaked profile details: %q", label, rpcErr.Message)
+	}
 }
 
 func writeRequest(t *testing.T, conn mcp.Connection, idValue string, method string, params string) {
