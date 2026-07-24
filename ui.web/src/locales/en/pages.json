@@ -64,6 +64,10 @@
       "title": "Storage",
       "description": "Review and manage storage locations for this workspace."
     },
+    "integrations": {
+      "title": "Integrations",
+      "description": "Manage local connector surfaces and profile-bound transport access."
+    },
     "billing": {
       "title": "Billing",
       "description": "Review subscription, billing, and plan preferences."

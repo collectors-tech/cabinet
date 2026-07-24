@@ -60,6 +60,10 @@
       "title": "存储",
       "description": "查看和管理当前工作区的存储位置与使用情况。"
     },
+    "integrations": {
+      "title": "集成",
+      "description": "管理本地连接界面和绑定到个人资料的传输访问。"
+    },
     "billing": {
       "title": "账单",
       "description": "查看订阅、费用和账单偏好。"
