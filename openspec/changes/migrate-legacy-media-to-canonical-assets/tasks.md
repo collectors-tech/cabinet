@@ -13,7 +13,7 @@
   primary-photo/display-order and source hash evidence.
 - [x] 2.3 Add idempotent migration apply for Chat attachments, preserving
   thread/message attachment links and filename/MIME metadata.
-- [ ] 2.4 Add interruption recovery so staged assets are not exposed and repeat
+- [x] 2.4 Add interruption recovery so staged assets are not exposed and repeat
   runs resume without duplicating records.
 - [ ] 2.5 Add duplicate, missing, corrupt, locked, already-migrated and orphan
   classification without silently deleting unknown files.

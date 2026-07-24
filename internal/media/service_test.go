@@ -756,6 +756,138 @@ func TestApplyLegacyChatAttachmentMigrationPreservesLinksAndMetadataIdempotently
 	}
 }
 
+func TestApplyLegacyMediaMigrationResumesPromotedAssetWithoutDuplicatingRecords(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	legacyAttachmentRoot := filepath.Join(mediaRoot, "chat-attachments")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyPhoto := filepath.Join(legacyItemDir, "front_orig.jpg")
+	legacyPhotoStored := filepath.ToSlash(filepath.Join("item-legacy", "front_orig.jpg"))
+	legacyPhotoBytes := sampleJPEG(t)
+	if err := os.WriteFile(legacyPhoto, legacyPhotoBytes, 0o644); err != nil {
+		t.Fatalf("write legacy photo: %v", err)
+	}
+	legacyAttachment := filepath.Join(legacyAttachmentRoot, "resume-note.txt")
+	legacyAttachmentStored := filepath.ToSlash(filepath.Join("chat-attachments", "resume-note.txt"))
+	legacyAttachmentBytes := []byte("resume attachment bytes")
+	if err := os.WriteFile(legacyAttachment, legacyAttachmentBytes, 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','RESUME','Resume Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-legacy','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/item/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-resume','item-legacy','front.jpg', ?, '', '', 1, 3);
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-resume','profile-1','thread-legacy','resume-note.txt','text/plain', ?, ?);
+	`, legacyPhotoStored, len(legacyAttachmentBytes), legacyAttachmentStored); err != nil {
+		t.Fatalf("seed legacy rows: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	if _, _, _, err := svc.createCanonicalAsset(
+		context.Background(),
+		mediaRoot,
+		"photo-resume",
+		"front.jpg",
+		"front.jpg",
+		"image/jpeg",
+		bytes.NewReader(legacyPhotoBytes),
+		[]AssetManifestOwner{{Type: "inventory_item", ID: "item-legacy"}},
+		map[string]string{"source": "legacy.inventory_photo.migration"},
+	); err != nil {
+		t.Fatalf("seed promoted photo asset: %v", err)
+	}
+	if _, _, _, err := svc.createCanonicalAsset(
+		context.Background(),
+		mediaRoot,
+		"attach-resume",
+		"resume-note.txt",
+		"resume-note.txt",
+		"text/plain",
+		bytes.NewReader(legacyAttachmentBytes),
+		[]AssetManifestOwner{{Type: "chat_thread", ID: "thread-legacy"}},
+		map[string]string{"source": "legacy.chat_attachment.migration"},
+	); err != nil {
+		t.Fatalf("seed promoted chat asset: %v", err)
+	}
+	if err := os.Remove(legacyPhoto); err != nil {
+		t.Fatalf("remove interrupted photo source: %v", err)
+	}
+	if err := os.Remove(legacyAttachment); err != nil {
+		t.Fatalf("remove interrupted attachment source: %v", err)
+	}
+
+	photoResult, err := svc.ApplyLegacyInventoryPhotoMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyInventoryPhotoMigration() resume error = %v", err)
+	}
+	chatResult, err := svc.ApplyLegacyChatAttachmentMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyChatAttachmentMigration() resume error = %v", err)
+	}
+	if photoResult.Migrated != 1 || photoResult.Skipped != 0 || photoResult.Failed != 0 {
+		t.Fatalf("expected photo resume to migrate existing promoted asset, got %+v", photoResult)
+	}
+	if chatResult.Migrated != 1 || chatResult.Skipped != 0 || chatResult.Failed != 0 {
+		t.Fatalf("expected chat resume to migrate existing promoted asset, got %+v", chatResult)
+	}
+
+	var originalPath, previewPath, thumbnailPath, attachmentPath string
+	if err := conn.QueryRow(`SELECT original_path, preview_path, thumbnail_path FROM item_photos WHERE id = 'photo-resume'`).Scan(&originalPath, &previewPath, &thumbnailPath); err != nil {
+		t.Fatalf("read resumed photo paths: %v", err)
+	}
+	if err := conn.QueryRow(`SELECT stored_path FROM chat_attachments WHERE id = 'attach-resume'`).Scan(&attachmentPath); err != nil {
+		t.Fatalf("read resumed attachment path: %v", err)
+	}
+	if originalPath != filepath.ToSlash(filepath.Join("assets", "photo-resume", "original", "front.jpg")) ||
+		previewPath != filepath.ToSlash(filepath.Join("assets", "photo-resume", "renditions", "preview.jpg")) ||
+		thumbnailPath != filepath.ToSlash(filepath.Join("assets", "photo-resume", "renditions", "thumbnail.jpg")) {
+		t.Fatalf("unexpected resumed photo paths: original=%q preview=%q thumbnail=%q", originalPath, previewPath, thumbnailPath)
+	}
+	if attachmentPath != filepath.ToSlash(filepath.Join("assets", "attach-resume", "original", "resume-note.txt")) {
+		t.Fatalf("unexpected resumed attachment path: %q", attachmentPath)
+	}
+	entries, err := os.ReadDir(filepath.Join(mediaRoot, "assets"))
+	if err != nil {
+		t.Fatalf("read asset root: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("resume should reuse two promoted asset folders without duplicates, got %+v", entries)
+	}
+	if _, err := os.Stat(filepath.Join(mediaRoot, ".staging", "photo-resume")); !os.IsNotExist(err) {
+		t.Fatalf("resume should not expose photo staging folder, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(mediaRoot, ".staging", "attach-resume")); !os.IsNotExist(err) {
+		t.Fatalf("resume should not expose attachment staging folder, stat err=%v", err)
+	}
+}
+
 func TestReorderPersistsListOrder(t *testing.T) {
 	t.Parallel()
 

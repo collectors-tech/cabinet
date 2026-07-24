@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -703,6 +704,7 @@ func (s *Service) ApplyLegacyInventoryPhotoMigration(ctx context.Context, profil
 		thumbnailPath string
 	}
 	pending := make([]photoMigrationRow, 0)
+	resumable := make([]photoMigrationRow, 0)
 	result := LegacyInventoryMigrationResult{}
 	for rows.Next() {
 		var row photoMigrationRow
@@ -718,7 +720,15 @@ func (s *Service) ApplyLegacyInventoryPhotoMigration(ctx context.Context, profil
 		case "already_migrated":
 			result.AlreadyMigrated++
 		case "missing", "failed":
-			result.Skipped++
+			ok, err := promotedCanonicalAssetExists(mediaRoot, row.id)
+			if err != nil {
+				return LegacyInventoryMigrationResult{}, err
+			}
+			if ok {
+				resumable = append(resumable, row)
+			} else {
+				result.Skipped++
+			}
 		default:
 			result.Skipped++
 		}
@@ -729,6 +739,13 @@ func (s *Service) ApplyLegacyInventoryPhotoMigration(ctx context.Context, profil
 
 	for _, row := range pending {
 		if err := s.migrateLegacyInventoryPhoto(ctx, mediaRoot, row.id, row.itemID, row.filename, row.originalPath); err != nil {
+			result.Failed++
+			return result, err
+		}
+		result.Migrated++
+	}
+	for _, row := range resumable {
+		if err := s.resumeLegacyInventoryPhotoMigration(ctx, mediaRoot, row.id, row.itemID); err != nil {
 			result.Failed++
 			return result, err
 		}
@@ -766,6 +783,7 @@ func (s *Service) ApplyLegacyChatAttachmentMigration(ctx context.Context, profil
 		storedPath string
 	}
 	pending := make([]attachmentMigrationRow, 0)
+	resumable := make([]attachmentMigrationRow, 0)
 	result := LegacyChatAttachmentMigrationResult{}
 	for rows.Next() {
 		var row attachmentMigrationRow
@@ -781,7 +799,15 @@ func (s *Service) ApplyLegacyChatAttachmentMigration(ctx context.Context, profil
 		case "already_migrated":
 			result.AlreadyMigrated++
 		case "missing", "failed":
-			result.Skipped++
+			ok, err := promotedCanonicalAssetExists(mediaRoot, row.id)
+			if err != nil {
+				return LegacyChatAttachmentMigrationResult{}, err
+			}
+			if ok {
+				resumable = append(resumable, row)
+			} else {
+				result.Skipped++
+			}
 		default:
 			result.Skipped++
 		}
@@ -792,6 +818,13 @@ func (s *Service) ApplyLegacyChatAttachmentMigration(ctx context.Context, profil
 
 	for _, row := range pending {
 		if err := s.migrateLegacyChatAttachment(ctx, mediaRoot, row.id, row.threadID, row.filename, row.mimeType, row.storedPath); err != nil {
+			result.Failed++
+			return result, err
+		}
+		result.Migrated++
+	}
+	for _, row := range resumable {
+		if err := s.resumeLegacyChatAttachmentMigration(ctx, mediaRoot, row.id); err != nil {
 			result.Failed++
 			return result, err
 		}
@@ -1983,6 +2016,85 @@ func (s *Service) migrateLegacyChatAttachment(ctx context.Context, mediaRoot, at
 		return fmt.Errorf("update migrated chat attachment %s: %w", attachmentID, err)
 	}
 	return nil
+}
+
+func (s *Service) resumeLegacyInventoryPhotoMigration(ctx context.Context, mediaRoot, photoID, itemID string) error {
+	manifest, err := readPromotedCanonicalManifest(mediaRoot, photoID)
+	if err != nil {
+		return fmt.Errorf("resume legacy inventory photo %s: %w", photoID, err)
+	}
+	previewPath, err := manifestVariantPath(manifest, "preview")
+	if err != nil {
+		return fmt.Errorf("resume legacy inventory photo %s: %w", photoID, err)
+	}
+	thumbnailPath, err := manifestVariantPath(manifest, "thumbnail")
+	if err != nil {
+		return fmt.Errorf("resume legacy inventory photo %s: %w", photoID, err)
+	}
+	assetDir := filepath.Join(mediaRoot, "assets", photoID)
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE item_photos
+		SET original_path = ?, preview_path = ?, thumbnail_path = ?
+		WHERE id = ? AND item_id = ?
+	`, mediaRootRelativePath(mediaRoot, filepath.Join(assetDir, filepath.FromSlash(manifest.Original.RelativePath))), mediaRootRelativePath(mediaRoot, filepath.Join(assetDir, filepath.FromSlash(previewPath))), mediaRootRelativePath(mediaRoot, filepath.Join(assetDir, filepath.FromSlash(thumbnailPath))), photoID, itemID); err != nil {
+		return fmt.Errorf("update resumed inventory photo %s: %w", photoID, err)
+	}
+	return nil
+}
+
+func (s *Service) resumeLegacyChatAttachmentMigration(ctx context.Context, mediaRoot, attachmentID string) error {
+	manifest, err := readPromotedCanonicalManifest(mediaRoot, attachmentID)
+	if err != nil {
+		return fmt.Errorf("resume legacy chat attachment %s: %w", attachmentID, err)
+	}
+	assetDir := filepath.Join(mediaRoot, "assets", attachmentID)
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE chat_attachments
+		SET stored_path = ?
+		WHERE id = ?
+	`, mediaRootRelativePath(mediaRoot, filepath.Join(assetDir, filepath.FromSlash(manifest.Original.RelativePath))), attachmentID); err != nil {
+		return fmt.Errorf("update resumed chat attachment %s: %w", attachmentID, err)
+	}
+	return nil
+}
+
+func promotedCanonicalAssetExists(mediaRoot, assetID string) (bool, error) {
+	_, err := readPromotedCanonicalManifest(mediaRoot, assetID)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
+func readPromotedCanonicalManifest(mediaRoot, assetID string) (AssetManifest, error) {
+	assetDir := filepath.Join(mediaRoot, "assets", assetID)
+	manifest, err := readAssetManifestFile(filepath.Join(assetDir, "manifest.json"))
+	if err != nil {
+		return AssetManifest{}, err
+	}
+	if manifest.AssetID != assetID {
+		return AssetManifest{}, fmt.Errorf("canonical asset manifest id mismatch: got %q want %q", manifest.AssetID, assetID)
+	}
+	if strings.TrimSpace(manifest.Original.RelativePath) == "" {
+		return AssetManifest{}, fmt.Errorf("canonical asset manifest missing original path")
+	}
+	originalPath := filepath.Join(assetDir, filepath.FromSlash(manifest.Original.RelativePath))
+	if _, err := os.Stat(originalPath); err != nil {
+		return AssetManifest{}, err
+	}
+	return manifest, nil
+}
+
+func manifestVariantPath(manifest AssetManifest, name string) (string, error) {
+	for _, variant := range manifest.Renditions {
+		if variant.Name == name && strings.TrimSpace(variant.RelativePath) != "" {
+			return variant.RelativePath, nil
+		}
+	}
+	return "", fmt.Errorf("canonical asset manifest missing %s rendition", name)
 }
 
 func fileSHA256(path string) (string, error) {
