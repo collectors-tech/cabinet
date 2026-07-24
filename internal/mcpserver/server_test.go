@@ -127,6 +127,46 @@ func TestRawProtocolInvalidNonPingMethodBeforeInitializeReturnsStructuredErrorTh
 	}
 }
 
+func TestRawProtocolInvalidInitializeParamsReturnsStructuredErrorThenInitializes(t *testing.T) {
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:abc123",
+		SessionIDSeed: "mcp-invalid-params-test-session",
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+	conn, err := clientTransport.Connect(ctx)
+	if err != nil {
+		t.Fatalf("client transport Connect() error = %v", err)
+	}
+	defer conn.Close()
+
+	writeRequest(t, conn, "bad-init", "initialize", `{"clientInfo":"not-an-object","protocolVersion":18,"capabilities":[]}`)
+	resp := readResponse(t, conn)
+	if got := resp.ID.Raw(); got != "bad-init" {
+		t.Fatalf("invalid-params response ID = %v, want bad-init", got)
+	}
+	assertStructuredProtocolErrorDoesNotLeakProfile(t, resp, "invalid initialize params")
+
+	writeRequest(t, conn, "init-1", "initialize", `{"clientInfo":{"name":"cabinet-raw-test","version":"0.1.0"},"protocolVersion":"2025-06-18","capabilities":{}}`)
+	resp = readResponse(t, conn)
+	if resp.Error != nil {
+		t.Fatalf("initialize after invalid params returned error: %v", resp.Error)
+	}
+}
+
 func TestToolCallTimeoutCancelsOnlyInFlightOperationAndKeepsSessionAlive(t *testing.T) {
 	server, err := NewServer(Config{
 		ProfileID:     "profile-main",
