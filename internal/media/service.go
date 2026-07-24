@@ -111,6 +111,13 @@ type LegacyMigrationSummary struct {
 	Failed          int `json:"failed"`
 }
 
+type LegacyInventoryMigrationResult struct {
+	Migrated        int `json:"migrated"`
+	AlreadyMigrated int `json:"already_migrated"`
+	Skipped         int `json:"skipped"`
+	Failed          int `json:"failed"`
+}
+
 type LegacyMigrationRecord struct {
 	ID             string `json:"id"`
 	RecordType     string `json:"record_type"`
@@ -656,6 +663,71 @@ func (s *Service) PreflightLegacyMediaMigration(ctx context.Context, profileID s
 		return LegacyMigrationPreflight{}, err
 	}
 	return report, nil
+}
+
+func (s *Service) ApplyLegacyInventoryPhotoMigration(ctx context.Context, profileID string) (LegacyInventoryMigrationResult, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return LegacyInventoryMigrationResult{}, fmt.Errorf("profile_id is required")
+	}
+	mediaRoot, err := s.resolveMediaDirForProfile(ctx, profileID)
+	if err != nil {
+		return LegacyInventoryMigrationResult{}, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ip.id, ip.item_id, ip.filename, ip.original_path, ip.preview_path, ip.thumbnail_path
+		FROM item_photos ip
+		INNER JOIN canonical_items ci ON ci.id = ip.item_id
+		WHERE ci.profile_id = ?
+		ORDER BY ip.id ASC
+	`, profileID)
+	if err != nil {
+		return LegacyInventoryMigrationResult{}, fmt.Errorf("list inventory photos for migration: %w", err)
+	}
+	defer rows.Close()
+
+	type photoMigrationRow struct {
+		id            string
+		itemID        string
+		filename      string
+		originalPath  string
+		previewPath   string
+		thumbnailPath string
+	}
+	pending := make([]photoMigrationRow, 0)
+	result := LegacyInventoryMigrationResult{}
+	for rows.Next() {
+		var row photoMigrationRow
+		if err := rows.Scan(&row.id, &row.itemID, &row.filename, &row.originalPath, &row.previewPath, &row.thumbnailPath); err != nil {
+			return LegacyInventoryMigrationResult{}, fmt.Errorf("scan inventory photo migration row: %w", err)
+		}
+		resolvedOriginal := resolveMediaRootPath(mediaRoot, row.originalPath)
+		record := LegacyMigrationRecord{ID: row.id, RecordType: "inventory_photo", ItemID: row.itemID, Filename: row.filename}
+		classifyLegacyMigrationPath(mediaRoot, resolvedOriginal, &record)
+		switch record.Classification {
+		case "pending":
+			pending = append(pending, row)
+		case "already_migrated":
+			result.AlreadyMigrated++
+		case "missing", "failed":
+			result.Skipped++
+		default:
+			result.Skipped++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return LegacyInventoryMigrationResult{}, fmt.Errorf("iterate inventory photo migration rows: %w", err)
+	}
+
+	for _, row := range pending {
+		if err := s.migrateLegacyInventoryPhoto(ctx, mediaRoot, row.id, row.itemID, row.filename, row.originalPath); err != nil {
+			result.Failed++
+			return result, err
+		}
+		result.Migrated++
+	}
+	return result, nil
 }
 
 func (s *Service) UpdateWorkspaceAssetMetadata(ctx context.Context, profileID, assetID string, update WorkspaceAssetMetadataUpdate) (WorkspaceAsset, error) {
@@ -1723,6 +1795,90 @@ func classifyLegacyMigrationPath(mediaRoot, resolvedPath string, record *LegacyM
 			record.RecoveryAction = "Resolve file access error and retry preflight."
 		}
 	}
+}
+
+func (s *Service) migrateLegacyInventoryPhoto(ctx context.Context, mediaRoot, photoID, itemID, filename, storedOriginalPath string) error {
+	sourcePath := resolveMediaRootPath(mediaRoot, storedOriginalPath)
+	sourceHash, err := fileSHA256(sourcePath)
+	if err != nil {
+		return fmt.Errorf("hash legacy inventory photo %s: %w", photoID, err)
+	}
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("open legacy inventory photo %s: %w", photoID, err)
+	}
+	defer sourceFile.Close()
+
+	safeName := safeMediaFilename(filename)
+	if filepath.Ext(safeName) == "" {
+		safeName += filepath.Ext(sourcePath)
+	}
+	if filepath.Ext(safeName) == "" {
+		safeName += ".jpg"
+	}
+	origPath, previewPath, thumbPath, err := s.createCanonicalAsset(
+		ctx,
+		mediaRoot,
+		photoID,
+		safeName,
+		filename,
+		contentTypeForFilename(safeName),
+		sourceFile,
+		[]AssetManifestOwner{{Type: "inventory_item", ID: itemID}},
+		map[string]string{
+			"source":              "legacy.inventory_photo.migration",
+			"legacy_source_class": legacyMigrationPathClass(mediaRoot, sourcePath),
+			"legacy_source_hash":  sourceHash,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create canonical asset for legacy inventory photo %s: %w", photoID, err)
+	}
+
+	manifest, err := readAssetManifestFile(filepath.Join(mediaRoot, "assets", photoID, "manifest.json"))
+	if err != nil {
+		_ = os.RemoveAll(filepath.Join(mediaRoot, "assets", photoID))
+		return fmt.Errorf("read migrated manifest for %s: %w", photoID, err)
+	}
+	if manifest.Original.ContentHash != sourceHash {
+		_ = os.RemoveAll(filepath.Join(mediaRoot, "assets", photoID))
+		return fmt.Errorf("verify migrated original hash for %s: got %s want %s", photoID, manifest.Original.ContentHash, sourceHash)
+	}
+
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE item_photos
+		SET original_path = ?, preview_path = ?, thumbnail_path = ?
+		WHERE id = ? AND item_id = ?
+	`, mediaRootRelativePath(mediaRoot, origPath), mediaRootRelativePath(mediaRoot, previewPath), mediaRootRelativePath(mediaRoot, thumbPath), photoID, itemID); err != nil {
+		_ = os.RemoveAll(filepath.Join(mediaRoot, "assets", photoID))
+		return fmt.Errorf("update migrated inventory photo %s: %w", photoID, err)
+	}
+	return nil
+}
+
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func readAssetManifestFile(path string) (AssetManifest, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return AssetManifest{}, err
+	}
+	var manifest AssetManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return AssetManifest{}, err
+	}
+	return manifest, nil
 }
 
 func legacyMigrationPathClass(mediaRoot, path string) string {

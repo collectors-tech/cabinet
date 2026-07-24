@@ -4,6 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -556,6 +559,100 @@ func TestPreflightLegacyMediaMigrationReportsMixedLegacyNewAndOrphanStore(t *tes
 	}
 }
 
+func TestApplyLegacyInventoryPhotoMigrationPreservesOrderAndHashIdempotently(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	legacyBytes := sampleJPEG(t)
+	legacyOriginal := filepath.Join(legacyItemDir, "front_orig.jpg")
+	legacyOriginalStored := filepath.ToSlash(filepath.Join("item-legacy", "front_orig.jpg"))
+	if err := os.WriteFile(legacyOriginal, legacyBytes, 0o644); err != nil {
+		t.Fatalf("write legacy original: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','LEG-APPLY','Legacy Apply Car');
+	`); err != nil {
+		t.Fatalf("seed profile/item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-legacy','item-legacy','front.jpg', ?, '', '', 1, 7)
+	`, legacyOriginalStored); err != nil {
+		t.Fatalf("seed legacy photo row: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	result, err := svc.ApplyLegacyInventoryPhotoMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyInventoryPhotoMigration() error = %v", err)
+	}
+	if result.Migrated != 1 || result.AlreadyMigrated != 0 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected apply result: %+v", result)
+	}
+
+	var originalPath, previewPath, thumbnailPath string
+	var isPrimary, displayOrder int
+	if err := conn.QueryRow(`
+		SELECT original_path, preview_path, thumbnail_path, is_primary, display_order
+		FROM item_photos WHERE id = 'photo-legacy'
+	`).Scan(&originalPath, &previewPath, &thumbnailPath, &isPrimary, &displayOrder); err != nil {
+		t.Fatalf("read migrated photo row: %v", err)
+	}
+	if originalPath != filepath.ToSlash(filepath.Join("assets", "photo-legacy", "original", "front.jpg")) ||
+		previewPath != filepath.ToSlash(filepath.Join("assets", "photo-legacy", "renditions", "preview.jpg")) ||
+		thumbnailPath != filepath.ToSlash(filepath.Join("assets", "photo-legacy", "renditions", "thumbnail.jpg")) {
+		t.Fatalf("unexpected migrated paths: original=%q preview=%q thumbnail=%q", originalPath, previewPath, thumbnailPath)
+	}
+	if isPrimary != 1 || displayOrder != 7 {
+		t.Fatalf("migration changed primary/order: isPrimary=%d displayOrder=%d", isPrimary, displayOrder)
+	}
+	if _, err := os.Stat(legacyOriginal); err != nil {
+		t.Fatalf("legacy source should be retained after verified migration: %v", err)
+	}
+
+	manifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "photo-legacy", "manifest.json"))
+	sourceHash := sha256.Sum256(legacyBytes)
+	if manifest.Original.ContentHash != "sha256:"+hex.EncodeToString(sourceHash[:]) {
+		t.Fatalf("manifest hash = %q, want source hash", manifest.Original.ContentHash)
+	}
+	if manifest.Provenance["legacy_source_hash"] != manifest.Original.ContentHash || manifest.Provenance["source"] != "legacy.inventory_photo.migration" {
+		t.Fatalf("manifest provenance missing hash/source evidence: %+v", manifest.Provenance)
+	}
+
+	second, err := svc.ApplyLegacyInventoryPhotoMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyInventoryPhotoMigration() second run error = %v", err)
+	}
+	if second.Migrated != 0 || second.AlreadyMigrated != 1 || second.Skipped != 0 || second.Failed != 0 {
+		t.Fatalf("second run should be idempotent, got %+v", second)
+	}
+	entries, err := os.ReadDir(filepath.Join(mediaRoot, "assets"))
+	if err != nil {
+		t.Fatalf("read asset root: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "photo-legacy" {
+		t.Fatalf("migration should create exactly one stable asset folder, got %+v", entries)
+	}
+}
+
 func TestReorderPersistsListOrder(t *testing.T) {
 	t.Parallel()
 
@@ -659,4 +756,17 @@ func containsLegacyMigrationRecord(records []LegacyMigrationRecord, id, recordTy
 		}
 	}
 	return false
+}
+
+func readAssetManifest(t *testing.T, path string) AssetManifest {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read asset manifest: %v", err)
+	}
+	var manifest AssetManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatalf("decode asset manifest: %v", err)
+	}
+	return manifest
 }

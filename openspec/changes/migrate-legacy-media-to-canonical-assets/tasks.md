@@ -9,7 +9,7 @@
 
 - [x] 2.1 Add migration preflight/dry-run reporting for legacy inventory photo
   folders and Chat attachment files.
-- [ ] 2.2 Add idempotent migration apply for inventory photos, preserving
+- [x] 2.2 Add idempotent migration apply for inventory photos, preserving
   primary-photo/display-order and source hash evidence.
 - [ ] 2.3 Add idempotent migration apply for Chat attachments, preserving
   thread/message attachment links and filename/MIME metadata.
