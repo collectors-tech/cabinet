@@ -25,5 +25,5 @@
 
 - [x] 4.1 Run targeted Go protocol and Settings tests.
 - [x] 4.2 Run MCP inspector/client stdio initialize smoke validation.
-- [ ] 4.3 Run Windows package smoke validation for the launcher.
+- [x] 4.3 Run Windows package smoke validation for the launcher.
 - [x] 4.4 Run strict OpenSpec validation and record results on #1934.
