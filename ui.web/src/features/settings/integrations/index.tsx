@@ -165,6 +165,8 @@ export function SettingsIntegrations() {
 
   const refreshStatus = useCallback(async () => {
     setPendingAction('refresh')
+    setCredential('')
+    setCredentialNotice('No credential has been generated in this session.')
     await loadStatus()
     setPendingAction(null)
   }, [loadStatus])
