@@ -33,6 +33,8 @@ parallel storage layouts.
   audit behavior.
 - `photos-media`: legacy inventory photo paths migrate into canonical assets
   without changing primary photo or display-order behavior.
+- `settings/storage`: operator-visible migration status, repair, rollback and
+  orphan-audit controls on Settings > Storage.
 - `data-management`: backup, restore and upgrade evidence must preserve
   migrated canonical media under relocated Windows profile paths.
 

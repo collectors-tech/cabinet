@@ -2,7 +2,7 @@
 
 - [x] 1.1 Define the legacy inventory-photo and Chat-attachment migration
   contract for #1937.
-- [ ] 1.2 Define operator-visible Settings Storage reporting, repair, rollback
+- [x] 1.2 Define operator-visible Settings Storage reporting, repair, rollback
   and orphan-audit states.
 
 ## 2. Implementation Evidence
