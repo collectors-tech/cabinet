@@ -17,6 +17,14 @@ type MCPHTTPStatusResponse = {
   guidance?: string
   recovery_action?: string
   credential?: string
+  last_diagnostic_outcome?: {
+    operation_id?: string
+    capability?: string
+    method?: string
+    input_class?: string
+    outcome?: string
+    error_class?: string
+  }
 }
 
 type MCPCredentialResponse = {
@@ -342,6 +350,23 @@ export function SettingsIntegrations() {
             >
               {credential || 'Credential appears only immediately after setup.'}
             </div>
+          </div>
+
+          <div className='rounded-md border bg-muted/20 p-3'>
+            <p className='text-xs font-medium text-muted-foreground'>
+              Last diagnostic
+            </p>
+            <p data-testid='settings-integrations-mcp-last-diagnostic'>
+              {status?.last_diagnostic_outcome?.outcome
+                ? [
+                    status.last_diagnostic_outcome.outcome,
+                    status.last_diagnostic_outcome.capability,
+                    status.last_diagnostic_outcome.error_class,
+                  ]
+                    .filter(Boolean)
+                    .join(' - ')
+                : 'No diagnostic outcome recorded.'}
+            </p>
           </div>
         </div>
       </div>

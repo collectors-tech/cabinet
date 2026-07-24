@@ -17,9 +17,10 @@ import (
 const HTTPTransportCredentialSecretKey = "mcp_http_transport_token"
 
 type HTTPTransportConfig struct {
-	Enabled    bool
-	ListenAddr string
-	Credential string
+	Enabled        bool
+	ListenAddr     string
+	Credential     string
+	LastDiagnostic *DiagnosticOutcome
 }
 
 type HTTPTransportCredentialStore interface {
@@ -28,13 +29,14 @@ type HTTPTransportCredentialStore interface {
 }
 
 type HTTPTransportStatusReport struct {
-	Enabled              bool   `json:"enabled"`
-	State                string `json:"state"`
-	ListenAddr           string `json:"listen_addr,omitempty"`
-	CredentialConfigured bool   `json:"credential_configured"`
-	Credential           string `json:"-"`
-	Guidance             string `json:"guidance,omitempty"`
-	RecoveryAction       string `json:"recovery_action,omitempty"`
+	Enabled               bool               `json:"enabled"`
+	State                 string             `json:"state"`
+	ListenAddr            string             `json:"listen_addr,omitempty"`
+	CredentialConfigured  bool               `json:"credential_configured"`
+	Credential            string             `json:"-"`
+	Guidance              string             `json:"guidance,omitempty"`
+	RecoveryAction        string             `json:"recovery_action,omitempty"`
+	LastDiagnosticOutcome *DiagnosticOutcome `json:"last_diagnostic_outcome,omitempty"`
 }
 
 func EnsureHTTPTransportCredential(ctx context.Context, store HTTPTransportCredentialStore, profileID string) (string, error) {
@@ -60,8 +62,9 @@ func EnsureHTTPTransportCredential(ctx context.Context, store HTTPTransportCrede
 
 func HTTPTransportStatus(ctx context.Context, store HTTPTransportCredentialStore, profileID string, cfg HTTPTransportConfig) HTTPTransportStatusReport {
 	report := HTTPTransportStatusReport{
-		Enabled:    cfg.Enabled,
-		ListenAddr: strings.TrimSpace(cfg.ListenAddr),
+		Enabled:               cfg.Enabled,
+		ListenAddr:            strings.TrimSpace(cfg.ListenAddr),
+		LastDiagnosticOutcome: redactedDiagnosticOutcome(cfg.LastDiagnostic),
 	}
 	if !cfg.Enabled {
 		report.State = "disabled"
@@ -91,6 +94,24 @@ func HTTPTransportStatus(ctx context.Context, store HTTPTransportCredentialStore
 	report.CredentialConfigured = true
 	report.Guidance = "Local MCP HTTP transport is configured for loopback clients."
 	return report
+}
+
+func redactedDiagnosticOutcome(outcome *DiagnosticOutcome) *DiagnosticOutcome {
+	if outcome == nil {
+		return nil
+	}
+	redacted := &DiagnosticOutcome{
+		OperationID: strings.TrimSpace(outcome.OperationID),
+		Capability:  strings.TrimSpace(outcome.Capability),
+		Method:      strings.TrimSpace(outcome.Method),
+		InputClass:  strings.TrimSpace(outcome.InputClass),
+		Outcome:     strings.TrimSpace(outcome.Outcome),
+		ErrorClass:  strings.TrimSpace(outcome.ErrorClass),
+	}
+	if redacted.OperationID == "" && redacted.Capability == "" && redacted.Method == "" && redacted.InputClass == "" && redacted.Outcome == "" && redacted.ErrorClass == "" {
+		return nil
+	}
+	return redacted
 }
 
 func NewHTTPHandler(server *mcp.Server, cfg HTTPTransportConfig) (http.Handler, error) {

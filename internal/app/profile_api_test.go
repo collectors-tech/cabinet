@@ -273,6 +273,69 @@ func TestProfileMCPHTTPConfigEndpointEnablesAndDisablesTransport(t *testing.T) {
 	}
 }
 
+func TestProfileMCPHTTPStatusEndpointIncludesRedactedDiagnosticOutcome(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Diagnostics"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	settingsBody := `{"settings":{
+		"mcp.diagnostics.last_operation_id":"mcp-session:000042",
+		"mcp.diagnostics.last_capability":"tool:cabinet.inventory.search",
+		"mcp.diagnostics.last_method":"tools/call",
+		"mcp.diagnostics.last_input_class":"tool_arguments",
+		"mcp.diagnostics.last_outcome":"error",
+		"mcp.diagnostics.last_error_class":"timeout",
+		"mcp.diagnostics.last_payload":"provider-secret-value"
+	}}`
+	putSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if putSettings.Code != http.StatusOK {
+		t.Fatalf("put mcp diagnostic settings status=%d body=%s", putSettings.Code, putSettings.Body.String())
+	}
+
+	status := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if status.Code != http.StatusOK {
+		t.Fatalf("status status=%d body=%s", status.Code, status.Body.String())
+	}
+	body := status.Body.String()
+	if strings.Contains(body, "provider-secret-value") {
+		t.Fatalf("mcp status leaked raw diagnostic payload: %s", body)
+	}
+	var payload struct {
+		LastDiagnosticOutcome *struct {
+			OperationID string `json:"operation_id"`
+			Capability  string `json:"capability"`
+			Method      string `json:"method"`
+			InputClass  string `json:"input_class"`
+			Outcome     string `json:"outcome"`
+			ErrorClass  string `json:"error_class"`
+		} `json:"last_diagnostic_outcome"`
+	}
+	if err := json.NewDecoder(strings.NewReader(body)).Decode(&payload); err != nil {
+		t.Fatalf("decode status payload: %v", err)
+	}
+	if payload.LastDiagnosticOutcome == nil {
+		t.Fatalf("expected redacted diagnostic outcome in status: %s", body)
+	}
+	if payload.LastDiagnosticOutcome.OperationID != "mcp-session:000042" ||
+		payload.LastDiagnosticOutcome.Capability != "tool:cabinet.inventory.search" ||
+		payload.LastDiagnosticOutcome.Method != "tools/call" ||
+		payload.LastDiagnosticOutcome.InputClass != "tool_arguments" ||
+		payload.LastDiagnosticOutcome.Outcome != "error" ||
+		payload.LastDiagnosticOutcome.ErrorClass != "timeout" {
+		t.Fatalf("unexpected diagnostic outcome: %+v", payload.LastDiagnosticOutcome)
+	}
+}
+
 func TestStorageMaintenanceEndpoints(t *testing.T) {
 	t.Parallel()
 

@@ -783,8 +783,9 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			status := mcpserver.HTTPTransportStatus(r.Context(), profiles, profileID, mcpserver.HTTPTransportConfig{
-				Enabled:    boolSetting(settings["mcp.http.enabled"]),
-				ListenAddr: settings["mcp.http.listen_addr"],
+				Enabled:        boolSetting(settings["mcp.http.enabled"]),
+				ListenAddr:     settings["mcp.http.listen_addr"],
+				LastDiagnostic: mcpDiagnosticOutcomeFromSettings(settings),
 			})
 			_ = json.NewEncoder(w).Encode(status)
 		case "mcp-http-credential":
@@ -837,8 +838,9 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			status := mcpserver.HTTPTransportStatus(r.Context(), profiles, profileID, mcpserver.HTTPTransportConfig{
-				Enabled:    boolSetting(updated["mcp.http.enabled"]),
-				ListenAddr: updated["mcp.http.listen_addr"],
+				Enabled:        boolSetting(updated["mcp.http.enabled"]),
+				ListenAddr:     updated["mcp.http.listen_addr"],
+				LastDiagnostic: mcpDiagnosticOutcomeFromSettings(updated),
 			})
 			_ = json.NewEncoder(w).Encode(status)
 		case "integration-instances":
@@ -13795,6 +13797,21 @@ func boolSetting(value string) bool {
 	default:
 		return false
 	}
+}
+
+func mcpDiagnosticOutcomeFromSettings(settings map[string]string) *mcpserver.DiagnosticOutcome {
+	outcome := &mcpserver.DiagnosticOutcome{
+		OperationID: strings.TrimSpace(settings["mcp.diagnostics.last_operation_id"]),
+		Capability:  strings.TrimSpace(settings["mcp.diagnostics.last_capability"]),
+		Method:      strings.TrimSpace(settings["mcp.diagnostics.last_method"]),
+		InputClass:  strings.TrimSpace(settings["mcp.diagnostics.last_input_class"]),
+		Outcome:     strings.TrimSpace(settings["mcp.diagnostics.last_outcome"]),
+		ErrorClass:  strings.TrimSpace(settings["mcp.diagnostics.last_error_class"]),
+	}
+	if outcome.OperationID == "" && outcome.Capability == "" && outcome.Method == "" && outcome.InputClass == "" && outcome.Outcome == "" && outcome.ErrorClass == "" {
+		return nil
+	}
+	return outcome
 }
 
 func nonSecretProviderTrace(in map[string]any) map[string]any {

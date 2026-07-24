@@ -36,6 +36,15 @@ type OperationReceipt struct {
 	ErrorClass    string `json:"error_class,omitempty"`
 }
 
+type DiagnosticOutcome struct {
+	OperationID string `json:"operation_id,omitempty"`
+	Capability  string `json:"capability,omitempty"`
+	Method      string `json:"method,omitempty"`
+	InputClass  string `json:"input_class,omitempty"`
+	Outcome     string `json:"outcome,omitempty"`
+	ErrorClass  string `json:"error_class,omitempty"`
+}
+
 type receiptClientInfo struct {
 	name    string
 	version string

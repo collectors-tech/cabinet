@@ -47,6 +47,14 @@ describe('settings/integrations MCP transport', () => {
                 credential_configured: true,
                 guidance: 'Loopback HTTP transport is ready.',
                 recovery_action: '',
+                last_diagnostic_outcome: {
+                  operation_id: 'mcp-session:000042',
+                  capability: 'tool:cabinet.inventory.search',
+                  method: 'tools/call',
+                  input_class: 'tool_arguments',
+                  outcome: 'error',
+                  error_class: 'timeout',
+                },
               },
       })
     }).as('mcpStatus')
@@ -124,6 +132,9 @@ describe('settings/integrations MCP transport', () => {
       'contain',
       'Configured'
     )
+    cy.get('[data-testid="settings-integrations-mcp-last-diagnostic"]')
+      .should('contain', 'error - tool:cabinet.inventory.search - timeout')
+      .and('not.contain', generatedCredential)
 
     cy.get('[data-testid="settings-integrations-mcp-refresh"]').click()
     cy.wait('@mcpStatus')
