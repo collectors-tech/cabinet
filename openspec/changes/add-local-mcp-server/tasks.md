@@ -3,7 +3,7 @@
 - [x] 1.1 Select the maintained Go MCP protocol implementation for #1934.
 - [x] 1.2 Define the local MCP trust boundary, transports, diagnostics, and
   packaging requirements in OpenSpec.
-- [ ] 1.3 Add failing protocol tests for stdio initialize/capability
+- [x] 1.3 Add failing protocol tests for stdio initialize/capability
   negotiation, malformed messages, unknown methods, cancellation, and timeout.
 
 ## 2. Server foundation

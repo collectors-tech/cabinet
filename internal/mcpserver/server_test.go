@@ -1,9 +1,12 @@
 package mcpserver
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -164,6 +167,34 @@ func TestRawProtocolInvalidInitializeParamsReturnsStructuredErrorThenInitializes
 	resp = readResponse(t, conn)
 	if resp.Error != nil {
 		t.Fatalf("initialize after invalid params returned error: %v", resp.Error)
+	}
+}
+
+func TestRawIOProtocolMalformedInitializeMessageReturnsStructuredErrorThenInitializes(t *testing.T) {
+	writer, reader, closeConn := rawIOProtocolConnection(t)
+	defer closeConn()
+
+	writeRawLine(t, writer, `{"jsonrpc":"2.0","id":"malformed-1","method":"initialize","params":{"clientInfo":{"name":["not","a","string"]},"protocolVersion":false,"capabilities":"not-an-object"}}`)
+	resp := readRawLineResponse(t, reader)
+	if got := resp.ID.Raw(); got != "malformed-1" {
+		t.Fatalf("malformed-message response ID = %v, want malformed-1", got)
+	}
+	assertStructuredProtocolErrorDoesNotLeakProfile(t, resp, "malformed initialize message")
+
+	writeRawLine(t, writer, `{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"clientInfo":{"name":"cabinet-raw-io-test","version":"0.1.0"},"protocolVersion":"2025-06-18","capabilities":{}}}`)
+	resp = readRawLineResponse(t, reader)
+	if resp.Error != nil {
+		t.Fatalf("initialize after malformed message returned error: %v", resp.Error)
+	}
+
+	writeRawLine(t, writer, `{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`)
+	writeRawLine(t, writer, `{"jsonrpc":"2.0","id":"ping-1","method":"ping","params":{}}`)
+	resp = readRawLineResponse(t, reader)
+	if resp.Error != nil {
+		t.Fatalf("ping after malformed message returned error: %v", resp.Error)
+	}
+	if got := strings.TrimSpace(string(resp.Result)); got != "{}" {
+		t.Fatalf("ping result = %s, want {}", got)
 	}
 }
 
@@ -344,6 +375,41 @@ func rawProtocolConnection(t *testing.T) (mcp.Connection, func()) {
 	return conn, cleanup
 }
 
+func rawIOProtocolConnection(t *testing.T) (*io.PipeWriter, *bufio.Reader, func()) {
+	t.Helper()
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:abc123",
+		SessionIDSeed: "mcp-raw-io-test-session",
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	clientToServerReader, clientToServerWriter := io.Pipe()
+	serverToClientReader, serverToClientWriter := io.Pipe()
+	transport := &mcp.IOTransport{
+		Reader: clientToServerReader,
+		Writer: serverToClientWriter,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverSession, err := server.Connect(ctx, transport, nil)
+	if err != nil {
+		cancel()
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+
+	cleanup := func() {
+		clientToServerWriter.Close()
+		serverToClientReader.Close()
+		serverSession.Close()
+		cancel()
+	}
+	return clientToServerWriter, bufio.NewReader(serverToClientReader), cleanup
+}
+
 func assertStructuredProtocolErrorDoesNotLeakProfile(t *testing.T, resp *jsonrpc.Response, label string) {
 	t.Helper()
 	var rpcErr *jsonrpc.Error
@@ -356,6 +422,30 @@ func assertStructuredProtocolErrorDoesNotLeakProfile(t *testing.T, resp *jsonrpc
 	if strings.Contains(strings.ToLower(rpcErr.Message), "profile-main") {
 		t.Fatalf("%s leaked profile details: %q", label, rpcErr.Message)
 	}
+}
+
+func writeRawLine(t *testing.T, writer *io.PipeWriter, raw string) {
+	t.Helper()
+	if _, err := writer.Write([]byte(raw + "\n")); err != nil {
+		t.Fatalf("write raw protocol line error = %v", err)
+	}
+}
+
+func readRawLineResponse(t *testing.T, reader *bufio.Reader) *jsonrpc.Response {
+	t.Helper()
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read raw protocol response error = %v", err)
+	}
+	msg, err := jsonrpc.DecodeMessage(bytes.TrimSpace(line))
+	if err != nil {
+		t.Fatalf("decode raw protocol response %q error = %v", line, err)
+	}
+	resp, ok := msg.(*jsonrpc.Response)
+	if !ok {
+		t.Fatalf("raw protocol response decoded to %T, want *jsonrpc.Response", msg)
+	}
+	return resp
 }
 
 func writeRequest(t *testing.T, conn mcp.Connection, idValue string, method string, params string) {
