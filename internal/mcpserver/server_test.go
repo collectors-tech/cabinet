@@ -127,6 +127,68 @@ func TestRawProtocolInvalidNonPingMethodBeforeInitializeReturnsStructuredErrorTh
 	}
 }
 
+func TestToolCallTimeoutCancelsOnlyInFlightOperationAndKeepsSessionAlive(t *testing.T) {
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:abc123",
+		SessionIDSeed: "mcp-timeout-test-session",
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	started := make(chan struct{})
+	cancelled := make(chan error, 1)
+	mcp.AddTool(server, &mcp.Tool{Name: "cabinet.test.hang"}, func(ctx context.Context, _ *mcp.CallToolRequest, _ any) (*mcp.CallToolResult, any, error) {
+		close(started)
+		<-ctx.Done()
+		cancelled <- ctx.Err()
+		return nil, nil, ctx.Err()
+	})
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-timeout-test-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	callCtx, cancelCall := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancelCall()
+	_, err = clientSession.CallTool(callCtx, &mcp.CallToolParams{Name: "cabinet.test.hang"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("CallTool() error = %v, want context deadline exceeded", err)
+	}
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for test tool to start")
+	}
+	select {
+	case err := <-cancelled:
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("server-side cancellation error = %v, want context cancellation", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for in-flight tool cancellation")
+	}
+
+	if err := clientSession.Ping(ctx, nil); err != nil {
+		t.Fatalf("Ping() after timed-out tool call error = %v", err)
+	}
+}
+
 func rawProtocolConnection(t *testing.T) (mcp.Connection, func()) {
 	t.Helper()
 	server, err := NewServer(Config{
