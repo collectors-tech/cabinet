@@ -119,6 +119,51 @@ func TestEnsureHTTPTransportCredentialGeneratesSecretWithoutSettingsLeak(t *test
 	}
 }
 
+func TestHTTPTransportStatusDoesNotExposeCredential(t *testing.T) {
+	t.Setenv("CABINET_ALLOW_INSECURE_SECRET_FALLBACK", "1")
+	t.Setenv("CABINET_FORCE_SECURESTORE_FAIL", "1")
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	repo := profile.NewRepository(conn)
+	p, err := repo.Create(context.Background(), "Main")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	disabled := HTTPTransportStatus(context.Background(), repo, p.ID, HTTPTransportConfig{})
+	if disabled.State != "disabled" || disabled.Enabled || disabled.CredentialConfigured {
+		t.Fatalf("unexpected disabled status: %+v", disabled)
+	}
+
+	missing := HTTPTransportStatus(context.Background(), repo, p.ID, HTTPTransportConfig{
+		Enabled:    true,
+		ListenAddr: "127.0.0.1:17890",
+	})
+	if missing.State != "misconfigured" || missing.CredentialConfigured || missing.RecoveryAction != "generate_mcp_http_credential" {
+		t.Fatalf("unexpected missing-credential status: %+v", missing)
+	}
+
+	credential, err := EnsureHTTPTransportCredential(context.Background(), repo, p.ID)
+	if err != nil {
+		t.Fatalf("EnsureHTTPTransportCredential() error = %v", err)
+	}
+	ready := HTTPTransportStatus(context.Background(), repo, p.ID, HTTPTransportConfig{
+		Enabled:    true,
+		ListenAddr: "127.0.0.1:17890",
+	})
+	if ready.State != "ready" || !ready.CredentialConfigured || ready.Credential != "" {
+		t.Fatalf("unexpected ready status: %+v", ready)
+	}
+	if strings.Contains(ready.Guidance, credential) || strings.Contains(ready.RecoveryAction, credential) {
+		t.Fatalf("status leaked credential: %+v", ready)
+	}
+}
+
 func mustTestServer(t *testing.T) *mcp.Server {
 	t.Helper()
 	server, err := NewServer(Config{

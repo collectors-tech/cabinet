@@ -27,6 +27,16 @@ type HTTPTransportCredentialStore interface {
 	PutSecret(ctx context.Context, profileID, key, value string) error
 }
 
+type HTTPTransportStatusReport struct {
+	Enabled              bool   `json:"enabled"`
+	State                string `json:"state"`
+	ListenAddr           string `json:"listen_addr,omitempty"`
+	CredentialConfigured bool   `json:"credential_configured"`
+	Credential           string `json:"-"`
+	Guidance             string `json:"guidance,omitempty"`
+	RecoveryAction       string `json:"recovery_action,omitempty"`
+}
+
 func EnsureHTTPTransportCredential(ctx context.Context, store HTTPTransportCredentialStore, profileID string) (string, error) {
 	if store == nil {
 		return "", errors.New("mcp HTTP transport credential store is required")
@@ -46,6 +56,41 @@ func EnsureHTTPTransportCredential(ctx context.Context, store HTTPTransportCrede
 		return "", fmt.Errorf("store mcp HTTP transport credential: %w", err)
 	}
 	return credential, nil
+}
+
+func HTTPTransportStatus(ctx context.Context, store HTTPTransportCredentialStore, profileID string, cfg HTTPTransportConfig) HTTPTransportStatusReport {
+	report := HTTPTransportStatusReport{
+		Enabled:    cfg.Enabled,
+		ListenAddr: strings.TrimSpace(cfg.ListenAddr),
+	}
+	if !cfg.Enabled {
+		report.State = "disabled"
+		report.Guidance = "Enable the local MCP HTTP transport before configuring loopback clients."
+		report.RecoveryAction = "enable_mcp_http_transport"
+		return report
+	}
+	if err := validateLoopbackListenAddr(cfg.ListenAddr); err != nil {
+		report.State = "misconfigured"
+		report.Guidance = "Use a loopback listen address for the local MCP HTTP transport."
+		report.RecoveryAction = "set_loopback_listen_address"
+		return report
+	}
+	credential := strings.TrimSpace(cfg.Credential)
+	if credential == "" && store != nil && strings.TrimSpace(profileID) != "" {
+		if stored, err := store.GetSecret(ctx, strings.TrimSpace(profileID), HTTPTransportCredentialSecretKey); err == nil {
+			credential = strings.TrimSpace(stored)
+		}
+	}
+	if credential == "" {
+		report.State = "misconfigured"
+		report.Guidance = "Generate a local MCP HTTP credential before accepting client sessions."
+		report.RecoveryAction = "generate_mcp_http_credential"
+		return report
+	}
+	report.State = "ready"
+	report.CredentialConfigured = true
+	report.Guidance = "Local MCP HTTP transport is configured for loopback clients."
+	return report
 }
 
 func NewHTTPHandler(server *mcp.Server, cfg HTTPTransportConfig) (http.Handler, error) {
