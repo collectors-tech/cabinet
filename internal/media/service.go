@@ -118,6 +118,13 @@ type LegacyInventoryMigrationResult struct {
 	Failed          int `json:"failed"`
 }
 
+type LegacyChatAttachmentMigrationResult struct {
+	Migrated        int `json:"migrated"`
+	AlreadyMigrated int `json:"already_migrated"`
+	Skipped         int `json:"skipped"`
+	Failed          int `json:"failed"`
+}
+
 type LegacyMigrationRecord struct {
 	ID             string `json:"id"`
 	RecordType     string `json:"record_type"`
@@ -722,6 +729,69 @@ func (s *Service) ApplyLegacyInventoryPhotoMigration(ctx context.Context, profil
 
 	for _, row := range pending {
 		if err := s.migrateLegacyInventoryPhoto(ctx, mediaRoot, row.id, row.itemID, row.filename, row.originalPath); err != nil {
+			result.Failed++
+			return result, err
+		}
+		result.Migrated++
+	}
+	return result, nil
+}
+
+func (s *Service) ApplyLegacyChatAttachmentMigration(ctx context.Context, profileID string) (LegacyChatAttachmentMigrationResult, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return LegacyChatAttachmentMigrationResult{}, fmt.Errorf("profile_id is required")
+	}
+	mediaRoot, err := s.resolveMediaDirForProfile(ctx, profileID)
+	if err != nil {
+		return LegacyChatAttachmentMigrationResult{}, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, thread_id, filename, mime_type, stored_path
+		FROM chat_attachments
+		WHERE profile_id = ?
+		ORDER BY id ASC
+	`, profileID)
+	if err != nil {
+		return LegacyChatAttachmentMigrationResult{}, fmt.Errorf("list chat attachments for migration: %w", err)
+	}
+	defer rows.Close()
+
+	type attachmentMigrationRow struct {
+		id         string
+		threadID   string
+		filename   string
+		mimeType   string
+		storedPath string
+	}
+	pending := make([]attachmentMigrationRow, 0)
+	result := LegacyChatAttachmentMigrationResult{}
+	for rows.Next() {
+		var row attachmentMigrationRow
+		if err := rows.Scan(&row.id, &row.threadID, &row.filename, &row.mimeType, &row.storedPath); err != nil {
+			return LegacyChatAttachmentMigrationResult{}, fmt.Errorf("scan chat attachment migration row: %w", err)
+		}
+		resolvedPath := resolveMediaRootPath(mediaRoot, row.storedPath)
+		record := LegacyMigrationRecord{ID: row.id, RecordType: "chat_attachment", ThreadID: row.threadID, Filename: row.filename}
+		classifyLegacyMigrationPath(mediaRoot, resolvedPath, &record)
+		switch record.Classification {
+		case "pending":
+			pending = append(pending, row)
+		case "already_migrated":
+			result.AlreadyMigrated++
+		case "missing", "failed":
+			result.Skipped++
+		default:
+			result.Skipped++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return LegacyChatAttachmentMigrationResult{}, fmt.Errorf("iterate chat attachment migration rows: %w", err)
+	}
+
+	for _, row := range pending {
+		if err := s.migrateLegacyChatAttachment(ctx, mediaRoot, row.id, row.threadID, row.filename, row.mimeType, row.storedPath); err != nil {
 			result.Failed++
 			return result, err
 		}
@@ -1852,6 +1922,65 @@ func (s *Service) migrateLegacyInventoryPhoto(ctx context.Context, mediaRoot, ph
 	`, mediaRootRelativePath(mediaRoot, origPath), mediaRootRelativePath(mediaRoot, previewPath), mediaRootRelativePath(mediaRoot, thumbPath), photoID, itemID); err != nil {
 		_ = os.RemoveAll(filepath.Join(mediaRoot, "assets", photoID))
 		return fmt.Errorf("update migrated inventory photo %s: %w", photoID, err)
+	}
+	return nil
+}
+
+func (s *Service) migrateLegacyChatAttachment(ctx context.Context, mediaRoot, attachmentID, threadID, filename, mimeType, storedPath string) error {
+	sourcePath := resolveMediaRootPath(mediaRoot, storedPath)
+	sourceHash, err := fileSHA256(sourcePath)
+	if err != nil {
+		return fmt.Errorf("hash legacy chat attachment %s: %w", attachmentID, err)
+	}
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("open legacy chat attachment %s: %w", attachmentID, err)
+	}
+	defer sourceFile.Close()
+
+	safeName := safeMediaFilename(filename)
+	if filepath.Ext(safeName) == "" {
+		safeName += filepath.Ext(sourcePath)
+	}
+	if strings.TrimSpace(mimeType) == "" {
+		mimeType = contentTypeForFilename(safeName)
+	}
+	origPath, _, _, err := s.createCanonicalAsset(
+		ctx,
+		mediaRoot,
+		attachmentID,
+		safeName,
+		filename,
+		mimeType,
+		sourceFile,
+		[]AssetManifestOwner{{Type: "chat_thread", ID: threadID}},
+		map[string]string{
+			"source":              "legacy.chat_attachment.migration",
+			"legacy_source_class": legacyMigrationPathClass(mediaRoot, sourcePath),
+			"legacy_source_hash":  sourceHash,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create canonical asset for legacy chat attachment %s: %w", attachmentID, err)
+	}
+
+	manifest, err := readAssetManifestFile(filepath.Join(mediaRoot, "assets", attachmentID, "manifest.json"))
+	if err != nil {
+		_ = os.RemoveAll(filepath.Join(mediaRoot, "assets", attachmentID))
+		return fmt.Errorf("read migrated chat attachment manifest for %s: %w", attachmentID, err)
+	}
+	if manifest.Original.ContentHash != sourceHash {
+		_ = os.RemoveAll(filepath.Join(mediaRoot, "assets", attachmentID))
+		return fmt.Errorf("verify migrated chat attachment hash for %s: got %s want %s", attachmentID, manifest.Original.ContentHash, sourceHash)
+	}
+
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE chat_attachments
+		SET stored_path = ?
+		WHERE id = ?
+	`, mediaRootRelativePath(mediaRoot, origPath), attachmentID); err != nil {
+		_ = os.RemoveAll(filepath.Join(mediaRoot, "assets", attachmentID))
+		return fmt.Errorf("update migrated chat attachment %s: %w", attachmentID, err)
 	}
 	return nil
 }

@@ -11,7 +11,7 @@
   folders and Chat attachment files.
 - [x] 2.2 Add idempotent migration apply for inventory photos, preserving
   primary-photo/display-order and source hash evidence.
-- [ ] 2.3 Add idempotent migration apply for Chat attachments, preserving
+- [x] 2.3 Add idempotent migration apply for Chat attachments, preserving
   thread/message attachment links and filename/MIME metadata.
 - [ ] 2.4 Add interruption recovery so staged assets are not exposed and repeat
   runs resume without duplicating records.

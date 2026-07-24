@@ -653,6 +653,109 @@ func TestApplyLegacyInventoryPhotoMigrationPreservesOrderAndHashIdempotently(t *
 	}
 }
 
+func TestApplyLegacyChatAttachmentMigrationPreservesLinksAndMetadataIdempotently(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyAttachmentRoot := filepath.Join(mediaRoot, "chat-attachments")
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyBytes := []byte("legacy chat attachment bytes")
+	legacyAttachment := filepath.Join(legacyAttachmentRoot, "reference note.txt")
+	legacyAttachmentStored := filepath.ToSlash(filepath.Join("chat-attachments", "reference note.txt"))
+	if err := os.WriteFile(legacyAttachment, legacyBytes, 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-legacy','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-legacy','profile-1','thread-legacy','Reference Note.txt','text/plain', ?, ?);
+		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
+		VALUES ('message-legacy','profile-1','thread-legacy','user','please use this attachment',
+			'[{"id":"attach-legacy","filename":"Reference Note.txt","mime_type":"text/plain","size_bytes":28}]',
+			'{"source":"test"}');
+	`, len(legacyBytes), legacyAttachmentStored); err != nil {
+		t.Fatalf("seed legacy chat attachment: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	result, err := svc.ApplyLegacyChatAttachmentMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyChatAttachmentMigration() error = %v", err)
+	}
+	if result.Migrated != 1 || result.AlreadyMigrated != 0 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected chat apply result: %+v", result)
+	}
+
+	var storedPath, filename, mimeType, messageAttachments string
+	var sizeBytes int
+	if err := conn.QueryRow(`
+		SELECT ca.stored_path, ca.filename, ca.mime_type, ca.size_bytes, cm.attachments_json
+		FROM chat_attachments ca
+		INNER JOIN chat_messages cm ON cm.thread_id = ca.thread_id
+		WHERE ca.id = 'attach-legacy'
+	`).Scan(&storedPath, &filename, &mimeType, &sizeBytes, &messageAttachments); err != nil {
+		t.Fatalf("read migrated chat attachment row: %v", err)
+	}
+	if storedPath != filepath.ToSlash(filepath.Join("assets", "attach-legacy", "original", "Reference Note.txt")) {
+		t.Fatalf("unexpected migrated chat attachment path: %q", storedPath)
+	}
+	if filename != "Reference Note.txt" || mimeType != "text/plain" || sizeBytes != len(legacyBytes) {
+		t.Fatalf("migration changed attachment metadata: filename=%q mime=%q size=%d", filename, mimeType, sizeBytes)
+	}
+	if messageAttachments != `[{"id":"attach-legacy","filename":"Reference Note.txt","mime_type":"text/plain","size_bytes":28}]` {
+		t.Fatalf("migration changed message attachment links: %s", messageAttachments)
+	}
+	if _, err := os.Stat(legacyAttachment); err != nil {
+		t.Fatalf("legacy source should be retained after verified chat migration: %v", err)
+	}
+
+	manifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "attach-legacy", "manifest.json"))
+	sourceHash := sha256.Sum256(legacyBytes)
+	if manifest.Original.Filename != "Reference Note.txt" || manifest.Original.MIMEType != "text/plain" || manifest.Original.ContentHash != "sha256:"+hex.EncodeToString(sourceHash[:]) {
+		t.Fatalf("manifest original metadata mismatch: %+v", manifest.Original)
+	}
+	if len(manifest.Owners) != 1 || manifest.Owners[0].Type != "chat_thread" || manifest.Owners[0].ID != "thread-legacy" {
+		t.Fatalf("manifest owners should preserve chat thread linkage: %+v", manifest.Owners)
+	}
+	if manifest.Provenance["legacy_source_hash"] != manifest.Original.ContentHash || manifest.Provenance["source"] != "legacy.chat_attachment.migration" {
+		t.Fatalf("manifest provenance missing hash/source evidence: %+v", manifest.Provenance)
+	}
+
+	second, err := svc.ApplyLegacyChatAttachmentMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyChatAttachmentMigration() second run error = %v", err)
+	}
+	if second.Migrated != 0 || second.AlreadyMigrated != 1 || second.Skipped != 0 || second.Failed != 0 {
+		t.Fatalf("second run should be idempotent, got %+v", second)
+	}
+	entries, err := os.ReadDir(filepath.Join(mediaRoot, "assets"))
+	if err != nil {
+		t.Fatalf("read asset root: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "attach-legacy" {
+		t.Fatalf("migration should create exactly one stable chat asset folder, got %+v", entries)
+	}
+}
+
 func TestReorderPersistsListOrder(t *testing.T) {
 	t.Parallel()
 
