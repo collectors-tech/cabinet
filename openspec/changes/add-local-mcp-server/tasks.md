@@ -12,18 +12,18 @@
 - [ ] 2.2 Bind sessions to one explicit profile and reject missing or mismatched
   profile authority.
 - [x] 2.3 Add structured redacted receipts for material protocol operations.
-- [ ] 2.4 Add optional loopback-only HTTP transport guarded by generated secret
+- [x] 2.4 Add optional loopback-only HTTP transport guarded by generated secret
   storage and disabled by default.
 
 ## 3. Settings and packaging
 
-- [ ] 3.1 Add Settings > Integrations > MCP status, enable/disable, selected
+- [x] 3.1 Add Settings > Integrations > MCP status, enable/disable, selected
   profile, client configuration guidance, and diagnostics.
 - [x] 3.2 Package the launcher with the Windows desktop application.
 
 ## 4. Evidence
 
-- [ ] 4.1 Run targeted Go protocol and Settings tests.
+- [x] 4.1 Run targeted Go protocol and Settings tests.
 - [x] 4.2 Run MCP inspector/client stdio initialize smoke validation.
 - [ ] 4.3 Run Windows package smoke validation for the launcher.
-- [ ] 4.4 Run strict OpenSpec validation and record results on #1934.
+- [x] 4.4 Run strict OpenSpec validation and record results on #1934.
