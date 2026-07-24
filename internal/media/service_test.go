@@ -444,6 +444,118 @@ func TestCreateCanonicalAssetCleansStagingAfterInterruptedRead(t *testing.T) {
 	}
 }
 
+func TestPreflightLegacyMediaMigrationReportsMixedLegacyNewAndOrphanStore(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	legacyOriginal := filepath.Join(legacyItemDir, "photo-legacy_orig.jpg")
+	legacyOriginalStored := filepath.ToSlash(filepath.Join("item-legacy", "photo-legacy_orig.jpg"))
+	if err := os.WriteFile(legacyOriginal, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write legacy original: %v", err)
+	}
+	orphanPath := filepath.Join(legacyItemDir, "orphan_orig.jpg")
+	if err := os.WriteFile(orphanPath, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write orphan legacy file: %v", err)
+	}
+	legacyAttachmentRoot := filepath.Join(mediaRoot, "chat-attachments")
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyAttachmentPath := filepath.Join(legacyAttachmentRoot, "attach-legacy-note.txt")
+	legacyAttachmentStored := filepath.ToSlash(filepath.Join("chat-attachments", "attach-legacy-note.txt"))
+	if err := os.WriteFile(legacyAttachmentPath, []byte("legacy note"), 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+	missingOriginalStored := filepath.ToSlash(filepath.Join("item-legacy", "missing", "missing_orig.jpg"))
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title) VALUES
+			('item-legacy','profile-1','AFX','Slot Car','LEG-1','Legacy Car'),
+			('item-canonical','profile-1','AFX','Slot Car','CAN-1','Canonical Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-1','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed legacy media records: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order) VALUES
+			('photo-legacy','item-legacy','legacy.jpg', ?, '', '', 1, 1),
+			('photo-missing','item-legacy','missing.jpg', ?, '', '', 0, 2)
+	`, legacyOriginalStored, missingOriginalStored); err != nil {
+		t.Fatalf("seed legacy photo rows: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-legacy','profile-1','thread-1','attach-legacy-note.txt','text/plain',11, ?)
+	`, legacyAttachmentStored); err != nil {
+		t.Fatalf("seed legacy attachment row: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	resolvedMediaRoot, err := svc.resolveMediaDirForProfile(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("resolve media root: %v", err)
+	}
+	if resolvedMediaRoot != mediaRoot {
+		t.Fatalf("resolved media root = %q, want %q", resolvedMediaRoot, mediaRoot)
+	}
+	if _, err := svc.Upload(context.Background(), "item-canonical", "canonical.jpg", bytes.NewReader(sampleJPEG(t))); err != nil {
+		t.Fatalf("seed canonical upload: %v", err)
+	}
+
+	report, err := svc.PreflightLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("PreflightLegacyMediaMigration() error = %v", err)
+	}
+	if !report.DryRun || report.ProfileID != "profile-1" {
+		t.Fatalf("preflight should be profile-scoped dry run, got %+v", report)
+	}
+	if report.Summary.Discovered != 5 || report.Summary.Pending != 2 || report.Summary.AlreadyMigrated != 1 || report.Summary.Missing != 1 || report.Summary.Orphan != 1 {
+		t.Fatalf("unexpected migration summary: %+v records=%+v", report.Summary, report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-legacy", "inventory_photo", "pending", "legacy_media") {
+		t.Fatalf("legacy inventory photo not classified as pending: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "attach-legacy", "chat_attachment", "pending", "legacy_media") {
+		t.Fatalf("legacy chat attachment not classified as pending legacy media: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-missing", "inventory_photo", "missing", "legacy_media") {
+		t.Fatalf("missing inventory photo not reported with record id: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "", "inventory_photo", "already_migrated", "canonical_asset") {
+		t.Fatalf("canonical inventory photo not classified as already migrated: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "", "orphan_file", "orphan", "legacy_media") {
+		t.Fatalf("orphan legacy file not reported without deletion: %+v", report.Records)
+	}
+
+	var originalPath string
+	if err := conn.QueryRow(`SELECT original_path FROM item_photos WHERE id = 'photo-legacy'`).Scan(&originalPath); err != nil {
+		t.Fatalf("read legacy original path after dry run: %v", err)
+	}
+	if originalPath != legacyOriginalStored {
+		t.Fatalf("preflight mutated legacy path: got %q want %q", originalPath, legacyOriginalStored)
+	}
+	if _, err := os.Stat(orphanPath); err != nil {
+		t.Fatalf("preflight should not delete orphan file: %v", err)
+	}
+}
+
 func TestReorderPersistsListOrder(t *testing.T) {
 	t.Parallel()
 
@@ -531,6 +643,18 @@ func containsAssetState(assets []WorkspaceAsset, id, state string) bool {
 func containsAssetTarget(assets []WorkspaceAsset, id, state, itemID, wishlistID string) bool {
 	for _, asset := range assets {
 		if asset.ID == id && asset.LinkageState == state && asset.ItemID == itemID && asset.WishlistID == wishlistID {
+			return true
+		}
+	}
+	return false
+}
+
+func containsLegacyMigrationRecord(records []LegacyMigrationRecord, id, recordType, classification, pathClass string) bool {
+	for _, record := range records {
+		if id != "" && record.ID != id {
+			continue
+		}
+		if record.RecordType == recordType && record.Classification == classification && record.PathClass == pathClass {
 			return true
 		}
 	}

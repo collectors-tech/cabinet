@@ -95,6 +95,33 @@ type WorkspaceList struct {
 	Filter  string           `json:"filter"`
 }
 
+type LegacyMigrationPreflight struct {
+	ProfileID string                  `json:"profile_id"`
+	DryRun    bool                    `json:"dry_run"`
+	Summary   LegacyMigrationSummary  `json:"summary"`
+	Records   []LegacyMigrationRecord `json:"records"`
+}
+
+type LegacyMigrationSummary struct {
+	Discovered      int `json:"discovered"`
+	Pending         int `json:"pending"`
+	AlreadyMigrated int `json:"already_migrated"`
+	Missing         int `json:"missing"`
+	Orphan          int `json:"orphan"`
+	Failed          int `json:"failed"`
+}
+
+type LegacyMigrationRecord struct {
+	ID             string `json:"id"`
+	RecordType     string `json:"record_type"`
+	ItemID         string `json:"item_id,omitempty"`
+	ThreadID       string `json:"thread_id,omitempty"`
+	Filename       string `json:"filename"`
+	Classification string `json:"classification"`
+	PathClass      string `json:"path_class"`
+	RecoveryAction string `json:"recovery_action,omitempty"`
+}
+
 type AssignmentPreview struct {
 	AssetID               string `json:"asset_id"`
 	TargetType            string `json:"target_type"`
@@ -553,6 +580,82 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		}
 	}
 	return WorkspaceList{Assets: assets, Summary: summarizeWorkspaceAssets(allAssets), Filter: filter}, nil
+}
+
+func (s *Service) PreflightLegacyMediaMigration(ctx context.Context, profileID string) (LegacyMigrationPreflight, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return LegacyMigrationPreflight{}, fmt.Errorf("profile_id is required")
+	}
+	mediaRoot, err := s.resolveMediaDirForProfile(ctx, profileID)
+	if err != nil {
+		return LegacyMigrationPreflight{}, err
+	}
+
+	report := LegacyMigrationPreflight{ProfileID: profileID, DryRun: true}
+	referenced := make(map[string]bool)
+
+	photoRows, err := s.db.QueryContext(ctx, `
+		SELECT ip.id, ip.item_id, ip.filename, ip.original_path, ci.id
+		FROM item_photos ip
+		INNER JOIN canonical_items ci ON ci.id = ip.item_id
+		WHERE ci.profile_id = ?
+		ORDER BY ip.id ASC
+	`, profileID)
+	if err != nil {
+		return LegacyMigrationPreflight{}, fmt.Errorf("preflight inventory photos: %w", err)
+	}
+	for photoRows.Next() {
+		var record LegacyMigrationRecord
+		var originalPath, itemIDCheck string
+		if err := photoRows.Scan(&record.ID, &record.ItemID, &record.Filename, &originalPath, &itemIDCheck); err != nil {
+			photoRows.Close()
+			return LegacyMigrationPreflight{}, fmt.Errorf("scan inventory photo preflight: %w", err)
+		}
+		record.RecordType = "inventory_photo"
+		resolvedPath := resolveMediaRootPath(mediaRoot, originalPath)
+		markReferencedPath(referenced, resolvedPath)
+		classifyLegacyMigrationPath(mediaRoot, resolvedPath, &record)
+		report.addLegacyMigrationRecord(record)
+	}
+	if err := photoRows.Err(); err != nil {
+		photoRows.Close()
+		return LegacyMigrationPreflight{}, fmt.Errorf("iterate inventory photo preflight: %w", err)
+	}
+	photoRows.Close()
+
+	attachmentRows, err := s.db.QueryContext(ctx, `
+		SELECT id, thread_id, filename, stored_path
+		FROM chat_attachments
+		WHERE profile_id = ?
+		ORDER BY id ASC
+	`, profileID)
+	if err != nil {
+		return LegacyMigrationPreflight{}, fmt.Errorf("preflight chat attachments: %w", err)
+	}
+	for attachmentRows.Next() {
+		var record LegacyMigrationRecord
+		var storedPath string
+		if err := attachmentRows.Scan(&record.ID, &record.ThreadID, &record.Filename, &storedPath); err != nil {
+			attachmentRows.Close()
+			return LegacyMigrationPreflight{}, fmt.Errorf("scan chat attachment preflight: %w", err)
+		}
+		record.RecordType = "chat_attachment"
+		resolvedPath := resolveMediaRootPath(mediaRoot, storedPath)
+		markReferencedPath(referenced, resolvedPath)
+		classifyLegacyMigrationPath(mediaRoot, resolvedPath, &record)
+		report.addLegacyMigrationRecord(record)
+	}
+	if err := attachmentRows.Err(); err != nil {
+		attachmentRows.Close()
+		return LegacyMigrationPreflight{}, fmt.Errorf("iterate chat attachment preflight: %w", err)
+	}
+	attachmentRows.Close()
+
+	if err := report.addLegacyMediaOrphans(mediaRoot, referenced); err != nil {
+		return LegacyMigrationPreflight{}, err
+	}
+	return report, nil
 }
 
 func (s *Service) UpdateWorkspaceAssetMetadata(ctx context.Context, profileID, assetID string, update WorkspaceAssetMetadataUpdate) (WorkspaceAsset, error) {
@@ -1541,6 +1644,123 @@ func summarizeWorkspaceAssets(assets []WorkspaceAsset) WorkspaceSummary {
 		}
 	}
 	return summary
+}
+
+func (r *LegacyMigrationPreflight) addLegacyMigrationRecord(record LegacyMigrationRecord) {
+	r.Records = append(r.Records, record)
+	r.Summary.Discovered++
+	switch record.Classification {
+	case "pending":
+		r.Summary.Pending++
+	case "already_migrated":
+		r.Summary.AlreadyMigrated++
+	case "missing":
+		r.Summary.Missing++
+	case "orphan":
+		r.Summary.Orphan++
+	case "failed":
+		r.Summary.Failed++
+	}
+}
+
+func (r *LegacyMigrationPreflight) addLegacyMediaOrphans(mediaRoot string, referenced map[string]bool) error {
+	if strings.TrimSpace(mediaRoot) == "" {
+		return nil
+	}
+	if _, err := os.Stat(mediaRoot); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat media root for orphan audit: %w", err)
+	}
+	return filepath.WalkDir(mediaRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk media orphan audit: %w", err)
+		}
+		if path == mediaRoot {
+			return nil
+		}
+		name := d.Name()
+		if d.IsDir() && (name == "assets" || name == ".staging") {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if referenced[canonicalPathKey(path)] {
+			return nil
+		}
+		r.addLegacyMigrationRecord(LegacyMigrationRecord{
+			ID:             "orphan:" + filepath.ToSlash(mediaRootRelativePath(mediaRoot, path)),
+			RecordType:     "orphan_file",
+			Filename:       filepath.Base(path),
+			Classification: "orphan",
+			PathClass:      "legacy_media",
+			RecoveryAction: "Review manually; migration will not delete orphan files.",
+		})
+		return nil
+	})
+}
+
+func classifyLegacyMigrationPath(mediaRoot, resolvedPath string, record *LegacyMigrationRecord) {
+	switch {
+	case isCanonicalMediaPath(mediaRoot, resolvedPath):
+		record.Classification = "already_migrated"
+		record.PathClass = "canonical_asset"
+	case strings.TrimSpace(resolvedPath) == "":
+		record.Classification = "missing"
+		record.PathClass = "empty"
+		record.RecoveryAction = "Restore or relink the missing source before migration."
+	default:
+		record.PathClass = legacyMigrationPathClass(mediaRoot, resolvedPath)
+		if _, err := os.Stat(resolvedPath); err == nil {
+			record.Classification = "pending"
+		} else if os.IsNotExist(err) {
+			record.Classification = "missing"
+			record.RecoveryAction = "Restore or relink the missing source before migration."
+		} else {
+			record.Classification = "failed"
+			record.RecoveryAction = "Resolve file access error and retry preflight."
+		}
+	}
+}
+
+func legacyMigrationPathClass(mediaRoot, path string) string {
+	if pathWithinDir(mediaRoot, path) {
+		return "legacy_media"
+	}
+	return "legacy_external"
+}
+
+func isCanonicalMediaPath(mediaRoot, path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false
+	}
+	assetRoot := filepath.Join(mediaRoot, "assets")
+	if strings.HasPrefix(filepath.ToSlash(path), "assets/") {
+		return true
+	}
+	return pathWithinDir(assetRoot, path)
+}
+
+func markReferencedPath(referenced map[string]bool, path string) {
+	key := canonicalPathKey(path)
+	if key != "" {
+		referenced[key] = true
+	}
+}
+
+func canonicalPathKey(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || strings.Contains(path, "://") {
+		return ""
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	return filepath.Clean(abs)
 }
 
 func projectedLinkageState(current, targetType string) string {

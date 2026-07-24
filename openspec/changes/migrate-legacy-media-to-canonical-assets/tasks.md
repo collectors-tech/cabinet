@@ -7,7 +7,7 @@
 
 ## 2. Implementation Evidence
 
-- [ ] 2.1 Add migration preflight/dry-run reporting for legacy inventory photo
+- [x] 2.1 Add migration preflight/dry-run reporting for legacy inventory photo
   folders and Chat attachment files.
 - [ ] 2.2 Add idempotent migration apply for inventory photos, preserving
   primary-photo/display-order and source hash evidence.
