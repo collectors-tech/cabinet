@@ -787,6 +787,22 @@ func New(cfg config.Config) (*App, error) {
 				ListenAddr: settings["mcp.http.listen_addr"],
 			})
 			_ = json.NewEncoder(w).Encode(status)
+		case "mcp-http-credential":
+			if r.Method != http.MethodPost {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			credential, err := mcpserver.EnsureHTTPTransportCredential(r.Context(), profiles, profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_generate_mcp_http_credential"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"credential":             credential,
+				"credential_configured":  strings.TrimSpace(credential) != "",
+				"secret_key":             mcpserver.HTTPTransportCredentialSecretKey,
+				"configuration_guidance": "Use this bearer token only with loopback MCP clients for the selected Cabinet profile.",
+			})
 		case "integration-instances":
 			switch r.Method {
 			case http.MethodGet:

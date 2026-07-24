@@ -169,6 +169,54 @@ func TestProfileMCPHTTPStatusEndpointDoesNotExposeCredential(t *testing.T) {
 	}
 }
 
+func TestProfileMCPHTTPCredentialEndpointStoresSecretOnly(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Credential"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/profiles/"+p.ID+"/mcp-http-credential", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("generate credential status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Credential           string `json:"credential"`
+		CredentialConfigured bool   `json:"credential_configured"`
+		SecretKey            string `json:"secret_key"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode credential payload: %v", err)
+	}
+	if len(payload.Credential) < 32 || !payload.CredentialConfigured || payload.SecretKey != "mcp_http_transport_token" {
+		t.Fatalf("unexpected credential payload: %+v", payload)
+	}
+
+	settings := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/settings", nil, nil)
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	if strings.Contains(settings.Body.String(), payload.Credential) {
+		t.Fatalf("generated credential leaked into settings response: %s", settings.Body.String())
+	}
+
+	status := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if status.Code != http.StatusOK {
+		t.Fatalf("status status=%d body=%s", status.Code, status.Body.String())
+	}
+	if strings.Contains(status.Body.String(), payload.Credential) {
+		t.Fatalf("generated credential leaked into status response: %s", status.Body.String())
+	}
+}
+
 func TestStorageMaintenanceEndpoints(t *testing.T) {
 	t.Parallel()
 
