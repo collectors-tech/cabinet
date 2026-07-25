@@ -2,8 +2,12 @@
 
 - [x] 1.1 Define the profile-scoped Agent authority modes and shared decision
   guard contract.
-- [ ] 1.2 Add OpenSpec traceability rows for the implemented policy and
+- [x] 1.2 Add OpenSpec traceability rows for the implemented policy and
   cross-entry-point enforcement evidence.
+  - `AGENT-SKILLS-REGISTRY-011` and `AGENT-UNIVERSAL-CHANNELS-006` in
+    `openspec/traceability.md` map #1932 policy, Settings, audit, direct API,
+    Chat, Assistant side-panel, MCP, and Telegram evidence to the modified
+    OpenSpec requirements.
 
 ## 2. Shared enforcement
 
