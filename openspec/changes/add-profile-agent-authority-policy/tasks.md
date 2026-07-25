@@ -24,8 +24,11 @@
   with entry point, skill, decision, outcome, and redacted payload references.
   - Current evidence records Settings > Skills profile policy changes in
     `audit_events` as `profile_agent_authority_policy` rows with non-secret
-    before/after policy fields. Remaining follow-up should persist
-    allowed/blocked/applied skill decision rows across guarded entry points.
+    before/after policy fields. App-side Agent Skill authority reviews now
+    persist allowed/blocked decision rows with entry point, skill, outcome,
+    blocker, source context, and redacted parameter-key references. Remaining
+    follow-up should extend equivalent decision receipts to MCP runtime calls
+    and applied-result outcomes where they happen outside the app review helper.
 
 ## 4. Evidence
 

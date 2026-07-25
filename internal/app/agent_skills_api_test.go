@@ -623,6 +623,68 @@ func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *te
 	if itemCount != 0 {
 		t.Fatalf("read-only authority apply must not create inventory item, got %d", itemCount)
 	}
+
+	rows, err := a.db.Query(`
+		SELECT source, after_json
+		FROM audit_events
+		WHERE entity_type = 'profile_agent_authority_decision'
+			AND entity_id = ?
+		ORDER BY created_at ASC, id ASC
+	`, p.ID)
+	if err != nil {
+		t.Fatalf("query authority decision audit: %v", err)
+	}
+	defer rows.Close()
+	var decisions []map[string]any
+	for rows.Next() {
+		var source string
+		var afterRaw string
+		if err := rows.Scan(&source, &afterRaw); err != nil {
+			t.Fatalf("scan authority decision audit: %v", err)
+		}
+		if source != "direct-api" {
+			t.Fatalf("expected direct-api audit source, got %q", source)
+		}
+		var decision map[string]any
+		if err := json.Unmarshal([]byte(afterRaw), &decision); err != nil {
+			t.Fatalf("unmarshal authority decision audit: %v", err)
+		}
+		decisions = append(decisions, decision)
+		if strings.Contains(afterRaw, "Blocked authority item") || strings.Contains(afterRaw, "AUTH-1") {
+			t.Fatalf("authority decision audit must not store raw payload values: %s", afterRaw)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate authority decision audit: %v", err)
+	}
+	if len(decisions) != 3 {
+		t.Fatalf("expected three direct API authority decision audit rows, got %d: %+v", len(decisions), decisions)
+	}
+	var allowedSearch int
+	var blockedCreate int
+	var createPayloadRef map[string]any
+	for _, decision := range decisions {
+		if decision["skill_id"] == "cabinet.inventory.search_items" && decision["outcome"] == "apply_allowed" {
+			allowedSearch++
+		}
+		if decision["skill_id"] == "cabinet.inventory.create_item" &&
+			decision["outcome"] == "blocked" &&
+			decision["blocker"] == "agent_authority_read_only" {
+			blockedCreate++
+			if ref, ok := decision["payload_ref"].(map[string]any); ok {
+				createPayloadRef = ref
+			}
+		}
+	}
+	if allowedSearch != 1 {
+		t.Fatalf("expected one allowed read-only search audit, got %d in %+v", allowedSearch, decisions)
+	}
+	if blockedCreate != 2 {
+		t.Fatalf("expected two blocked create-item audits, got %d in %+v", blockedCreate, decisions)
+	}
+	if createPayloadRef == nil || createPayloadRef["parameter_count"] == nil {
+		t.Fatalf("expected redacted payload reference on create-item authority audit, got %+v", decisions)
+	}
 }
 
 func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {

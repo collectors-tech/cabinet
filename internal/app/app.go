@@ -9304,13 +9304,61 @@ func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository
 	if strings.TrimSpace(strongConfirmation) == "" && req.Confirm {
 		strongConfirmation = firstNonEmptyString(strings.TrimSpace(entryPoint), "agent-skill") + "-confirmed"
 	}
-	return registry.ReviewAuthority(authorityReq, agentskills.AgentAuthorityPolicy{
+	review, err := registry.ReviewAuthority(authorityReq, agentskills.AgentAuthorityPolicy{
 		ProfileID:              policy.ProfileID,
 		Mode:                   agentskills.AgentAuthorityMode(policy.Mode),
 		ExternalWriteApproved:  policy.ExternalWriteApproved,
 		EntryPoint:             strings.TrimSpace(entryPoint),
 		StrongConfirmationText: strongConfirmation,
 	})
+	if err != nil {
+		return agentskills.AgentAuthorityReview{}, err
+	}
+	if err := profiles.AppendAgentAuthorityDecisionAudit(ctx, profile.AgentAuthorityDecisionAudit{
+		ProfileID:      review.ProfileID,
+		EntryPoint:     review.EntryPoint,
+		SkillID:        review.SkillID,
+		Mode:           string(review.Mode),
+		SafetyLevel:    string(review.SafetyLevel),
+		Decision:       review.Decision,
+		Outcome:        agentAuthorityAuditOutcome(review),
+		Blocker:        review.Blocker,
+		SourceSurface:  authorityReq.SourceSurface,
+		SourceChannel:  authorityReq.SourceChannel,
+		SourceThreadID: authorityReq.SourceThreadID,
+		PayloadRef:     agentAuthorityPayloadRef(authorityReq.Parameters),
+	}); err != nil {
+		return agentskills.AgentAuthorityReview{}, err
+	}
+	return review, nil
+}
+
+func agentAuthorityAuditOutcome(review agentskills.AgentAuthorityReview) string {
+	if review.ApplyAllowed {
+		return "apply_allowed"
+	}
+	if review.PreviewAllowed {
+		return "preview_allowed"
+	}
+	return "blocked"
+}
+
+func agentAuthorityPayloadRef(parameters map[string]any) map[string]any {
+	if len(parameters) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(parameters))
+	for key := range parameters {
+		trimmed := strings.TrimSpace(key)
+		if trimmed != "" {
+			keys = append(keys, trimmed)
+		}
+	}
+	sort.Strings(keys)
+	return map[string]any{
+		"parameter_count": len(keys),
+		"parameter_keys":  keys,
+	}
 }
 
 func reviewChatActionAuthority(ctx context.Context, profiles *profile.Repository, req chat.PreviewActionInput, entryPoint string) (agentskills.AgentAuthorityReview, error) {

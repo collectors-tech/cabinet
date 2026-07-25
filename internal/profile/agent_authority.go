@@ -25,6 +25,21 @@ type AgentAuthorityPolicy struct {
 	ExternalWriteApproved bool   `json:"external_write_approved"`
 }
 
+type AgentAuthorityDecisionAudit struct {
+	ProfileID      string         `json:"profile_id"`
+	EntryPoint     string         `json:"entry_point"`
+	SkillID        string         `json:"skill_id"`
+	Mode           string         `json:"mode"`
+	SafetyLevel    string         `json:"safety_level"`
+	Decision       string         `json:"decision"`
+	Outcome        string         `json:"outcome"`
+	Blocker        string         `json:"blocker,omitempty"`
+	SourceSurface  string         `json:"source_surface,omitempty"`
+	SourceChannel  string         `json:"source_channel,omitempty"`
+	SourceThreadID string         `json:"source_thread_id,omitempty"`
+	PayloadRef     map[string]any `json:"payload_ref,omitempty"`
+}
+
 func (r *Repository) GetAgentAuthorityPolicy(ctx context.Context, profileID string) (AgentAuthorityPolicy, error) {
 	if _, err := r.GetByID(ctx, profileID); err != nil {
 		return AgentAuthorityPolicy{}, err
@@ -152,4 +167,56 @@ func agentAuthorityPolicyAuditMap(policy AgentAuthorityPolicy) map[string]any {
 		"mode":                    strings.TrimSpace(policy.Mode),
 		"external_write_approved": policy.ExternalWriteApproved,
 	}
+}
+
+func (r *Repository) AppendAgentAuthorityDecisionAudit(ctx context.Context, audit AgentAuthorityDecisionAudit) error {
+	profileID := strings.TrimSpace(audit.ProfileID)
+	if profileID == "" {
+		return fmt.Errorf("profile id is required")
+	}
+	if _, err := r.GetByID(ctx, profileID); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(agentAuthorityDecisionAuditMap(audit))
+	if err != nil {
+		return fmt.Errorf("marshal agent authority decision audit: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT INTO audit_events(id, entity_type, entity_id, action, actor, source, before_json, after_json, created_at)
+		VALUES (?, 'profile_agent_authority_decision', ?, 'agent_authority_decision.review', 'cabinet.agent_authority', ?, '{}', ?, ?)
+	`, uuid.NewString(), profileID, firstNonEmptyProfileAudit(audit.EntryPoint, "agent"), string(payload), time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return fmt.Errorf("append agent authority decision audit: %w", err)
+	}
+	return nil
+}
+
+func agentAuthorityDecisionAuditMap(audit AgentAuthorityDecisionAudit) map[string]any {
+	out := map[string]any{
+		"profile_id":       strings.TrimSpace(audit.ProfileID),
+		"entry_point":      strings.TrimSpace(audit.EntryPoint),
+		"skill_id":         strings.TrimSpace(audit.SkillID),
+		"mode":             strings.TrimSpace(audit.Mode),
+		"safety_level":     strings.TrimSpace(audit.SafetyLevel),
+		"decision":         strings.TrimSpace(audit.Decision),
+		"outcome":          strings.TrimSpace(audit.Outcome),
+		"source_surface":   strings.TrimSpace(audit.SourceSurface),
+		"source_channel":   strings.TrimSpace(audit.SourceChannel),
+		"source_thread_id": strings.TrimSpace(audit.SourceThreadID),
+	}
+	if strings.TrimSpace(audit.Blocker) != "" {
+		out["blocker"] = strings.TrimSpace(audit.Blocker)
+	}
+	if len(audit.PayloadRef) > 0 {
+		out["payload_ref"] = audit.PayloadRef
+	}
+	return out
+}
+
+func firstNonEmptyProfileAudit(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
