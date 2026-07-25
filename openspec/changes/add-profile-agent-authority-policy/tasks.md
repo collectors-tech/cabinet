@@ -22,6 +22,10 @@
   mode and external-write approval.
 - [ ] 3.2 Record policy changes and allowed/blocked/applied skill decisions
   with entry point, skill, decision, outcome, and redacted payload references.
+  - Current evidence records Settings > Skills profile policy changes in
+    `audit_events` as `profile_agent_authority_policy` rows with non-secret
+    before/after policy fields. Remaining follow-up should persist
+    allowed/blocked/applied skill decision rows across guarded entry points.
 
 ## 4. Evidence
 

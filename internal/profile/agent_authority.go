@@ -2,8 +2,12 @@ package profile
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -51,6 +55,10 @@ func (r *Repository) PutAgentAuthorityPolicy(ctx context.Context, profileID stri
 	if _, err := r.GetByID(ctx, profileID); err != nil {
 		return AgentAuthorityPolicy{}, err
 	}
+	current, err := r.GetAgentAuthorityPolicy(ctx, profileID)
+	if err != nil {
+		return AgentAuthorityPolicy{}, err
+	}
 	mode := strings.TrimSpace(policy.Mode)
 	if mode == "" {
 		mode = AgentAuthorityModeAskBeforeLocalChanges
@@ -64,11 +72,17 @@ func (r *Repository) PutAgentAuthorityPolicy(ctx context.Context, profileID stri
 	}); err != nil {
 		return AgentAuthorityPolicy{}, err
 	}
-	return AgentAuthorityPolicy{
+	updated := AgentAuthorityPolicy{
 		ProfileID:             strings.TrimSpace(profileID),
 		Mode:                  mode,
 		ExternalWriteApproved: policy.ExternalWriteApproved,
-	}, nil
+	}
+	if current.Mode != updated.Mode || current.ExternalWriteApproved != updated.ExternalWriteApproved {
+		if err := r.appendAgentAuthorityPolicyAudit(ctx, current, updated); err != nil {
+			return AgentAuthorityPolicy{}, err
+		}
+	}
+	return updated, nil
 }
 
 func (r *Repository) ensureDefaultAgentAuthorityPolicy(ctx context.Context, profileID string) error {
@@ -112,4 +126,30 @@ func formatAgentAuthorityBool(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func (r *Repository) appendAgentAuthorityPolicyAudit(ctx context.Context, before, after AgentAuthorityPolicy) error {
+	beforeJSON, err := json.Marshal(agentAuthorityPolicyAuditMap(before))
+	if err != nil {
+		return fmt.Errorf("marshal agent authority policy audit before: %w", err)
+	}
+	afterJSON, err := json.Marshal(agentAuthorityPolicyAuditMap(after))
+	if err != nil {
+		return fmt.Errorf("marshal agent authority policy audit after: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT INTO audit_events(id, entity_type, entity_id, action, actor, source, before_json, after_json, created_at)
+		VALUES (?, 'profile_agent_authority_policy', ?, 'agent_authority_policy.update', 'cabinet.agent_authority', 'settings.skills', ?, ?, ?)
+	`, uuid.NewString(), strings.TrimSpace(after.ProfileID), string(beforeJSON), string(afterJSON), time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return fmt.Errorf("append agent authority policy audit: %w", err)
+	}
+	return nil
+}
+
+func agentAuthorityPolicyAuditMap(policy AgentAuthorityPolicy) map[string]any {
+	return map[string]any{
+		"profile_id":              strings.TrimSpace(policy.ProfileID),
+		"mode":                    strings.TrimSpace(policy.Mode),
+		"external_write_approved": policy.ExternalWriteApproved,
+	}
 }

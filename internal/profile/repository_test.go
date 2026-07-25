@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -136,5 +137,78 @@ func TestRepositoryPersistsDefaultAgentAuthorityPolicy(t *testing.T) {
 	}
 	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), created.ID, AgentAuthorityPolicy{Mode: "silent_write"}); err == nil {
 		t.Fatal("expected invalid Agent authority mode to be rejected")
+	}
+}
+
+func TestRepositoryAuditsAgentAuthorityPolicyChanges(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	repo := NewRepository(conn)
+	created, err := repo.Create(context.Background(), "Audited Agent Authority")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), created.ID, AgentAuthorityPolicy{
+		Mode:                  AgentAuthorityModeApprovedExternalActions,
+		ExternalWriteApproved: true,
+	}); err != nil {
+		t.Fatalf("PutAgentAuthorityPolicy() error = %v", err)
+	}
+
+	rows, err := conn.QueryContext(context.Background(), `
+		SELECT entity_type, entity_id, action, actor, source, before_json, after_json
+		FROM audit_events
+		WHERE entity_type = 'profile_agent_authority_policy' AND entity_id = ?
+		ORDER BY created_at ASC, id ASC
+	`, created.ID)
+	if err != nil {
+		t.Fatalf("query audit events: %v", err)
+	}
+	defer rows.Close()
+
+	var count int
+	for rows.Next() {
+		count++
+		var entityType, entityID, action, actor, source, beforeRaw, afterRaw string
+		if err := rows.Scan(&entityType, &entityID, &action, &actor, &source, &beforeRaw, &afterRaw); err != nil {
+			t.Fatalf("scan audit event: %v", err)
+		}
+		if entityType != "profile_agent_authority_policy" || entityID != created.ID {
+			t.Fatalf("unexpected audited entity: %s/%s", entityType, entityID)
+		}
+		if action != "agent_authority_policy.update" || actor != "cabinet.agent_authority" || source != "settings.skills" {
+			t.Fatalf("unexpected audit metadata: action=%q actor=%q source=%q", action, actor, source)
+		}
+		var before map[string]any
+		var after map[string]any
+		if err := json.Unmarshal([]byte(beforeRaw), &before); err != nil {
+			t.Fatalf("unmarshal before_json: %v", err)
+		}
+		if err := json.Unmarshal([]byte(afterRaw), &after); err != nil {
+			t.Fatalf("unmarshal after_json: %v", err)
+		}
+		if before["mode"] != AgentAuthorityModeAskBeforeLocalChanges || before["external_write_approved"] != false {
+			t.Fatalf("unexpected before policy: %+v", before)
+		}
+		if after["mode"] != AgentAuthorityModeApprovedExternalActions || after["external_write_approved"] != true {
+			t.Fatalf("unexpected after policy: %+v", after)
+		}
+		if _, ok := after["secret"]; ok {
+			t.Fatalf("audit payload must not include secret fields: %+v", after)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate audit events: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one policy-change audit event, got %d", count)
 	}
 }
