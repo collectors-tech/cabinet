@@ -18,7 +18,7 @@
 
 ## 3. Settings and audit
 
-- [ ] 3.1 Add Settings > Skills controls for the effective Agent authority
+- [x] 3.1 Add Settings > Skills controls for the effective Agent authority
   mode and external-write approval.
 - [ ] 3.2 Record policy changes and allowed/blocked/applied skill decisions
   with entry point, skill, decision, outcome, and redacted payload references.
@@ -30,7 +30,7 @@
   attempt paths across Chat, side panel, direct API, MCP, and Telegram.
   - Current evidence includes direct Skill API, Chat action API, Telegram Agent
     text API, MCP `tools/call`, and side-panel Agent Skill read-only blocker
-    coverage. Remaining follow-up should fill any missing allowed/bypass matrix
-    cells before closing the item.
+    coverage, plus Settings > Skills policy save coverage. Remaining follow-up
+    should fill any missing allowed/bypass matrix cells before closing the item.
 - [ ] 4.3 Add restart plus backup/restore persistence coverage.
 - [ ] 4.4 Run strict OpenSpec validation and record results on #1932.
