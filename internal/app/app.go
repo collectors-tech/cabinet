@@ -5393,7 +5393,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		req.ProfileID = strings.TrimSpace(authorized.ProfileID)
-		result, err := handleTelegramAgentText(r.Context(), chatSvc, conn, req)
+		result, err := handleTelegramAgentText(r.Context(), profiles, chatSvc, conn, req)
 		if err != nil {
 			if errors.Is(err, errTelegramAgentTextNeedsClarification) {
 				w.WriteHeader(http.StatusUnprocessableEntity)
@@ -5795,7 +5795,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
 			return
 		}
-		authority, err := reviewDirectAgentSkillAuthority(r.Context(), profiles, registry, req)
+		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
 		if err != nil {
 			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
 			return
@@ -5835,7 +5835,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
 			return
 		}
-		authority, err := reviewDirectAgentSkillAuthority(r.Context(), profiles, registry, req)
+		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
 		if err != nil {
 			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
 			return
@@ -9253,7 +9253,7 @@ func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc
 	}
 }
 
-func reviewDirectAgentSkillAuthority(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest, entryPoint string) (agentskills.AgentAuthorityReview, error) {
 	if profiles == nil {
 		return agentskills.AgentAuthorityReview{}, fmt.Errorf("profile repository required")
 	}
@@ -9264,21 +9264,21 @@ func reviewDirectAgentSkillAuthority(ctx context.Context, profiles *profile.Repo
 			Mode:      profile.AgentAuthorityModeAskBeforeLocalChanges,
 		}
 	}
-	authorityReq := directAgentSkillAuthorityRequest(req)
+	authorityReq := agentSkillAuthorityRequest(req)
 	strongConfirmation := stringMapParam(req.Parameters, "strong_confirmation_text")
 	if strings.TrimSpace(strongConfirmation) == "" && req.Confirm {
-		strongConfirmation = "direct-api-confirmed"
+		strongConfirmation = firstNonEmptyString(strings.TrimSpace(entryPoint), "agent-skill") + "-confirmed"
 	}
 	return registry.ReviewAuthority(authorityReq, agentskills.AgentAuthorityPolicy{
 		ProfileID:              policy.ProfileID,
 		Mode:                   agentskills.AgentAuthorityMode(policy.Mode),
 		ExternalWriteApproved:  policy.ExternalWriteApproved,
-		EntryPoint:             "direct-api",
+		EntryPoint:             strings.TrimSpace(entryPoint),
 		StrongConfirmationText: strongConfirmation,
 	})
 }
 
-func directAgentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
+func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
 	if req.Parameters == nil {
 		req.Parameters = map[string]any{}
 	} else {
@@ -13420,7 +13420,7 @@ func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]
 
 var errTelegramAgentTextNeedsClarification = errors.New("telegram agent text needs clarification")
 
-func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *sql.DB, req telegramAgentTextRequest) (map[string]any, error) {
+func handleTelegramAgentText(ctx context.Context, profiles *profile.Repository, chatSvc *chat.Service, conn *sql.DB, req telegramAgentTextRequest) (map[string]any, error) {
 	profileID := strings.TrimSpace(req.ProfileID)
 	skillID := strings.TrimSpace(req.SkillID)
 	text := strings.TrimSpace(req.Text)
@@ -13481,9 +13481,37 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 		Parameters:      params,
 	}
 	registry := agentskills.NewRegistry(nil)
-	preview, err := registry.Preview(previewReq)
+	if _, ok := registry.Resolve(skillID); !ok {
+		return nil, fmt.Errorf("skill_not_found")
+	}
+	authority, err := reviewAgentSkillAuthority(ctx, profiles, registry, previewReq, "telegram")
 	if err != nil {
 		return nil, err
+	}
+	var preview agentskills.PreviewResponse
+	if authority.PreviewAllowed {
+		preview, err = registry.Preview(previewReq)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		skill, _ := registry.Resolve(skillID)
+		preview = agentskills.PreviewResponse{
+			SkillID:              skill.ID,
+			Status:               skill.Status,
+			SafetyLevel:          skill.SafetyLevel,
+			Executable:           skill.Executable,
+			Allowed:              false,
+			PreviewOnly:          true,
+			MutationApplied:      false,
+			ConfirmationRequired: authority.ConfirmationRequired,
+			SourceSurface:        previewReq.SourceSurface,
+			SourceChannel:        previewReq.SourceChannel,
+			SourceThreadID:       previewReq.SourceThreadID,
+			SourceMessageID:      previewReq.SourceMessageID,
+			Blocker:              authority.Blocker,
+			NextAction:           authority.NextAction,
+		}
 	}
 	workflowRun, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 		ProfileID:         profileID,
@@ -13510,7 +13538,7 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 		return nil, err
 	}
 	var skillResult map[string]any
-	if preview.Allowed || (preview.ConfirmationRequired && req.Confirm) {
+	if authority.ApplyAllowed && (preview.Allowed || (preview.ConfirmationRequired && req.Confirm)) {
 		skillResult, _, err = applyAgentSkill(ctx, conn, chatSvc, skillID, profileID, params)
 		if err != nil {
 			preview.Allowed = false
