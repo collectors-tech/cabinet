@@ -553,6 +553,78 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	}
 }
 
+func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Authority"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	repo := profile.NewRepository(a.db)
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeReadOnly,
+	}); err != nil {
+		t.Fatalf("set read-only authority policy: %v", err)
+	}
+
+	readOnlySearch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"Authority","workspace_id":"workspace-authority"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if readOnlySearch.Code != http.StatusOK {
+		t.Fatalf("read-only search status=%d body=%s", readOnlySearch.Code, readOnlySearch.Body.String())
+	}
+	if !strings.Contains(readOnlySearch.Body.String(), `"read_only":true`) ||
+		!strings.Contains(readOnlySearch.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected read-only direct skill to remain executable, body=%s", readOnlySearch.Body.String())
+	}
+
+	blockedPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"source_thread_id":"thread-authority",
+		"parameters":{"title":"Blocked authority item","part_number":"AUTH-1","workspace_id":"workspace-authority"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedPreview.Code != http.StatusConflict {
+		t.Fatalf("blocked preview status=%d body=%s", blockedPreview.Code, blockedPreview.Body.String())
+	}
+	if !strings.Contains(blockedPreview.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedPreview.Body.String(), `"entry_point":"direct-api"`) {
+		t.Fatalf("expected read-only authority blocker on crafted preview, body=%s", blockedPreview.Body.String())
+	}
+
+	blockedApply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"source_thread_id":"thread-authority",
+		"parameters":{"title":"Blocked authority item","part_number":"AUTH-1","workspace_id":"workspace-authority"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedApply.Code != http.StatusConflict {
+		t.Fatalf("blocked apply status=%d body=%s", blockedApply.Code, blockedApply.Body.String())
+	}
+	if !strings.Contains(blockedApply.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedApply.Body.String(), `"skill_id":"cabinet.inventory.create_item"`) {
+		t.Fatalf("expected read-only authority blocker on crafted apply, body=%s", blockedApply.Body.String())
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number = 'AUTH-1'`, p.ID).Scan(&itemCount); err != nil {
+		t.Fatalf("count blocked authority item: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("read-only authority apply must not create inventory item, got %d", itemCount)
+	}
+}
+
 func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {
 	t.Parallel()
 
@@ -1746,6 +1818,12 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	if _, err := profile.NewRepository(a.db).PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeApprovedExternalActions,
+		ExternalWriteApproved: true,
+	}); err != nil {
+		t.Fatalf("approve external agent authority: %v", err)
+	}
 	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'error', 'credentials expired; refresh token required', 0, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("seed provider health: %v", err)
 	}
@@ -1933,6 +2011,12 @@ func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	if _, err := profile.NewRepository(a.db).PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeApprovedExternalActions,
+		ExternalWriteApproved: true,
+	}); err != nil {
+		t.Fatalf("approve external agent authority: %v", err)
+	}
 	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('openai', 'auth_missing', 'missing credential: configure provider API key', 0, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("seed provider health: %v", err)
 	}
@@ -2064,6 +2148,12 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 	}
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := profile.NewRepository(a.db).PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeApprovedExternalActions,
+		ExternalWriteApproved: true,
+	}); err != nil {
+		t.Fatalf("approve external agent authority: %v", err)
 	}
 	if err := profile.NewRepository(a.db).PutSettings(context.Background(), p.ID, map[string]string{
 		"ebay_base_url":                   ebayStub.URL,

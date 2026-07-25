@@ -12,7 +12,7 @@
   decisions.
 - [x] 2.2 Persist the profile policy with the default
   `ask_before_local_changes` mode for existing and new profiles.
-- [ ] 2.3 Apply the shared guard to direct Agent Skill preview/apply API calls.
+- [x] 2.3 Apply the shared guard to direct Agent Skill preview/apply API calls.
 - [ ] 2.4 Apply the shared guard to Chat, Assistant side panel, MCP, and
   Telegram/API dispatch paths.
 

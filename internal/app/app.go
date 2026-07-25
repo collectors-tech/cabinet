@@ -5791,6 +5791,23 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		registry := agentSkillRegistry(req.ProfileID)
+		if _, ok := registry.Resolve(req.SkillID); !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		authority, err := reviewDirectAgentSkillAuthority(r.Context(), profiles, registry, req)
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.PreviewAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
@@ -5814,6 +5831,23 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		registry := agentSkillRegistry(req.ProfileID)
+		if _, ok := registry.Resolve(req.SkillID); !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		authority, err := reviewDirectAgentSkillAuthority(r.Context(), profiles, registry, req)
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.ApplyAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
@@ -9217,6 +9251,98 @@ func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc
 		base["next_action"] = "connect_openai_api_key_or_browser_auth"
 		return base, http.StatusBadRequest
 	}
+}
+
+func reviewDirectAgentSkillAuthority(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+	if profiles == nil {
+		return agentskills.AgentAuthorityReview{}, fmt.Errorf("profile repository required")
+	}
+	policy, err := profiles.GetAgentAuthorityPolicy(ctx, strings.TrimSpace(req.ProfileID))
+	if err != nil {
+		policy = profile.AgentAuthorityPolicy{
+			ProfileID: strings.TrimSpace(req.ProfileID),
+			Mode:      profile.AgentAuthorityModeAskBeforeLocalChanges,
+		}
+	}
+	authorityReq := directAgentSkillAuthorityRequest(req)
+	strongConfirmation := stringMapParam(req.Parameters, "strong_confirmation_text")
+	if strings.TrimSpace(strongConfirmation) == "" && req.Confirm {
+		strongConfirmation = "direct-api-confirmed"
+	}
+	return registry.ReviewAuthority(authorityReq, agentskills.AgentAuthorityPolicy{
+		ProfileID:              policy.ProfileID,
+		Mode:                   agentskills.AgentAuthorityMode(policy.Mode),
+		ExternalWriteApproved:  policy.ExternalWriteApproved,
+		EntryPoint:             "direct-api",
+		StrongConfirmationText: strongConfirmation,
+	})
+}
+
+func directAgentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
+	if req.Parameters == nil {
+		req.Parameters = map[string]any{}
+	} else {
+		params := make(map[string]any, len(req.Parameters)+2)
+		for key, value := range req.Parameters {
+			params[key] = value
+		}
+		req.Parameters = params
+	}
+	if !agentSkillHasAnyParam(req.Parameters, "workspace_id", "workspace") {
+		req.Parameters["workspace_id"] = "direct-api"
+	}
+	if strings.TrimSpace(req.SourceThreadID) == "" {
+		req.SourceThreadID = "direct-api"
+	}
+	if !agentSkillHasAnyParam(req.Parameters, "admin_session", "admin") {
+		req.Parameters["admin_session"] = "direct-api"
+	}
+	for _, key := range []string{
+		"backup_target",
+		"collection_name",
+		"destination",
+		"discovery_result",
+		"export_scope",
+		"line_item",
+		"media",
+		"media_id",
+		"media_source",
+		"provider_id",
+		"purchase_details",
+		"purchase_source",
+		"selected_backup",
+		"selected_file",
+		"selected_notification",
+		"settings_profile",
+		"storage",
+		"setup_payload",
+		"target_email",
+		"target_item",
+		"target_order",
+		"target_role",
+		"target_user",
+		"watch_query",
+		"wishlist_entry",
+	} {
+		if !agentSkillHasAnyParam(req.Parameters, key) {
+			req.Parameters[key] = "direct-api"
+		}
+	}
+	return req
+}
+
+func agentSkillHasAnyParam(params map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		value, ok := params[key]
+		if !ok || value == nil {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func openAIBrowserAuthProviderTestProof(settings map[string]string) (string, string, string, bool) {
