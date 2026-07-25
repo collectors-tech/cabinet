@@ -20,15 +20,16 @@
 
 - [x] 3.1 Add Settings > Skills controls for the effective Agent authority
   mode and external-write approval.
-- [ ] 3.2 Record policy changes and allowed/blocked/applied skill decisions
+- [x] 3.2 Record policy changes and allowed/blocked/applied skill decisions
   with entry point, skill, decision, outcome, and redacted payload references.
   - Current evidence records Settings > Skills profile policy changes in
     `audit_events` as `profile_agent_authority_policy` rows with non-secret
     before/after policy fields. App-side Agent Skill authority reviews now
     persist allowed/blocked decision rows with entry point, skill, outcome,
     blocker, source context, and redacted parameter-key references; successful
-    direct apply calls also append an `applied` outcome row. Remaining follow-up
-    should extend equivalent decision receipts to MCP runtime calls.
+    direct apply calls also append an `applied` outcome row. MCP runtime
+    `tools/call` authority reviews emit redacted receipt rows for allowed and
+    blocked decisions without storing tool argument values.
 
 ## 4. Evidence
 

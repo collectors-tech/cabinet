@@ -68,7 +68,7 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 		Version: version,
 	}, options)
 	if cfg.AuthorityReviewer != nil {
-		server.AddReceivingMiddleware(authorityMiddleware(cfg.AuthorityReviewer, profileID))
+		server.AddReceivingMiddleware(authorityMiddleware(cfg, profileID, version))
 	}
 	if cfg.ReceiptSink != nil {
 		server.AddReceivingMiddleware(receiptMiddleware(cfg, profileID, version))
@@ -76,7 +76,8 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 	return server, nil
 }
 
-func authorityMiddleware(reviewer AuthorityReviewer, profileID string) mcp.Middleware {
+func authorityMiddleware(cfg Config, profileID string, version string) mcp.Middleware {
+	reviewer := cfg.AuthorityReviewer
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			if method != "tools/call" || reviewer == nil {
@@ -98,6 +99,7 @@ func authorityMiddleware(reviewer AuthorityReviewer, profileID string) mcp.Middl
 			if err != nil {
 				return nil, err
 			}
+			recordMCPAuthorityReceipt(ctx, cfg, req, toolName, profileID, version, review)
 			if !review.ApplyAllowed {
 				blocker := strings.TrimSpace(review.Blocker)
 				if blocker == "" {
@@ -108,6 +110,47 @@ func authorityMiddleware(reviewer AuthorityReviewer, profileID string) mcp.Middl
 			return next(ctx, method, req)
 		}
 	}
+}
+
+func recordMCPAuthorityReceipt(ctx context.Context, cfg Config, req mcp.Request, toolName string, profileID string, version string, review agentskills.AgentAuthorityReview) {
+	if cfg.ReceiptSink == nil {
+		return
+	}
+	sessionID := sessionIDForReceipt(req.GetSession(), strings.TrimSpace(cfg.SessionIDSeed))
+	blocker := strings.TrimSpace(review.Blocker)
+	receipt := OperationReceipt{
+		OperationID:   fmt.Sprintf("%s:authority:%s", operationIDSeed(sessionID, cfg.SessionIDSeed), strings.TrimSpace(toolName)),
+		SessionID:     sessionID,
+		ProfileID:     strings.TrimSpace(profileID),
+		ProfileLabel:  strings.TrimSpace(cfg.ProfileLabel),
+		Capability:    "tool:" + firstNonEmptyMCPReceipt(strings.TrimSpace(toolName), "unknown"),
+		Method:        "tools/call",
+		Version:       strings.TrimSpace(version),
+		VersionDigest: strings.TrimSpace(cfg.VersionDigest),
+		InputClass:    "tool_arguments",
+		Outcome:       mcpAuthorityReceiptOutcome(review),
+		ErrorClass:    blocker,
+	}
+	cfg.ReceiptSink.RecordMCPReceipt(ctx, receipt)
+}
+
+func mcpAuthorityReceiptOutcome(review agentskills.AgentAuthorityReview) string {
+	if review.ApplyAllowed {
+		return "apply_allowed"
+	}
+	if review.PreviewAllowed {
+		return "preview_allowed"
+	}
+	return "blocked"
+}
+
+func firstNonEmptyMCPReceipt(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func mcpToolCallAuthorityInput(params mcp.Params) (string, map[string]any) {

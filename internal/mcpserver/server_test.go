@@ -263,6 +263,7 @@ func TestToolCallTimeoutCancelsOnlyInFlightOperationAndKeepsSessionAlive(t *test
 
 func TestMCPToolCallAuthorityBlocksReadOnlyMutationBeforeHandler(t *testing.T) {
 	var reviewed agentskills.PreviewRequest
+	var receipts []OperationReceipt
 	called := false
 	server, err := NewServer(Config{
 		ProfileID:     "profile-read-only",
@@ -270,6 +271,9 @@ func TestMCPToolCallAuthorityBlocksReadOnlyMutationBeforeHandler(t *testing.T) {
 		Version:       "0.1.0-test",
 		VersionDigest: "git:authority",
 		SessionIDSeed: "mcp-authority-test-session",
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
 		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
 			reviewed = req
 			return agentskills.AgentAuthorityReview{
@@ -329,6 +333,33 @@ func TestMCPToolCallAuthorityBlocksReadOnlyMutationBeforeHandler(t *testing.T) {
 	if reviewed.Parameters["title"] != "Blocked MCP Item" || reviewed.Parameters["part_number"] != "MCP-AUTH-1" {
 		t.Fatalf("expected tool arguments to reach authority review, got %+v", reviewed.Parameters)
 	}
+	var authorityReceipt *OperationReceipt
+	for i := range receipts {
+		if receipts[i].Method == "tools/call" &&
+			receipts[i].Capability == "tool:cabinet.inventory.create_item" &&
+			receipts[i].Outcome == "blocked" {
+			authorityReceipt = &receipts[i]
+			break
+		}
+	}
+	if authorityReceipt == nil {
+		t.Fatalf("expected blocked MCP authority receipt, got %+v", receipts)
+	}
+	if authorityReceipt.ProfileID != "profile-read-only" ||
+		authorityReceipt.InputClass != "tool_arguments" ||
+		authorityReceipt.ErrorClass != "agent_authority_read_only" ||
+		authorityReceipt.VersionDigest != "git:authority" {
+		t.Fatalf("blocked authority receipt missing redacted decision metadata: %+v", authorityReceipt)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal MCP authority receipts: %v", err)
+	}
+	for _, forbidden := range []string{"Blocked MCP Item", "MCP-AUTH-1"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("MCP authority receipt leaked tool argument value %q: %s", forbidden, body)
+		}
+	}
 }
 
 func TestServerRecordsRedactedDiagnosticReceiptsForMaterialOperations(t *testing.T) {
@@ -341,6 +372,15 @@ func TestServerRecordsRedactedDiagnosticReceiptsForMaterialOperations(t *testing
 		SessionIDSeed: "mcp-receipt-test-session",
 		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
 			receipts = append(receipts, receipt)
+		}),
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			return agentskills.AgentAuthorityReview{
+				ProfileID:    req.ProfileID,
+				EntryPoint:   "mcp",
+				SkillID:      req.SkillID,
+				Decision:     "allowed",
+				ApplyAllowed: true,
+			}, nil
 		}),
 	})
 	if err != nil {
@@ -393,6 +433,23 @@ func TestServerRecordsRedactedDiagnosticReceiptsForMaterialOperations(t *testing
 	toolReceipt := receipts[len(receipts)-1]
 	if toolReceipt.Method != "tools/call" || toolReceipt.Capability != "tool:cabinet.test.receipt" || toolReceipt.InputClass != "tool_arguments" || toolReceipt.Outcome != "ok" {
 		t.Fatalf("unexpected tool receipt: %+v", toolReceipt)
+	}
+	var allowedAuthorityReceipt *OperationReceipt
+	for i := range receipts {
+		if receipts[i].Method == "tools/call" &&
+			receipts[i].Capability == "tool:cabinet.test.receipt" &&
+			receipts[i].Outcome == "apply_allowed" {
+			allowedAuthorityReceipt = &receipts[i]
+			break
+		}
+	}
+	if allowedAuthorityReceipt == nil {
+		t.Fatalf("expected allowed MCP authority receipt, got %+v", receipts)
+	}
+	if allowedAuthorityReceipt.ProfileID != "profile-main" ||
+		allowedAuthorityReceipt.InputClass != "tool_arguments" ||
+		allowedAuthorityReceipt.ErrorClass != "" {
+		t.Fatalf("allowed authority receipt missing redacted decision metadata: %+v", allowedAuthorityReceipt)
 	}
 	body, err := json.Marshal(receipts)
 	if err != nil {
