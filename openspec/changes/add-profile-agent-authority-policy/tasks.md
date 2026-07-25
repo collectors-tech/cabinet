@@ -44,5 +44,9 @@
     text API, MCP `tools/call`, and side-panel Agent Skill read-only blocker
     coverage, plus Settings > Skills policy save coverage. Remaining follow-up
     should fill any missing allowed/bypass matrix cells before closing the item.
-- [ ] 4.3 Add restart plus backup/restore persistence coverage.
+- [x] 4.3 Add restart plus backup/restore persistence coverage.
+  - `TestAgentAuthorityPolicySurvivesRestartAndBackupRestore` proves the
+    profile authority policy and redacted policy/decision audit rows survive a
+    database restart and a backup/restore round trip after an intervening
+    policy mutation.
 - [ ] 4.4 Run strict OpenSpec validation and record results on #1932.
