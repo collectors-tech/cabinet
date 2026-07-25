@@ -657,15 +657,19 @@ func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *te
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate authority decision audit: %v", err)
 	}
-	if len(decisions) != 3 {
-		t.Fatalf("expected three direct API authority decision audit rows, got %d: %+v", len(decisions), decisions)
+	if len(decisions) != 4 {
+		t.Fatalf("expected four direct API authority decision audit rows, got %d: %+v", len(decisions), decisions)
 	}
 	var allowedSearch int
+	var appliedSearch int
 	var blockedCreate int
 	var createPayloadRef map[string]any
 	for _, decision := range decisions {
 		if decision["skill_id"] == "cabinet.inventory.search_items" && decision["outcome"] == "apply_allowed" {
 			allowedSearch++
+		}
+		if decision["skill_id"] == "cabinet.inventory.search_items" && decision["outcome"] == "applied" {
+			appliedSearch++
 		}
 		if decision["skill_id"] == "cabinet.inventory.create_item" &&
 			decision["outcome"] == "blocked" &&
@@ -678,6 +682,9 @@ func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *te
 	}
 	if allowedSearch != 1 {
 		t.Fatalf("expected one allowed read-only search audit, got %d in %+v", allowedSearch, decisions)
+	}
+	if appliedSearch != 1 {
+		t.Fatalf("expected one applied read-only search audit, got %d in %+v", appliedSearch, decisions)
 	}
 	if blockedCreate != 2 {
 		t.Fatalf("expected two blocked create-item audits, got %d in %+v", blockedCreate, decisions)

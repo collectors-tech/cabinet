@@ -26,9 +26,9 @@
     `audit_events` as `profile_agent_authority_policy` rows with non-secret
     before/after policy fields. App-side Agent Skill authority reviews now
     persist allowed/blocked decision rows with entry point, skill, outcome,
-    blocker, source context, and redacted parameter-key references. Remaining
-    follow-up should extend equivalent decision receipts to MCP runtime calls
-    and applied-result outcomes where they happen outside the app review helper.
+    blocker, source context, and redacted parameter-key references; successful
+    direct apply calls also append an `applied` outcome row. Remaining follow-up
+    should extend equivalent decision receipts to MCP runtime calls.
 
 ## 4. Evidence
 

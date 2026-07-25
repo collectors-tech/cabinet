@@ -5867,6 +5867,10 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(preview)
 			return
 		}
+		if err := appendAgentAuthorityDecisionAudit(r.Context(), profiles, authority, agentSkillAuthorityRequest(req), "applied"); err != nil {
+			http.Error(w, `{"error":"agent_authority_audit_failed"}`, http.StatusInternalServerError)
+			return
+		}
 		preview.Allowed = true
 		preview.PreviewOnly = false
 		preview.MutationApplied = preview.ConfirmationRequired
@@ -9314,23 +9318,27 @@ func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository
 	if err != nil {
 		return agentskills.AgentAuthorityReview{}, err
 	}
-	if err := profiles.AppendAgentAuthorityDecisionAudit(ctx, profile.AgentAuthorityDecisionAudit{
+	if err := appendAgentAuthorityDecisionAudit(ctx, profiles, review, authorityReq, agentAuthorityAuditOutcome(review)); err != nil {
+		return agentskills.AgentAuthorityReview{}, err
+	}
+	return review, nil
+}
+
+func appendAgentAuthorityDecisionAudit(ctx context.Context, profiles *profile.Repository, review agentskills.AgentAuthorityReview, req agentskills.PreviewRequest, outcome string) error {
+	return profiles.AppendAgentAuthorityDecisionAudit(ctx, profile.AgentAuthorityDecisionAudit{
 		ProfileID:      review.ProfileID,
 		EntryPoint:     review.EntryPoint,
 		SkillID:        review.SkillID,
 		Mode:           string(review.Mode),
 		SafetyLevel:    string(review.SafetyLevel),
 		Decision:       review.Decision,
-		Outcome:        agentAuthorityAuditOutcome(review),
+		Outcome:        strings.TrimSpace(outcome),
 		Blocker:        review.Blocker,
-		SourceSurface:  authorityReq.SourceSurface,
-		SourceChannel:  authorityReq.SourceChannel,
-		SourceThreadID: authorityReq.SourceThreadID,
-		PayloadRef:     agentAuthorityPayloadRef(authorityReq.Parameters),
-	}); err != nil {
-		return agentskills.AgentAuthorityReview{}, err
-	}
-	return review, nil
+		SourceSurface:  req.SourceSurface,
+		SourceChannel:  req.SourceChannel,
+		SourceThreadID: req.SourceThreadID,
+		PayloadRef:     agentAuthorityPayloadRef(req.Parameters),
+	})
 }
 
 func agentAuthorityAuditOutcome(review agentskills.AgentAuthorityReview) string {
