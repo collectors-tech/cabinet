@@ -8,6 +8,8 @@ import (
 	"image/jpeg"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -66,11 +68,11 @@ func TestProfileStorageSecretAndLicenseEndpoints(t *testing.T) {
 	if storage.Code != http.StatusOK {
 		t.Fatalf("storage status=%d body=%s", storage.Code, storage.Body.String())
 	}
-	var st map[string]string
+	var st map[string]any
 	if err := json.NewDecoder(storage.Body).Decode(&st); err != nil {
 		t.Fatalf("decode storage: %v", err)
 	}
-	if strings.TrimSpace(st["db_path"]) == "" || strings.TrimSpace(st["media_dir"]) == "" {
+	if strings.TrimSpace(st["db_path"].(string)) == "" || strings.TrimSpace(st["media_dir"].(string)) == "" {
 		t.Fatalf("expected non-empty storage paths: %+v", st)
 	}
 
@@ -333,6 +335,72 @@ func TestProfileMCPHTTPStatusEndpointIncludesRedactedDiagnosticOutcome(t *testin
 		payload.LastDiagnosticOutcome.Outcome != "error" ||
 		payload.LastDiagnosticOutcome.ErrorClass != "timeout" {
 		t.Fatalf("unexpected diagnostic outcome: %+v", payload.LastDiagnosticOutcome)
+	}
+}
+
+func TestProfileStorageIncludesMediaMigrationPreflightStatus(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Migration Storage"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	mediaRoot := filepath.Join(a.cfg.DataDir, "profiles", p.ID, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	legacyOriginal := filepath.Join(legacyItemDir, "front_orig.jpg")
+	if err := os.WriteFile(legacyOriginal, []byte("legacy image bytes"), 0o644); err != nil {
+		t.Fatalf("write legacy original: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy', ?, 'AFX', 'Slot Car', 'MIG-1', 'Legacy Migration Car');
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-legacy', 'item-legacy', 'front.jpg', 'item-legacy/front_orig.jpg', '', '', 1, 1);
+	`, p.ID); err != nil {
+		t.Fatalf("seed legacy media row: %v", err)
+	}
+
+	storage := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/storage", nil, nil)
+	if storage.Code != http.StatusOK {
+		t.Fatalf("storage status=%d body=%s", storage.Code, storage.Body.String())
+	}
+	var payload struct {
+		MigrationPreflight struct {
+			State   string `json:"state"`
+			Summary struct {
+				Discovered int `json:"discovered"`
+				Pending    int `json:"pending"`
+			} `json:"summary"`
+			Records []struct {
+				ID             string `json:"id"`
+				Classification string `json:"classification"`
+				RecoveryAction string `json:"recovery_action"`
+			} `json:"records"`
+		} `json:"migration_preflight"`
+	}
+	if err := json.NewDecoder(storage.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode storage payload: %v", err)
+	}
+	if payload.MigrationPreflight.State != "ready" ||
+		payload.MigrationPreflight.Summary.Discovered != 1 ||
+		payload.MigrationPreflight.Summary.Pending != 1 {
+		t.Fatalf("unexpected migration preflight payload: %+v", payload.MigrationPreflight)
+	}
+	if len(payload.MigrationPreflight.Records) != 1 ||
+		payload.MigrationPreflight.Records[0].ID != "photo-legacy" ||
+		payload.MigrationPreflight.Records[0].Classification != "pending" {
+		t.Fatalf("expected pending legacy media record for Settings Storage: %+v", payload.MigrationPreflight.Records)
 	}
 }
 

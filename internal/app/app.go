@@ -85,6 +85,29 @@ func startupSampleDataSeedEnabled() bool {
 	}
 }
 
+func storageMigrationPreflightPayload(report media.LegacyMigrationPreflight) map[string]any {
+	return map[string]any{
+		"profile_id": report.ProfileID,
+		"dry_run":    report.DryRun,
+		"state":      storageMigrationPreflightState(report.Summary),
+		"summary":    report.Summary,
+		"records":    report.Records,
+	}
+}
+
+func storageMigrationPreflightState(summary media.LegacyMigrationSummary) string {
+	switch {
+	case summary.Failed > 0 || summary.Missing > 0 || summary.Duplicate > 0:
+		return "needs_repair"
+	case summary.Pending > 0 || summary.Orphan > 0:
+		return "ready"
+	case summary.AlreadyMigrated > 0:
+		return "completed"
+	default:
+		return "not_needed"
+	}
+}
+
 type App struct {
 	cfg           config.Config
 	db            *sql.DB
@@ -952,9 +975,16 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_get_storage"}`, http.StatusBadRequest)
 				return
 			}
+			migrationPreflight, err := mediaService.PreflightLegacyMediaMigration(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_get_storage_migration_preflight"}`, http.StatusBadRequest)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"db_path":   settings["storage.db_path"],
-				"media_dir": settings["storage.media_dir"],
+				"db_path":              settings["storage.db_path"],
+				"media_dir":            settings["storage.media_dir"],
+				"migration_preflight":  storageMigrationPreflightPayload(migrationPreflight),
+				"migration_status_key": storageMigrationPreflightState(migrationPreflight.Summary),
 			})
 		case "secrets":
 			if r.Method == http.MethodPut {
