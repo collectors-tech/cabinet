@@ -1916,8 +1916,13 @@ func classifyLegacyMigrationPath(mediaRoot, resolvedPath string, record *LegacyM
 		record.RecoveryAction = "Restore or relink the missing source before migration."
 	default:
 		record.PathClass = legacyMigrationPathClass(mediaRoot, resolvedPath)
-		if _, err := os.Stat(resolvedPath); err == nil {
-			record.Classification = "pending"
+		if info, err := os.Stat(resolvedPath); err == nil {
+			if err := validateReadableLegacyMigrationSource(resolvedPath, info); err != nil {
+				record.Classification = "failed"
+				record.RecoveryAction = "Resolve file access error and retry preflight."
+			} else {
+				record.Classification = "pending"
+			}
 		} else if os.IsNotExist(err) {
 			record.Classification = "missing"
 			record.RecoveryAction = "Restore or relink the missing source before migration."
@@ -1926,6 +1931,20 @@ func classifyLegacyMigrationPath(mediaRoot, resolvedPath string, record *LegacyM
 			record.RecoveryAction = "Resolve file access error and retry preflight."
 		}
 	}
+}
+
+func validateReadableLegacyMigrationSource(path string, info os.FileInfo) error {
+	if info == nil {
+		return fmt.Errorf("legacy source metadata is unavailable")
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("legacy source is not a regular file")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 func validateCanonicalMigrationPath(mediaRoot, resolvedPath string) error {

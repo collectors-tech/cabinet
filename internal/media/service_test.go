@@ -629,6 +629,73 @@ func TestPreflightLegacyMediaMigrationClassifiesDuplicateAndCorruptCanonicalReco
 	}
 }
 
+func TestPreflightLegacyMediaMigrationClassifiesAccessAndWindowsPathEdges(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	nonFileSource := filepath.Join(legacyItemDir, "locked-source")
+	if err := os.MkdirAll(nonFileSource, 0o755); err != nil {
+		t.Fatalf("create non-file legacy source: %v", err)
+	}
+	externalDir := filepath.Join(base, "external")
+	if err := os.MkdirAll(externalDir, 0o755); err != nil {
+		t.Fatalf("create external dir: %v", err)
+	}
+	externalSource := filepath.Join(externalDir, "über front.jpg")
+	if err := os.WriteFile(externalSource, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write external absolute source: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','EDGE','Path Edge Car');
+	`); err != nil {
+		t.Fatalf("seed profile/item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES
+			('photo-locked','item-legacy','locked.jpg', ?, '', '', 0, 1),
+			('photo-external','item-legacy','über front.jpg', ?, '', '', 0, 2)
+	`, filepath.ToSlash(filepath.Join("item-legacy", "locked-source")), externalSource); err != nil {
+		t.Fatalf("seed access/path edge rows: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	report, err := svc.PreflightLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("PreflightLegacyMediaMigration() error = %v", err)
+	}
+	if report.Summary.Discovered != 2 || report.Summary.Failed != 1 || report.Summary.Pending != 1 {
+		t.Fatalf("unexpected access/path edge summary: %+v records=%+v", report.Summary, report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-locked", "inventory_photo", "failed", "legacy_media") {
+		t.Fatalf("non-file locked-style source should be failed with record id: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-external", "inventory_photo", "pending", "legacy_external") {
+		t.Fatalf("absolute external Windows path should remain pending legacy_external: %+v", report.Records)
+	}
+	if _, err := os.Stat(externalSource); err != nil {
+		t.Fatalf("preflight should not delete external source: %v", err)
+	}
+}
+
 func TestApplyLegacyInventoryPhotoMigrationPreservesOrderAndHashIdempotently(t *testing.T) {
 	t.Parallel()
 

@@ -15,7 +15,7 @@
   thread/message attachment links and filename/MIME metadata.
 - [x] 2.4 Add interruption recovery so staged assets are not exposed and repeat
   runs resume without duplicating records.
-- [ ] 2.5 Add duplicate, missing, corrupt, locked, already-migrated and orphan
+- [x] 2.5 Add duplicate, missing, corrupt, locked, already-migrated and orphan
   classification without silently deleting unknown files.
 
 ## 3. UI and Operations
