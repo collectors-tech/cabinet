@@ -2,12 +2,14 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -24,6 +26,18 @@ type Config struct {
 	VersionDigest string
 	SessionIDSeed string
 	ReceiptSink   ReceiptSink
+
+	AuthorityReviewer AuthorityReviewer
+}
+
+type AuthorityReviewer interface {
+	ReviewAgentAuthority(ctx context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error)
+}
+
+type AuthorityReviewerFunc func(ctx context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error)
+
+func (f AuthorityReviewerFunc) ReviewAgentAuthority(ctx context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+	return f(ctx, req)
 }
 
 func NewServer(cfg Config) (*mcp.Server, error) {
@@ -53,10 +67,87 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 		Title:   ServerTitle,
 		Version: version,
 	}, options)
+	if cfg.AuthorityReviewer != nil {
+		server.AddReceivingMiddleware(authorityMiddleware(cfg.AuthorityReviewer, profileID))
+	}
 	if cfg.ReceiptSink != nil {
 		server.AddReceivingMiddleware(receiptMiddleware(cfg, profileID, version))
 	}
 	return server, nil
+}
+
+func authorityMiddleware(reviewer AuthorityReviewer, profileID string) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if method != "tools/call" || reviewer == nil {
+				return next(ctx, method, req)
+			}
+			toolName, args := mcpToolCallAuthorityInput(req.GetParams())
+			if strings.TrimSpace(toolName) == "" {
+				return next(ctx, method, req)
+			}
+			review, err := reviewer.ReviewAgentAuthority(ctx, agentskills.PreviewRequest{
+				SkillID:        toolName,
+				ProfileID:      profileID,
+				Confirm:        true,
+				SourceSurface:  "mcp.tools.call",
+				SourceChannel:  "mcp",
+				SourceThreadID: sessionIDForReceipt(req.GetSession(), ""),
+				Parameters:     args,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if !review.ApplyAllowed {
+				blocker := strings.TrimSpace(review.Blocker)
+				if blocker == "" {
+					blocker = "agent_authority_blocked"
+				}
+				return nil, fmt.Errorf("mcp agent authority blocked: %s", blocker)
+			}
+			return next(ctx, method, req)
+		}
+	}
+}
+
+func mcpToolCallAuthorityInput(params mcp.Params) (string, map[string]any) {
+	switch p := params.(type) {
+	case *mcp.CallToolParams:
+		return strings.TrimSpace(p.Name), normalizeToolArguments(p.Arguments)
+	case *mcp.CallToolParamsRaw:
+		return strings.TrimSpace(p.Name), normalizeRawToolArguments(p.Arguments)
+	default:
+		return "", map[string]any{}
+	}
+}
+
+func normalizeToolArguments(args any) map[string]any {
+	if args == nil {
+		return map[string]any{}
+	}
+	if typed, ok := args.(map[string]any); ok {
+		out := make(map[string]any, len(typed))
+		for key, value := range typed {
+			out[key] = value
+		}
+		return out
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return map[string]any{}
+	}
+	return normalizeRawToolArguments(raw)
+}
+
+func normalizeRawToolArguments(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
 }
 
 func receiptMiddleware(cfg Config, profileID string, version string) mcp.Middleware {

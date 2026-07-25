@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -257,6 +258,76 @@ func TestToolCallTimeoutCancelsOnlyInFlightOperationAndKeepsSessionAlive(t *test
 
 	if err := clientSession.Ping(ctx, nil); err != nil {
 		t.Fatalf("Ping() after timed-out tool call error = %v", err)
+	}
+}
+
+func TestMCPToolCallAuthorityBlocksReadOnlyMutationBeforeHandler(t *testing.T) {
+	var reviewed agentskills.PreviewRequest
+	called := false
+	server, err := NewServer(Config{
+		ProfileID:     "profile-read-only",
+		ProfileLabel:  "Read only",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:authority",
+		SessionIDSeed: "mcp-authority-test-session",
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			reviewed = req
+			return agentskills.AgentAuthorityReview{
+				ProfileID:            req.ProfileID,
+				EntryPoint:           "mcp",
+				SkillID:              req.SkillID,
+				Decision:             "blocked",
+				Blocker:              "agent_authority_read_only",
+				ConfirmationRequired: true,
+			}, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "cabinet.inventory.create_item"}, func(ctx context.Context, _ *mcp.CallToolRequest, _ map[string]any) (*mcp.CallToolResult, any, error) {
+		called = true
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "mutated"}}}, nil, nil
+	})
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-authority-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	_, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.inventory.create_item",
+		Arguments: map[string]any{
+			"title":       "Blocked MCP Item",
+			"part_number": "MCP-AUTH-1",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "agent_authority_read_only") {
+		t.Fatalf("expected read-only authority error, got %v", err)
+	}
+	if called {
+		t.Fatal("MCP tool handler ran despite read-only authority blocker")
+	}
+	if reviewed.SkillID != "cabinet.inventory.create_item" ||
+		reviewed.ProfileID != "profile-read-only" ||
+		reviewed.SourceChannel != "mcp" ||
+		reviewed.SourceSurface != "mcp.tools.call" {
+		t.Fatalf("unexpected authority request: %+v", reviewed)
+	}
+	if reviewed.Parameters["title"] != "Blocked MCP Item" || reviewed.Parameters["part_number"] != "MCP-AUTH-1" {
+		t.Fatalf("expected tool arguments to reach authority review, got %+v", reviewed.Parameters)
 	}
 }
 
