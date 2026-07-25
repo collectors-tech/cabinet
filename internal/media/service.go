@@ -127,6 +127,25 @@ type LegacyChatAttachmentMigrationResult struct {
 	Failed          int `json:"failed"`
 }
 
+type LegacyMediaMigrationEvidence struct {
+	ProfileID  string                              `json:"profile_id"`
+	Preflight  LegacyMigrationPreflight            `json:"preflight"`
+	Inventory  LegacyInventoryMigrationResult      `json:"inventory"`
+	Chat       LegacyChatAttachmentMigrationResult `json:"chat"`
+	Summary    LegacyMediaMigrationEvidenceSummary `json:"summary"`
+	RecordedAt string                              `json:"recorded_at"`
+}
+
+type LegacyMediaMigrationEvidenceSummary struct {
+	Discovered      int `json:"discovered"`
+	Migrated        int `json:"migrated"`
+	AlreadyMigrated int `json:"already_migrated"`
+	Duplicate       int `json:"duplicate"`
+	Skipped         int `json:"skipped"`
+	Failed          int `json:"failed"`
+	Orphan          int `json:"orphan"`
+}
+
 type LegacyMigrationRecord struct {
 	ID             string `json:"id"`
 	RecordType     string `json:"record_type"`
@@ -852,6 +871,44 @@ func (s *Service) ApplyLegacyChatAttachmentMigration(ctx context.Context, profil
 		result.Migrated++
 	}
 	return result, nil
+}
+
+func (s *Service) ApplyLegacyMediaMigration(ctx context.Context, profileID string) (LegacyMediaMigrationEvidence, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return LegacyMediaMigrationEvidence{}, fmt.Errorf("profile_id is required")
+	}
+
+	preflight, err := s.PreflightLegacyMediaMigration(ctx, profileID)
+	if err != nil {
+		return LegacyMediaMigrationEvidence{}, err
+	}
+	inventory, err := s.ApplyLegacyInventoryPhotoMigration(ctx, profileID)
+	if err != nil {
+		return LegacyMediaMigrationEvidence{}, err
+	}
+	chat, err := s.ApplyLegacyChatAttachmentMigration(ctx, profileID)
+	if err != nil {
+		return LegacyMediaMigrationEvidence{}, err
+	}
+
+	evidence := LegacyMediaMigrationEvidence{
+		ProfileID:  profileID,
+		Preflight:  preflight,
+		Inventory:  inventory,
+		Chat:       chat,
+		RecordedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	evidence.Summary = LegacyMediaMigrationEvidenceSummary{
+		Discovered:      preflight.Summary.Discovered,
+		Migrated:        inventory.Migrated + chat.Migrated,
+		AlreadyMigrated: inventory.AlreadyMigrated + chat.AlreadyMigrated,
+		Duplicate:       preflight.Summary.Duplicate,
+		Skipped:         inventory.Skipped + chat.Skipped,
+		Failed:          inventory.Failed + chat.Failed,
+		Orphan:          preflight.Summary.Orphan,
+	}
+	return evidence, nil
 }
 
 func (s *Service) UpdateWorkspaceAssetMetadata(ctx context.Context, profileID, assetID string, update WorkspaceAssetMetadataUpdate) (WorkspaceAsset, error) {

@@ -893,6 +893,104 @@ func TestApplyLegacyChatAttachmentMigrationPreservesLinksAndMetadataIdempotently
 	}
 }
 
+func TestApplyLegacyMediaMigrationReportsUpgradeSmokeEvidenceCounts(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	legacyAttachmentRoot := filepath.Join(base, "chat-attachments")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyPhoto := filepath.Join(legacyItemDir, "front_orig.jpg")
+	if err := os.WriteFile(legacyPhoto, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write legacy photo: %v", err)
+	}
+	legacyAttachment := filepath.Join(legacyAttachmentRoot, "manual.txt")
+	legacyAttachmentBytes := []byte("legacy manual")
+	if err := os.WriteFile(legacyAttachment, legacyAttachmentBytes, 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+	orphanPath := filepath.Join(legacyItemDir, "orphan_orig.jpg")
+	if err := os.WriteFile(orphanPath, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write orphan legacy photo: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','SMOKE','Smoke Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-legacy','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/item/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	if _, _, _, err := svc.createCanonicalAsset(
+		context.Background(),
+		mediaRoot,
+		"photo-canonical",
+		"already.jpg",
+		"already.jpg",
+		"image/jpeg",
+		bytes.NewReader(sampleJPEG(t)),
+		[]AssetManifestOwner{{Type: "inventory_item", ID: "item-legacy"}},
+		map[string]string{"source": "test.canonical"},
+	); err != nil {
+		t.Fatalf("seed canonical asset: %v", err)
+	}
+
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES
+			('photo-legacy','item-legacy','front.jpg', ?, '', '', 1, 1),
+			('photo-canonical','item-legacy','already.jpg', ?, '', '', 0, 2);
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES
+			('attach-legacy','profile-1','thread-legacy','manual.txt','text/plain', ?, ?),
+			('attach-missing','profile-1','thread-legacy','missing.pdf','application/pdf', 0, ?);
+	`,
+		filepath.ToSlash(filepath.Join("item-legacy", "front_orig.jpg")),
+		filepath.ToSlash(filepath.Join("assets", "photo-canonical", "original", "already.jpg")),
+		len(legacyAttachmentBytes),
+		legacyAttachment,
+		filepath.ToSlash(filepath.Join("chat-attachments", "missing.pdf")),
+	); err != nil {
+		t.Fatalf("seed legacy media rows: %v", err)
+	}
+
+	evidence, err := svc.ApplyLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyMediaMigration() error = %v", err)
+	}
+	if evidence.Summary.Discovered != 5 ||
+		evidence.Summary.Migrated != 1 ||
+		evidence.Summary.AlreadyMigrated != 2 ||
+		evidence.Summary.Duplicate != 0 ||
+		evidence.Summary.Skipped != 1 ||
+		evidence.Summary.Failed != 0 ||
+		evidence.Summary.Orphan != 1 {
+		t.Fatalf("unexpected package/upgrade smoke evidence counts: %+v", evidence.Summary)
+	}
+	if evidence.Preflight.Summary.Pending != 1 || evidence.Preflight.Summary.Missing != 1 {
+		t.Fatalf("preflight evidence should retain dry-run counts, got %+v", evidence.Preflight.Summary)
+	}
+}
+
 func TestApplyLegacyMediaMigrationResumesPromotedAssetWithoutDuplicatingRecords(t *testing.T) {
 	t.Parallel()
 
