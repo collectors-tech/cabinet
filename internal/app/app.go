@@ -6151,6 +6151,19 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		authority, err := reviewChatActionAuthority(r.Context(), profiles, req, "chat")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.PreviewAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		preview, err := chatSvc.PreviewAction(r.Context(), req)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -6168,6 +6181,28 @@ func New(cfg config.Config) (*App, error) {
 		var req chat.ApplyActionInput
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if !req.Confirm {
+			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := chatSvc.GetActionPreview(r.Context(), req.ProfileID, req.PreviewID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		authority, err := reviewChatActionApplyAuthority(r.Context(), profiles, req, preview, "chat")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.ApplyAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
 			return
 		}
 		result, err := chatSvc.ApplyAction(r.Context(), req)
@@ -9276,6 +9311,74 @@ func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository
 		EntryPoint:             strings.TrimSpace(entryPoint),
 		StrongConfirmationText: strongConfirmation,
 	})
+}
+
+func reviewChatActionAuthority(ctx context.Context, profiles *profile.Repository, req chat.PreviewActionInput, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	skillID := agentSkillIDForChatAction(req.CapabilityID, req.Action)
+	if skillID == "" {
+		return agentskills.AgentAuthorityReview{PreviewAllowed: true, ApplyAllowed: true, Decision: "allowed"}, nil
+	}
+	return reviewAgentSkillAuthority(ctx, profiles, agentskills.NewRegistry(nil), agentskills.PreviewRequest{
+		SkillID:        skillID,
+		ProfileID:      strings.TrimSpace(req.ProfileID),
+		Confirm:        false,
+		SourceSurface:  "chats.main",
+		SourceChannel:  "in-app",
+		SourceThreadID: strings.TrimSpace(req.ThreadID),
+		Parameters:     copyActionPayload(req.Payload),
+	}, entryPoint)
+}
+
+func reviewChatActionApplyAuthority(ctx context.Context, profiles *profile.Repository, req chat.ApplyActionInput, preview chat.ActionPreview, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	skillID := agentSkillIDForChatAction(preview.CapabilityID, preview.Action)
+	if skillID == "" {
+		return agentskills.AgentAuthorityReview{PreviewAllowed: true, ApplyAllowed: true, Decision: "allowed"}, nil
+	}
+	return reviewAgentSkillAuthority(ctx, profiles, agentskills.NewRegistry(nil), agentskills.PreviewRequest{
+		SkillID:        skillID,
+		ProfileID:      strings.TrimSpace(req.ProfileID),
+		Confirm:        req.Confirm,
+		SourceSurface:  "chats.main",
+		SourceChannel:  "in-app",
+		SourceThreadID: strings.TrimSpace(req.ThreadID),
+		Parameters:     map[string]any{"preview_id": strings.TrimSpace(req.PreviewID)},
+	}, entryPoint)
+}
+
+func agentSkillIDForChatAction(capabilityID, action string) string {
+	switch strings.TrimSpace(capabilityID) {
+	case "inventory.item.create":
+		return "cabinet.inventory.create_item"
+	case "inventory.item.update", "update_open_item_title":
+		return "cabinet.inventory.update_item"
+	case "wishlist.entry.create":
+		return "cabinet.wishlist.create_entry"
+	case "collections.item.assign":
+		return "cabinet.collections.assign_item"
+	}
+	switch strings.TrimSpace(action) {
+	case "create_item_stub", "create_inventory_item":
+		return "cabinet.inventory.create_item"
+	case "update_inventory_item", "update_open_item_title":
+		return "cabinet.inventory.update_item"
+	case "create_wishlist_entry":
+		return "cabinet.wishlist.create_entry"
+	case "assign_collection_item":
+		return "cabinet.collections.assign_item"
+	default:
+		return ""
+	}
+}
+
+func copyActionPayload(payload map[string]any) map[string]any {
+	if payload == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(payload))
+	for key, value := range payload {
+		out[key] = value
+	}
+	return out
 }
 
 func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {

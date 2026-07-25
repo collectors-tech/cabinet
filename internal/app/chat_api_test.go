@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
 func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
@@ -280,6 +283,103 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	}
 	if !strings.Contains(messagesAfterCancel.Body.String(), "Canceled update_inventory_item") || !strings.Contains(messagesAfterCancel.Body.String(), "no mutation applied") {
 		t.Fatalf("expected canceled assistant history outcome, body=%s", messagesAfterCancel.Body.String())
+	}
+}
+
+func TestChatActionAPIsHonorReadOnlyProfileAuthority(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Read Only Chat Authority"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Read Only Chat"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	repo := profile.NewRepository(a.db)
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeReadOnly,
+	}); err != nil {
+		t.Fatalf("set read-only authority policy: %v", err)
+	}
+
+	blockedPreview := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"capability_id":"inventory.item.create",
+		"payload":{"part_number":"CHAT-AUTH-1","title":"Blocked Chat Authority Item"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedPreview.Code != http.StatusConflict {
+		t.Fatalf("blocked preview status=%d body=%s", blockedPreview.Code, blockedPreview.Body.String())
+	}
+	if !strings.Contains(blockedPreview.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedPreview.Body.String(), `"entry_point":"chat"`) {
+		t.Fatalf("expected chat read-only authority blocker, body=%s", blockedPreview.Body.String())
+	}
+
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeAskBeforeLocalChanges,
+	}); err != nil {
+		t.Fatalf("set default authority policy: %v", err)
+	}
+	allowedPreview := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"capability_id":"inventory.item.create",
+		"payload":{"part_number":"CHAT-AUTH-2","title":"Late Blocked Chat Authority Item"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if allowedPreview.Code != http.StatusOK {
+		t.Fatalf("allowed preview status=%d body=%s", allowedPreview.Code, allowedPreview.Body.String())
+	}
+	var preview struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(allowedPreview.Body).Decode(&preview); err != nil {
+		t.Fatalf("decode allowed preview: %v", err)
+	}
+	if preview.ID == "" {
+		t.Fatalf("expected preview id, body=%s", allowedPreview.Body.String())
+	}
+
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeReadOnly,
+	}); err != nil {
+		t.Fatalf("restore read-only authority policy: %v", err)
+	}
+	blockedApply := doRequest(t, a, http.MethodPost, "/api/chat/actions/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"preview_id":"`+preview.ID+`",
+		"confirm":true
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedApply.Code != http.StatusConflict {
+		t.Fatalf("blocked apply status=%d body=%s", blockedApply.Code, blockedApply.Body.String())
+	}
+	if !strings.Contains(blockedApply.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedApply.Body.String(), `"entry_point":"chat"`) {
+		t.Fatalf("expected chat apply read-only authority blocker, body=%s", blockedApply.Body.String())
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number IN ('CHAT-AUTH-1', 'CHAT-AUTH-2')`, p.ID).Scan(&itemCount); err != nil {
+		t.Fatalf("count blocked chat authority items: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("read-only chat authority must not create inventory items, got %d", itemCount)
 	}
 }
 
