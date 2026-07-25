@@ -10,7 +10,7 @@
 - [x] 2.1 Add the first shared Agent Skill authority guard covering read-only,
   default local-change, external-write, destructive, and profile-mismatch
   decisions.
-- [ ] 2.2 Persist the profile policy with the default
+- [x] 2.2 Persist the profile policy with the default
   `ask_before_local_changes` mode for existing and new profiles.
 - [ ] 2.3 Apply the shared guard to direct Agent Skill preview/apply API calls.
 - [ ] 2.4 Apply the shared guard to Chat, Assistant side panel, MCP, and
