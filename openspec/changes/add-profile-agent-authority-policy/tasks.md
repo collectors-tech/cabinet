@@ -13,7 +13,7 @@
 - [x] 2.2 Persist the profile policy with the default
   `ask_before_local_changes` mode for existing and new profiles.
 - [x] 2.3 Apply the shared guard to direct Agent Skill preview/apply API calls.
-- [ ] 2.4 Apply the shared guard to Chat, Assistant side panel, MCP, and
+- [x] 2.4 Apply the shared guard to Chat, Assistant side panel, MCP, and
   Telegram/API dispatch paths.
 
 ## 3. Settings and audit
@@ -28,5 +28,9 @@
 - [x] 4.1 Add focused unit coverage for the shared authority guard.
 - [ ] 4.2 Add API and end-to-end coverage for allowed, blocked, and bypass
   attempt paths across Chat, side panel, direct API, MCP, and Telegram.
+  - Current evidence includes direct Skill API, Chat action API, Telegram Agent
+    text API, MCP `tools/call`, and side-panel Agent Skill read-only blocker
+    coverage. Remaining follow-up should fill any missing allowed/bypass matrix
+    cells before closing the item.
 - [ ] 4.3 Add restart plus backup/restore persistence coverage.
 - [ ] 4.4 Run strict OpenSpec validation and record results on #1932.

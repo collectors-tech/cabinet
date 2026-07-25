@@ -156,6 +156,15 @@ type AgentSkillPreview = {
   source_channel?: string
 }
 
+type AgentSkillAuthorityError = {
+  error?: string
+  authority?: {
+    entry_point?: string
+    next_action?: string
+    blocker?: string
+  }
+}
+
 type AgentSkillApplyResult = {
   skill_id: string
   mutation_applied: boolean
@@ -1577,19 +1586,39 @@ export function AssistantWorkspacePanel() {
           parameters: agentSkillParameters(),
         }),
       })
-      if (!response.ok)
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | AgentSkillAuthorityError
+          | null
+        const blocker = payload?.error || payload?.authority?.blocker
+        if (blocker) {
+          throw new Error(
+            [
+              blocker,
+              payload?.authority?.entry_point
+                ? `entry=${payload.authority.entry_point}`
+                : '',
+              payload?.authority?.next_action || '',
+            ]
+              .filter(Boolean)
+              .join(' - ')
+          )
+        }
         throw new Error(`agent_skill_preview_${response.status}`)
+      }
       const preview = (await response.json()) as AgentSkillPreview
       setAgentSkillPreview(preview)
       setExecutionState(preview.confirmation_required ? 'running' : 'success')
     } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'agent_skill_preview_failed'
       setExecutionState('failure')
       setWorkflowRunsLoading(false)
-      setError(
-        err instanceof Error ? err.message : 'agent_skill_preview_failed'
-      )
+      setError(message)
       setPermissionGuidance(
-        'Agent Skill preview could not be prepared under the current policy.'
+        message.includes(' - ')
+          ? message
+          : 'Agent Skill preview could not be prepared under the current policy.'
       )
     }
   }
@@ -1644,17 +1673,40 @@ export function AssistantWorkspacePanel() {
           parameters: agentSkillParameters(),
         }),
       })
-      if (!response.ok) throw new Error(`agent_skill_apply_${response.status}`)
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | AgentSkillAuthorityError
+          | null
+        const blocker = payload?.error || payload?.authority?.blocker
+        if (blocker) {
+          throw new Error(
+            [
+              blocker,
+              payload?.authority?.entry_point
+                ? `entry=${payload.authority.entry_point}`
+                : '',
+              payload?.authority?.next_action || '',
+            ]
+              .filter(Boolean)
+              .join(' - ')
+          )
+        }
+        throw new Error(`agent_skill_apply_${response.status}`)
+      }
       const result = (await response.json()) as AgentSkillApplyResult
       setAgentSkillResult(result)
       setExecutionState('success')
       setConfirmApplyOpen(false)
     } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'agent_skill_apply_failed'
       setExecutionState('failure')
       setWorkflowRunsLoading(false)
-      setError(err instanceof Error ? err.message : 'agent_skill_apply_failed')
+      setError(message)
       setPermissionGuidance(
-        'Agent Skill apply is confirm-required and may stay blocked until setup targets are complete.'
+        message.includes(' - ')
+          ? message
+          : 'Agent Skill apply is confirm-required and may stay blocked until setup targets are complete.'
       )
     }
   }
