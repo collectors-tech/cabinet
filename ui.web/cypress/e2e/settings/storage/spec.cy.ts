@@ -1,9 +1,7 @@
 describe('settings/storage', () => {
   function signInToStorage() {
     cy.visit('/sign-in?redirect=%2Fsettings%2Fstorage')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/settings\/storage\/?$/

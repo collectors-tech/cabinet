@@ -20,7 +20,7 @@
 
 ## 3. UI and Operations
 
-- [ ] 3.1 Surface migration status, counts, blockers, recovery actions and
+- [x] 3.1 Surface migration status, counts, blockers, recovery actions and
   rollback guidance in Settings > Storage.
 - [ ] 3.2 Record package/upgrade smoke evidence with discovered, migrated,
   skipped, failed and orphan counts.
