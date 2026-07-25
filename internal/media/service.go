@@ -107,6 +107,7 @@ type LegacyMigrationSummary struct {
 	Discovered      int `json:"discovered"`
 	Pending         int `json:"pending"`
 	AlreadyMigrated int `json:"already_migrated"`
+	Duplicate       int `json:"duplicate"`
 	Missing         int `json:"missing"`
 	Orphan          int `json:"orphan"`
 	Failed          int `json:"failed"`
@@ -609,6 +610,11 @@ func (s *Service) PreflightLegacyMediaMigration(ctx context.Context, profileID s
 
 	report := LegacyMigrationPreflight{ProfileID: profileID, DryRun: true}
 	referenced := make(map[string]bool)
+	type preflightRecord struct {
+		record  LegacyMigrationRecord
+		pathKey string
+	}
+	records := make([]preflightRecord, 0)
 
 	photoRows, err := s.db.QueryContext(ctx, `
 		SELECT ip.id, ip.item_id, ip.filename, ip.original_path, ci.id
@@ -631,7 +637,7 @@ func (s *Service) PreflightLegacyMediaMigration(ctx context.Context, profileID s
 		resolvedPath := resolveMediaRootPath(mediaRoot, originalPath)
 		markReferencedPath(referenced, resolvedPath)
 		classifyLegacyMigrationPath(mediaRoot, resolvedPath, &record)
-		report.addLegacyMigrationRecord(record)
+		records = append(records, preflightRecord{record: record, pathKey: canonicalPathKey(resolvedPath)})
 	}
 	if err := photoRows.Err(); err != nil {
 		photoRows.Close()
@@ -659,13 +665,28 @@ func (s *Service) PreflightLegacyMediaMigration(ctx context.Context, profileID s
 		resolvedPath := resolveMediaRootPath(mediaRoot, storedPath)
 		markReferencedPath(referenced, resolvedPath)
 		classifyLegacyMigrationPath(mediaRoot, resolvedPath, &record)
-		report.addLegacyMigrationRecord(record)
+		records = append(records, preflightRecord{record: record, pathKey: canonicalPathKey(resolvedPath)})
 	}
 	if err := attachmentRows.Err(); err != nil {
 		attachmentRows.Close()
 		return LegacyMigrationPreflight{}, fmt.Errorf("iterate chat attachment preflight: %w", err)
 	}
 	attachmentRows.Close()
+
+	duplicateCounts := make(map[string]int)
+	for _, entry := range records {
+		if entry.pathKey == "" || entry.record.Classification != "pending" {
+			continue
+		}
+		duplicateCounts[entry.pathKey]++
+	}
+	for _, entry := range records {
+		if duplicateCounts[entry.pathKey] > 1 {
+			entry.record.Classification = "duplicate"
+			entry.record.RecoveryAction = "Resolve duplicate source references before applying migration."
+		}
+		report.addLegacyMigrationRecord(entry.record)
+	}
 
 	if err := report.addLegacyMediaOrphans(mediaRoot, referenced); err != nil {
 		return LegacyMigrationPreflight{}, err
@@ -1829,6 +1850,8 @@ func (r *LegacyMigrationPreflight) addLegacyMigrationRecord(record LegacyMigrati
 		r.Summary.Pending++
 	case "already_migrated":
 		r.Summary.AlreadyMigrated++
+	case "duplicate":
+		r.Summary.Duplicate++
 	case "missing":
 		r.Summary.Missing++
 	case "orphan":
@@ -1880,8 +1903,13 @@ func (r *LegacyMigrationPreflight) addLegacyMediaOrphans(mediaRoot string, refer
 func classifyLegacyMigrationPath(mediaRoot, resolvedPath string, record *LegacyMigrationRecord) {
 	switch {
 	case isCanonicalMediaPath(mediaRoot, resolvedPath):
-		record.Classification = "already_migrated"
 		record.PathClass = "canonical_asset"
+		if err := validateCanonicalMigrationPath(mediaRoot, resolvedPath); err != nil {
+			record.Classification = "failed"
+			record.RecoveryAction = "Repair canonical asset manifest/original before migration."
+		} else {
+			record.Classification = "already_migrated"
+		}
 	case strings.TrimSpace(resolvedPath) == "":
 		record.Classification = "missing"
 		record.PathClass = "empty"
@@ -1898,6 +1926,42 @@ func classifyLegacyMigrationPath(mediaRoot, resolvedPath string, record *LegacyM
 			record.RecoveryAction = "Resolve file access error and retry preflight."
 		}
 	}
+}
+
+func validateCanonicalMigrationPath(mediaRoot, resolvedPath string) error {
+	assetID, ok := canonicalAssetIDForPath(mediaRoot, resolvedPath)
+	if !ok {
+		return fmt.Errorf("canonical asset id not found")
+	}
+	_, err := readPromotedCanonicalManifest(mediaRoot, assetID)
+	return err
+}
+
+func canonicalAssetIDForPath(mediaRoot, path string) (string, bool) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", false
+	}
+	if strings.HasPrefix(filepath.ToSlash(path), "assets/") {
+		parts := strings.Split(filepath.ToSlash(path), "/")
+		if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
+			return parts[1], true
+		}
+		return "", false
+	}
+	assetRoot := filepath.Join(mediaRoot, "assets")
+	if !pathWithinDir(assetRoot, path) {
+		return "", false
+	}
+	rel, err := filepath.Rel(assetRoot, path)
+	if err != nil {
+		return "", false
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" || parts[0] == "." || strings.HasPrefix(parts[0], "..") {
+		return "", false
+	}
+	return parts[0], true
 }
 
 func (s *Service) migrateLegacyInventoryPhoto(ctx context.Context, mediaRoot, photoID, itemID, filename, storedOriginalPath string) error {

@@ -559,6 +559,76 @@ func TestPreflightLegacyMediaMigrationReportsMixedLegacyNewAndOrphanStore(t *tes
 	}
 }
 
+func TestPreflightLegacyMediaMigrationClassifiesDuplicateAndCorruptCanonicalRecords(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	sharedLegacy := filepath.Join(legacyItemDir, "shared_orig.jpg")
+	sharedLegacyStored := filepath.ToSlash(filepath.Join("item-legacy", "shared_orig.jpg"))
+	if err := os.WriteFile(sharedLegacy, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write shared legacy original: %v", err)
+	}
+
+	corruptAssetDir := filepath.Join(mediaRoot, "assets", "photo-corrupt")
+	if err := os.MkdirAll(corruptAssetDir, 0o755); err != nil {
+		t.Fatalf("create corrupt canonical asset dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(corruptAssetDir, "manifest.json"), []byte("{not-json"), 0o644); err != nil {
+		t.Fatalf("write corrupt manifest: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','DUP','Duplicate Car');
+	`); err != nil {
+		t.Fatalf("seed profile/item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES
+			('photo-shared-a','item-legacy','shared-a.jpg', ?, '', '', 1, 1),
+			('photo-shared-b','item-legacy','shared-b.jpg', ?, '', '', 0, 2),
+			('photo-corrupt','item-legacy','corrupt.jpg', 'assets/photo-corrupt/original/corrupt.jpg', '', '', 0, 3)
+	`, sharedLegacyStored, sharedLegacyStored); err != nil {
+		t.Fatalf("seed duplicate/corrupt photo rows: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	report, err := svc.PreflightLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("PreflightLegacyMediaMigration() error = %v", err)
+	}
+	if report.Summary.Discovered != 3 || report.Summary.Duplicate != 2 || report.Summary.Failed != 1 {
+		t.Fatalf("unexpected duplicate/corrupt summary: %+v records=%+v", report.Summary, report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-shared-a", "inventory_photo", "duplicate", "legacy_media") ||
+		!containsLegacyMigrationRecord(report.Records, "photo-shared-b", "inventory_photo", "duplicate", "legacy_media") {
+		t.Fatalf("duplicate legacy source rows not classified explicitly: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-corrupt", "inventory_photo", "failed", "canonical_asset") {
+		t.Fatalf("corrupt canonical asset not classified as failed: %+v", report.Records)
+	}
+	if _, err := os.Stat(sharedLegacy); err != nil {
+		t.Fatalf("preflight should not delete duplicate source: %v", err)
+	}
+}
+
 func TestApplyLegacyInventoryPhotoMigrationPreservesOrderAndHashIdempotently(t *testing.T) {
 	t.Parallel()
 
