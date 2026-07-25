@@ -991,6 +991,106 @@ func TestApplyLegacyMediaMigrationReportsUpgradeSmokeEvidenceCounts(t *testing.T
 	}
 }
 
+func TestApplyLegacyMediaMigrationPreservesUnicodeLegacyFilenames(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-unicode")
+	legacyAttachmentRoot := filepath.Join(base, "chat-attachments")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+
+	photoFilename := "前面 写真.jpg"
+	photoSource := filepath.Join(legacyItemDir, photoFilename)
+	photoBytes := sampleJPEG(t)
+	if err := os.WriteFile(photoSource, photoBytes, 0o644); err != nil {
+		t.Fatalf("write unicode legacy photo: %v", err)
+	}
+	attachmentFilename := "référence notes.txt"
+	attachmentSource := filepath.Join(legacyAttachmentRoot, attachmentFilename)
+	attachmentBytes := []byte("unicode legacy attachment")
+	if err := os.WriteFile(attachmentSource, attachmentBytes, 0o644); err != nil {
+		t.Fatalf("write unicode legacy attachment: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-unicode','profile-1','AFX','Slot Car','UNICODE','Unicode Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-unicode','profile-1','Unicode attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/item/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-unicode','item-unicode', ?, ?, '', '', 1, 3)
+	`, photoFilename,
+		filepath.ToSlash(filepath.Join("item-unicode", photoFilename)),
+	); err != nil {
+		t.Fatalf("seed unicode legacy photo row: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-unicode','profile-1','thread-unicode', ?, 'text/plain', ?, ?)
+	`,
+		attachmentFilename,
+		len(attachmentBytes),
+		attachmentSource,
+	); err != nil {
+		t.Fatalf("seed unicode legacy attachment row: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	evidence, err := svc.ApplyLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyMediaMigration() error = %v", err)
+	}
+	if evidence.Summary.Discovered != 2 || evidence.Summary.Migrated != 2 || evidence.Summary.Failed != 0 || evidence.Summary.Skipped != 0 {
+		t.Fatalf("unexpected unicode migration evidence: %+v preflight=%+v inventory=%+v chat=%+v", evidence.Summary, evidence.Preflight.Records, evidence.Inventory, evidence.Chat)
+	}
+
+	var photoPath, attachmentPath string
+	if err := conn.QueryRow(`SELECT original_path FROM item_photos WHERE id = 'photo-unicode'`).Scan(&photoPath); err != nil {
+		t.Fatalf("read migrated unicode photo path: %v", err)
+	}
+	if err := conn.QueryRow(`SELECT stored_path FROM chat_attachments WHERE id = 'attach-unicode'`).Scan(&attachmentPath); err != nil {
+		t.Fatalf("read migrated unicode attachment path: %v", err)
+	}
+	if photoPath != filepath.ToSlash(filepath.Join("assets", "photo-unicode", "original", photoFilename)) {
+		t.Fatalf("unicode photo path = %q", photoPath)
+	}
+	if attachmentPath != filepath.ToSlash(filepath.Join("assets", "attach-unicode", "original", attachmentFilename)) {
+		t.Fatalf("unicode attachment path = %q", attachmentPath)
+	}
+
+	photoManifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "photo-unicode", "manifest.json"))
+	attachmentManifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "attach-unicode", "manifest.json"))
+	if photoManifest.Original.Filename != photoFilename || attachmentManifest.Original.Filename != attachmentFilename {
+		t.Fatalf("unicode filenames not preserved: photo=%q attachment=%q", photoManifest.Original.Filename, attachmentManifest.Original.Filename)
+	}
+	if _, err := os.Stat(photoSource); err != nil {
+		t.Fatalf("unicode legacy photo source should be retained: %v", err)
+	}
+	if _, err := os.Stat(attachmentSource); err != nil {
+		t.Fatalf("unicode legacy attachment source should be retained: %v", err)
+	}
+}
+
 func TestApplyLegacyMediaMigrationResumesPromotedAssetWithoutDuplicatingRecords(t *testing.T) {
 	t.Parallel()
 

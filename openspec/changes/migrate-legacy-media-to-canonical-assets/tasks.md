@@ -27,7 +27,7 @@
 
 ## 4. Validation
 
-- [ ] 4.1 Cover mixed legacy/new stores, duplicate bytes, missing files, corrupt
+- [x] 4.1 Cover mixed legacy/new stores, duplicate bytes, missing files, corrupt
   files, Unicode names and Windows path edge cases.
 - [ ] 4.2 Verify backup/export/restore and profile relocation after migration.
 - [ ] 4.3 Run strict OpenSpec validation and record results on #1937.
