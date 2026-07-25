@@ -440,4 +440,94 @@ describe('settings/storage', () => {
     )
   })
 
+  it('UI-SCREEN-SETTINGS-STORAGE-011 shows media migration preflight counts and recovery records', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+        migration_preflight: {
+          state: 'needs_repair',
+          dry_run: true,
+          summary: {
+            discovered: 6,
+            pending: 2,
+            already_migrated: 1,
+            duplicate: 1,
+            missing: 1,
+            orphan: 1,
+            failed: 1,
+          },
+          records: [
+            {
+              id: 'photo-duplicate',
+              record_type: 'inventory_photo',
+              filename: 'front.jpg',
+              classification: 'duplicate',
+              path_class: 'legacy_media',
+              recovery_action:
+                'Resolve duplicate source references before applying migration.',
+            },
+            {
+              id: 'attach-missing',
+              record_type: 'chat_attachment',
+              filename: 'receipt.pdf',
+              classification: 'missing',
+              path_class: 'legacy_external',
+              recovery_action:
+                'Restore or relink the missing source before migration.',
+            },
+          ],
+        },
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-migration-preflight"]').should(
+      'contain',
+      'Media migration'
+    )
+    cy.get('[data-testid="settings-storage-migration-preflight"]').should(
+      'contain',
+      'Needs repair'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      'Discovered'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      '6'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      'Pending'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      '2'
+    )
+    cy.get('[data-testid="settings-storage-migration-record"]').should(
+      'have.length',
+      2
+    )
+    cy.get('[data-testid="settings-storage-migration-record"]')
+      .first()
+      .should('contain', 'photo-duplicate')
+      .and('contain', 'duplicate')
+      .and('contain', 'Resolve duplicate source references')
+  })
+
 })
