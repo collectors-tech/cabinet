@@ -23,7 +23,7 @@
   classification with bounded tests.
 - [x] 3.2 Keep provider credentials inside Cabinet secret storage and redact
   logs, errors, workflow evidence, and health diagnostics.
-- [ ] 3.3 Prove providers cannot call Cabinet skills, database, filesystem, or
+- [x] 3.3 Prove providers cannot call Cabinet skills, database, filesystem, or
   app-control tools directly; #1933 owns governed tool selection/dispatch.
 - [ ] 3.4 Keep Anthropic/Google placeholders unavailable until separate adapters
   exist.

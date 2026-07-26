@@ -361,13 +361,17 @@ func assistantModelSupported(model string, supported []string) bool {
 
 func openAIAssistantSetupMetadata(setup AssistantProviderSetup) map[string]string {
 	metadata := map[string]string{
-		"provider_id":        "openai",
-		"active_auth_method": strings.TrimSpace(setup.ActiveAuthMethod),
-		"health_state":       strings.TrimSpace(setup.HealthState),
-		"integration_mode":   strings.TrimSpace(setup.IntegrationMode),
-		"integration_id":     strings.TrimSpace(setup.IntegrationID),
-		"config_schema_ref":  strings.TrimSpace(setup.ConfigSchemaRef),
-		"workflow_ref":       strings.TrimSpace(setup.WorkflowReference),
+		"provider_id":               "openai",
+		"active_auth_method":        strings.TrimSpace(setup.ActiveAuthMethod),
+		"health_state":              strings.TrimSpace(setup.HealthState),
+		"integration_mode":          strings.TrimSpace(setup.IntegrationMode),
+		"integration_id":            strings.TrimSpace(setup.IntegrationID),
+		"config_schema_ref":         strings.TrimSpace(setup.ConfigSchemaRef),
+		"workflow_ref":              strings.TrimSpace(setup.WorkflowReference),
+		"cabinet_tool_authority":    "none",
+		"cabinet_database_access":   "none",
+		"cabinet_filesystem_access": "none",
+		"governed_dispatch_owner":   "cabinet",
 	}
 	for key, value := range metadata {
 		if value == "" {

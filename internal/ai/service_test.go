@@ -187,6 +187,49 @@ func TestOpenAIAssistantProviderUsesProfileSecretBoundary(t *testing.T) {
 	}
 }
 
+func TestOpenAIAssistantProviderDoesNotReceiveCabinetToolAuthority(t *testing.T) {
+	t.Parallel()
+
+	var rawBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"planner text only"}}]}`))
+	}))
+	defer srv.Close()
+
+	resp, err := newReadyOpenAITestProvider(srv.URL).RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "draft a wishlist update"}},
+		Context: map[string]any{
+			"db":         "sqlite://cabinet.db",
+			"filesystem": `C:\Users\maxbarrass\.openclaw\workspace-cabinet-developer`,
+			"skills":     []string{"wishlist.apply", "inventory.delete"},
+			"tools":      []string{"app_control.apply"},
+		},
+		Metadata: map[string]string{
+			"capability_id": "wishlist.apply",
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunAssistantTurn() error = %v", err)
+	}
+	for _, forbidden := range []string{"context", "metadata", "tools", "skills", "db", "filesystem", "capability_id"} {
+		if _, ok := rawBody[forbidden]; ok {
+			t.Fatalf("OpenAI request body exposed Cabinet authority field %q: %+v", forbidden, rawBody)
+		}
+	}
+	if resp.Metadata["cabinet_tool_authority"] != "none" ||
+		resp.Metadata["cabinet_database_access"] != "none" ||
+		resp.Metadata["cabinet_filesystem_access"] != "none" ||
+		resp.Metadata["governed_dispatch_owner"] != "cabinet" {
+		t.Fatalf("expected explicit no-authority provider metadata, got %+v", resp.Metadata)
+	}
+}
+
 func TestOpenAIAssistantProviderReportsMissingProfileSecretWithoutNetwork(t *testing.T) {
 	t.Parallel()
 
