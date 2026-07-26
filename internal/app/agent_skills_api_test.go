@@ -522,8 +522,19 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Unsafe Guard"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
 	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.users.remove_user",
 		"confirm":true,
 		"parameters":{
@@ -698,9 +709,19 @@ func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testin
 	t.Parallel()
 
 	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Context Guard"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
 
 	wishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.wishlist.mark_purchased",
 		"parameters":{"purchase_url":"https://example.test/order"}
 	}`), map[string]string{"Content-Type": "application/json"})
@@ -713,7 +734,7 @@ func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testin
 	}
 
 	allItems := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.collections.soft_delete",
 		"parameters":{"collection_name":"All Items"}
 	}`), map[string]string{"Content-Type": "application/json"})
@@ -726,7 +747,7 @@ func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testin
 	}
 
 	nonEmptyDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.collections.soft_delete",
 		"parameters":{"collection_name":"Display Case","has_items":true}
 	}`), map[string]string{"Content-Type": "application/json"})
