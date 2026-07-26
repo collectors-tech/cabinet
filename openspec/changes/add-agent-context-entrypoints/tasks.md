@@ -77,5 +77,10 @@
   - `AGENT-CONTEXT-003/#1714` covers an inventory row launch into side-panel
     Agent Skill preview with route, surface, thread, source channel, and
     selected inventory item context.
-- [ ] 4.3 Run touched UI validation, focused Go tests, strict OpenSpec
+- [x] 4.3 Run touched UI validation, focused Go tests, strict OpenSpec
   validation, and `git diff --check`.
+  - Final validation evidence:
+    `npm run build` from `ui.web`,
+    `go test ./internal/app -run 'Test(ChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel|ChatMessageAppControlPlannerDispatchesDeterministicActions|AgentSkillPreview(NormalizesAgentContextEnvelope|ClarifiesMissingAgentContext))' -count=1`,
+    `openspec validate add-agent-context-entrypoints --strict --no-interactive`,
+    and `git diff --check`.
