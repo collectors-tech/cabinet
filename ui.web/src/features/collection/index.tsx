@@ -187,6 +187,7 @@ function persistAgentSelectedInventoryItem(
       id: item.id,
       label: item.part_number || item.title || item.id,
       title: item.title,
+      route_id: '/inventory',
     })
     window.localStorage.setItem(key, payload)
     window.localStorage.setItem(agentSelectedRecordKey('local'), payload)

@@ -187,6 +187,7 @@ type AgentSelectedRecord = {
   id?: string
   label?: string
   title?: string
+  route_id?: string
 }
 
 type AgentSkillOption = {
@@ -461,8 +462,21 @@ function agentSelectedRecordKey(profileId: string) {
   return `cabinet.agent.selected_record.${profileId || 'local'}`
 }
 
+function routeMatchesAgentSelectedRecord(
+  recordRoute: string,
+  currentRoute: string
+) {
+  const normalizedRecordRoute = recordRoute.replace(/\/+$/, '')
+  const normalizedCurrentRoute = currentRoute.replace(/\/+$/, '')
+  return (
+    normalizedRecordRoute !== '' &&
+    normalizedCurrentRoute === normalizedRecordRoute
+  )
+}
+
 function loadAgentSelectedRecord(
-  profileId: string
+  profileId: string,
+  routePath: string
 ): AgentSelectedRecord | null {
   if (typeof window === 'undefined') return null
   for (const key of [
@@ -473,7 +487,11 @@ function loadAgentSelectedRecord(
       const raw = window.localStorage.getItem(key)
       if (!raw) continue
       const parsed = JSON.parse(raw) as AgentSelectedRecord
-      if (parsed?.type?.trim() && parsed?.id?.trim()) {
+      if (
+        parsed?.type?.trim() &&
+        parsed?.id?.trim() &&
+        routeMatchesAgentSelectedRecord(parsed.route_id || '', routePath)
+      ) {
         return parsed
       }
     } catch {
@@ -645,8 +663,8 @@ export function AssistantWorkspacePanel() {
     }
   }, [profileScope, messages.length, location.pathname, location.search])
   const selectedAgentRecordContext = useMemo(
-    () => loadAgentSelectedRecord(activeProfileId),
-    [activeProfileId, messages.length, location.pathname, location.search]
+    () => loadAgentSelectedRecord(activeProfileId, routeContext.pathname),
+    [activeProfileId, messages.length, routeContext.pathname, location.search]
   )
   const agentContextEnvelope = useMemo(
     () => ({
@@ -1117,6 +1135,7 @@ export function AssistantWorkspacePanel() {
             role: 'user',
             content: normalizedDraft,
             attachment_ids: attachments.map((attachment) => attachment.id),
+            agent_context: agentContextEnvelope,
             context: {
               route: routeContext,
               profile: { id: activeProfileId },
@@ -1141,6 +1160,7 @@ export function AssistantWorkspacePanel() {
     },
     [
       activeProfileId,
+      agentContextEnvelope,
       attachments,
       model,
       provider,

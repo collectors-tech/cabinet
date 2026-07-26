@@ -82,6 +82,16 @@ func TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel(t *testing
 		"thread_id":"`+thread.ID+`",
 		"role":"user",
 		"content":"what can you do with this selected item?",
+		"agent_context":{
+			"workspace_id":"workspace-chat-explicit",
+			"route_id":"/inventory",
+			"surface_id":"inventory.item.detail",
+			"selected_record":{"type":"inventory_item","id":"item-ctx-001"},
+			"source_channel":"in-app",
+			"permission_state":"ask_before_local_changes",
+			"setup_state":"ready",
+			"workflow_run_id":"workflow-ctx-001"
+		},
 		"context":{
 			"route":{"pathname":"/inventory"},
 			"surface_id":"chats.side-panel",
@@ -122,8 +132,11 @@ func TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel(t *testing
 	if mainContext["surface_id"] != "chats.main" || mainContext["route_id"] != "/chats/" || mainContext["intent_text"] != "summarize the active chat" {
 		t.Fatalf("unexpected main chat agent context: %+v", mainContext)
 	}
-	if sideContext["surface_id"] != "chats.side-panel" || sideContext["route_id"] != "/inventory" || sideContext["intent_text"] != "what can you do with this selected item?" {
+	if sideContext["surface_id"] != "inventory.item.detail" || sideContext["route_id"] != "/inventory" || sideContext["intent_text"] != "what can you do with this selected item?" {
 		t.Fatalf("unexpected side-panel agent context: %+v", sideContext)
+	}
+	if sideContext["workspace_id"] != "workspace-chat-explicit" {
+		t.Fatalf("expected explicit workspace context, got %+v", sideContext)
 	}
 	selected, ok := sideContext["selected_record"].(map[string]any)
 	if !ok || selected["type"] != "inventory_item" || selected["id"] != "item-ctx-001" {

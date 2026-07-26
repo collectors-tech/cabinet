@@ -38,8 +38,12 @@
   - Inventory row selection now persists a canonical selected-record bridge for
     side-panel Agent launches and sends `inventory.item.detail` context to
     Agent Skill preview/apply requests.
-- [ ] 3.3 Preserve profile/thread/workflow context across governed route changes
+- [x] 3.3 Preserve profile/thread/workflow context across governed route changes
   while keeping side-panel Chat state available.
+  - Side-panel chat messages now send the canonical `agent_context` envelope,
+    and `AGENT-CONTEXT-004/#1714` Cypress coverage proves the same thread
+    remains active after governed navigation while the next message records the
+    changed route.
 - [ ] 3.4 Record context evidence in workflow/action/audit metadata without
   storing secrets or invented targets.
 
@@ -47,6 +51,9 @@
 
 - [ ] 4.1 Add focused Go/API coverage for main Chat context, side-panel context,
   selected item context, missing context, and route-change continuity.
+  - `TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel` now
+    covers explicit top-level chat `agent_context` normalization for side-panel
+    selected-record context.
 - [x] 4.2 Add Cypress coverage for side-panel Agent context from at least one
   table/detail surface.
   - `AGENT-CONTEXT-003/#1714` covers an inventory row launch into side-panel

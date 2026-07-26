@@ -5984,6 +5984,7 @@ func New(cfg config.Config) (*App, error) {
 				Role          string         `json:"role"`
 				Content       string         `json:"content"`
 				Context       map[string]any `json:"context"`
+				AgentContext  map[string]any `json:"agent_context"`
 				AttachmentIDs []string       `json:"attachment_ids"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -5995,6 +5996,7 @@ func New(cfg config.Config) (*App, error) {
 				ThreadID:      req.ThreadID,
 				IntentText:    req.Content,
 				Context:       req.Context,
+				AgentContext:  req.AgentContext,
 				AttachmentIDs: req.AttachmentIDs,
 			})
 			message, err := chatSvc.CreateMessageWithAttachments(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, messageContext, req.AttachmentIDs)

@@ -29,37 +29,43 @@ type NormalizeInput struct {
 	ThreadID      string
 	IntentText    string
 	Context       map[string]any
+	AgentContext  map[string]any
 	AttachmentIDs []string
 }
 
 func Normalize(input NormalizeInput) Envelope {
 	ctx := input.Context
+	agentCtx := input.AgentContext
+	if len(agentCtx) == 0 {
+		agentCtx = mapValue(ctx["agent_context"])
+	}
 	envelope := Envelope{
-		ProfileID:     firstNonBlank(input.ProfileID, nestedString(ctx, "profile", "id"), stringValue(ctx["profile_id"])),
-		WorkspaceID:   firstNonBlank(nestedString(ctx, "workspace", "id"), stringValue(ctx["workspace_id"])),
-		ThreadID:      firstNonBlank(input.ThreadID, stringValue(ctx["thread_id"])),
-		IntentText:    strings.TrimSpace(input.IntentText),
+		ProfileID:     firstNonBlank(input.ProfileID, stringValue(agentCtx["profile_id"]), nestedString(ctx, "profile", "id"), stringValue(ctx["profile_id"])),
+		WorkspaceID:   firstNonBlank(stringValue(agentCtx["workspace_id"]), nestedString(ctx, "workspace", "id"), stringValue(ctx["workspace_id"])),
+		ThreadID:      firstNonBlank(input.ThreadID, stringValue(agentCtx["thread_id"]), stringValue(ctx["thread_id"])),
+		IntentText:    firstNonBlank(input.IntentText, stringValue(agentCtx["intent_text"])),
 		AttachmentIDs: cleanStrings(input.AttachmentIDs),
 	}
 	if envelope.AttachmentIDs == nil {
-		envelope.AttachmentIDs = cleanAnyStrings(ctx["attachment_ids"])
+		envelope.AttachmentIDs = cleanAnyStrings(firstNonNil(agentCtx["attachment_ids"], ctx["attachment_ids"]))
 	}
 
 	routePath := nestedString(ctx, "route", "pathname")
-	routeID := firstNonBlank(stringValue(ctx["route_id"]), routePath)
+	routeID := firstNonBlank(stringValue(agentCtx["route_id"]), stringValue(ctx["route_id"]), routePath)
 	envelope.RouteID = routeID
-	envelope.SurfaceID = firstNonBlank(stringValue(ctx["surface_id"]), nestedString(ctx, "assistant", "surface_id"), surfaceFromRoute(routePath), stringValue(ctx["source_surface"]))
-	envelope.SourceChannel = firstNonBlank(stringValue(ctx["source_channel"]), nestedString(ctx, "assistant", "source_channel"), "in-app")
-	envelope.PermissionState = firstNonBlank(stringValue(ctx["permission_state"]), nestedString(ctx, "permissions", "state"), nestedString(ctx, "assistant", "permission_state"))
-	envelope.SetupState = firstNonBlank(stringValue(ctx["setup_state"]), nestedString(ctx, "setup", "state"), nestedString(ctx, "assistant", "setup_state"))
-	envelope.WorkflowRunID = firstNonBlank(stringValue(ctx["workflow_run_id"]), nestedString(ctx, "workflow", "run_id"))
-	envelope.AuditID = firstNonBlank(stringValue(ctx["audit_id"]), nestedString(ctx, "audit", "id"))
-	envelope.MediaIDs = cleanAnyStrings(ctx["media_ids"])
+	envelope.SurfaceID = firstNonBlank(stringValue(agentCtx["surface_id"]), stringValue(ctx["surface_id"]), nestedString(ctx, "assistant", "surface_id"), surfaceFromRoute(routePath), stringValue(ctx["source_surface"]))
+	envelope.SourceChannel = firstNonBlank(stringValue(agentCtx["source_channel"]), stringValue(ctx["source_channel"]), nestedString(ctx, "assistant", "source_channel"), "in-app")
+	envelope.PermissionState = firstNonBlank(stringValue(agentCtx["permission_state"]), stringValue(ctx["permission_state"]), nestedString(ctx, "permissions", "state"), nestedString(ctx, "assistant", "permission_state"))
+	envelope.SetupState = firstNonBlank(stringValue(agentCtx["setup_state"]), stringValue(ctx["setup_state"]), nestedString(ctx, "setup", "state"), nestedString(ctx, "assistant", "setup_state"))
+	envelope.WorkflowRunID = firstNonBlank(stringValue(agentCtx["workflow_run_id"]), stringValue(ctx["workflow_run_id"]), nestedString(ctx, "workflow", "run_id"))
+	envelope.AuditID = firstNonBlank(stringValue(agentCtx["audit_id"]), stringValue(ctx["audit_id"]), nestedString(ctx, "audit", "id"))
+	envelope.MediaIDs = cleanAnyStrings(firstNonNil(agentCtx["media_ids"], ctx["media_ids"]))
 
 	selection := mapValue(ctx["selection"])
+	selectedRecord := mapValue(agentCtx["selected_record"])
 	envelope.SelectedRecord = SelectedRecord{
-		Type: firstNonBlank(stringValue(selection["record_type"]), stringValue(selection["type"]), stringValue(selection["selected_record_type"])),
-		ID:   firstNonBlank(stringValue(selection["record_id"]), stringValue(selection["id"]), stringValue(selection["selected_record_id"])),
+		Type: firstNonBlank(stringValue(selectedRecord["type"]), stringValue(selection["record_type"]), stringValue(selection["type"]), stringValue(selection["selected_record_type"])),
+		ID:   firstNonBlank(stringValue(selectedRecord["id"]), stringValue(selection["record_id"]), stringValue(selection["id"]), stringValue(selection["selected_record_id"])),
 	}
 	return envelope
 }
@@ -111,6 +117,15 @@ func mapValue(value any) map[string]any {
 		return typed
 	}
 	return map[string]any{}
+}
+
+func firstNonNil(values ...any) any {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func nestedString(root map[string]any, path ...string) string {
