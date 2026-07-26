@@ -1,9 +1,10 @@
 describe('settings/agent-skills', () => {
   function signInToSkills() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2Fskills')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/skills',
+    })
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/settings\/skills\/?$/
@@ -256,5 +257,82 @@ describe('settings/agent-skills', () => {
       'contain',
       'No Agent Skills are available'
     )
+  })
+
+  it('AGENT-AUTHORITY-006/#1932 manages profile Agent authority policy from Settings Skills', () => {
+    const skills = [
+      {
+        id: 'cabinet.inventory.create_item',
+        version: '1.0.0',
+        display_name: 'Create inventory item',
+        category: 'inventory',
+        source: 'built-in',
+        status: 'available',
+        safety_level: 'confirm-required',
+        permissions: {
+          local_read: true,
+          local_write: true,
+          requires_confirm: true,
+        },
+        built_in: true,
+        enabled: true,
+      },
+    ]
+    let profileSettings = {
+      'agent.authority.external_write_approved': 'false',
+      'agent.authority.mode': 'ask_before_local_changes',
+    }
+
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'e2e-profile-001' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/agent/skills?profile_id=e2e-profile-001', {
+      statusCode: 200,
+      body: { profile_id: 'e2e-profile-001', skills },
+    }).as('loadSkills')
+    cy.intercept('GET', '/api/profiles/e2e-profile-001/settings', {
+      statusCode: 200,
+      body: { profile_id: 'e2e-profile-001', settings: profileSettings },
+    }).as('loadAuthoritySettings')
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings', (req) => {
+      expect(req.body.settings).to.deep.equal({
+        'agent.authority.external_write_approved': 'true',
+        'agent.authority.mode': 'approved_external_actions',
+      })
+      profileSettings = req.body.settings
+      req.reply({
+        statusCode: 200,
+        body: { profile_id: 'e2e-profile-001', settings: profileSettings },
+      })
+    }).as('saveAuthoritySettings')
+
+    signInToSkills()
+    cy.wait('@activeProfile')
+    cy.wait('@loadSkills')
+    cy.wait('@loadAuthoritySettings')
+
+    cy.get('[data-testid="settings-skills-authority-panel"]')
+      .should('contain', 'Agent authority policy')
+      .and('contain', 'Ask Before Local Changes')
+    cy.get('[data-testid="settings-skills-authority-mode"]').should(
+      'have.value',
+      'ask_before_local_changes'
+    )
+    cy.get('[data-testid="settings-skills-authority-external-write"]').should(
+      'not.be.checked'
+    )
+
+    cy.get('[data-testid="settings-skills-authority-mode"]').select(
+      'approved_external_actions'
+    )
+    cy.get('[data-testid="settings-skills-authority-external-write"]').check()
+    cy.get('[data-testid="settings-skills-authority-save"]').click()
+    cy.wait('@saveAuthoritySettings')
+
+    cy.get('[data-testid="settings-skills-authority-status"]')
+      .should('contain', 'Saved')
+      .and('contain', 'Approved External Actions')
+      .and('contain', 'External write approval is enabled')
   })
 })

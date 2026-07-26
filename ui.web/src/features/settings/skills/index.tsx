@@ -17,6 +17,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { useProfileSettings } from '../use-profile-settings'
 import { ContentSection } from '../components/content-section'
 
 type ActiveProfileResponse = {
@@ -74,8 +75,15 @@ type ImportResponse = ImportResult & {
   result?: ImportResult
 }
 
+type AgentAuthorityMode =
+  | 'read_only'
+  | 'ask_before_local_changes'
+  | 'approved_external_actions'
+
 const missingProfileCopy =
   'Select or create a profile before managing imported skills.'
+
+const defaultAuthorityMode: AgentAuthorityMode = 'ask_before_local_changes'
 
 export function SettingsSkills() {
   const [profileID, setProfileID] = useState('')
@@ -93,6 +101,23 @@ export function SettingsSkills() {
     null
   )
   const [stateError, setStateError] = useState<string | null>(null)
+  const profileSettings = useProfileSettings()
+  const [authorityMode, setAuthorityMode] =
+    useState<AgentAuthorityMode>(defaultAuthorityMode)
+  const [externalWriteApproved, setExternalWriteApproved] = useState(false)
+  const [authorityStatus, setAuthorityStatus] = useState('')
+
+  useEffect(() => {
+    setAuthorityMode(
+      normalizeAuthorityMode(
+        profileSettings.settings['agent.authority.mode'] ?? defaultAuthorityMode
+      )
+    )
+    setExternalWriteApproved(
+      profileSettings.settings['agent.authority.external_write_approved'] ===
+        'true'
+    )
+  }, [profileSettings.settings])
 
   const loadSkills = useCallback(async () => {
     setLoading(true)
@@ -247,6 +272,30 @@ export function SettingsSkills() {
     }
   }
 
+  async function saveAuthorityPolicy() {
+    setStateError(null)
+    try {
+      await profileSettings.saveSettings({
+        ...profileSettings.settings,
+        'agent.authority.external_write_approved': externalWriteApproved
+          ? 'true'
+          : 'false',
+        'agent.authority.mode': authorityMode,
+      })
+      setAuthorityStatus(
+        `Saved - ${labelize(authorityMode)} - External write approval is ${
+          externalWriteApproved ? 'enabled' : 'disabled'
+        }`
+      )
+    } catch (err) {
+      setStateError(
+        err instanceof Error
+          ? labelize(err.message) || 'Agent authority policy save failed.'
+          : 'Agent authority policy save failed.'
+      )
+    }
+  }
+
   return (
     <ContentSection
       title='Skills'
@@ -300,6 +349,103 @@ export function SettingsSkills() {
             <p className='font-medium'>{stateError}</p>
           </div>
         ) : null}
+
+        <div
+          className='rounded-md border p-4'
+          data-testid='settings-skills-authority-panel'
+        >
+          <div className='flex flex-wrap items-start justify-between gap-3'>
+            <div>
+              <p className='font-medium'>Agent authority policy</p>
+              <p className='mt-1 max-w-3xl text-muted-foreground'>
+                Current mode: {labelize(authorityMode)}. External write
+                approval is {externalWriteApproved ? 'enabled' : 'disabled'}.
+              </p>
+            </div>
+            <Button
+              size='sm'
+              data-testid='settings-skills-authority-save'
+              disabled={
+                profileSettings.loading ||
+                profileSettings.saving ||
+                profileSettings.profileContextMissing
+              }
+              onClick={() => {
+                void saveAuthorityPolicy()
+              }}
+            >
+              {profileSettings.saving ? 'Saving...' : 'Save policy'}
+            </Button>
+          </div>
+          <div className='mt-4 grid gap-3 md:grid-cols-[minmax(220px,320px)_minmax(260px,1fr)]'>
+            <div className='space-y-2'>
+              <Label htmlFor='settings-skills-authority-mode'>
+                Authority mode
+              </Label>
+              <select
+                id='settings-skills-authority-mode'
+                data-testid='settings-skills-authority-mode'
+                className='h-9 w-full rounded-md border bg-background px-3 text-sm'
+                value={authorityMode}
+                disabled={
+                  profileSettings.loading || profileSettings.profileContextMissing
+                }
+                onChange={(event) => {
+                  setAuthorityMode(normalizeAuthorityMode(event.target.value))
+                  setAuthorityStatus('')
+                }}
+              >
+                <option value='read_only'>Read Only</option>
+                <option value='ask_before_local_changes'>
+                  Ask Before Local Changes
+                </option>
+                <option value='approved_external_actions'>
+                  Approved External Actions
+                </option>
+              </select>
+            </div>
+            <label className='flex items-start gap-3 rounded-md border p-3'>
+              <input
+                type='checkbox'
+                className='mt-1 h-4 w-4'
+                data-testid='settings-skills-authority-external-write'
+                checked={externalWriteApproved}
+                disabled={
+                  profileSettings.loading || profileSettings.profileContextMissing
+                }
+                onChange={(event) => {
+                  setExternalWriteApproved(event.target.checked)
+                  setAuthorityStatus('')
+                }}
+              />
+              <span>
+                <span className='block font-medium'>
+                  Approve external write actions
+                </span>
+                <span className='mt-1 block text-muted-foreground'>
+                  Allows external-write skills only when the authority mode and
+                  individual confirmation also allow the request.
+                </span>
+              </span>
+            </label>
+          </div>
+          {profileSettings.error ? (
+            <p className='mt-3 text-destructive'>
+              {profileSettings.profileContextMissing
+                ? missingProfileCopy
+                : 'Agent authority settings are unavailable right now.'}
+            </p>
+          ) : null}
+          <p
+            className='mt-3 text-muted-foreground'
+            data-testid='settings-skills-authority-status'
+          >
+            {authorityStatus ||
+              `${labelize(authorityMode)} - External write approval is ${
+                externalWriteApproved ? 'enabled' : 'disabled'
+              }`}
+          </p>
+        </div>
 
         <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
           <SummaryTile
@@ -727,4 +873,15 @@ function labelize(value?: string) {
     .filter(Boolean)
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function normalizeAuthorityMode(value: string): AgentAuthorityMode {
+  if (
+    value === 'read_only' ||
+    value === 'ask_before_local_changes' ||
+    value === 'approved_external_actions'
+  ) {
+    return value
+  }
+  return defaultAuthorityMode
 }

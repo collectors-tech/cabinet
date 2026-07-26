@@ -522,8 +522,19 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Unsafe Guard"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
 	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.users.remove_user",
 		"confirm":true,
 		"parameters":{
@@ -553,13 +564,164 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	}
 }
 
+func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Authority"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	repo := profile.NewRepository(a.db)
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeReadOnly,
+	}); err != nil {
+		t.Fatalf("set read-only authority policy: %v", err)
+	}
+
+	readOnlySearch := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.search_items",
+		"parameters":{"query":"Authority","workspace_id":"workspace-authority"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if readOnlySearch.Code != http.StatusOK {
+		t.Fatalf("read-only search status=%d body=%s", readOnlySearch.Code, readOnlySearch.Body.String())
+	}
+	if !strings.Contains(readOnlySearch.Body.String(), `"read_only":true`) ||
+		!strings.Contains(readOnlySearch.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected read-only direct skill to remain executable, body=%s", readOnlySearch.Body.String())
+	}
+
+	blockedPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"source_thread_id":"thread-authority",
+		"parameters":{"title":"Blocked authority item","part_number":"AUTH-1","workspace_id":"workspace-authority"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedPreview.Code != http.StatusConflict {
+		t.Fatalf("blocked preview status=%d body=%s", blockedPreview.Code, blockedPreview.Body.String())
+	}
+	if !strings.Contains(blockedPreview.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedPreview.Body.String(), `"entry_point":"direct-api"`) {
+		t.Fatalf("expected read-only authority blocker on crafted preview, body=%s", blockedPreview.Body.String())
+	}
+
+	blockedApply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"source_thread_id":"thread-authority",
+		"parameters":{"title":"Blocked authority item","part_number":"AUTH-1","workspace_id":"workspace-authority"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedApply.Code != http.StatusConflict {
+		t.Fatalf("blocked apply status=%d body=%s", blockedApply.Code, blockedApply.Body.String())
+	}
+	if !strings.Contains(blockedApply.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedApply.Body.String(), `"skill_id":"cabinet.inventory.create_item"`) {
+		t.Fatalf("expected read-only authority blocker on crafted apply, body=%s", blockedApply.Body.String())
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number = 'AUTH-1'`, p.ID).Scan(&itemCount); err != nil {
+		t.Fatalf("count blocked authority item: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("read-only authority apply must not create inventory item, got %d", itemCount)
+	}
+
+	rows, err := a.db.Query(`
+		SELECT source, after_json
+		FROM audit_events
+		WHERE entity_type = 'profile_agent_authority_decision'
+			AND entity_id = ?
+		ORDER BY created_at ASC, id ASC
+	`, p.ID)
+	if err != nil {
+		t.Fatalf("query authority decision audit: %v", err)
+	}
+	defer rows.Close()
+	var decisions []map[string]any
+	for rows.Next() {
+		var source string
+		var afterRaw string
+		if err := rows.Scan(&source, &afterRaw); err != nil {
+			t.Fatalf("scan authority decision audit: %v", err)
+		}
+		if source != "direct-api" {
+			t.Fatalf("expected direct-api audit source, got %q", source)
+		}
+		var decision map[string]any
+		if err := json.Unmarshal([]byte(afterRaw), &decision); err != nil {
+			t.Fatalf("unmarshal authority decision audit: %v", err)
+		}
+		decisions = append(decisions, decision)
+		if strings.Contains(afterRaw, "Blocked authority item") || strings.Contains(afterRaw, "AUTH-1") {
+			t.Fatalf("authority decision audit must not store raw payload values: %s", afterRaw)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate authority decision audit: %v", err)
+	}
+	if len(decisions) != 4 {
+		t.Fatalf("expected four direct API authority decision audit rows, got %d: %+v", len(decisions), decisions)
+	}
+	var allowedSearch int
+	var appliedSearch int
+	var blockedCreate int
+	var createPayloadRef map[string]any
+	for _, decision := range decisions {
+		if decision["skill_id"] == "cabinet.inventory.search_items" && decision["outcome"] == "apply_allowed" {
+			allowedSearch++
+		}
+		if decision["skill_id"] == "cabinet.inventory.search_items" && decision["outcome"] == "applied" {
+			appliedSearch++
+		}
+		if decision["skill_id"] == "cabinet.inventory.create_item" &&
+			decision["outcome"] == "blocked" &&
+			decision["blocker"] == "agent_authority_read_only" {
+			blockedCreate++
+			if ref, ok := decision["payload_ref"].(map[string]any); ok {
+				createPayloadRef = ref
+			}
+		}
+	}
+	if allowedSearch != 1 {
+		t.Fatalf("expected one allowed read-only search audit, got %d in %+v", allowedSearch, decisions)
+	}
+	if appliedSearch != 1 {
+		t.Fatalf("expected one applied read-only search audit, got %d in %+v", appliedSearch, decisions)
+	}
+	if blockedCreate != 2 {
+		t.Fatalf("expected two blocked create-item audits, got %d in %+v", blockedCreate, decisions)
+	}
+	if createPayloadRef == nil || createPayloadRef["parameter_count"] == nil {
+		t.Fatalf("expected redacted payload reference on create-item authority audit, got %+v", decisions)
+	}
+}
+
 func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Context Guard"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
 
 	wishlist := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.wishlist.mark_purchased",
 		"parameters":{"purchase_url":"https://example.test/order"}
 	}`), map[string]string{"Content-Type": "application/json"})
@@ -572,7 +734,7 @@ func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testin
 	}
 
 	allItems := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.collections.soft_delete",
 		"parameters":{"collection_name":"All Items"}
 	}`), map[string]string{"Content-Type": "application/json"})
@@ -585,7 +747,7 @@ func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testin
 	}
 
 	nonEmptyDelete := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"test-profile",
+		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.collections.soft_delete",
 		"parameters":{"collection_name":"Display Case","has_items":true}
 	}`), map[string]string{"Content-Type": "application/json"})
@@ -1746,6 +1908,12 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	if _, err := profile.NewRepository(a.db).PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeApprovedExternalActions,
+		ExternalWriteApproved: true,
+	}); err != nil {
+		t.Fatalf("approve external agent authority: %v", err)
+	}
 	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('ebay', 'error', 'credentials expired; refresh token required', 0, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("seed provider health: %v", err)
 	}
@@ -1933,6 +2101,12 @@ func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	if _, err := profile.NewRepository(a.db).PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeApprovedExternalActions,
+		ExternalWriteApproved: true,
+	}); err != nil {
+		t.Fatalf("approve external agent authority: %v", err)
+	}
 	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('openai', 'auth_missing', 'missing credential: configure provider API key', 0, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("seed provider health: %v", err)
 	}
@@ -2064,6 +2238,12 @@ func TestAgentSkillApplyAPIHandlesMarketWatchAndPurchasesSkills(t *testing.T) {
 	}
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := profile.NewRepository(a.db).PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeApprovedExternalActions,
+		ExternalWriteApproved: true,
+	}); err != nil {
+		t.Fatalf("approve external agent authority: %v", err)
 	}
 	if err := profile.NewRepository(a.db).PutSettings(context.Background(), p.ID, map[string]string{
 		"ebay_base_url":                   ebayStub.URL,

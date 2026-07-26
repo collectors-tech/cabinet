@@ -1,11 +1,14 @@
 package app
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
 func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testing.T) {
@@ -319,6 +322,60 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 		!strings.Contains(runsAfterConfirm.Body.String(), `"confirmation_state":"confirmed"`) ||
 		!strings.Contains(runsAfterConfirm.Body.String(), `"source_message_id":"agent-message-confirm"`) {
 		t.Fatalf("expected queryable Telegram Agent callback workflow proof, body=%s", runsAfterConfirm.Body.String())
+	}
+}
+
+func TestTelegramAgentTextHonorsReadOnlyProfileAuthority(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Agent Read Only"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	repo := profile.NewRepository(a.db)
+	if err := repo.PutSettings(context.Background(), p.ID, map[string]string{
+		"telegram.catalog_capture.sender_id": "sender-read-only-agent",
+		"telegram.catalog_capture.chat_id":   "chat-read-only-agent",
+	}); err != nil {
+		t.Fatalf("authorize telegram sender: %v", err)
+	}
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeReadOnly,
+	}); err != nil {
+		t.Fatalf("set read-only authority policy: %v", err)
+	}
+
+	blocked := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
+		"sender_id":"sender-read-only-agent",
+		"chat_id":"chat-read-only-agent",
+		"message_id":"agent-read-only-create",
+		"text":"create an inventory item even though the profile is read only",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"parameters":{"title":"Blocked Telegram Authority Item","part_number":"TG-RO-1932"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blocked.Code != http.StatusCreated {
+		t.Fatalf("blocked telegram authority status=%d body=%s", blocked.Code, blocked.Body.String())
+	}
+	body := blocked.Body.String()
+	if !strings.Contains(body, `"blocker":"agent_authority_read_only"`) ||
+		!strings.Contains(body, `"source_channel":"telegram"`) ||
+		!strings.Contains(body, `"mutation_applied":false`) {
+		t.Fatalf("expected read-only authority blocker without mutation, body=%s", body)
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number = 'TG-RO-1932'`, p.ID).Scan(&itemCount); err != nil {
+		t.Fatalf("count blocked telegram item: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("read-only Telegram authority must not create inventory item, got %d", itemCount)
 	}
 }
 

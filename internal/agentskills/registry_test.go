@@ -747,6 +747,141 @@ func TestSkillInvocationReportsMissingContextAndPermissions(t *testing.T) {
 	}
 }
 
+func TestProfileAgentPermissionPolicyGuardsSkillAuthority(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	readOnlySearch, err := registry.ReviewAuthority(PreviewRequest{
+		SkillID:   "cabinet.inventory.search_items",
+		ProfileID: "profile-a",
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+		},
+	}, AgentAuthorityPolicy{
+		ProfileID:  "profile-a",
+		Mode:       AgentAuthorityReadOnly,
+		EntryPoint: "chat",
+	})
+	if err != nil {
+		t.Fatalf("review read-only authority: %v", err)
+	}
+	if !readOnlySearch.Allowed || !readOnlySearch.PreviewAllowed || !readOnlySearch.ApplyAllowed || readOnlySearch.Blocker != "" {
+		t.Fatalf("expected read-only skill to remain allowed in read-only mode, got %+v", readOnlySearch)
+	}
+
+	blockedMutation, err := registry.ReviewAuthority(PreviewRequest{
+		SkillID:        "cabinet.inventory.create_item",
+		ProfileID:      "profile-a",
+		SourceThreadID: "thread-a",
+		Confirm:        true,
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+			"part_number":  "AFX-1",
+			"title":        "Agent blocked item",
+		},
+	}, AgentAuthorityPolicy{
+		ProfileID:  "profile-a",
+		Mode:       AgentAuthorityReadOnly,
+		EntryPoint: "direct-api",
+	})
+	if err != nil {
+		t.Fatalf("review blocked mutation authority: %v", err)
+	}
+	if blockedMutation.Allowed || blockedMutation.PreviewAllowed || blockedMutation.ApplyAllowed ||
+		blockedMutation.Blocker != "agent_authority_read_only" ||
+		blockedMutation.Decision != "blocked" {
+		t.Fatalf("expected read-only profile to block crafted mutation, got %+v", blockedMutation)
+	}
+
+	defaultMutationPreview, err := registry.ReviewAuthority(PreviewRequest{
+		SkillID:        "cabinet.inventory.create_item",
+		ProfileID:      "profile-a",
+		SourceThreadID: "thread-a",
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+			"part_number":  "AFX-2",
+			"title":        "Agent preview item",
+		},
+	}, AgentAuthorityPolicy{
+		ProfileID:  "profile-a",
+		Mode:       AgentAuthorityAskBeforeLocalChanges,
+		EntryPoint: "assistant-side-panel",
+	})
+	if err != nil {
+		t.Fatalf("review default mutation authority: %v", err)
+	}
+	if defaultMutationPreview.Allowed || !defaultMutationPreview.PreviewAllowed || defaultMutationPreview.ApplyAllowed ||
+		!defaultMutationPreview.ConfirmationRequired || defaultMutationPreview.Blocker != "confirmation_required" {
+		t.Fatalf("expected default mode to permit preview but require confirmation before apply, got %+v", defaultMutationPreview)
+	}
+
+	externalWriteBlocked, err := registry.ReviewAuthority(PreviewRequest{
+		SkillID:        "cabinet.market_watch.run_watch",
+		ProfileID:      "profile-a",
+		SourceThreadID: "thread-a",
+		Confirm:        true,
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+			"provider_id":  "ebay",
+			"watch_id":     "watch-a",
+		},
+	}, AgentAuthorityPolicy{
+		ProfileID:  "profile-a",
+		Mode:       AgentAuthorityAskBeforeLocalChanges,
+		EntryPoint: "telegram",
+	})
+	if err != nil {
+		t.Fatalf("review external write authority: %v", err)
+	}
+	if externalWriteBlocked.Allowed || externalWriteBlocked.ApplyAllowed || externalWriteBlocked.Blocker != "agent_authority_external_write_not_approved" {
+		t.Fatalf("expected external write to require separate approval, got %+v", externalWriteBlocked)
+	}
+
+	externalWriteApproved, err := registry.ReviewAuthority(PreviewRequest{
+		SkillID:        "cabinet.market_watch.run_watch",
+		ProfileID:      "profile-a",
+		SourceThreadID: "thread-a",
+		Confirm:        true,
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+			"provider_id":  "ebay",
+			"watch_id":     "watch-a",
+		},
+	}, AgentAuthorityPolicy{
+		ProfileID:              "profile-a",
+		Mode:                   AgentAuthorityApprovedExternalActions,
+		ExternalWriteApproved:  true,
+		EntryPoint:             "telegram",
+		StrongConfirmationText: "Run saved watch watch-a with eBay",
+	})
+	if err != nil {
+		t.Fatalf("review approved external write authority: %v", err)
+	}
+	if !externalWriteApproved.Allowed || !externalWriteApproved.ApplyAllowed || !externalWriteApproved.ConfirmationRequired || externalWriteApproved.Blocker != "" {
+		t.Fatalf("expected approved external write to pass only with confirmation, got %+v", externalWriteApproved)
+	}
+
+	profileMismatch, err := registry.ReviewAuthority(PreviewRequest{
+		SkillID:   "cabinet.storage.show_status",
+		ProfileID: "profile-b",
+		Parameters: map[string]any{
+			"workspace_id": "workspace-b",
+			"storage":      "local",
+		},
+	}, AgentAuthorityPolicy{
+		ProfileID:  "profile-a",
+		Mode:       AgentAuthorityAskBeforeLocalChanges,
+		EntryPoint: "mcp",
+	})
+	if err != nil {
+		t.Fatalf("review profile mismatch authority: %v", err)
+	}
+	if profileMismatch.Allowed || profileMismatch.Blocker != "agent_authority_profile_mismatch" {
+		t.Fatalf("expected profile mismatch blocker, got %+v", profileMismatch)
+	}
+}
+
 func TestProfileScopedInstalledSkillEnableDisableAndInvalidState(t *testing.T) {
 	t.Parallel()
 
