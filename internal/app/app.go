@@ -5787,6 +5787,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		req = normalizeAgentSkillContextRequest(req)
 		if strings.TrimSpace(req.ProfileID) == "" {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
@@ -5827,6 +5828,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		req = normalizeAgentSkillContextRequest(req)
 		if strings.TrimSpace(req.ProfileID) == "" {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
@@ -9444,6 +9446,91 @@ func copyActionPayload(payload map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
+	ctx := req.AgentContext
+	if len(ctx) == 0 {
+		return req
+	}
+	if req.Parameters == nil {
+		req.Parameters = map[string]any{}
+	} else {
+		params := make(map[string]any, len(req.Parameters)+8)
+		for key, value := range req.Parameters {
+			params[key] = value
+		}
+		req.Parameters = params
+	}
+
+	if strings.TrimSpace(req.ProfileID) == "" {
+		req.ProfileID = agentContextString(ctx, "profile_id")
+	}
+	if strings.TrimSpace(req.SourceSurface) == "" {
+		req.SourceSurface = firstNonEmptyString(agentContextString(ctx, "surface_id"), agentContextString(ctx, "route_id"))
+	}
+	if strings.TrimSpace(req.SourceChannel) == "" {
+		req.SourceChannel = agentContextString(ctx, "source_channel")
+	}
+	if strings.TrimSpace(req.SourceThreadID) == "" {
+		req.SourceThreadID = agentContextString(ctx, "thread_id")
+	}
+	if strings.TrimSpace(req.SourceMessageID) == "" {
+		req.SourceMessageID = agentContextString(ctx, "message_id")
+	}
+
+	putAgentContextParamIfMissing(req.Parameters, "workspace_id", agentContextString(ctx, "workspace_id"))
+	putAgentContextParamIfMissing(req.Parameters, "route_id", agentContextString(ctx, "route_id"))
+	putAgentContextParamIfMissing(req.Parameters, "permission_state", agentContextString(ctx, "permission_state"))
+	putAgentContextParamIfMissing(req.Parameters, "setup_state", agentContextString(ctx, "setup_state"))
+	putAgentContextParamIfMissing(req.Parameters, "workflow_run_id", agentContextString(ctx, "workflow_run_id"))
+
+	selected := mapValue(ctx["selected_record"])
+	selectedType := agentContextString(selected, "type")
+	selectedID := agentContextString(selected, "id")
+	putAgentContextParamIfMissing(req.Parameters, "selected_record_type", selectedType)
+	putAgentContextParamIfMissing(req.Parameters, "selected_record_id", selectedID)
+	switch selectedType {
+	case "inventory_item", "item":
+		putAgentContextParamIfMissing(req.Parameters, "item_id", selectedID)
+	case "media", "media_asset":
+		putAgentContextParamIfMissing(req.Parameters, "media_id", selectedID)
+	case "wishlist_entry":
+		putAgentContextParamIfMissing(req.Parameters, "wishlist_entry_id", selectedID)
+	case "inbox_notification", "notification":
+		putAgentContextParamIfMissing(req.Parameters, "selected_notification", selectedID)
+	case "collection":
+		putAgentContextParamIfMissing(req.Parameters, "collection_name", selectedID)
+	}
+
+	for _, raw := range anySlice(ctx["media_ids"]) {
+		if mediaID := strings.TrimSpace(fmt.Sprintf("%v", raw)); mediaID != "" {
+			putAgentContextParamIfMissing(req.Parameters, "media_id", mediaID)
+			break
+		}
+	}
+	for _, raw := range anySlice(ctx["attachment_ids"]) {
+		if attachmentID := strings.TrimSpace(fmt.Sprintf("%v", raw)); attachmentID != "" {
+			putAgentContextParamIfMissing(req.Parameters, "attachment_id", attachmentID)
+			break
+		}
+	}
+	return req
+}
+
+func agentContextString(ctx map[string]any, key string) string {
+	value, ok := ctx[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprintf("%v", value))
+}
+
+func putAgentContextParamIfMissing(params map[string]any, key, value string) {
+	if strings.TrimSpace(value) == "" || agentSkillHasAnyParam(params, key) {
+		return
+	}
+	params[key] = value
 }
 
 func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {

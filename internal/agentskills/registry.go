@@ -135,6 +135,7 @@ type PreviewRequest struct {
 	SourceChannel   string         `json:"source_channel,omitempty"`
 	SourceThreadID  string         `json:"source_thread_id,omitempty"`
 	SourceMessageID string         `json:"source_message_id,omitempty"`
+	AgentContext    map[string]any `json:"agent_context,omitempty"`
 	Parameters      map[string]any `json:"parameters,omitempty"`
 }
 

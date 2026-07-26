@@ -14,6 +14,11 @@
 - [ ] 2.2 Preserve profile, route/surface, thread, selected record, intent,
   attachment/media, source channel, permission/setup, and workflow/audit IDs in
   Agent requests.
+  - Added Agent Skill preview/apply request normalization from
+    `agent_context` so skill dispatch inherits profile, source
+    surface/channel/thread, selected-record IDs, route/setup/workflow context,
+    media IDs, and attachment IDs without exposing audit-only IDs in preview
+    responses.
 - [ ] 2.3 Return clarification/setup guidance when required profile, route,
   selection, provider, permission, or setup context is missing.
 
