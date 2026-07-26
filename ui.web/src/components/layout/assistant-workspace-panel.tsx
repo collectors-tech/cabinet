@@ -182,6 +182,14 @@ type AgentSkillApplyResult = {
   source_message_id?: string
 }
 
+type AgentSelectedRecord = {
+  type?: string
+  id?: string
+  label?: string
+  title?: string
+  route_id?: string
+}
+
 type AgentSkillOption = {
   id: string
   label: string
@@ -450,6 +458,59 @@ function assistantModelKey(profileId: string) {
   return `cabinet.assistant.workspace.model.${profileId || 'local'}`
 }
 
+function agentSelectedRecordKey(profileId: string) {
+  return `cabinet.agent.selected_record.${profileId || 'local'}`
+}
+
+function routeMatchesAgentSelectedRecord(
+  recordRoute: string,
+  currentRoute: string
+) {
+  const normalizedRecordRoute = recordRoute.replace(/\/+$/, '')
+  const normalizedCurrentRoute = currentRoute.replace(/\/+$/, '')
+  return (
+    normalizedRecordRoute !== '' &&
+    normalizedCurrentRoute === normalizedRecordRoute
+  )
+}
+
+function loadAgentSelectedRecord(
+  profileId: string,
+  routePath: string
+): AgentSelectedRecord | null {
+  if (typeof window === 'undefined') return null
+  for (const key of [
+    agentSelectedRecordKey(profileId),
+    agentSelectedRecordKey('local'),
+  ]) {
+    try {
+      const raw = window.localStorage.getItem(key)
+      if (!raw) continue
+      const parsed = JSON.parse(raw) as AgentSelectedRecord
+      if (
+        parsed?.type?.trim() &&
+        parsed?.id?.trim() &&
+        routeMatchesAgentSelectedRecord(parsed.route_id || '', routePath)
+      ) {
+        return parsed
+      }
+    } catch {
+      // Ignore malformed stale context and continue with the next fallback.
+    }
+  }
+  return null
+}
+
+function surfaceIDForAgentSelectedRecord(record: AgentSelectedRecord | null) {
+  if (!record) {
+    return 'chats.side-panel'
+  }
+  if (record.type === 'inventory_item') {
+    return 'inventory.item.detail'
+  }
+  return `${record.type}.detail`
+}
+
 function defaultModelForProvider(provider: string) {
   return (
     assistantProviderOptions.find((option) => option.provider === provider)
@@ -601,6 +662,35 @@ export function AssistantWorkspacePanel() {
       return 'All Items'
     }
   }, [profileScope, messages.length, location.pathname, location.search])
+  const selectedAgentRecordContext = useMemo(
+    () => loadAgentSelectedRecord(activeProfileId, routeContext.pathname),
+    [activeProfileId, messages.length, routeContext.pathname, location.search]
+  )
+  const agentContextEnvelope = useMemo(
+    () => ({
+      profile_id: activeProfileId,
+      workspace_id: profileScope,
+      route_id: routeContext.pathname,
+      surface_id: surfaceIDForAgentSelectedRecord(selectedAgentRecordContext),
+      selected_record: selectedAgentRecordContext
+        ? {
+            type: selectedAgentRecordContext.type,
+            id: selectedAgentRecordContext.id,
+          }
+        : undefined,
+      thread_id: threadId,
+      source_channel: 'in-app',
+      permission_state: 'ask_before_local_changes',
+      setup_state: 'ready',
+    }),
+    [
+      activeProfileId,
+      profileScope,
+      routeContext.pathname,
+      selectedAgentRecordContext,
+      threadId,
+    ]
+  )
 
   const availableModels = useMemo(
     () =>
@@ -1045,6 +1135,7 @@ export function AssistantWorkspacePanel() {
             role: 'user',
             content: normalizedDraft,
             attachment_ids: attachments.map((attachment) => attachment.id),
+            agent_context: agentContextEnvelope,
             context: {
               route: routeContext,
               profile: { id: activeProfileId },
@@ -1069,6 +1160,7 @@ export function AssistantWorkspacePanel() {
     },
     [
       activeProfileId,
+      agentContextEnvelope,
       attachments,
       model,
       provider,
@@ -1583,13 +1675,14 @@ export function AssistantWorkspacePanel() {
           source_channel: 'in-app',
           source_thread_id: threadId,
           source_message_id: 'assistant-workspace-agent-skill',
+          agent_context: agentContextEnvelope,
           parameters: agentSkillParameters(),
         }),
       })
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | AgentSkillAuthorityError
-          | null
+        const payload = (await response
+          .json()
+          .catch(() => null)) as AgentSkillAuthorityError | null
         const blocker = payload?.error || payload?.authority?.blocker
         if (blocker) {
           throw new Error(
@@ -1670,13 +1763,14 @@ export function AssistantWorkspacePanel() {
           source_channel: 'in-app',
           source_thread_id: threadId,
           source_message_id: 'assistant-workspace-agent-skill',
+          agent_context: agentContextEnvelope,
           parameters: agentSkillParameters(),
         }),
       })
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | AgentSkillAuthorityError
-          | null
+        const payload = (await response
+          .json()
+          .catch(() => null)) as AgentSkillAuthorityError | null
         const blocker = payload?.error || payload?.authority?.blocker
         if (blocker) {
           throw new Error(
@@ -1825,7 +1919,9 @@ export function AssistantWorkspacePanel() {
                         data-testid='shell-assistant-runtime-state'
                       >
                         <span className='h-1.5 w-1.5 rounded-full bg-emerald-300' />
-                        {activeProfileId ? 'Agent runtime connected' : 'Waiting for profile'}
+                        {activeProfileId
+                          ? 'Agent runtime connected'
+                          : 'Waiting for profile'}
                       </p>
                     </div>
                   </div>
@@ -1932,11 +2028,17 @@ export function AssistantWorkspacePanel() {
                   <span data-testid='shell-assistant-selection-context'>
                     Collection: {selectionContext}
                   </span>
+                  <span data-testid='shell-assistant-selected-record-context'>
+                    Selected:{' '}
+                    {selectedAgentRecordContext
+                      ? `${selectedAgentRecordContext.type}:${selectedAgentRecordContext.label || selectedAgentRecordContext.id}`
+                      : 'None'}
+                  </span>
                   <span data-testid='shell-assistant-thread-id'>
                     {threadId || 'bootstrapping'}
                   </span>
-                    <span data-testid='shell-assistant-selected-thread-title'>
-                      Conversation: {selectedThreadTitle}
+                  <span data-testid='shell-assistant-selected-thread-title'>
+                    Conversation: {selectedThreadTitle}
                   </span>
                   <span data-testid='shell-assistant-boundary-note'>
                     Thread continuity persists across authenticated route
@@ -2554,8 +2656,8 @@ export function AssistantWorkspacePanel() {
                     commandEvents.length === 0 ? (
                       <p>
                         Durable workflow records appear here after Cabinet
-                        plans, previews, applies, cancels, or fails an
-                        assistant action.
+                        plans, previews, applies, cancels, or fails an assistant
+                        action.
                       </p>
                     ) : null}
                     {workflowRunsError && workflowRuns.length === 0 ? (

@@ -183,6 +183,118 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	}
 }
 
+func TestAgentSkillPreviewNormalizesAgentContextEnvelope(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Context"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.update_item",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"workspace-agent-skill",
+			"route_id":"/inventory/item/item-agent-ctx-001",
+			"surface_id":"inventory.detail",
+			"selected_record":{"type":"inventory_item","id":"item-agent-ctx-001"},
+			"thread_id":"thread-agent-skill",
+			"intent_text":"rename this item",
+			"source_channel":"in-app",
+			"permission_state":"ask_before_local_changes",
+			"setup_state":"ready",
+			"workflow_run_id":"workflow-agent-skill",
+			"audit_id":"audit-agent-skill"
+		},
+		"parameters":{"title":"Updated title"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		SourceSurface  string         `json:"source_surface"`
+		SourceChannel  string         `json:"source_channel"`
+		SourceThreadID string         `json:"source_thread_id"`
+		Blocker        string         `json:"blocker"`
+		Target         map[string]any `json:"target"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if payload.SourceSurface != "inventory.detail" || payload.SourceChannel != "in-app" || payload.SourceThreadID != "thread-agent-skill" {
+		t.Fatalf("expected skill preview source fields from agent context, got %+v", payload)
+	}
+	if payload.Blocker != "confirmation_required" {
+		t.Fatalf("expected hydrated selected item to advance to confirmation, got %+v", payload)
+	}
+	if payload.Target["item_id"] != "item-agent-ctx-001" || payload.Target["title"] != "Updated title" {
+		t.Fatalf("expected selected record and params in preview target, got %+v", payload.Target)
+	}
+	if strings.Contains(resp.Body.String(), "audit-agent-skill") {
+		t.Fatalf("preview response must not expose audit-only context ids: %s", resp.Body.String())
+	}
+}
+
+func TestAgentSkillPreviewClarifiesMissingAgentContext(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Clarification"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.update_item",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"workspace-agent-skill",
+			"thread_id":"thread-agent-skill",
+			"source_channel":"in-app",
+			"setup_state":"setup_needed"
+		},
+		"parameters":{"title":"Updated title"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("preview status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Error          string            `json:"error"`
+		MissingContext []string          `json:"missing_context"`
+		NextAction     string            `json:"next_action"`
+		Clarification  map[string]string `json:"clarification"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode clarification: %v", err)
+	}
+	if payload.Error != "missing_context" || !slices.Contains(payload.MissingContext, "selected_item") ||
+		!slices.Contains(payload.MissingContext, "route") || !slices.Contains(payload.MissingContext, "setup_state") {
+		t.Fatalf("expected selected item, route, and setup clarification, got %+v", payload)
+	}
+	if payload.Clarification["selected_item"] == "" || payload.Clarification["route"] == "" || payload.Clarification["setup_state"] == "" || payload.NextAction == "" {
+		t.Fatalf("expected actionable clarification guidance, got %+v", payload)
+	}
+	if strings.Contains(resp.Body.String(), "direct-api") || strings.Contains(resp.Body.String(), "audit") {
+		t.Fatalf("clarification must not invent direct-api targets or leak audit context: %s", resp.Body.String())
+	}
+}
+
 func TestAgentSkillImportAPIInstallsLocalFolderDisabledAndListsMetadata(t *testing.T) {
 	t.Parallel()
 
