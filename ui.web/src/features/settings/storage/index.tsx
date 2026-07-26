@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle, Download } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { recordNotificationHistory } from '@/lib/toast-history'
 import { ContentSection } from '../components/content-section'
 
 type ActiveProfileResponse = {
@@ -20,6 +20,33 @@ type ActiveProfileResponse = {
 type StorageResponse = {
   db_path?: string
   media_dir?: string
+  migration_preflight?: MigrationPreflight
+}
+
+type MigrationSummary = {
+  discovered?: number
+  pending?: number
+  already_migrated?: number
+  duplicate?: number
+  missing?: number
+  orphan?: number
+  failed?: number
+}
+
+type MigrationRecord = {
+  id?: string
+  record_type?: string
+  filename?: string
+  classification?: string
+  path_class?: string
+  recovery_action?: string
+}
+
+type MigrationPreflight = {
+  state?: string
+  dry_run?: boolean
+  summary?: MigrationSummary
+  records?: MigrationRecord[]
 }
 
 type BackupInfo = {
@@ -90,6 +117,8 @@ export function SettingsStorage() {
   const [actionTone, setActionTone] = useState<'default' | 'destructive'>(
     'default'
   )
+  const [migrationPreflight, setMigrationPreflight] =
+    useState<MigrationPreflight | null>(null)
   const [lastKnown, setLastKnown] = useState<StorageResponse | null>(() => {
     if (typeof window === 'undefined') {
       return null
@@ -144,10 +173,12 @@ export function SettingsStorage() {
       }
       setDbPath(next.db_path)
       setMediaDir(next.media_dir)
+      setMigrationPreflight(storage.migration_preflight ?? null)
     } catch {
       setError('Storage information is unavailable right now.')
       setDbPath(lastKnownRef.current?.db_path || 'Unavailable')
       setMediaDir(lastKnownRef.current?.media_dir || 'Unavailable')
+      setMigrationPreflight(null)
     } finally {
       setLoading(false)
     }
@@ -231,8 +262,7 @@ export function SettingsStorage() {
       }
       const rebuiltItems = Number(payload.rebuilt_items ?? 0)
       const rebuiltPhotos = Number(payload.rebuilt_photos ?? 0)
-      const message =
-        `Thumbnail rebuild completed for ${rebuiltPhotos} photo${rebuiltPhotos === 1 ? '' : 's'} across ${rebuiltItems} item${rebuiltItems === 1 ? '' : 's'}.`
+      const message = `Thumbnail rebuild completed for ${rebuiltPhotos} photo${rebuiltPhotos === 1 ? '' : 's'} across ${rebuiltItems} item${rebuiltItems === 1 ? '' : 's'}.`
       setActionStatus(message)
       recordStorageStatusHistory({
         id: 'settings-storage-rebuild-success',
@@ -312,8 +342,7 @@ export function SettingsStorage() {
         payload.backup?.integrity_check?.trim() || 'unknown'
       const archiveFormat =
         payload.backup?.archive_format?.trim().toUpperCase() || 'archive'
-      const message =
-        `Backup created successfully: ${fileName}. ${archiveFormat} ready for download. Integrity check: ${integrityCheck}.`
+      const message = `Backup created successfully: ${fileName}. ${archiveFormat} ready for download. Integrity check: ${integrityCheck}.`
       setActionStatus(message)
       recordStorageStatusHistory({
         id: 'settings-storage-backup-success',
@@ -472,6 +501,70 @@ export function SettingsStorage() {
             <p className='text-muted-foreground'>
               {loading ? 'Loading storage paths...' : mediaDir}
             </p>
+          </div>
+          <div
+            className='space-y-3 rounded-md border p-3'
+            data-testid='settings-storage-migration-preflight'
+          >
+            <div className='flex flex-wrap items-start justify-between gap-3'>
+              <div>
+                <p className='font-medium'>Media migration</p>
+                <p className='text-xs text-muted-foreground'>
+                  Dry-run status for legacy photo and Chat attachment storage.
+                </p>
+              </div>
+              <span
+                className={migrationStateClassName(migrationPreflight?.state)}
+              >
+                {migrationStateLabel(migrationPreflight?.state)}
+              </span>
+            </div>
+            <div
+              className='grid gap-2 sm:grid-cols-2 lg:grid-cols-4'
+              data-testid='settings-storage-migration-summary'
+            >
+              {migrationSummaryItems(migrationPreflight?.summary).map(
+                (item) => (
+                  <div
+                    key={item.label}
+                    className='rounded-md border bg-muted/20 px-3 py-2'
+                  >
+                    <p className='text-xs text-muted-foreground'>
+                      {item.label}
+                    </p>
+                    <p className='font-medium'>{item.value}</p>
+                  </div>
+                )
+              )}
+            </div>
+            {migrationRecoveryRecords(migrationPreflight).length > 0 ? (
+              <div className='space-y-2'>
+                {migrationRecoveryRecords(migrationPreflight).map((record) => (
+                  <div
+                    key={`${record.record_type ?? 'record'}-${record.id ?? record.filename ?? 'unknown'}`}
+                    className='rounded-md border border-amber-300/40 bg-amber-50/20 px-3 py-2 text-amber-950 dark:text-amber-200'
+                    data-testid='settings-storage-migration-record'
+                  >
+                    <p className='font-medium'>
+                      {record.id?.trim() ||
+                        record.filename?.trim() ||
+                        'media record'}{' '}
+                      · {migrationStateLabel(record.classification)}
+                    </p>
+                    <p className='text-xs opacity-90'>
+                      {migrationRecordContext(record)}
+                    </p>
+                    {record.recovery_action ? (
+                      <p className='mt-1 text-xs'>{record.recovery_action}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className='text-xs text-muted-foreground'>
+                No migration recovery actions are currently reported.
+              </p>
+            )}
           </div>
           <div className='rounded-md border border-amber-300/40 bg-amber-50/20 p-3 text-amber-950 dark:text-amber-200'>
             <div className='flex items-start gap-2'>
@@ -847,6 +940,95 @@ function formatBackupStatus(backup: BackupInfo) {
     return integrity.toLowerCase() === 'ok' ? 'Valid' : integrity
   }
   return 'Validity unknown'
+}
+
+function migrationSummaryItems(summary?: MigrationSummary) {
+  return [
+    { label: 'Discovered', value: Number(summary?.discovered ?? 0) },
+    { label: 'Pending', value: Number(summary?.pending ?? 0) },
+    {
+      label: 'Already migrated',
+      value: Number(summary?.already_migrated ?? 0),
+    },
+    { label: 'Needs attention', value: migrationAttentionCount(summary) },
+    { label: 'Duplicate', value: Number(summary?.duplicate ?? 0) },
+    { label: 'Missing', value: Number(summary?.missing ?? 0) },
+    { label: 'Failed', value: Number(summary?.failed ?? 0) },
+    { label: 'Orphan', value: Number(summary?.orphan ?? 0) },
+  ]
+}
+
+function migrationAttentionCount(summary?: MigrationSummary) {
+  return (
+    Number(summary?.duplicate ?? 0) +
+    Number(summary?.missing ?? 0) +
+    Number(summary?.failed ?? 0)
+  )
+}
+
+function migrationRecoveryRecords(preflight?: MigrationPreflight | null) {
+  return (preflight?.records ?? [])
+    .filter((record) =>
+      [
+        'duplicate',
+        'missing',
+        'failed',
+        'orphan',
+        'locked',
+        'corrupt',
+      ].includes(record.classification?.trim().toLowerCase() ?? '')
+    )
+    .slice(0, 5)
+}
+
+function migrationStateLabel(state?: string) {
+  const normalized = state?.trim().toLowerCase()
+  switch (normalized) {
+    case 'not_needed':
+      return 'Not needed'
+    case 'ready':
+      return 'Ready'
+    case 'dry_run_complete':
+      return 'Dry run complete'
+    case 'applying':
+      return 'Applying'
+    case 'needs_repair':
+      return 'Needs repair'
+    case 'blocked':
+      return 'Blocked'
+    case 'rollback_available':
+      return 'Rollback available'
+    case 'completed':
+      return 'Completed'
+    case 'pending':
+      return 'pending'
+    case 'already_migrated':
+      return 'already migrated'
+    default:
+      return normalized || 'Unknown'
+  }
+}
+
+function migrationStateClassName(state?: string) {
+  const normalized = state?.trim().toLowerCase()
+  const base =
+    'rounded-md border px-2 py-1 text-xs font-medium whitespace-nowrap'
+  if (normalized === 'needs_repair' || normalized === 'blocked') {
+    return `${base} border-amber-300/60 bg-amber-50 text-amber-950 dark:text-amber-200`
+  }
+  if (normalized === 'completed' || normalized === 'not_needed') {
+    return `${base} border-emerald-300/60 bg-emerald-50 text-emerald-950 dark:text-emerald-200`
+  }
+  return `${base} border-border bg-muted/40 text-muted-foreground`
+}
+
+function migrationRecordContext(record: MigrationRecord) {
+  const parts = [
+    record.record_type?.trim(),
+    record.path_class?.trim(),
+    record.filename?.trim(),
+  ].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : 'migration record'
 }
 
 function sortIndicator(direction: BackupSortDirection) {

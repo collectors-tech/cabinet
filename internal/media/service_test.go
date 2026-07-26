@@ -4,6 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -444,6 +447,782 @@ func TestCreateCanonicalAssetCleansStagingAfterInterruptedRead(t *testing.T) {
 	}
 }
 
+func TestPreflightLegacyMediaMigrationReportsMixedLegacyNewAndOrphanStore(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	legacyOriginal := filepath.Join(legacyItemDir, "photo-legacy_orig.jpg")
+	legacyOriginalStored := filepath.ToSlash(filepath.Join("item-legacy", "photo-legacy_orig.jpg"))
+	if err := os.WriteFile(legacyOriginal, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write legacy original: %v", err)
+	}
+	orphanPath := filepath.Join(legacyItemDir, "orphan_orig.jpg")
+	if err := os.WriteFile(orphanPath, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write orphan legacy file: %v", err)
+	}
+	legacyAttachmentRoot := filepath.Join(mediaRoot, "chat-attachments")
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyAttachmentPath := filepath.Join(legacyAttachmentRoot, "attach-legacy-note.txt")
+	legacyAttachmentStored := filepath.ToSlash(filepath.Join("chat-attachments", "attach-legacy-note.txt"))
+	if err := os.WriteFile(legacyAttachmentPath, []byte("legacy note"), 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+	missingOriginalStored := filepath.ToSlash(filepath.Join("item-legacy", "missing", "missing_orig.jpg"))
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title) VALUES
+			('item-legacy','profile-1','AFX','Slot Car','LEG-1','Legacy Car'),
+			('item-canonical','profile-1','AFX','Slot Car','CAN-1','Canonical Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-1','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed legacy media records: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order) VALUES
+			('photo-legacy','item-legacy','legacy.jpg', ?, '', '', 1, 1),
+			('photo-missing','item-legacy','missing.jpg', ?, '', '', 0, 2)
+	`, legacyOriginalStored, missingOriginalStored); err != nil {
+		t.Fatalf("seed legacy photo rows: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-legacy','profile-1','thread-1','attach-legacy-note.txt','text/plain',11, ?)
+	`, legacyAttachmentStored); err != nil {
+		t.Fatalf("seed legacy attachment row: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	resolvedMediaRoot, err := svc.resolveMediaDirForProfile(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("resolve media root: %v", err)
+	}
+	if resolvedMediaRoot != mediaRoot {
+		t.Fatalf("resolved media root = %q, want %q", resolvedMediaRoot, mediaRoot)
+	}
+	if _, err := svc.Upload(context.Background(), "item-canonical", "canonical.jpg", bytes.NewReader(sampleJPEG(t))); err != nil {
+		t.Fatalf("seed canonical upload: %v", err)
+	}
+
+	report, err := svc.PreflightLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("PreflightLegacyMediaMigration() error = %v", err)
+	}
+	if !report.DryRun || report.ProfileID != "profile-1" {
+		t.Fatalf("preflight should be profile-scoped dry run, got %+v", report)
+	}
+	if report.Summary.Discovered != 5 || report.Summary.Pending != 2 || report.Summary.AlreadyMigrated != 1 || report.Summary.Missing != 1 || report.Summary.Orphan != 1 {
+		t.Fatalf("unexpected migration summary: %+v records=%+v", report.Summary, report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-legacy", "inventory_photo", "pending", "legacy_media") {
+		t.Fatalf("legacy inventory photo not classified as pending: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "attach-legacy", "chat_attachment", "pending", "legacy_media") {
+		t.Fatalf("legacy chat attachment not classified as pending legacy media: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-missing", "inventory_photo", "missing", "legacy_media") {
+		t.Fatalf("missing inventory photo not reported with record id: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "", "inventory_photo", "already_migrated", "canonical_asset") {
+		t.Fatalf("canonical inventory photo not classified as already migrated: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "", "orphan_file", "orphan", "legacy_media") {
+		t.Fatalf("orphan legacy file not reported without deletion: %+v", report.Records)
+	}
+
+	var originalPath string
+	if err := conn.QueryRow(`SELECT original_path FROM item_photos WHERE id = 'photo-legacy'`).Scan(&originalPath); err != nil {
+		t.Fatalf("read legacy original path after dry run: %v", err)
+	}
+	if originalPath != legacyOriginalStored {
+		t.Fatalf("preflight mutated legacy path: got %q want %q", originalPath, legacyOriginalStored)
+	}
+	if _, err := os.Stat(orphanPath); err != nil {
+		t.Fatalf("preflight should not delete orphan file: %v", err)
+	}
+}
+
+func TestPreflightLegacyMediaMigrationClassifiesDuplicateAndCorruptCanonicalRecords(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	sharedLegacy := filepath.Join(legacyItemDir, "shared_orig.jpg")
+	sharedLegacyStored := filepath.ToSlash(filepath.Join("item-legacy", "shared_orig.jpg"))
+	if err := os.WriteFile(sharedLegacy, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write shared legacy original: %v", err)
+	}
+
+	corruptAssetDir := filepath.Join(mediaRoot, "assets", "photo-corrupt")
+	if err := os.MkdirAll(corruptAssetDir, 0o755); err != nil {
+		t.Fatalf("create corrupt canonical asset dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(corruptAssetDir, "manifest.json"), []byte("{not-json"), 0o644); err != nil {
+		t.Fatalf("write corrupt manifest: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','DUP','Duplicate Car');
+	`); err != nil {
+		t.Fatalf("seed profile/item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES
+			('photo-shared-a','item-legacy','shared-a.jpg', ?, '', '', 1, 1),
+			('photo-shared-b','item-legacy','shared-b.jpg', ?, '', '', 0, 2),
+			('photo-corrupt','item-legacy','corrupt.jpg', 'assets/photo-corrupt/original/corrupt.jpg', '', '', 0, 3)
+	`, sharedLegacyStored, sharedLegacyStored); err != nil {
+		t.Fatalf("seed duplicate/corrupt photo rows: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	report, err := svc.PreflightLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("PreflightLegacyMediaMigration() error = %v", err)
+	}
+	if report.Summary.Discovered != 3 || report.Summary.Duplicate != 2 || report.Summary.Failed != 1 {
+		t.Fatalf("unexpected duplicate/corrupt summary: %+v records=%+v", report.Summary, report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-shared-a", "inventory_photo", "duplicate", "legacy_media") ||
+		!containsLegacyMigrationRecord(report.Records, "photo-shared-b", "inventory_photo", "duplicate", "legacy_media") {
+		t.Fatalf("duplicate legacy source rows not classified explicitly: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-corrupt", "inventory_photo", "failed", "canonical_asset") {
+		t.Fatalf("corrupt canonical asset not classified as failed: %+v", report.Records)
+	}
+	if _, err := os.Stat(sharedLegacy); err != nil {
+		t.Fatalf("preflight should not delete duplicate source: %v", err)
+	}
+}
+
+func TestPreflightLegacyMediaMigrationClassifiesAccessAndWindowsPathEdges(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	nonFileSource := filepath.Join(legacyItemDir, "locked-source")
+	if err := os.MkdirAll(nonFileSource, 0o755); err != nil {
+		t.Fatalf("create non-file legacy source: %v", err)
+	}
+	externalDir := filepath.Join(base, "external")
+	if err := os.MkdirAll(externalDir, 0o755); err != nil {
+		t.Fatalf("create external dir: %v", err)
+	}
+	externalSource := filepath.Join(externalDir, "über front.jpg")
+	if err := os.WriteFile(externalSource, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write external absolute source: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','EDGE','Path Edge Car');
+	`); err != nil {
+		t.Fatalf("seed profile/item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES
+			('photo-locked','item-legacy','locked.jpg', ?, '', '', 0, 1),
+			('photo-external','item-legacy','über front.jpg', ?, '', '', 0, 2)
+	`, filepath.ToSlash(filepath.Join("item-legacy", "locked-source")), externalSource); err != nil {
+		t.Fatalf("seed access/path edge rows: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	report, err := svc.PreflightLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("PreflightLegacyMediaMigration() error = %v", err)
+	}
+	if report.Summary.Discovered != 2 || report.Summary.Failed != 1 || report.Summary.Pending != 1 {
+		t.Fatalf("unexpected access/path edge summary: %+v records=%+v", report.Summary, report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-locked", "inventory_photo", "failed", "legacy_media") {
+		t.Fatalf("non-file locked-style source should be failed with record id: %+v", report.Records)
+	}
+	if !containsLegacyMigrationRecord(report.Records, "photo-external", "inventory_photo", "pending", "legacy_external") {
+		t.Fatalf("absolute external Windows path should remain pending legacy_external: %+v", report.Records)
+	}
+	if _, err := os.Stat(externalSource); err != nil {
+		t.Fatalf("preflight should not delete external source: %v", err)
+	}
+}
+
+func TestApplyLegacyInventoryPhotoMigrationPreservesOrderAndHashIdempotently(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	legacyBytes := sampleJPEG(t)
+	legacyOriginal := filepath.Join(legacyItemDir, "front_orig.jpg")
+	legacyOriginalStored := filepath.ToSlash(filepath.Join("item-legacy", "front_orig.jpg"))
+	if err := os.WriteFile(legacyOriginal, legacyBytes, 0o644); err != nil {
+		t.Fatalf("write legacy original: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','LEG-APPLY','Legacy Apply Car');
+	`); err != nil {
+		t.Fatalf("seed profile/item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-legacy','item-legacy','front.jpg', ?, '', '', 1, 7)
+	`, legacyOriginalStored); err != nil {
+		t.Fatalf("seed legacy photo row: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	result, err := svc.ApplyLegacyInventoryPhotoMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyInventoryPhotoMigration() error = %v", err)
+	}
+	if result.Migrated != 1 || result.AlreadyMigrated != 0 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected apply result: %+v", result)
+	}
+
+	var originalPath, previewPath, thumbnailPath string
+	var isPrimary, displayOrder int
+	if err := conn.QueryRow(`
+		SELECT original_path, preview_path, thumbnail_path, is_primary, display_order
+		FROM item_photos WHERE id = 'photo-legacy'
+	`).Scan(&originalPath, &previewPath, &thumbnailPath, &isPrimary, &displayOrder); err != nil {
+		t.Fatalf("read migrated photo row: %v", err)
+	}
+	if originalPath != filepath.ToSlash(filepath.Join("assets", "photo-legacy", "original", "front.jpg")) ||
+		previewPath != filepath.ToSlash(filepath.Join("assets", "photo-legacy", "renditions", "preview.jpg")) ||
+		thumbnailPath != filepath.ToSlash(filepath.Join("assets", "photo-legacy", "renditions", "thumbnail.jpg")) {
+		t.Fatalf("unexpected migrated paths: original=%q preview=%q thumbnail=%q", originalPath, previewPath, thumbnailPath)
+	}
+	if isPrimary != 1 || displayOrder != 7 {
+		t.Fatalf("migration changed primary/order: isPrimary=%d displayOrder=%d", isPrimary, displayOrder)
+	}
+	if _, err := os.Stat(legacyOriginal); err != nil {
+		t.Fatalf("legacy source should be retained after verified migration: %v", err)
+	}
+
+	manifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "photo-legacy", "manifest.json"))
+	sourceHash := sha256.Sum256(legacyBytes)
+	if manifest.Original.ContentHash != "sha256:"+hex.EncodeToString(sourceHash[:]) {
+		t.Fatalf("manifest hash = %q, want source hash", manifest.Original.ContentHash)
+	}
+	if manifest.Provenance["legacy_source_hash"] != manifest.Original.ContentHash || manifest.Provenance["source"] != "legacy.inventory_photo.migration" {
+		t.Fatalf("manifest provenance missing hash/source evidence: %+v", manifest.Provenance)
+	}
+
+	second, err := svc.ApplyLegacyInventoryPhotoMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyInventoryPhotoMigration() second run error = %v", err)
+	}
+	if second.Migrated != 0 || second.AlreadyMigrated != 1 || second.Skipped != 0 || second.Failed != 0 {
+		t.Fatalf("second run should be idempotent, got %+v", second)
+	}
+	entries, err := os.ReadDir(filepath.Join(mediaRoot, "assets"))
+	if err != nil {
+		t.Fatalf("read asset root: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "photo-legacy" {
+		t.Fatalf("migration should create exactly one stable asset folder, got %+v", entries)
+	}
+}
+
+func TestApplyLegacyChatAttachmentMigrationPreservesLinksAndMetadataIdempotently(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyAttachmentRoot := filepath.Join(mediaRoot, "chat-attachments")
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyBytes := []byte("legacy chat attachment bytes")
+	legacyAttachment := filepath.Join(legacyAttachmentRoot, "reference note.txt")
+	legacyAttachmentStored := filepath.ToSlash(filepath.Join("chat-attachments", "reference note.txt"))
+	if err := os.WriteFile(legacyAttachment, legacyBytes, 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-legacy','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-legacy','profile-1','thread-legacy','Reference Note.txt','text/plain', ?, ?);
+		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
+		VALUES ('message-legacy','profile-1','thread-legacy','user','please use this attachment',
+			'[{"id":"attach-legacy","filename":"Reference Note.txt","mime_type":"text/plain","size_bytes":28}]',
+			'{"source":"test"}');
+	`, len(legacyBytes), legacyAttachmentStored); err != nil {
+		t.Fatalf("seed legacy chat attachment: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	result, err := svc.ApplyLegacyChatAttachmentMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyChatAttachmentMigration() error = %v", err)
+	}
+	if result.Migrated != 1 || result.AlreadyMigrated != 0 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected chat apply result: %+v", result)
+	}
+
+	var storedPath, filename, mimeType, messageAttachments string
+	var sizeBytes int
+	if err := conn.QueryRow(`
+		SELECT ca.stored_path, ca.filename, ca.mime_type, ca.size_bytes, cm.attachments_json
+		FROM chat_attachments ca
+		INNER JOIN chat_messages cm ON cm.thread_id = ca.thread_id
+		WHERE ca.id = 'attach-legacy'
+	`).Scan(&storedPath, &filename, &mimeType, &sizeBytes, &messageAttachments); err != nil {
+		t.Fatalf("read migrated chat attachment row: %v", err)
+	}
+	if storedPath != filepath.ToSlash(filepath.Join("assets", "attach-legacy", "original", "Reference Note.txt")) {
+		t.Fatalf("unexpected migrated chat attachment path: %q", storedPath)
+	}
+	if filename != "Reference Note.txt" || mimeType != "text/plain" || sizeBytes != len(legacyBytes) {
+		t.Fatalf("migration changed attachment metadata: filename=%q mime=%q size=%d", filename, mimeType, sizeBytes)
+	}
+	if messageAttachments != `[{"id":"attach-legacy","filename":"Reference Note.txt","mime_type":"text/plain","size_bytes":28}]` {
+		t.Fatalf("migration changed message attachment links: %s", messageAttachments)
+	}
+	if _, err := os.Stat(legacyAttachment); err != nil {
+		t.Fatalf("legacy source should be retained after verified chat migration: %v", err)
+	}
+
+	manifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "attach-legacy", "manifest.json"))
+	sourceHash := sha256.Sum256(legacyBytes)
+	if manifest.Original.Filename != "Reference Note.txt" || manifest.Original.MIMEType != "text/plain" || manifest.Original.ContentHash != "sha256:"+hex.EncodeToString(sourceHash[:]) {
+		t.Fatalf("manifest original metadata mismatch: %+v", manifest.Original)
+	}
+	if len(manifest.Owners) != 1 || manifest.Owners[0].Type != "chat_thread" || manifest.Owners[0].ID != "thread-legacy" {
+		t.Fatalf("manifest owners should preserve chat thread linkage: %+v", manifest.Owners)
+	}
+	if manifest.Provenance["legacy_source_hash"] != manifest.Original.ContentHash || manifest.Provenance["source"] != "legacy.chat_attachment.migration" {
+		t.Fatalf("manifest provenance missing hash/source evidence: %+v", manifest.Provenance)
+	}
+
+	second, err := svc.ApplyLegacyChatAttachmentMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyChatAttachmentMigration() second run error = %v", err)
+	}
+	if second.Migrated != 0 || second.AlreadyMigrated != 1 || second.Skipped != 0 || second.Failed != 0 {
+		t.Fatalf("second run should be idempotent, got %+v", second)
+	}
+	entries, err := os.ReadDir(filepath.Join(mediaRoot, "assets"))
+	if err != nil {
+		t.Fatalf("read asset root: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "attach-legacy" {
+		t.Fatalf("migration should create exactly one stable chat asset folder, got %+v", entries)
+	}
+}
+
+func TestApplyLegacyMediaMigrationReportsUpgradeSmokeEvidenceCounts(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	legacyAttachmentRoot := filepath.Join(base, "chat-attachments")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyPhoto := filepath.Join(legacyItemDir, "front_orig.jpg")
+	if err := os.WriteFile(legacyPhoto, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write legacy photo: %v", err)
+	}
+	legacyAttachment := filepath.Join(legacyAttachmentRoot, "manual.txt")
+	legacyAttachmentBytes := []byte("legacy manual")
+	if err := os.WriteFile(legacyAttachment, legacyAttachmentBytes, 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+	orphanPath := filepath.Join(legacyItemDir, "orphan_orig.jpg")
+	if err := os.WriteFile(orphanPath, sampleJPEG(t), 0o644); err != nil {
+		t.Fatalf("write orphan legacy photo: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','SMOKE','Smoke Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-legacy','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/item/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	if _, _, _, err := svc.createCanonicalAsset(
+		context.Background(),
+		mediaRoot,
+		"photo-canonical",
+		"already.jpg",
+		"already.jpg",
+		"image/jpeg",
+		bytes.NewReader(sampleJPEG(t)),
+		[]AssetManifestOwner{{Type: "inventory_item", ID: "item-legacy"}},
+		map[string]string{"source": "test.canonical"},
+	); err != nil {
+		t.Fatalf("seed canonical asset: %v", err)
+	}
+
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES
+			('photo-legacy','item-legacy','front.jpg', ?, '', '', 1, 1),
+			('photo-canonical','item-legacy','already.jpg', ?, '', '', 0, 2);
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES
+			('attach-legacy','profile-1','thread-legacy','manual.txt','text/plain', ?, ?),
+			('attach-missing','profile-1','thread-legacy','missing.pdf','application/pdf', 0, ?);
+	`,
+		filepath.ToSlash(filepath.Join("item-legacy", "front_orig.jpg")),
+		filepath.ToSlash(filepath.Join("assets", "photo-canonical", "original", "already.jpg")),
+		len(legacyAttachmentBytes),
+		legacyAttachment,
+		filepath.ToSlash(filepath.Join("chat-attachments", "missing.pdf")),
+	); err != nil {
+		t.Fatalf("seed legacy media rows: %v", err)
+	}
+
+	evidence, err := svc.ApplyLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyMediaMigration() error = %v", err)
+	}
+	if evidence.Summary.Discovered != 5 ||
+		evidence.Summary.Migrated != 1 ||
+		evidence.Summary.AlreadyMigrated != 2 ||
+		evidence.Summary.Duplicate != 0 ||
+		evidence.Summary.Skipped != 1 ||
+		evidence.Summary.Failed != 0 ||
+		evidence.Summary.Orphan != 1 {
+		t.Fatalf("unexpected package/upgrade smoke evidence counts: %+v", evidence.Summary)
+	}
+	if evidence.Preflight.Summary.Pending != 1 || evidence.Preflight.Summary.Missing != 1 {
+		t.Fatalf("preflight evidence should retain dry-run counts, got %+v", evidence.Preflight.Summary)
+	}
+}
+
+func TestApplyLegacyMediaMigrationPreservesUnicodeLegacyFilenames(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-unicode")
+	legacyAttachmentRoot := filepath.Join(base, "chat-attachments")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+
+	photoFilename := "前面 写真.jpg"
+	photoSource := filepath.Join(legacyItemDir, photoFilename)
+	photoBytes := sampleJPEG(t)
+	if err := os.WriteFile(photoSource, photoBytes, 0o644); err != nil {
+		t.Fatalf("write unicode legacy photo: %v", err)
+	}
+	attachmentFilename := "référence notes.txt"
+	attachmentSource := filepath.Join(legacyAttachmentRoot, attachmentFilename)
+	attachmentBytes := []byte("unicode legacy attachment")
+	if err := os.WriteFile(attachmentSource, attachmentBytes, 0o644); err != nil {
+		t.Fatalf("write unicode legacy attachment: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-unicode','profile-1','AFX','Slot Car','UNICODE','Unicode Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-unicode','profile-1','Unicode attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/item/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-unicode','item-unicode', ?, ?, '', '', 1, 3)
+	`, photoFilename,
+		filepath.ToSlash(filepath.Join("item-unicode", photoFilename)),
+	); err != nil {
+		t.Fatalf("seed unicode legacy photo row: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-unicode','profile-1','thread-unicode', ?, 'text/plain', ?, ?)
+	`,
+		attachmentFilename,
+		len(attachmentBytes),
+		attachmentSource,
+	); err != nil {
+		t.Fatalf("seed unicode legacy attachment row: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	evidence, err := svc.ApplyLegacyMediaMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyMediaMigration() error = %v", err)
+	}
+	if evidence.Summary.Discovered != 2 || evidence.Summary.Migrated != 2 || evidence.Summary.Failed != 0 || evidence.Summary.Skipped != 0 {
+		t.Fatalf("unexpected unicode migration evidence: %+v preflight=%+v inventory=%+v chat=%+v", evidence.Summary, evidence.Preflight.Records, evidence.Inventory, evidence.Chat)
+	}
+
+	var photoPath, attachmentPath string
+	if err := conn.QueryRow(`SELECT original_path FROM item_photos WHERE id = 'photo-unicode'`).Scan(&photoPath); err != nil {
+		t.Fatalf("read migrated unicode photo path: %v", err)
+	}
+	if err := conn.QueryRow(`SELECT stored_path FROM chat_attachments WHERE id = 'attach-unicode'`).Scan(&attachmentPath); err != nil {
+		t.Fatalf("read migrated unicode attachment path: %v", err)
+	}
+	if photoPath != filepath.ToSlash(filepath.Join("assets", "photo-unicode", "original", photoFilename)) {
+		t.Fatalf("unicode photo path = %q", photoPath)
+	}
+	if attachmentPath != filepath.ToSlash(filepath.Join("assets", "attach-unicode", "original", attachmentFilename)) {
+		t.Fatalf("unicode attachment path = %q", attachmentPath)
+	}
+
+	photoManifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "photo-unicode", "manifest.json"))
+	attachmentManifest := readAssetManifest(t, filepath.Join(mediaRoot, "assets", "attach-unicode", "manifest.json"))
+	if photoManifest.Original.Filename != photoFilename || attachmentManifest.Original.Filename != attachmentFilename {
+		t.Fatalf("unicode filenames not preserved: photo=%q attachment=%q", photoManifest.Original.Filename, attachmentManifest.Original.Filename)
+	}
+	if _, err := os.Stat(photoSource); err != nil {
+		t.Fatalf("unicode legacy photo source should be retained: %v", err)
+	}
+	if _, err := os.Stat(attachmentSource); err != nil {
+		t.Fatalf("unicode legacy attachment source should be retained: %v", err)
+	}
+}
+
+func TestApplyLegacyMediaMigrationResumesPromotedAssetWithoutDuplicatingRecords(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	mediaRoot := filepath.Join(base, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	legacyAttachmentRoot := filepath.Join(mediaRoot, "chat-attachments")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	if err := os.MkdirAll(legacyAttachmentRoot, 0o755); err != nil {
+		t.Fatalf("create legacy attachment dir: %v", err)
+	}
+	legacyPhoto := filepath.Join(legacyItemDir, "front_orig.jpg")
+	legacyPhotoStored := filepath.ToSlash(filepath.Join("item-legacy", "front_orig.jpg"))
+	legacyPhotoBytes := sampleJPEG(t)
+	if err := os.WriteFile(legacyPhoto, legacyPhotoBytes, 0o644); err != nil {
+		t.Fatalf("write legacy photo: %v", err)
+	}
+	legacyAttachment := filepath.Join(legacyAttachmentRoot, "resume-note.txt")
+	legacyAttachmentStored := filepath.ToSlash(filepath.Join("chat-attachments", "resume-note.txt"))
+	legacyAttachmentBytes := []byte("resume attachment bytes")
+	if err := os.WriteFile(legacyAttachment, legacyAttachmentBytes, 0o644); err != nil {
+		t.Fatalf("write legacy attachment: %v", err)
+	}
+
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy','profile-1','AFX','Slot Car','RESUME','Resume Car');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-legacy','profile-1','Legacy attachments');
+	`); err != nil {
+		t.Fatalf("seed profile/item/thread: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO profile_settings(profile_id, key, value) VALUES ('profile-1','storage.media_dir', ?)`, mediaRoot); err != nil {
+		t.Fatalf("seed media root setting: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-resume','item-legacy','front.jpg', ?, '', '', 1, 3);
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('attach-resume','profile-1','thread-legacy','resume-note.txt','text/plain', ?, ?);
+	`, legacyPhotoStored, len(legacyAttachmentBytes), legacyAttachmentStored); err != nil {
+		t.Fatalf("seed legacy rows: %v", err)
+	}
+
+	svc := NewService(conn, mediaRoot)
+	if _, _, _, err := svc.createCanonicalAsset(
+		context.Background(),
+		mediaRoot,
+		"photo-resume",
+		"front.jpg",
+		"front.jpg",
+		"image/jpeg",
+		bytes.NewReader(legacyPhotoBytes),
+		[]AssetManifestOwner{{Type: "inventory_item", ID: "item-legacy"}},
+		map[string]string{"source": "legacy.inventory_photo.migration"},
+	); err != nil {
+		t.Fatalf("seed promoted photo asset: %v", err)
+	}
+	if _, _, _, err := svc.createCanonicalAsset(
+		context.Background(),
+		mediaRoot,
+		"attach-resume",
+		"resume-note.txt",
+		"resume-note.txt",
+		"text/plain",
+		bytes.NewReader(legacyAttachmentBytes),
+		[]AssetManifestOwner{{Type: "chat_thread", ID: "thread-legacy"}},
+		map[string]string{"source": "legacy.chat_attachment.migration"},
+	); err != nil {
+		t.Fatalf("seed promoted chat asset: %v", err)
+	}
+	if err := os.Remove(legacyPhoto); err != nil {
+		t.Fatalf("remove interrupted photo source: %v", err)
+	}
+	if err := os.Remove(legacyAttachment); err != nil {
+		t.Fatalf("remove interrupted attachment source: %v", err)
+	}
+
+	photoResult, err := svc.ApplyLegacyInventoryPhotoMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyInventoryPhotoMigration() resume error = %v", err)
+	}
+	chatResult, err := svc.ApplyLegacyChatAttachmentMigration(context.Background(), "profile-1")
+	if err != nil {
+		t.Fatalf("ApplyLegacyChatAttachmentMigration() resume error = %v", err)
+	}
+	if photoResult.Migrated != 1 || photoResult.Skipped != 0 || photoResult.Failed != 0 {
+		t.Fatalf("expected photo resume to migrate existing promoted asset, got %+v", photoResult)
+	}
+	if chatResult.Migrated != 1 || chatResult.Skipped != 0 || chatResult.Failed != 0 {
+		t.Fatalf("expected chat resume to migrate existing promoted asset, got %+v", chatResult)
+	}
+
+	var originalPath, previewPath, thumbnailPath, attachmentPath string
+	if err := conn.QueryRow(`SELECT original_path, preview_path, thumbnail_path FROM item_photos WHERE id = 'photo-resume'`).Scan(&originalPath, &previewPath, &thumbnailPath); err != nil {
+		t.Fatalf("read resumed photo paths: %v", err)
+	}
+	if err := conn.QueryRow(`SELECT stored_path FROM chat_attachments WHERE id = 'attach-resume'`).Scan(&attachmentPath); err != nil {
+		t.Fatalf("read resumed attachment path: %v", err)
+	}
+	if originalPath != filepath.ToSlash(filepath.Join("assets", "photo-resume", "original", "front.jpg")) ||
+		previewPath != filepath.ToSlash(filepath.Join("assets", "photo-resume", "renditions", "preview.jpg")) ||
+		thumbnailPath != filepath.ToSlash(filepath.Join("assets", "photo-resume", "renditions", "thumbnail.jpg")) {
+		t.Fatalf("unexpected resumed photo paths: original=%q preview=%q thumbnail=%q", originalPath, previewPath, thumbnailPath)
+	}
+	if attachmentPath != filepath.ToSlash(filepath.Join("assets", "attach-resume", "original", "resume-note.txt")) {
+		t.Fatalf("unexpected resumed attachment path: %q", attachmentPath)
+	}
+	entries, err := os.ReadDir(filepath.Join(mediaRoot, "assets"))
+	if err != nil {
+		t.Fatalf("read asset root: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("resume should reuse two promoted asset folders without duplicates, got %+v", entries)
+	}
+	if _, err := os.Stat(filepath.Join(mediaRoot, ".staging", "photo-resume")); !os.IsNotExist(err) {
+		t.Fatalf("resume should not expose photo staging folder, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(mediaRoot, ".staging", "attach-resume")); !os.IsNotExist(err) {
+		t.Fatalf("resume should not expose attachment staging folder, stat err=%v", err)
+	}
+}
+
 func TestReorderPersistsListOrder(t *testing.T) {
 	t.Parallel()
 
@@ -535,4 +1314,29 @@ func containsAssetTarget(assets []WorkspaceAsset, id, state, itemID, wishlistID 
 		}
 	}
 	return false
+}
+
+func containsLegacyMigrationRecord(records []LegacyMigrationRecord, id, recordType, classification, pathClass string) bool {
+	for _, record := range records {
+		if id != "" && record.ID != id {
+			continue
+		}
+		if record.RecordType == recordType && record.Classification == classification && record.PathClass == pathClass {
+			return true
+		}
+	}
+	return false
+}
+
+func readAssetManifest(t *testing.T, path string) AssetManifest {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read asset manifest: %v", err)
+	}
+	var manifest AssetManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatalf("decode asset manifest: %v", err)
+	}
+	return manifest
 }

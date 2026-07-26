@@ -20,6 +20,7 @@ This checklist is the stable packaged-candidate acceptance pack for Cabinet 0.1 
 - [ ] Fresh start and onboarding/profile setup complete from a clean Windows data directory.
 - [ ] Inventory item can be created, edited, searched, filtered, reloaded, and verified after restart.
 - [ ] Media can be attached, marked primary, and verified after restart.
+- [ ] #1937 media migration evidence records discovered, migrated, already-migrated, duplicate, skipped, failed, and orphan counts from the packaged or explicit maintenance smoke run.
 - [ ] Wishlist item can be created, reprioritised, status-updated, and marked purchased into Inventory.
 - [ ] Collection can be created/edited, receive/move an item, soft-delete safely, and protect All Items.
 - [ ] Data export and backup both complete with non-secret artefacts.

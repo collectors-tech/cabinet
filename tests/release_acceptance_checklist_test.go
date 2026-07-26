@@ -31,6 +31,7 @@ func TestPackagedCoreWorkflowAcceptanceChecklistCoversIssue1869(t *testing.T) {
 		"Wishlist item can be created, reprioritised, status-updated, and marked purchased into Inventory",
 		"Collection can be created/edited, receive/move an item, soft-delete safely, and protect All Items",
 		"Data export and backup",
+		"#1937 media migration evidence records discovered, migrated, already-migrated, duplicate, skipped, failed, and orphan counts",
 		"Backup restore into an isolated target preserves core record counts and relationships",
 		"A saved Market Watch can run against the chosen live beta provider",
 		"Discovery review can hand an item to Wishlist or Inventory",

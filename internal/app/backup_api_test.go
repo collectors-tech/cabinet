@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/media"
 )
 
 func TestBackupRunAndRestoreEndpoints(t *testing.T) {
@@ -192,6 +194,111 @@ func TestBackupRunAndRestorePreservesCanonicalMediaAssets(t *testing.T) {
 	}
 }
 
+func TestBackupRestoreRelocatesMigratedLegacyMediaAssets(t *testing.T) {
+	t.Setenv("CABINET_SEED_SAMPLE_DATA", "0")
+
+	sourceApp := newTestApp(t)
+	createProfile := doRequest(t, sourceApp, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Migration Backup Source"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create source profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var sourceProfile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&sourceProfile); err != nil {
+		t.Fatalf("decode source profile: %v", err)
+	}
+	activateProfile := doRequest(t, sourceApp, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+sourceProfile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activateProfile.Code != http.StatusOK {
+		t.Fatalf("activate source profile status=%d body=%s", activateProfile.Code, activateProfile.Body.String())
+	}
+	sourceMediaRoot := filepath.Join(sourceApp.cfg.DataDir, "media")
+	if _, err := sourceApp.db.Exec(`
+		INSERT INTO profile_settings(profile_id, key, value)
+		VALUES (?, 'storage.media_dir', ?)
+		ON CONFLICT(profile_id, key) DO UPDATE SET value = excluded.value
+	`, sourceProfile.ID, sourceMediaRoot); err != nil {
+		t.Fatalf("set source media root: %v", err)
+	}
+	legacyDir := filepath.Join(sourceMediaRoot, "legacy-item")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatalf("create legacy media dir: %v", err)
+	}
+	legacyOriginal := filepath.Join(legacyDir, "front_orig.jpg")
+	legacyBytes := sampleJPEG(t)
+	if err := os.WriteFile(legacyOriginal, legacyBytes, 0o644); err != nil {
+		t.Fatalf("write legacy media: %v", err)
+	}
+	if _, err := sourceApp.db.Exec(`
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('legacy-item', ?,'AFX','Slot Car','MIG-BACKUP','Migrated Backup');
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('legacy-photo','legacy-item','front.jpg','legacy-item/front_orig.jpg','','',1,1);
+	`, sourceProfile.ID); err != nil {
+		t.Fatalf("seed legacy media row: %v", err)
+	}
+
+	mediaSvc := media.NewService(sourceApp.db, sourceMediaRoot)
+	evidence, err := mediaSvc.ApplyLegacyMediaMigration(t.Context(), sourceProfile.ID)
+	if err != nil {
+		t.Fatalf("ApplyLegacyMediaMigration() error: %v", err)
+	}
+	if evidence.Summary.Migrated != 1 || evidence.Summary.Failed != 0 || evidence.Summary.Skipped != 0 {
+		t.Fatalf("unexpected migration evidence before backup: %+v", evidence.Summary)
+	}
+
+	runResp := doRequest(t, sourceApp, http.MethodPost, "/api/backup/run", nil, nil)
+	if runResp.Code != http.StatusOK {
+		t.Fatalf("backup run status=%d body=%s", runResp.Code, runResp.Body.String())
+	}
+	var runPayload struct {
+		Backup struct {
+			Path string `json:"path"`
+		} `json:"backup"`
+	}
+	if err := json.NewDecoder(runResp.Body).Decode(&runPayload); err != nil {
+		t.Fatalf("decode backup run: %v", err)
+	}
+
+	targetApp := newTestApp(t)
+	targetBackupPath := filepath.Join(targetApp.cfg.DataDir, "backups", filepath.Base(runPayload.Backup.Path))
+	if err := os.MkdirAll(filepath.Dir(targetBackupPath), 0o755); err != nil {
+		t.Fatalf("create relocated backup dir: %v", err)
+	}
+	copyFileForTest(t, runPayload.Backup.Path, targetBackupPath)
+	restoreBody := bytes.NewBufferString(`{"backup_path":"` + strings.ReplaceAll(targetBackupPath, `\`, `\\`) + `","confirm_restore":true}`)
+	restoreResp := doRequest(t, targetApp, http.MethodPost, "/api/backup/restore", restoreBody, map[string]string{"Content-Type": "application/json"})
+	if restoreResp.Code != http.StatusOK {
+		t.Fatalf("relocated backup restore status=%d body=%s", restoreResp.Code, restoreResp.Body.String())
+	}
+
+	var originalPath, previewPath, thumbnailPath string
+	if err := targetApp.db.QueryRow(`
+		SELECT original_path, preview_path, thumbnail_path
+		FROM item_photos
+		WHERE id = 'legacy-photo'
+	`).Scan(&originalPath, &previewPath, &thumbnailPath); err != nil {
+		t.Fatalf("read relocated migrated photo row: %v", err)
+	}
+	expectedOriginal := filepath.ToSlash(filepath.Join("assets", "legacy-photo", "original", "front.jpg"))
+	expectedPreview := filepath.ToSlash(filepath.Join("assets", "legacy-photo", "renditions", "preview.jpg"))
+	expectedThumbnail := filepath.ToSlash(filepath.Join("assets", "legacy-photo", "renditions", "thumbnail.jpg"))
+	if originalPath != expectedOriginal || previewPath != expectedPreview || thumbnailPath != expectedThumbnail {
+		t.Fatalf("restored migrated paths should stay media-root-relative, got original=%q preview=%q thumbnail=%q", originalPath, previewPath, thumbnailPath)
+	}
+	restoredOriginal := filepath.Join(targetApp.cfg.DataDir, "media", filepath.FromSlash(originalPath))
+	restoredBytes, err := os.ReadFile(restoredOriginal)
+	if err != nil {
+		t.Fatalf("read relocated restored original: %v", err)
+	}
+	if !bytes.Equal(restoredBytes, legacyBytes) {
+		t.Fatalf("relocated restore did not preserve migrated original bytes")
+	}
+	if !strings.HasPrefix(restoredOriginal, filepath.Join(targetApp.cfg.DataDir, "media")) || strings.Contains(originalPath, sourceApp.cfg.DataDir) {
+		t.Fatalf("restored path did not relocate cleanly: db=%q resolved=%q sourceData=%q", originalPath, restoredOriginal, sourceApp.cfg.DataDir)
+	}
+}
+
 func archiveEntryBytes(t *testing.T, path, name string) []byte {
 	t.Helper()
 	zr, err := zip.OpenReader(path)
@@ -216,4 +323,24 @@ func archiveEntryBytes(t *testing.T, path, name string) []byte {
 	}
 	t.Fatalf("backup archive missing %s", name)
 	return nil
+}
+
+func copyFileForTest(t *testing.T, src, dst string) {
+	t.Helper()
+	in, err := os.Open(src)
+	if err != nil {
+		t.Fatalf("open source file for copy: %v", err)
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		t.Fatalf("create destination file for copy: %v", err)
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		t.Fatalf("copy file: %v", err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatalf("close destination file: %v", err)
+	}
 }
