@@ -34,6 +34,6 @@
   normal turn completion, and redacted error taxonomy.
 - [x] 4.2 Add Chat/API coverage showing governed Chat consumes provider output
   without provider-side Cabinet tool execution.
-- [ ] 4.3 Run strict OpenSpec validation, focused Go tests, touched UI/API
+- [x] 4.3 Run strict OpenSpec validation, focused Go tests, touched UI/API
   validation where relevant, Windows package smoke if runtime wiring affects
   packaged behavior, and `git diff --check`.
