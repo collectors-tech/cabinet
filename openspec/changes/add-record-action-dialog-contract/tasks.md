@@ -7,7 +7,7 @@
 
 ## 2. Shared components
 
-- [ ] 2.1 Add a shared record action menu component with capability-driven
+- [x] 2.1 Add a shared record action menu component with capability-driven
   action definitions, stable ordering, accessible icon trigger, tooltips, and
   row-click isolation.
 - [ ] 2.2 Add shared create/edit dialog primitives for title/description/icon,
