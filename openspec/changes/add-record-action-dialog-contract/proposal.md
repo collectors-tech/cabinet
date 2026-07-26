@@ -18,7 +18,10 @@ and capability-gated actions hard to verify or migrate consistently.
   focus, and focus return.
 - Define a shared destructive confirmation contract that names the record and
   distinguishes soft delete/archive from permanent deletion.
-- Require a surface/action matrix before broad page migration starts.
+- Publish `surface-action-matrix.md` as the baseline for current Inventory,
+  Wishlist, Users, Collections, Media, Purchases, Market Watch, Discoveries,
+  Integrations, and Settings row-action behavior before broad page migration
+  starts.
 
 ## Capabilities
 

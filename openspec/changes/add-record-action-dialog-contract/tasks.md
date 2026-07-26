@@ -2,7 +2,7 @@
 
 - [x] 1.1 Define the shared record action menu and CRUD/destructive dialog
   contract for #1938.
-- [ ] 1.2 Publish a surface/action matrix for current Cabinet tables before
+- [x] 1.2 Publish a surface/action matrix for current Cabinet tables before
   page migration begins.
 
 ## 2. Shared components
