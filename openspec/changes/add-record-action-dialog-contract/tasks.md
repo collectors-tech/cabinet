@@ -13,7 +13,7 @@
 - [x] 2.2 Add shared create/edit dialog primitives for title/description/icon,
   validation/server errors, dirty-state cancel protection, loading state,
   double-submit prevention, focus trap, initial focus, and focus return.
-- [ ] 2.3 Add a shared destructive confirmation primitive that names the record,
+- [x] 2.3 Add a shared destructive confirmation primitive that names the record,
   describes the consequence, and distinguishes archive/soft delete from
   permanent deletion.
 
@@ -33,3 +33,8 @@ validation and server errors, dirty cancel protection, loading/double-submit
 prevention, initial focus, and focus return. Task 3.1 remains open until the
 destructive confirmation primitive and keyboard/screen-reader matrix coverage
 are also in place.
+
+Evidence note: `ui.web/cypress/component/data-table/record-destructive-confirm-dialog.cy.tsx`
+now covers the shared destructive confirmation primitive naming the record,
+distinguishing archive/soft-delete/permanent-delete consequences, preventing
+duplicate destructive submissions, and returning focus after close.
