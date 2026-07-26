@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -390,6 +391,51 @@ func TestOpenAIAssistantProviderClassifiesCancelledTurn(t *testing.T) {
 	}
 }
 
+func TestOpenAIAssistantProviderReturnsRedactedRuntimeErrors(t *testing.T) {
+	t.Parallel()
+
+	const (
+		secretValue = "sk-runtime-redaction-secret"
+		rawPath     = `C:\Users\maxbarrass\.openclaw\workspace-cabinet-developer\secret-openai-dump.json`
+		rawPayload  = `{"error":{"message":"provider leaked ` + secretValue + ` from ` + rawPath + `"}}`
+	)
+
+	service := NewService(Config{BaseURL: "https://openai.example"})
+	service.client = &http.Client{Transport: failingRoundTripper{err: errors.New(rawPayload)}}
+	resp, err := NewOpenAIAssistantProvider(service, fakeAssistantSetupResolver{
+		setup: AssistantProviderSetup{
+			ProviderID:       "openai",
+			Enabled:          true,
+			ActiveAuthMethod: "api_key",
+			DefaultModel:     "gpt-4o-mini",
+			SupportedModels:  []string{"gpt-4o-mini"},
+			APIKeySecretRef:  "integration.inst_123.openai_api_key",
+			HealthState:      "ready",
+			IntegrationID:    "inst_123",
+		},
+		secret: secretValue,
+	}).RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err == nil {
+		t.Fatal("expected redacted runtime error")
+	}
+	if resp.ErrorClass != "transport_failure" || resp.SetupNextAction != "retry_when_openai_network_is_available" {
+		t.Fatalf("expected transport failure guidance, got resp=%+v err=%v", resp, err)
+	}
+	encoded, marshalErr := json.Marshal(resp)
+	if marshalErr != nil {
+		t.Fatalf("marshal response: %v", marshalErr)
+	}
+	for _, leaked := range []string{secretValue, "integration.inst_123.openai_api_key", rawPath, rawPayload, "secret-openai-dump"} {
+		if strings.Contains(err.Error(), leaked) || strings.Contains(string(encoded), leaked) {
+			t.Fatalf("assistant provider runtime evidence leaked %q: err=%v resp=%s", leaked, err, string(encoded))
+		}
+	}
+}
+
 type fakeAssistantSetupResolver struct {
 	setup  AssistantProviderSetup
 	secret string
@@ -441,4 +487,12 @@ func newReadyOpenAITestProvider(baseURL string) *OpenAIAssistantProvider {
 		},
 		secret: "sk-boundary-secret",
 	})
+}
+
+type failingRoundTripper struct {
+	err error
+}
+
+func (rt failingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, rt.err
 }

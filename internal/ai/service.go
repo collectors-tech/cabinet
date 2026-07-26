@@ -99,7 +99,7 @@ func (p *OpenAIAssistantProvider) RunAssistantTurn(ctx context.Context, req Assi
 	if err != nil {
 		respBase.ErrorClass = classifyAssistantProviderError(err)
 		respBase.SetupNextAction = assistantProviderFailureNextAction(respBase.ErrorClass)
-		return respBase, err
+		return respBase, assistantProviderRedactedError(respBase.ErrorClass)
 	}
 	respBase.Text = text
 	return respBase, nil
@@ -315,6 +315,21 @@ func assistantProviderFailureNextAction(class string) string {
 		return "retry_when_openai_network_is_available"
 	default:
 		return "retry_openai_assistant_turn"
+	}
+}
+
+func assistantProviderRedactedError(class string) error {
+	switch strings.TrimSpace(class) {
+	case "cancelled":
+		return fmt.Errorf("openai assistant turn cancelled")
+	case "timeout":
+		return fmt.Errorf("openai assistant turn timed out")
+	case "rate_limit":
+		return fmt.Errorf("openai assistant provider rate limited the request")
+	case "transport_failure":
+		return fmt.Errorf("openai assistant provider transport failed")
+	default:
+		return fmt.Errorf("openai assistant provider failed")
 	}
 }
 
