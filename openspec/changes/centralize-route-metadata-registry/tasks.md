@@ -2,7 +2,7 @@
 
 - [x] 1.1 Define the canonical authenticated route metadata contract for
   #1940.
-- [ ] 1.2 Publish the complete authenticated route metadata matrix before
+- [x] 1.2 Publish the complete authenticated route metadata matrix before
   implementation.
 
 ## 2. Shared registry
