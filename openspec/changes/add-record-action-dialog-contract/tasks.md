@@ -10,7 +10,7 @@
 - [x] 2.1 Add a shared record action menu component with capability-driven
   action definitions, stable ordering, accessible icon trigger, tooltips, and
   row-click isolation.
-- [ ] 2.2 Add shared create/edit dialog primitives for title/description/icon,
+- [x] 2.2 Add shared create/edit dialog primitives for title/description/icon,
   validation/server errors, dirty-state cancel protection, loading state,
   double-submit prevention, focus trap, initial focus, and focus return.
 - [ ] 2.3 Add a shared destructive confirmation primitive that names the record,
@@ -26,3 +26,10 @@
   migrations start.
 - [ ] 3.3 Run strict OpenSpec validation, focused component tests, UI build, and
   `git diff --check`.
+
+Evidence note: `ui.web/cypress/component/data-table/record-edit-dialog.cy.tsx`
+now covers the shared create/edit dialog title/description/icon contract,
+validation and server errors, dirty cancel protection, loading/double-submit
+prevention, initial focus, and focus return. Task 3.1 remains open until the
+destructive confirmation primitive and keyboard/screen-reader matrix coverage
+are also in place.
