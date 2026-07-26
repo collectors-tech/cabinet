@@ -44,3 +44,50 @@ func (r *Registry) Provider(name string) (Provider, bool) {
 	p, ok := r.providers[strings.ToLower(strings.TrimSpace(name))]
 	return p, ok
 }
+
+type AssistantProviderRegistry struct {
+	providers map[string]AssistantTurnProvider
+}
+
+func NewAssistantProviderRegistry(openAI AssistantTurnProvider) *AssistantProviderRegistry {
+	out := &AssistantProviderRegistry{providers: map[string]AssistantTurnProvider{}}
+	if openAI != nil {
+		out.providers["openai"] = openAI
+	}
+	out.providers["anthropic"] = PlaceholderAssistantProvider{name: "anthropic"}
+	out.providers["google"] = PlaceholderAssistantProvider{name: "google"}
+	return out
+}
+
+func (r *AssistantProviderRegistry) Provider(name string) (AssistantTurnProvider, bool) {
+	if r == nil {
+		return nil, false
+	}
+	p, ok := r.providers[strings.ToLower(strings.TrimSpace(name))]
+	return p, ok
+}
+
+type PlaceholderAssistantProvider struct {
+	name string
+}
+
+func (p PlaceholderAssistantProvider) Name() string {
+	if name := strings.TrimSpace(p.name); name != "" {
+		return name
+	}
+	return "placeholder"
+}
+
+func (p PlaceholderAssistantProvider) RunAssistantTurn(context.Context, AssistantTurnRequest) (AssistantTurnResponse, error) {
+	name := p.Name()
+	return AssistantTurnResponse{
+		Provider:        name,
+		ErrorClass:      "adapter_unavailable",
+		SetupNextAction: "wait_for_supported_assistant_provider_adapter",
+		Metadata: map[string]string{
+			"live_provider":      "false",
+			"adapter_supported":  "false",
+			"placeholder_status": "disabled",
+		},
+	}, fmt.Errorf("%s assistant provider adapter is not supported", name)
+}
