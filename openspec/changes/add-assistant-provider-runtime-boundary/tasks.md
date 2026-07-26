@@ -12,7 +12,7 @@
   governed Chat planning.
 - [x] 2.2 Add a deterministic fake assistant provider adapter for tests without
   network calls.
-- [ ] 2.3 Implement the OpenAI adapter through the active configured
+- [x] 2.3 Implement the OpenAI adapter through the active configured
   integration instance and profile secret boundary.
 - [ ] 2.4 Resolve model/default options from schema-driven provider
   configuration and reject unsupported models with redacted guidance.
