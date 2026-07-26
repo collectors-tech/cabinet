@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -10,7 +11,163 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/profile"
 )
+
+func TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Context"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Agent Context Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	mainResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"summarize the active chat",
+		"context":{
+			"route":{"pathname":"/chats/"},
+			"surface_id":"chats.main",
+			"source_channel":"in-app",
+			"assistant":{"provider":"openai","model":"gpt-4o-mini"}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if mainResp.Code != http.StatusCreated {
+		t.Fatalf("main chat message status=%d body=%s", mainResp.Code, mainResp.Body.String())
+	}
+
+	sideResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"what can you do with this selected item?",
+		"attachment_ids":["media-ctx-001"],
+		"context":{
+			"route":{"pathname":"/inventory"},
+			"surface_id":"chats.side-panel",
+			"source_channel":"in-app",
+			"selection":{"record_type":"inventory_item","record_id":"item-ctx-001"},
+			"permissions":{"state":"ask_before_local_changes"},
+			"setup":{"state":"ready"},
+			"workflow":{"run_id":"workflow-ctx-001"},
+			"assistant":{"provider":"openai","model":"gpt-4o-mini"}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if sideResp.Code != http.StatusBadRequest {
+		t.Fatalf("expected missing attachment fixture to fail before persist, got status=%d body=%s", sideResp.Code, sideResp.Body.String())
+	}
+
+	sideResp = doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"what can you do with this selected item?",
+		"agent_context":{
+			"workspace_id":"workspace-chat-explicit",
+			"route_id":"/inventory",
+			"surface_id":"inventory.item.detail",
+			"selected_record":{"type":"inventory_item","id":"item-ctx-001"},
+			"source_channel":"in-app",
+			"permission_state":"ask_before_local_changes",
+			"setup_state":"ready",
+			"workflow_run_id":"workflow-ctx-001"
+		},
+		"context":{
+			"route":{"pathname":"/inventory"},
+			"surface_id":"chats.side-panel",
+			"source_channel":"in-app",
+			"selection":{"record_type":"inventory_item","record_id":"item-ctx-001"},
+			"permissions":{"state":"ask_before_local_changes"},
+			"setup":{"state":"ready"},
+			"workflow":{"run_id":"workflow-ctx-001"},
+			"assistant":{"provider":"openai","model":"gpt-4o-mini"}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if sideResp.Code != http.StatusCreated {
+		t.Fatalf("side-panel chat message status=%d body=%s", sideResp.Code, sideResp.Body.String())
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list messages status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Messages []struct {
+			Role    string         `json:"role"`
+			Content string         `json:"content"`
+			Context map[string]any `json:"context"`
+		} `json:"messages"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode messages: %v", err)
+	}
+	mainContext := findAgentContext(t, payload.Messages, "summarize the active chat")
+	sideContext := findAgentContext(t, payload.Messages, "what can you do with this selected item?")
+
+	for label, ctx := range map[string]map[string]any{"main": mainContext, "side": sideContext} {
+		if ctx["profile_id"] != p.ID || ctx["thread_id"] != thread.ID || ctx["source_channel"] != "in-app" {
+			t.Fatalf("%s context missing shared profile/thread/channel fields: %+v", label, ctx)
+		}
+	}
+	if mainContext["surface_id"] != "chats.main" || mainContext["route_id"] != "/chats/" || mainContext["intent_text"] != "summarize the active chat" {
+		t.Fatalf("unexpected main chat agent context: %+v", mainContext)
+	}
+	if sideContext["surface_id"] != "inventory.item.detail" || sideContext["route_id"] != "/inventory" || sideContext["intent_text"] != "what can you do with this selected item?" {
+		t.Fatalf("unexpected side-panel agent context: %+v", sideContext)
+	}
+	if sideContext["workspace_id"] != "workspace-chat-explicit" {
+		t.Fatalf("expected explicit workspace context, got %+v", sideContext)
+	}
+	selected, ok := sideContext["selected_record"].(map[string]any)
+	if !ok || selected["type"] != "inventory_item" || selected["id"] != "item-ctx-001" {
+		t.Fatalf("expected side-panel selected record context, got %+v", sideContext)
+	}
+	if sideContext["permission_state"] != "ask_before_local_changes" || sideContext["setup_state"] != "ready" || sideContext["workflow_run_id"] != "workflow-ctx-001" {
+		t.Fatalf("expected side-panel permission/setup/workflow context, got %+v", sideContext)
+	}
+	if strings.Contains(list.Body.String(), "openai_api_key") || strings.Contains(list.Body.String(), "secret") {
+		t.Fatalf("agent context evidence must not expose secret-looking fields: %s", list.Body.String())
+	}
+}
+
+func findAgentContext(t *testing.T, messages []struct {
+	Role    string         `json:"role"`
+	Content string         `json:"content"`
+	Context map[string]any `json:"context"`
+}, content string) map[string]any {
+	t.Helper()
+	for _, message := range messages {
+		if message.Role == "user" && message.Content == content {
+			ctx, ok := message.Context["agent_context"].(map[string]any)
+			if !ok {
+				t.Fatalf("message %q missing agent_context: %+v", content, message.Context)
+			}
+			return ctx
+		}
+	}
+	t.Fatalf("message %q not found in %+v", content, messages)
+	return nil
+}
 
 func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	t.Parallel()
@@ -280,6 +437,103 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	}
 	if !strings.Contains(messagesAfterCancel.Body.String(), "Canceled update_inventory_item") || !strings.Contains(messagesAfterCancel.Body.String(), "no mutation applied") {
 		t.Fatalf("expected canceled assistant history outcome, body=%s", messagesAfterCancel.Body.String())
+	}
+}
+
+func TestChatActionAPIsHonorReadOnlyProfileAuthority(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Read Only Chat Authority"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Read Only Chat"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	repo := profile.NewRepository(a.db)
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeReadOnly,
+	}); err != nil {
+		t.Fatalf("set read-only authority policy: %v", err)
+	}
+
+	blockedPreview := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"capability_id":"inventory.item.create",
+		"payload":{"part_number":"CHAT-AUTH-1","title":"Blocked Chat Authority Item"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedPreview.Code != http.StatusConflict {
+		t.Fatalf("blocked preview status=%d body=%s", blockedPreview.Code, blockedPreview.Body.String())
+	}
+	if !strings.Contains(blockedPreview.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedPreview.Body.String(), `"entry_point":"chat"`) {
+		t.Fatalf("expected chat read-only authority blocker, body=%s", blockedPreview.Body.String())
+	}
+
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeAskBeforeLocalChanges,
+	}); err != nil {
+		t.Fatalf("set default authority policy: %v", err)
+	}
+	allowedPreview := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"capability_id":"inventory.item.create",
+		"payload":{"part_number":"CHAT-AUTH-2","title":"Late Blocked Chat Authority Item"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if allowedPreview.Code != http.StatusOK {
+		t.Fatalf("allowed preview status=%d body=%s", allowedPreview.Code, allowedPreview.Body.String())
+	}
+	var preview struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(allowedPreview.Body).Decode(&preview); err != nil {
+		t.Fatalf("decode allowed preview: %v", err)
+	}
+	if preview.ID == "" {
+		t.Fatalf("expected preview id, body=%s", allowedPreview.Body.String())
+	}
+
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode: profile.AgentAuthorityModeReadOnly,
+	}); err != nil {
+		t.Fatalf("restore read-only authority policy: %v", err)
+	}
+	blockedApply := doRequest(t, a, http.MethodPost, "/api/chat/actions/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"preview_id":"`+preview.ID+`",
+		"confirm":true
+	}`), map[string]string{"Content-Type": "application/json"})
+	if blockedApply.Code != http.StatusConflict {
+		t.Fatalf("blocked apply status=%d body=%s", blockedApply.Code, blockedApply.Body.String())
+	}
+	if !strings.Contains(blockedApply.Body.String(), `"error":"agent_authority_read_only"`) ||
+		!strings.Contains(blockedApply.Body.String(), `"entry_point":"chat"`) {
+		t.Fatalf("expected chat apply read-only authority blocker, body=%s", blockedApply.Body.String())
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number IN ('CHAT-AUTH-1', 'CHAT-AUTH-2')`, p.ID).Scan(&itemCount); err != nil {
+		t.Fatalf("count blocked chat authority items: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("read-only chat authority must not create inventory items, got %d", itemCount)
 	}
 }
 
@@ -742,7 +996,25 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 		t.Fatalf("decode thread: %v", err)
 	}
 
-	routeResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"open media","context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	routeResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"open media",
+		"agent_context":{
+			"workspace_id":"planner-workspace",
+			"route_id":"/chats",
+			"surface_id":"chats.side-panel",
+			"source_channel":"in-app",
+			"permission_state":"ask_before_local_changes",
+			"setup_state":"ready",
+			"workflow_run_id":"planner-parent-run",
+			"audit_id":"audit-review-001",
+			"openai_api_key":"sk-should-not-persist",
+			"local_path":"C:\\secret\\cabinet.txt"
+		},
+		"context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}
+	}`), map[string]string{"Content-Type": "application/json"})
 	if routeResp.Code != http.StatusCreated {
 		t.Fatalf("route app-control status=%d body=%s", routeResp.Code, routeResp.Body.String())
 	}
@@ -834,6 +1106,12 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 	}
 	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) ||
 		!strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) ||
+		!strings.Contains(runs.Body.String(), `"agent_context"`) ||
+		!strings.Contains(runs.Body.String(), `"surface_id":"chats.side-panel"`) ||
+		!strings.Contains(runs.Body.String(), `"source_channel":"in-app"`) ||
+		!strings.Contains(runs.Body.String(), `"permission_state":"ask_before_local_changes"`) ||
+		!strings.Contains(runs.Body.String(), `"workflow_run_id":"planner-parent-run"`) ||
+		!strings.Contains(runs.Body.String(), `"audit_id":"audit-review-001"`) ||
 		!strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) ||
 		!strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) ||
 		!strings.Contains(runs.Body.String(), `"step_id":"preview-change"`) ||
@@ -841,6 +1119,9 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 		!strings.Contains(runs.Body.String(), `"status":"failed"`) ||
 		!strings.Contains(runs.Body.String(), `"code":"unknown_surface"`) {
 		t.Fatalf("expected durable app-control workflow audit runs, body=%s", runs.Body.String())
+	}
+	if strings.Contains(runs.Body.String(), "sk-should-not-persist") || strings.Contains(runs.Body.String(), "C:\\secret") {
+		t.Fatalf("workflow context evidence must not persist secret-looking context, body=%s", runs.Body.String())
 	}
 }
 
@@ -1116,6 +1397,88 @@ func TestAssistantWorkflowRunsPersistLifecycleAndBulkResults(t *testing.T) {
 	}
 	if !strings.Contains(list.Body.String(), run.ID) || !strings.Contains(list.Body.String(), `"preview_id":"preview-1"`) {
 		t.Fatalf("expected listed run with result payload, body=%s", list.Body.String())
+	}
+
+	providerTurn := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"assistant-provider-turn",
+		"capability_id":"assistant.provider.turn",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"chat-message-1",
+		"confirmation_state":"not_required",
+		"input":{"prompt":"summarize the selected item"},
+		"provider_trace":{
+			"provider":"openai",
+			"model":"gpt-4o-mini",
+			"cabinet_tool_authority":"none",
+			"cabinet_database_access":"none",
+			"cabinet_filesystem_access":"none",
+			"governed_dispatch_owner":"cabinet"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if providerTurn.Code != http.StatusCreated {
+		t.Fatalf("create provider turn status=%d body=%s", providerTurn.Code, providerTurn.Body.String())
+	}
+	var providerRun struct {
+		ID            string         `json:"id"`
+		ProviderTrace map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(providerTurn.Body).Decode(&providerRun); err != nil {
+		t.Fatalf("decode provider turn: %v", err)
+	}
+	for key, want := range map[string]string{
+		"cabinet_tool_authority":    "none",
+		"cabinet_database_access":   "none",
+		"cabinet_filesystem_access": "none",
+		"governed_dispatch_owner":   "cabinet",
+	} {
+		if providerRun.ProviderTrace[key] != want {
+			t.Fatalf("expected provider turn trace %s=%s, got %+v", key, want, providerRun.ProviderTrace)
+		}
+	}
+	providerCompleted := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+providerRun.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"provider_trace":{
+			"provider":"openai",
+			"model":"gpt-4o-mini",
+			"error_class":"",
+			"cabinet_tool_authority":"none",
+			"cabinet_database_access":"none",
+			"cabinet_filesystem_access":"none",
+			"governed_dispatch_owner":"cabinet"
+		},
+		"result":{
+			"provider_text":"Provider summary only; Cabinet planner decides any next action.",
+			"planner_input_kind":"assistant_provider_text",
+			"mutation_applied":false,
+			"preview_required_for_mutation":true
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if providerCompleted.Code != http.StatusOK {
+		t.Fatalf("complete provider turn status=%d body=%s", providerCompleted.Code, providerCompleted.Body.String())
+	}
+	completedBody := providerCompleted.Body.String()
+	for _, token := range []string{
+		`"planner_input_kind":"assistant_provider_text"`,
+		`"provider_text":"Provider summary only; Cabinet planner decides any next action."`,
+		`"mutation_applied":false`,
+		`"preview_required_for_mutation":true`,
+		`"cabinet_tool_authority":"none"`,
+		`"cabinet_database_access":"none"`,
+		`"cabinet_filesystem_access":"none"`,
+		`"governed_dispatch_owner":"cabinet"`,
+	} {
+		if !strings.Contains(completedBody, token) {
+			t.Fatalf("provider turn workflow evidence missing %s, body=%s", token, completedBody)
+		}
+	}
+	for _, forbidden := range []string{"tool_call_id", "database_handle", "filesystem_handle", "C:\\", "/Users/"} {
+		if strings.Contains(completedBody, forbidden) {
+			t.Fatalf("provider turn workflow evidence leaked forbidden token %q, body=%s", forbidden, completedBody)
+		}
 	}
 
 	failed := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{

@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/agentcontext"
 	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/auth"
@@ -5423,7 +5424,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		req.ProfileID = strings.TrimSpace(authorized.ProfileID)
-		result, err := handleTelegramAgentText(r.Context(), chatSvc, conn, req)
+		result, err := handleTelegramAgentText(r.Context(), profiles, chatSvc, conn, req)
 		if err != nil {
 			if errors.Is(err, errTelegramAgentTextNeedsClarification) {
 				w.WriteHeader(http.StatusUnprocessableEntity)
@@ -5816,11 +5817,34 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		req = normalizeAgentSkillContextRequest(req)
 		if strings.TrimSpace(req.ProfileID) == "" {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
 		registry := agentSkillRegistry(req.ProfileID)
+		if _, ok := registry.Resolve(req.SkillID); !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.PreviewAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
@@ -5839,11 +5863,34 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		req = normalizeAgentSkillContextRequest(req)
 		if strings.TrimSpace(req.ProfileID) == "" {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
 		registry := agentSkillRegistry(req.ProfileID)
+		if _, ok := registry.Resolve(req.SkillID); !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.ApplyAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
@@ -5861,6 +5908,10 @@ func New(cfg config.Config) (*App, error) {
 			preview.Blocker = blocker
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
+		if err := appendAgentAuthorityDecisionAudit(r.Context(), profiles, authority, agentSkillAuthorityRequest(req), "applied"); err != nil {
+			http.Error(w, `{"error":"agent_authority_audit_failed"}`, http.StatusInternalServerError)
 			return
 		}
 		preview.Allowed = true
@@ -5963,21 +6014,30 @@ func New(cfg config.Config) (*App, error) {
 				Role          string         `json:"role"`
 				Content       string         `json:"content"`
 				Context       map[string]any `json:"context"`
+				AgentContext  map[string]any `json:"agent_context"`
 				AttachmentIDs []string       `json:"attachment_ids"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			message, err := chatSvc.CreateMessageWithAttachments(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, req.Context, req.AttachmentIDs)
+			messageContext := agentcontext.WithEnvelope(req.Context, agentcontext.NormalizeInput{
+				ProfileID:     req.ProfileID,
+				ThreadID:      req.ThreadID,
+				IntentText:    req.Content,
+				Context:       req.Context,
+				AgentContext:  req.AgentContext,
+				AttachmentIDs: req.AttachmentIDs,
+			})
+			message, err := chatSvc.CreateMessageWithAttachments(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, messageContext, req.AttachmentIDs)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_chat_message"}`, http.StatusBadRequest)
 				return
 			}
 			response := map[string]any{"message": message}
 			if strings.EqualFold(strings.TrimSpace(req.Role), "user") {
-				if assistantContext, ok := req.Context["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
-					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, req.Context, message.ID); handled {
+				if assistantContext, ok := messageContext["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
+					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
 						response["app_control"] = appControl
 					} else if chatMessageRequiresAssistantHandoff(req.Content) {
 						inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
@@ -5988,9 +6048,10 @@ func New(cfg config.Config) (*App, error) {
 							Title:     "Assistant handoff queued",
 							Summary:   strings.TrimSpace(req.Content),
 							Metadata: map[string]any{
-								"assistant": assistantContext,
-								"route":     req.Context["route"],
-								"selection": req.Context["selection"],
+								"assistant":     assistantContext,
+								"route":         messageContext["route"],
+								"selection":     messageContext["selection"],
+								"agent_context": messageContext["agent_context"],
 							},
 						})
 						if inboxErr == nil {
@@ -6147,6 +6208,19 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		authority, err := reviewChatActionAuthority(r.Context(), profiles, req, "chat")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.PreviewAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		preview, err := chatSvc.PreviewAction(r.Context(), req)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -6164,6 +6238,28 @@ func New(cfg config.Config) (*App, error) {
 		var req chat.ApplyActionInput
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if !req.Confirm {
+			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := chatSvc.GetActionPreview(r.Context(), req.ProfileID, req.PreviewID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		authority, err := reviewChatActionApplyAuthority(r.Context(), profiles, req, preview, "chat")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.ApplyAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
 			return
 		}
 		result, err := chatSvc.ApplyAction(r.Context(), req)
@@ -9247,6 +9343,388 @@ func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc
 		base["next_action"] = "connect_openai_api_key_or_browser_auth"
 		return base, http.StatusBadRequest
 	}
+}
+
+func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	if profiles == nil {
+		return agentskills.AgentAuthorityReview{}, fmt.Errorf("profile repository required")
+	}
+	policy, err := profiles.GetAgentAuthorityPolicy(ctx, strings.TrimSpace(req.ProfileID))
+	if err != nil {
+		policy = profile.AgentAuthorityPolicy{
+			ProfileID: strings.TrimSpace(req.ProfileID),
+			Mode:      profile.AgentAuthorityModeAskBeforeLocalChanges,
+		}
+	}
+	authorityReq := agentSkillAuthorityRequest(req)
+	strongConfirmation := stringMapParam(req.Parameters, "strong_confirmation_text")
+	if strings.TrimSpace(strongConfirmation) == "" && req.Confirm {
+		strongConfirmation = firstNonEmptyString(strings.TrimSpace(entryPoint), "agent-skill") + "-confirmed"
+	}
+	review, err := registry.ReviewAuthority(authorityReq, agentskills.AgentAuthorityPolicy{
+		ProfileID:              policy.ProfileID,
+		Mode:                   agentskills.AgentAuthorityMode(policy.Mode),
+		ExternalWriteApproved:  policy.ExternalWriteApproved,
+		EntryPoint:             strings.TrimSpace(entryPoint),
+		StrongConfirmationText: strongConfirmation,
+	})
+	if err != nil {
+		return agentskills.AgentAuthorityReview{}, err
+	}
+	if err := appendAgentAuthorityDecisionAudit(ctx, profiles, review, authorityReq, agentAuthorityAuditOutcome(review)); err != nil {
+		return agentskills.AgentAuthorityReview{}, err
+	}
+	return review, nil
+}
+
+func appendAgentAuthorityDecisionAudit(ctx context.Context, profiles *profile.Repository, review agentskills.AgentAuthorityReview, req agentskills.PreviewRequest, outcome string) error {
+	return profiles.AppendAgentAuthorityDecisionAudit(ctx, profile.AgentAuthorityDecisionAudit{
+		ProfileID:      review.ProfileID,
+		EntryPoint:     review.EntryPoint,
+		SkillID:        review.SkillID,
+		Mode:           string(review.Mode),
+		SafetyLevel:    string(review.SafetyLevel),
+		Decision:       review.Decision,
+		Outcome:        strings.TrimSpace(outcome),
+		Blocker:        review.Blocker,
+		SourceSurface:  req.SourceSurface,
+		SourceChannel:  req.SourceChannel,
+		SourceThreadID: req.SourceThreadID,
+		PayloadRef:     agentAuthorityPayloadRef(req.Parameters),
+	})
+}
+
+func agentAuthorityAuditOutcome(review agentskills.AgentAuthorityReview) string {
+	if review.ApplyAllowed {
+		return "apply_allowed"
+	}
+	if review.PreviewAllowed {
+		return "preview_allowed"
+	}
+	return "blocked"
+}
+
+func agentAuthorityPayloadRef(parameters map[string]any) map[string]any {
+	if len(parameters) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(parameters))
+	for key := range parameters {
+		trimmed := strings.TrimSpace(key)
+		if trimmed != "" {
+			keys = append(keys, trimmed)
+		}
+	}
+	sort.Strings(keys)
+	return map[string]any{
+		"parameter_count": len(keys),
+		"parameter_keys":  keys,
+	}
+}
+
+func reviewChatActionAuthority(ctx context.Context, profiles *profile.Repository, req chat.PreviewActionInput, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	skillID := agentSkillIDForChatAction(req.CapabilityID, req.Action)
+	if skillID == "" {
+		return agentskills.AgentAuthorityReview{PreviewAllowed: true, ApplyAllowed: true, Decision: "allowed"}, nil
+	}
+	return reviewAgentSkillAuthority(ctx, profiles, agentskills.NewRegistry(nil), agentskills.PreviewRequest{
+		SkillID:        skillID,
+		ProfileID:      strings.TrimSpace(req.ProfileID),
+		Confirm:        false,
+		SourceSurface:  "chats.main",
+		SourceChannel:  "in-app",
+		SourceThreadID: strings.TrimSpace(req.ThreadID),
+		Parameters:     copyActionPayload(req.Payload),
+	}, entryPoint)
+}
+
+func reviewChatActionApplyAuthority(ctx context.Context, profiles *profile.Repository, req chat.ApplyActionInput, preview chat.ActionPreview, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	skillID := agentSkillIDForChatAction(preview.CapabilityID, preview.Action)
+	if skillID == "" {
+		return agentskills.AgentAuthorityReview{PreviewAllowed: true, ApplyAllowed: true, Decision: "allowed"}, nil
+	}
+	return reviewAgentSkillAuthority(ctx, profiles, agentskills.NewRegistry(nil), agentskills.PreviewRequest{
+		SkillID:        skillID,
+		ProfileID:      strings.TrimSpace(req.ProfileID),
+		Confirm:        req.Confirm,
+		SourceSurface:  "chats.main",
+		SourceChannel:  "in-app",
+		SourceThreadID: strings.TrimSpace(req.ThreadID),
+		Parameters:     map[string]any{"preview_id": strings.TrimSpace(req.PreviewID)},
+	}, entryPoint)
+}
+
+func agentSkillIDForChatAction(capabilityID, action string) string {
+	switch strings.TrimSpace(capabilityID) {
+	case "inventory.item.create":
+		return "cabinet.inventory.create_item"
+	case "inventory.item.update", "update_open_item_title":
+		return "cabinet.inventory.update_item"
+	case "wishlist.entry.create":
+		return "cabinet.wishlist.create_entry"
+	case "collections.item.assign":
+		return "cabinet.collections.assign_item"
+	}
+	switch strings.TrimSpace(action) {
+	case "create_item_stub", "create_inventory_item":
+		return "cabinet.inventory.create_item"
+	case "update_inventory_item", "update_open_item_title":
+		return "cabinet.inventory.update_item"
+	case "create_wishlist_entry":
+		return "cabinet.wishlist.create_entry"
+	case "assign_collection_item":
+		return "cabinet.collections.assign_item"
+	default:
+		return ""
+	}
+}
+
+func copyActionPayload(payload map[string]any) map[string]any {
+	if payload == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(payload))
+	for key, value := range payload {
+		out[key] = value
+	}
+	return out
+}
+
+func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
+	ctx := req.AgentContext
+	if len(ctx) == 0 {
+		return req
+	}
+	if req.Parameters == nil {
+		req.Parameters = map[string]any{}
+	} else {
+		params := make(map[string]any, len(req.Parameters)+8)
+		for key, value := range req.Parameters {
+			params[key] = value
+		}
+		req.Parameters = params
+	}
+
+	if strings.TrimSpace(req.ProfileID) == "" {
+		req.ProfileID = agentContextString(ctx, "profile_id")
+	}
+	if strings.TrimSpace(req.SourceSurface) == "" {
+		req.SourceSurface = firstNonEmptyString(agentContextString(ctx, "surface_id"), agentContextString(ctx, "route_id"))
+	}
+	if strings.TrimSpace(req.SourceChannel) == "" {
+		req.SourceChannel = agentContextString(ctx, "source_channel")
+	}
+	if strings.TrimSpace(req.SourceThreadID) == "" {
+		req.SourceThreadID = agentContextString(ctx, "thread_id")
+	}
+	if strings.TrimSpace(req.SourceMessageID) == "" {
+		req.SourceMessageID = agentContextString(ctx, "message_id")
+	}
+
+	putAgentContextParamIfMissing(req.Parameters, "workspace_id", agentContextString(ctx, "workspace_id"))
+	putAgentContextParamIfMissing(req.Parameters, "route_id", agentContextString(ctx, "route_id"))
+	putAgentContextParamIfMissing(req.Parameters, "permission_state", agentContextString(ctx, "permission_state"))
+	putAgentContextParamIfMissing(req.Parameters, "setup_state", agentContextString(ctx, "setup_state"))
+	putAgentContextParamIfMissing(req.Parameters, "workflow_run_id", agentContextString(ctx, "workflow_run_id"))
+
+	selected := mapValue(ctx["selected_record"])
+	selectedType := agentContextString(selected, "type")
+	selectedID := agentContextString(selected, "id")
+	putAgentContextParamIfMissing(req.Parameters, "selected_record_type", selectedType)
+	putAgentContextParamIfMissing(req.Parameters, "selected_record_id", selectedID)
+	switch selectedType {
+	case "inventory_item", "item":
+		putAgentContextParamIfMissing(req.Parameters, "item_id", selectedID)
+	case "media", "media_asset":
+		putAgentContextParamIfMissing(req.Parameters, "media_id", selectedID)
+	case "wishlist_entry":
+		putAgentContextParamIfMissing(req.Parameters, "wishlist_entry_id", selectedID)
+	case "inbox_notification", "notification":
+		putAgentContextParamIfMissing(req.Parameters, "selected_notification", selectedID)
+	case "collection":
+		putAgentContextParamIfMissing(req.Parameters, "collection_name", selectedID)
+	}
+
+	for _, raw := range anySlice(ctx["media_ids"]) {
+		if mediaID := strings.TrimSpace(fmt.Sprintf("%v", raw)); mediaID != "" {
+			putAgentContextParamIfMissing(req.Parameters, "media_id", mediaID)
+			break
+		}
+	}
+	for _, raw := range anySlice(ctx["attachment_ids"]) {
+		if attachmentID := strings.TrimSpace(fmt.Sprintf("%v", raw)); attachmentID != "" {
+			putAgentContextParamIfMissing(req.Parameters, "attachment_id", attachmentID)
+			break
+		}
+	}
+	return req
+}
+
+func agentSkillContextClarification(registry agentskills.Registry, req agentskills.PreviewRequest) (map[string]any, bool) {
+	if len(req.AgentContext) == 0 {
+		return nil, false
+	}
+	review, err := registry.ReviewRequirements(req)
+	if err != nil {
+		return nil, false
+	}
+	missing := append([]string(nil), review.MissingContext...)
+	for _, contextName := range review.RequiredContext {
+		switch contextName {
+		case "selected_item", "target_item":
+			if !agentSkillHasAnyParam(req.Parameters, "item_id", "selected_item", "target_item") {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "selected_media", "media":
+			if !agentSkillHasAnyParam(req.Parameters, "media_id", "selected_media", "media", "attachment_id") {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "provider":
+			if !agentSkillHasAnyParam(req.Parameters, "provider_id", "provider_name", "provider") {
+				missing = appendMissingContext(missing, contextName)
+			}
+		}
+	}
+	if strings.TrimSpace(req.SourceSurface) == "" && !agentSkillHasAnyParam(req.Parameters, "route_id") {
+		missing = appendMissingContext(missing, "route")
+	}
+	setupState := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", req.Parameters["setup_state"])))
+	if setupState != "ready" {
+		missing = appendMissingContext(missing, "setup_state")
+	}
+	if len(missing) == 0 {
+		return nil, false
+	}
+	guidance := map[string]string{}
+	for _, contextName := range missing {
+		guidance[contextName] = agentSkillContextGuidance(contextName)
+	}
+	return map[string]any{
+		"error":           "missing_context",
+		"blocker":         "missing_context",
+		"skill_id":        review.SkillID,
+		"missing_context": missing,
+		"clarification":   guidance,
+		"next_action":     "Ask for or capture the missing Agent context before previewing or applying this skill.",
+	}, true
+}
+
+func appendMissingContext(missing []string, contextName string) []string {
+	contextName = strings.TrimSpace(contextName)
+	if contextName == "" {
+		return missing
+	}
+	for _, existing := range missing {
+		if existing == contextName {
+			return missing
+		}
+	}
+	return append(missing, contextName)
+}
+
+func agentSkillContextGuidance(contextName string) string {
+	switch contextName {
+	case "profile":
+		return "Select or create the active Cabinet profile for this Agent request."
+	case "workspace":
+		return "Open the Cabinet workspace that owns the requested records."
+	case "thread":
+		return "Attach the active chat thread before invoking this Agent skill."
+	case "route":
+		return "Launch Agent from a Cabinet route or provide the target route in the context envelope."
+	case "selected_item", "target_item":
+		return "Select the inventory item that Agent should use as the target."
+	case "selected_media", "media":
+		return "Select the media asset that Agent should use as the target."
+	case "provider":
+		return "Choose the integration or marketplace provider before invoking this skill."
+	case "setup_state":
+		return "Complete the required setup so the Agent context reports setup_state=ready."
+	default:
+		return "Provide this required Cabinet context before invoking the Agent skill."
+	}
+}
+
+func agentContextString(ctx map[string]any, key string) string {
+	value, ok := ctx[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprintf("%v", value))
+}
+
+func putAgentContextParamIfMissing(params map[string]any, key, value string) {
+	if strings.TrimSpace(value) == "" || agentSkillHasAnyParam(params, key) {
+		return
+	}
+	params[key] = value
+}
+
+func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
+	if req.Parameters == nil {
+		req.Parameters = map[string]any{}
+	} else {
+		params := make(map[string]any, len(req.Parameters)+2)
+		for key, value := range req.Parameters {
+			params[key] = value
+		}
+		req.Parameters = params
+	}
+	if !agentSkillHasAnyParam(req.Parameters, "workspace_id", "workspace") {
+		req.Parameters["workspace_id"] = "direct-api"
+	}
+	if strings.TrimSpace(req.SourceThreadID) == "" {
+		req.SourceThreadID = "direct-api"
+	}
+	if !agentSkillHasAnyParam(req.Parameters, "admin_session", "admin") {
+		req.Parameters["admin_session"] = "direct-api"
+	}
+	for _, key := range []string{
+		"backup_target",
+		"collection_name",
+		"destination",
+		"discovery_result",
+		"export_scope",
+		"line_item",
+		"media",
+		"media_id",
+		"media_source",
+		"provider_id",
+		"purchase_details",
+		"purchase_source",
+		"selected_backup",
+		"selected_file",
+		"selected_notification",
+		"settings_profile",
+		"storage",
+		"setup_payload",
+		"target_email",
+		"target_item",
+		"target_order",
+		"target_role",
+		"target_user",
+		"watch_query",
+		"wishlist_entry",
+	} {
+		if !agentSkillHasAnyParam(req.Parameters, key) {
+			req.Parameters[key] = "direct-api"
+		}
+	}
+	return req
+}
+
+func agentSkillHasAnyParam(params map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		value, ok := params[key]
+		if !ok || value == nil {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func openAIBrowserAuthProviderTestProof(settings map[string]string) (string, string, string, bool) {
@@ -13324,7 +13802,7 @@ func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]
 
 var errTelegramAgentTextNeedsClarification = errors.New("telegram agent text needs clarification")
 
-func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *sql.DB, req telegramAgentTextRequest) (map[string]any, error) {
+func handleTelegramAgentText(ctx context.Context, profiles *profile.Repository, chatSvc *chat.Service, conn *sql.DB, req telegramAgentTextRequest) (map[string]any, error) {
 	profileID := strings.TrimSpace(req.ProfileID)
 	skillID := strings.TrimSpace(req.SkillID)
 	text := strings.TrimSpace(req.Text)
@@ -13385,9 +13863,37 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 		Parameters:      params,
 	}
 	registry := agentskills.NewRegistry(nil)
-	preview, err := registry.Preview(previewReq)
+	if _, ok := registry.Resolve(skillID); !ok {
+		return nil, fmt.Errorf("skill_not_found")
+	}
+	authority, err := reviewAgentSkillAuthority(ctx, profiles, registry, previewReq, "telegram")
 	if err != nil {
 		return nil, err
+	}
+	var preview agentskills.PreviewResponse
+	if authority.PreviewAllowed {
+		preview, err = registry.Preview(previewReq)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		skill, _ := registry.Resolve(skillID)
+		preview = agentskills.PreviewResponse{
+			SkillID:              skill.ID,
+			Status:               skill.Status,
+			SafetyLevel:          skill.SafetyLevel,
+			Executable:           skill.Executable,
+			Allowed:              false,
+			PreviewOnly:          true,
+			MutationApplied:      false,
+			ConfirmationRequired: authority.ConfirmationRequired,
+			SourceSurface:        previewReq.SourceSurface,
+			SourceChannel:        previewReq.SourceChannel,
+			SourceThreadID:       previewReq.SourceThreadID,
+			SourceMessageID:      previewReq.SourceMessageID,
+			Blocker:              authority.Blocker,
+			NextAction:           authority.NextAction,
+		}
 	}
 	workflowRun, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 		ProfileID:         profileID,
@@ -13414,7 +13920,7 @@ func handleTelegramAgentText(ctx context.Context, chatSvc *chat.Service, conn *s
 		return nil, err
 	}
 	var skillResult map[string]any
-	if preview.Allowed || (preview.ConfirmationRequired && req.Confirm) {
+	if authority.ApplyAllowed && (preview.Allowed || (preview.ConfirmationRequired && req.Confirm)) {
 		skillResult, _, err = applyAgentSkill(ctx, conn, chatSvc, skillID, profileID, params)
 		if err != nil {
 			preview.Allowed = false

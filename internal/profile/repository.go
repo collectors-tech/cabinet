@@ -74,6 +74,9 @@ func (r *Repository) Create(ctx context.Context, name string) (Profile, error) {
 	if err := r.db.QueryRowContext(ctx, `SELECT created_at FROM profiles WHERE id = ?`, p.ID).Scan(&p.CreatedAt); err != nil {
 		return Profile{}, fmt.Errorf("load profile: %w", err)
 	}
+	if err := r.ensureDefaultAgentAuthorityPolicy(ctx, p.ID); err != nil {
+		return Profile{}, err
+	}
 
 	return p, nil
 }

@@ -46,6 +46,37 @@ type PermissionDeclaration struct {
 	RequiresConfirm bool `json:"requires_confirm"`
 }
 
+type AgentAuthorityMode string
+
+const (
+	AgentAuthorityReadOnly                AgentAuthorityMode = "read_only"
+	AgentAuthorityAskBeforeLocalChanges   AgentAuthorityMode = "ask_before_local_changes"
+	AgentAuthorityApprovedExternalActions AgentAuthorityMode = "approved_external_actions"
+)
+
+type AgentAuthorityPolicy struct {
+	ProfileID              string             `json:"profile_id"`
+	Mode                   AgentAuthorityMode `json:"mode"`
+	ExternalWriteApproved  bool               `json:"external_write_approved"`
+	EntryPoint             string             `json:"entry_point,omitempty"`
+	StrongConfirmationText string             `json:"strong_confirmation_text,omitempty"`
+}
+
+type AgentAuthorityReview struct {
+	ProfileID            string             `json:"profile_id"`
+	EntryPoint           string             `json:"entry_point,omitempty"`
+	SkillID              string             `json:"skill_id"`
+	Mode                 AgentAuthorityMode `json:"mode"`
+	SafetyLevel          SafetyLevel        `json:"safety_level"`
+	Decision             string             `json:"decision"`
+	Allowed              bool               `json:"allowed"`
+	PreviewAllowed       bool               `json:"preview_allowed"`
+	ApplyAllowed         bool               `json:"apply_allowed"`
+	ConfirmationRequired bool               `json:"confirmation_required"`
+	Blocker              string             `json:"blocker,omitempty"`
+	NextAction           string             `json:"next_action,omitempty"`
+}
+
 type Skill struct {
 	ID                   string                `json:"id"`
 	Version              string                `json:"version"`
@@ -104,6 +135,7 @@ type PreviewRequest struct {
 	SourceChannel   string         `json:"source_channel,omitempty"`
 	SourceThreadID  string         `json:"source_thread_id,omitempty"`
 	SourceMessageID string         `json:"source_message_id,omitempty"`
+	AgentContext    map[string]any `json:"agent_context,omitempty"`
 	Parameters      map[string]any `json:"parameters,omitempty"`
 }
 
@@ -379,6 +411,99 @@ func (r Registry) ReviewRequirements(req PreviewRequest) (RequirementReview, err
 			review.NextAction = "Review the preview and confirm before Cabinet applies this skill."
 		}
 	}
+	return review, nil
+}
+
+func (r Registry) ReviewAuthority(req PreviewRequest, policy AgentAuthorityPolicy) (AgentAuthorityReview, error) {
+	skill, ok := r.Resolve(strings.TrimSpace(req.SkillID))
+	if !ok {
+		return AgentAuthorityReview{}, errors.New("skill_not_found")
+	}
+
+	mode := policy.Mode
+	if mode == "" {
+		mode = AgentAuthorityAskBeforeLocalChanges
+	}
+	profileID := strings.TrimSpace(policy.ProfileID)
+	requestProfileID := strings.TrimSpace(req.ProfileID)
+	review := AgentAuthorityReview{
+		ProfileID:            requestProfileID,
+		EntryPoint:           strings.TrimSpace(policy.EntryPoint),
+		SkillID:              skill.ID,
+		Mode:                 mode,
+		SafetyLevel:          skill.SafetyLevel,
+		Decision:             "blocked",
+		ConfirmationRequired: skill.Permissions.RequiresConfirm,
+		NextAction:           skill.NextAction,
+	}
+	if review.ProfileID == "" {
+		review.ProfileID = profileID
+	}
+
+	if profileID != "" && requestProfileID != "" && profileID != requestProfileID {
+		review.Blocker = "agent_authority_profile_mismatch"
+		review.NextAction = "Retry from the active profile that owns this Agent authority policy."
+		return review, nil
+	}
+
+	requirements, err := r.ReviewRequirements(req)
+	if err != nil {
+		return AgentAuthorityReview{}, err
+	}
+	if !requirements.Executable || requirements.Blocker == "missing_context" {
+		review.Blocker = requirements.Blocker
+		review.NextAction = requirements.NextAction
+		return review, nil
+	}
+
+	isMutation := skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive
+	if mode == AgentAuthorityReadOnly && isMutation {
+		review.Blocker = "agent_authority_read_only"
+		review.NextAction = "Switch the profile Agent authority mode before previewing or applying mutating skills."
+		return review, nil
+	}
+	if skill.Permissions.ExternalWrite && (mode != AgentAuthorityApprovedExternalActions || !policy.ExternalWriteApproved) {
+		review.PreviewAllowed = mode != AgentAuthorityReadOnly
+		review.Blocker = "agent_authority_external_write_not_approved"
+		review.NextAction = "Approve external Agent actions for this profile before running external-write skills."
+		return review, nil
+	}
+	if skill.Permissions.Destructive {
+		review.PreviewAllowed = true
+		review.ConfirmationRequired = true
+		if strings.TrimSpace(policy.StrongConfirmationText) == "" || !req.Confirm {
+			review.Blocker = "strong_confirmation_required"
+			review.NextAction = "Review the destructive target and impact summary, then provide action-specific confirmation."
+			return review, nil
+		}
+		review.Allowed = true
+		review.ApplyAllowed = true
+		review.Decision = "allowed"
+		return review, nil
+	}
+
+	if !isMutation {
+		review.Allowed = true
+		review.PreviewAllowed = true
+		review.ApplyAllowed = true
+		review.Decision = "allowed"
+		review.Blocker = ""
+		return review, nil
+	}
+
+	review.PreviewAllowed = true
+	review.ConfirmationRequired = true
+	if !req.Confirm {
+		review.Blocker = "confirmation_required"
+		if review.NextAction == "" {
+			review.NextAction = "Review the preview and confirm before Cabinet applies this skill."
+		}
+		return review, nil
+	}
+	review.Allowed = true
+	review.ApplyAllowed = true
+	review.Decision = "allowed"
+	review.Blocker = ""
 	return review, nil
 }
 
