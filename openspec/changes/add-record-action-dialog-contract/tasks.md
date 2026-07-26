@@ -19,12 +19,12 @@
 
 ## 3. Evidence
 
-- [ ] 3.1 Add component tests for menu permissions/capabilities, omitted and
+- [x] 3.1 Add component tests for menu permissions/capabilities, omitted and
   disabled operations, keyboard/screen-reader affordances, loading, server
   errors, destructive confirmation, and focus return.
 - [x] 3.2 Add story/demo fixtures documenting the standard before dependent page
   migrations start.
-- [ ] 3.3 Run strict OpenSpec validation, focused component tests, UI build, and
+- [x] 3.3 Run strict OpenSpec validation, focused component tests, UI build, and
   `git diff --check`.
 
 Evidence note: `ui.web/cypress/component/data-table/record-edit-dialog.cy.tsx`
@@ -43,3 +43,9 @@ Evidence note: `ui.web/src/components/data-table/record-action-contract-demo.tsx
 documents the standard record action menu, create/edit dialog, and destructive
 confirmation fixtures for dependent page migrations. Its Cypress component
 coverage lives in `ui.web/cypress/component/data-table/record-action-contract-demo.cy.tsx`.
+
+Evidence note: the full focused component matrix passed with 6/6 tests across
+`record-action-menu.cy.tsx`, `record-edit-dialog.cy.tsx`,
+`record-destructive-confirm-dialog.cy.tsx`, and
+`record-action-contract-demo.cy.tsx`. `npm run build`, strict OpenSpec
+validation, and `git diff --check` also passed before PR handoff.
