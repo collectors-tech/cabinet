@@ -2,8 +2,12 @@
 
 - [x] 1.1 Define the canonical Agent context envelope fields and supported
   launch surfaces for #1714.
-- [ ] 1.2 Add OpenSpec traceability rows mapping the context-envelope
+- [x] 1.2 Add OpenSpec traceability rows mapping the context-envelope
   requirements to implementation evidence.
+  - Added `AGENT-UNIVERSAL-CHANNELS-007` to `openspec/traceability.md`
+    and updated `openspec/traceability/agent-skill-coverage.md` to bind
+    main Chat, side-panel Chat, selected-record launches, route continuity,
+    and workflow evidence to #1714 tests.
 
 ## 2. Shared context model
 
@@ -11,7 +15,7 @@
   Chat, side-panel Chat, and Agent Skill dispatch.
   - Added `internal/agentcontext` with a canonical envelope normalizer and
     wired `/api/chat/messages` to persist `agent_context` for chat messages.
-- [ ] 2.2 Preserve profile, route/surface, thread, selected record, intent,
+- [x] 2.2 Preserve profile, route/surface, thread, selected record, intent,
   attachment/media, source channel, permission/setup, and workflow/audit IDs in
   Agent requests.
   - Added Agent Skill preview/apply request normalization from
@@ -19,7 +23,7 @@
     surface/channel/thread, selected-record IDs, route/setup/workflow context,
     media IDs, and attachment IDs without exposing audit-only IDs in preview
     responses.
-- [ ] 2.3 Return clarification/setup guidance when required profile, route,
+- [x] 2.3 Return clarification/setup guidance when required profile, route,
   selection, provider, permission, or setup context is missing.
   - Added a pre-authority clarification response for Agent Skill preview/apply
     requests launched with `agent_context`; missing route, explicit selected
@@ -53,13 +57,21 @@
 
 ## 4. Evidence
 
-- [ ] 4.1 Add focused Go/API coverage for main Chat context, side-panel context,
+- [x] 4.1 Add focused Go/API coverage for main Chat context, side-panel context,
   selected item context, missing context, and route-change continuity.
   - `TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel` now
     covers explicit top-level chat `agent_context` normalization for side-panel
     selected-record context.
   - `TestChatMessageAppControlPlannerDispatchesDeterministicActions` covers
     sanitized context evidence in app-control workflow runs.
+  - `TestAgentSkillPreviewNormalizesAgentContextEnvelope` covers selected item,
+    media, attachment, source channel, permission/setup, workflow, and audit
+    context propagation into Agent Skill preview/apply dispatch.
+  - `TestAgentSkillPreviewClarifiesMissingAgentContext` covers deterministic
+    missing-route, selection, provider, and setup guidance before authority or
+    mutation preview.
+  - `AGENT-CONTEXT-004/#1714` covers route-change continuity for side-panel
+    Chat at the UI workflow level.
 - [x] 4.2 Add Cypress coverage for side-panel Agent context from at least one
   table/detail surface.
   - `AGENT-CONTEXT-003/#1714` covers an inventory row launch into side-panel
