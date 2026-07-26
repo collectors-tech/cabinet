@@ -63,3 +63,57 @@ func TestProposeOperationStructuredPayload(t *testing.T) {
 		t.Fatal("expected requires confirmation true")
 	}
 }
+
+func TestFakeAssistantProviderReturnsProviderNeutralTurn(t *testing.T) {
+	t.Parallel()
+
+	provider := NewFakeAssistantProvider()
+	req := AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Provider:  "fake",
+		Model:     "fake-assistant-model",
+		Messages: []AssistantTurnMessage{
+			{Role: "system", Content: "stay deterministic"},
+			{Role: "user", Content: "summarize setup state"},
+		},
+		Context: map[string]any{
+			"route": map[string]any{"pathname": "/integrations"},
+		},
+	}
+
+	first, err := provider.RunAssistantTurn(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RunAssistantTurn() error = %v", err)
+	}
+	second, err := provider.RunAssistantTurn(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RunAssistantTurn() second error = %v", err)
+	}
+
+	if first.Provider != "fake" || first.Model != "fake-assistant-model" {
+		t.Fatalf("expected fake provider/model metadata, got %+v", first)
+	}
+	if first.Text == "" || first.Text != second.Text {
+		t.Fatalf("expected deterministic fake turn text, first=%q second=%q", first.Text, second.Text)
+	}
+	if first.Metadata["test_provider"] != "true" || first.Metadata["network"] != "disabled" {
+		t.Fatalf("expected explicit no-network test metadata, got %+v", first.Metadata)
+	}
+	if first.Metadata["openai_ready"] != "" || first.Metadata["anthropic_ready"] != "" || first.Metadata["google_ready"] != "" {
+		t.Fatalf("fake provider must not mark live providers ready, got %+v", first.Metadata)
+	}
+}
+
+func TestFakeAssistantProviderRejectsMissingTurnContext(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewFakeAssistantProvider().RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		Provider:  "fake",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err == nil {
+		t.Fatal("expected missing thread context error")
+	}
+}

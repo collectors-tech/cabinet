@@ -8,9 +8,9 @@
 
 ## 2. Runtime adapter
 
-- [ ] 2.1 Add a provider-neutral assistant turn request/response type used by
+- [x] 2.1 Add a provider-neutral assistant turn request/response type used by
   governed Chat planning.
-- [ ] 2.2 Add a deterministic fake assistant provider adapter for tests without
+- [x] 2.2 Add a deterministic fake assistant provider adapter for tests without
   network calls.
 - [ ] 2.3 Implement the OpenAI adapter through the active configured
   integration instance and profile secret boundary.
