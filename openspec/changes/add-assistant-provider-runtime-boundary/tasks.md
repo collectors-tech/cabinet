@@ -25,7 +25,7 @@
   logs, errors, workflow evidence, and health diagnostics.
 - [x] 3.3 Prove providers cannot call Cabinet skills, database, filesystem, or
   app-control tools directly; #1933 owns governed tool selection/dispatch.
-- [ ] 3.4 Keep Anthropic/Google placeholders unavailable until separate adapters
+- [x] 3.4 Keep Anthropic/Google placeholders unavailable until separate adapters
   exist.
 
 ## 4. Evidence
