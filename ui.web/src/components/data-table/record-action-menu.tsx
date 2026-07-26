@@ -1,4 +1,5 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
+import { forwardRef } from 'react'
 import {
   Archive,
   Copy,
@@ -90,13 +91,19 @@ function visibleActions(actions: RecordActionDefinition[]) {
     })
 }
 
-export function RecordActionMenu({
-  recordLabel,
-  actions,
-  className,
-  triggerClassName,
-  testId = 'record-action-menu',
-}: RecordActionMenuProps) {
+export const RecordActionMenu = forwardRef<
+  HTMLButtonElement,
+  RecordActionMenuProps
+>(function RecordActionMenu(
+  {
+    recordLabel,
+    actions,
+    className,
+    triggerClassName,
+    testId = 'record-action-menu',
+  },
+  ref
+) {
   const triggerLabel = `Open actions for ${recordLabel}`
   const menuActions = visibleActions(actions)
 
@@ -116,6 +123,7 @@ export function RecordActionMenu({
               data-testid={`${testId}-trigger`}
               aria-label={triggerLabel}
               title={triggerLabel}
+              ref={ref}
               onPointerDown={stopRowEvent}
               onClick={stopRowEvent}
               onDoubleClick={stopRowEvent}
@@ -175,4 +183,4 @@ export function RecordActionMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+})

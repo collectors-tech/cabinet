@@ -22,7 +22,7 @@
 - [ ] 3.1 Add component tests for menu permissions/capabilities, omitted and
   disabled operations, keyboard/screen-reader affordances, loading, server
   errors, destructive confirmation, and focus return.
-- [ ] 3.2 Add story/demo fixtures documenting the standard before dependent page
+- [x] 3.2 Add story/demo fixtures documenting the standard before dependent page
   migrations start.
 - [ ] 3.3 Run strict OpenSpec validation, focused component tests, UI build, and
   `git diff --check`.
@@ -38,3 +38,8 @@ Evidence note: `ui.web/cypress/component/data-table/record-destructive-confirm-d
 now covers the shared destructive confirmation primitive naming the record,
 distinguishing archive/soft-delete/permanent-delete consequences, preventing
 duplicate destructive submissions, and returning focus after close.
+
+Evidence note: `ui.web/src/components/data-table/record-action-contract-demo.tsx`
+documents the standard record action menu, create/edit dialog, and destructive
+confirmation fixtures for dependent page migrations. Its Cypress component
+coverage lives in `ui.web/cypress/component/data-table/record-action-contract-demo.cy.tsx`.
