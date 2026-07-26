@@ -32,7 +32,7 @@
 
 - [ ] 4.1 Add focused Go tests for fake adapter, OpenAI adapter setup/readiness,
   normal turn completion, and redacted error taxonomy.
-- [ ] 4.2 Add Chat/API coverage showing governed Chat consumes provider output
+- [x] 4.2 Add Chat/API coverage showing governed Chat consumes provider output
   without provider-side Cabinet tool execution.
 - [ ] 4.3 Run strict OpenSpec validation, focused Go tests, touched UI/API
   validation where relevant, Windows package smoke if runtime wiring affects

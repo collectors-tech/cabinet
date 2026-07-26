@@ -1399,6 +1399,88 @@ func TestAssistantWorkflowRunsPersistLifecycleAndBulkResults(t *testing.T) {
 		t.Fatalf("expected listed run with result payload, body=%s", list.Body.String())
 	}
 
+	providerTurn := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"assistant-provider-turn",
+		"capability_id":"assistant.provider.turn",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"chat-message-1",
+		"confirmation_state":"not_required",
+		"input":{"prompt":"summarize the selected item"},
+		"provider_trace":{
+			"provider":"openai",
+			"model":"gpt-4o-mini",
+			"cabinet_tool_authority":"none",
+			"cabinet_database_access":"none",
+			"cabinet_filesystem_access":"none",
+			"governed_dispatch_owner":"cabinet"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if providerTurn.Code != http.StatusCreated {
+		t.Fatalf("create provider turn status=%d body=%s", providerTurn.Code, providerTurn.Body.String())
+	}
+	var providerRun struct {
+		ID            string         `json:"id"`
+		ProviderTrace map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(providerTurn.Body).Decode(&providerRun); err != nil {
+		t.Fatalf("decode provider turn: %v", err)
+	}
+	for key, want := range map[string]string{
+		"cabinet_tool_authority":    "none",
+		"cabinet_database_access":   "none",
+		"cabinet_filesystem_access": "none",
+		"governed_dispatch_owner":   "cabinet",
+	} {
+		if providerRun.ProviderTrace[key] != want {
+			t.Fatalf("expected provider turn trace %s=%s, got %+v", key, want, providerRun.ProviderTrace)
+		}
+	}
+	providerCompleted := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+providerRun.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"provider_trace":{
+			"provider":"openai",
+			"model":"gpt-4o-mini",
+			"error_class":"",
+			"cabinet_tool_authority":"none",
+			"cabinet_database_access":"none",
+			"cabinet_filesystem_access":"none",
+			"governed_dispatch_owner":"cabinet"
+		},
+		"result":{
+			"provider_text":"Provider summary only; Cabinet planner decides any next action.",
+			"planner_input_kind":"assistant_provider_text",
+			"mutation_applied":false,
+			"preview_required_for_mutation":true
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if providerCompleted.Code != http.StatusOK {
+		t.Fatalf("complete provider turn status=%d body=%s", providerCompleted.Code, providerCompleted.Body.String())
+	}
+	completedBody := providerCompleted.Body.String()
+	for _, token := range []string{
+		`"planner_input_kind":"assistant_provider_text"`,
+		`"provider_text":"Provider summary only; Cabinet planner decides any next action."`,
+		`"mutation_applied":false`,
+		`"preview_required_for_mutation":true`,
+		`"cabinet_tool_authority":"none"`,
+		`"cabinet_database_access":"none"`,
+		`"cabinet_filesystem_access":"none"`,
+		`"governed_dispatch_owner":"cabinet"`,
+	} {
+		if !strings.Contains(completedBody, token) {
+			t.Fatalf("provider turn workflow evidence missing %s, body=%s", token, completedBody)
+		}
+	}
+	for _, forbidden := range []string{"tool_call_id", "database_handle", "filesystem_handle", "C:\\", "/Users/"} {
+		if strings.Contains(completedBody, forbidden) {
+			t.Fatalf("provider turn workflow evidence leaked forbidden token %q, body=%s", forbidden, completedBody)
+		}
+	}
+
 	failed := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"workflow_id":"provider-test",
