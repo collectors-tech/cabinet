@@ -77,6 +77,11 @@ func (p *OpenAIAssistantProvider) RunAssistantTurn(ctx context.Context, req Assi
 		Model:    assistantTurnModel(req.Model, setup.DefaultModel),
 		Metadata: openAIAssistantSetupMetadata(setup),
 	}
+	if !assistantModelSupported(respBase.Model, setup.SupportedModels) {
+		respBase.ErrorClass = "unsupported_model"
+		respBase.SetupNextAction = "choose_supported_openai_model"
+		return respBase, fmt.Errorf("openai assistant model is not supported")
+	}
 	if !setup.Enabled || strings.TrimSpace(setup.APIKeySecretRef) == "" || !strings.EqualFold(strings.TrimSpace(setup.ActiveAuthMethod), "api_key") {
 		respBase.ErrorClass = "missing_credentials"
 		respBase.SetupNextAction = "configure_openai_api_key"
@@ -232,6 +237,22 @@ func assistantTurnModel(requested, fallback string) string {
 		return model
 	}
 	return "gpt-4o-mini"
+}
+
+func assistantModelSupported(model string, supported []string) bool {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false
+	}
+	if len(supported) == 0 {
+		supported = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
+	}
+	for _, candidate := range supported {
+		if strings.EqualFold(model, strings.TrimSpace(candidate)) {
+			return true
+		}
+	}
+	return false
 }
 
 func openAIAssistantSetupMetadata(setup AssistantProviderSetup) map[string]string {

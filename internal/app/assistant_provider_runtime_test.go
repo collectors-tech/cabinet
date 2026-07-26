@@ -52,6 +52,9 @@ func TestProfileAssistantProviderResolverSelectsOpenAIIntegrationInstance(t *tes
 	if setup.ActiveAuthMethod != "api_key" || setup.DefaultModel != "gpt-4.1-mini" || setup.HealthState != "ready" {
 		t.Fatalf("expected setup to merge profile auth and instance model/health, got %+v", setup)
 	}
+	if !assistantRuntimeStringSliceContains(setup.SupportedModels, "gpt-4o-mini") || !assistantRuntimeStringSliceContains(setup.SupportedModels, "gpt-4.1-mini") {
+		t.Fatalf("expected setup to expose schema-driven supported models, got %+v", setup.SupportedModels)
+	}
 	if setup.APIKeySecretRef != instance.SecretRefs["openai_api_key"] || setup.APIKeySecretRef == "" {
 		t.Fatalf("expected setup to expose only instance secret ref, got setup=%+v refs=%+v", setup, instance.SecretRefs)
 	}
@@ -83,4 +86,13 @@ func TestProfileAssistantProviderResolverRejectsUnavailableOpenAIInstance(t *tes
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func assistantRuntimeStringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), strings.TrimSpace(want)) {
+			return true
+		}
+	}
+	return false
 }

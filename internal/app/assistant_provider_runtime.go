@@ -44,6 +44,7 @@ func (r profileAssistantProviderSetupResolver) ResolveAssistantProviderSetup(ctx
 		Enabled:           instance.Enabled,
 		ActiveAuthMethod:  activeMethod,
 		DefaultModel:      defaultModel,
+		SupportedModels:   openAIAssistantSupportedModels(),
 		APIKeySecretRef:   strings.TrimSpace(instance.SecretRefs["openai_api_key"]),
 		HealthState:       firstNonEmpty(instance.HealthState, "unknown"),
 		IntegrationMode:   "assistant_workflows",
@@ -71,6 +72,75 @@ func selectOpenAIAssistantIntegrationInstance(instances []profile.IntegrationIns
 		}
 	}
 	return profile.IntegrationInstance{}, false
+}
+
+func openAIAssistantSupportedModels() []string {
+	schema, ok := providerConfigSchemaForRef("integrations/openai/auth")
+	if !ok {
+		return []string{"gpt-4o-mini"}
+	}
+	for _, field := range assistantSetupSchemaFields(schema["fields"]) {
+		if strings.TrimSpace(fmt.Sprintf("%v", field["key"])) != "assistant_default_model" {
+			continue
+		}
+		models := []string{}
+		for _, option := range assistantSetupSchemaOptions(field["options"]) {
+			if value := strings.TrimSpace(option); value != "" {
+				models = append(models, value)
+			}
+		}
+		if len(models) > 0 {
+			return models
+		}
+	}
+	return []string{"gpt-4o-mini"}
+}
+
+func assistantSetupSchemaFields(value any) []map[string]any {
+	switch typed := value.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		fields := make([]map[string]any, 0, len(typed))
+		for _, raw := range typed {
+			if field, ok := raw.(map[string]any); ok {
+				fields = append(fields, field)
+			}
+		}
+		return fields
+	default:
+		return nil
+	}
+}
+
+func assistantSetupSchemaOptions(value any) []string {
+	switch typed := value.(type) {
+	case []map[string]string:
+		options := make([]string, 0, len(typed))
+		for _, option := range typed {
+			options = append(options, option["value"])
+		}
+		return options
+	case []map[string]any:
+		options := make([]string, 0, len(typed))
+		for _, option := range typed {
+			options = append(options, fmt.Sprintf("%v", option["value"]))
+		}
+		return options
+	case []any:
+		options := []string{}
+		for _, raw := range typed {
+			switch option := raw.(type) {
+			case map[string]any:
+				options = append(options, fmt.Sprintf("%v", option["value"]))
+			case map[string]string:
+				options = append(options, option["value"])
+			}
+		}
+		return options
+	default:
+		return nil
+	}
 }
 
 func firstNonEmpty(values ...string) string {

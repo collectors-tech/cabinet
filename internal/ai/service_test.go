@@ -225,6 +225,51 @@ func TestOpenAIAssistantProviderReportsMissingProfileSecretWithoutNetwork(t *tes
 	}
 }
 
+func TestOpenAIAssistantProviderRejectsUnsupportedModelBeforeSecretOrNetwork(t *testing.T) {
+	t.Parallel()
+
+	var networkCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		networkCalled = true
+		t.Fatalf("OpenAI adapter must not call network for unsupported model")
+	}))
+	defer srv.Close()
+
+	var secretCalls int
+	provider := NewOpenAIAssistantProvider(NewService(Config{BaseURL: srv.URL}), countedAssistantSetupResolver{
+		setup: AssistantProviderSetup{
+			ProviderID:       "openai",
+			Enabled:          true,
+			ActiveAuthMethod: "api_key",
+			DefaultModel:     "gpt-4o-mini",
+			SupportedModels:  []string{"gpt-4o-mini", "gpt-4.1-mini"},
+			APIKeySecretRef:  "integration.inst_123.openai_api_key",
+			HealthState:      "ready",
+			IntegrationID:    "inst_123",
+		},
+		secret:      "sk-boundary-secret",
+		secretCalls: &secretCalls,
+	})
+	resp, err := provider.RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Model:     "gpt-9-experimental",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err == nil {
+		t.Fatal("expected unsupported model error")
+	}
+	if networkCalled || secretCalls != 0 {
+		t.Fatalf("unsupported model must stop before secret/network, network=%v secretCalls=%d", networkCalled, secretCalls)
+	}
+	if resp.ErrorClass != "unsupported_model" || resp.SetupNextAction != "choose_supported_openai_model" || resp.Model != "gpt-9-experimental" {
+		t.Fatalf("expected redacted unsupported model guidance, got resp=%+v err=%v", resp, err)
+	}
+	if strings.Contains(err.Error(), "gpt-9-experimental") || strings.Contains(err.Error(), "sk-") {
+		t.Fatalf("unsupported model error leaked request/secret detail: %v", err)
+	}
+}
+
 type fakeAssistantSetupResolver struct {
 	setup  AssistantProviderSetup
 	secret string
@@ -244,3 +289,20 @@ func (r fakeAssistantSetupResolver) GetAssistantProviderSecret(context.Context, 
 type errFakeSecretMissing struct{}
 
 func (errFakeSecretMissing) Error() string { return "secret not found" }
+
+type countedAssistantSetupResolver struct {
+	setup       AssistantProviderSetup
+	secret      string
+	secretCalls *int
+}
+
+func (r countedAssistantSetupResolver) ResolveAssistantProviderSetup(context.Context, string, string) (AssistantProviderSetup, error) {
+	return r.setup, nil
+}
+
+func (r countedAssistantSetupResolver) GetAssistantProviderSecret(context.Context, string, string) (string, error) {
+	if r.secretCalls != nil {
+		(*r.secretCalls)++
+	}
+	return r.secret, nil
+}

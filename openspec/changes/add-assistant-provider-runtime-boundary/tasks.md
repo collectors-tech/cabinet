@@ -14,7 +14,7 @@
   network calls.
 - [x] 2.3 Implement the OpenAI adapter through the active configured
   integration instance and profile secret boundary.
-- [ ] 2.4 Resolve model/default options from schema-driven provider
+- [x] 2.4 Resolve model/default options from schema-driven provider
   configuration and reject unsupported models with redacted guidance.
 
 ## 3. Safety and diagnostics
