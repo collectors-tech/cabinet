@@ -3,7 +3,7 @@
 - [x] 1.1 Define the assistant-provider runtime boundary, provider-neutral turn
   interface, OpenAI adapter scope, fake-adapter test path, and non-goal
   boundaries for #1481.
-- [ ] 1.2 Add OpenSpec traceability rows for the assistant-provider runtime
+- [x] 1.2 Add OpenSpec traceability rows for the assistant-provider runtime
   requirements and validation evidence.
 
 ## 2. Runtime adapter
