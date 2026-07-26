@@ -2,8 +2,10 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -117,3 +119,128 @@ func TestFakeAssistantProviderRejectsMissingTurnContext(t *testing.T) {
 		t.Fatal("expected missing thread context error")
 	}
 }
+
+func TestOpenAIAssistantProviderUsesProfileSecretBoundary(t *testing.T) {
+	t.Parallel()
+
+	var sawAuthorization string
+	var sawModel string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("unexpected OpenAI path %s", r.URL.Path)
+		}
+		sawAuthorization = r.Header.Get("Authorization")
+		var body struct {
+			Model    string                 `json:"model"`
+			Messages []AssistantTurnMessage `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		sawModel = body.Model
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ready from OpenAI boundary"}}]}`))
+	}))
+	defer srv.Close()
+
+	resolver := fakeAssistantSetupResolver{
+		setup: AssistantProviderSetup{
+			ProviderID:        "openai",
+			Enabled:           true,
+			ActiveAuthMethod:  "api_key",
+			DefaultModel:      "gpt-4.1-mini",
+			APIKeySecretRef:   "integration.inst_123.openai_api_key",
+			HealthState:       "ready",
+			IntegrationMode:   "assistant_workflows",
+			IntegrationID:     "inst_123",
+			ConfigSchemaRef:   "integrations/openai/auth",
+			WorkflowReference: "assistant.chat",
+		},
+		secret: "sk-boundary-secret",
+	}
+	provider := NewOpenAIAssistantProvider(NewService(Config{BaseURL: srv.URL}), resolver)
+	resp, err := provider.RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("RunAssistantTurn() error = %v", err)
+	}
+
+	if sawAuthorization != "Bearer sk-boundary-secret" {
+		t.Fatalf("expected adapter to fetch the profile secret for Authorization, got %q", sawAuthorization)
+	}
+	if sawModel != "gpt-4.1-mini" {
+		t.Fatalf("expected default model from setup boundary, got %q", sawModel)
+	}
+	if resp.Provider != "openai" || resp.Model != "gpt-4.1-mini" || resp.Text != "ready from OpenAI boundary" {
+		t.Fatalf("unexpected OpenAI assistant response: %+v", resp)
+	}
+	if resp.Metadata["integration_id"] != "inst_123" || resp.Metadata["active_auth_method"] != "api_key" || resp.Metadata["secret_ref"] != "" {
+		t.Fatalf("expected non-secret setup metadata only, got %+v", resp.Metadata)
+	}
+	if strings.Contains(resp.Text, "sk-boundary-secret") {
+		t.Fatalf("assistant response leaked secret: %+v", resp)
+	}
+}
+
+func TestOpenAIAssistantProviderReportsMissingProfileSecretWithoutNetwork(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		t.Fatalf("OpenAI adapter must not call network without a profile secret")
+	}))
+	defer srv.Close()
+
+	provider := NewOpenAIAssistantProvider(NewService(Config{BaseURL: srv.URL}), fakeAssistantSetupResolver{
+		setup: AssistantProviderSetup{
+			ProviderID:       "openai",
+			Enabled:          true,
+			ActiveAuthMethod: "api_key",
+			DefaultModel:     "gpt-4o-mini",
+			APIKeySecretRef:  "integration.inst_123.openai_api_key",
+			HealthState:      "ready",
+			IntegrationID:    "inst_123",
+		},
+	})
+	resp, err := provider.RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err == nil {
+		t.Fatal("expected missing credential error")
+	}
+	if called {
+		t.Fatal("network was called despite missing profile secret")
+	}
+	if resp.ErrorClass != "missing_credentials" || resp.SetupNextAction != "configure_openai_api_key" {
+		t.Fatalf("expected redacted missing credential guidance, got resp=%+v err=%v", resp, err)
+	}
+	if strings.Contains(err.Error(), "integration.inst_123.openai_api_key") || strings.Contains(err.Error(), "sk-") {
+		t.Fatalf("missing credential error leaked secret detail: %v", err)
+	}
+}
+
+type fakeAssistantSetupResolver struct {
+	setup  AssistantProviderSetup
+	secret string
+}
+
+func (r fakeAssistantSetupResolver) ResolveAssistantProviderSetup(context.Context, string, string) (AssistantProviderSetup, error) {
+	return r.setup, nil
+}
+
+func (r fakeAssistantSetupResolver) GetAssistantProviderSecret(context.Context, string, string) (string, error) {
+	if strings.TrimSpace(r.secret) == "" {
+		return "", errFakeSecretMissing{}
+	}
+	return r.secret, nil
+}
+
+type errFakeSecretMissing struct{}
+
+func (errFakeSecretMissing) Error() string { return "secret not found" }

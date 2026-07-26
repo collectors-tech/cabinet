@@ -36,6 +36,24 @@ type AssistantTurnProvider interface {
 	RunAssistantTurn(ctx context.Context, req AssistantTurnRequest) (AssistantTurnResponse, error)
 }
 
+type AssistantProviderSetup struct {
+	ProviderID        string
+	Enabled           bool
+	ActiveAuthMethod  string
+	DefaultModel      string
+	APIKeySecretRef   string
+	HealthState       string
+	IntegrationMode   string
+	IntegrationID     string
+	ConfigSchemaRef   string
+	WorkflowReference string
+}
+
+type AssistantProviderSetupResolver interface {
+	ResolveAssistantProviderSetup(ctx context.Context, profileID, providerID string) (AssistantProviderSetup, error)
+	GetAssistantProviderSecret(ctx context.Context, profileID, secretRef string) (string, error)
+}
+
 type FakeAssistantProvider struct {
 	provider string
 	model    string
