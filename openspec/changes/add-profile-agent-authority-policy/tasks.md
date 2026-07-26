@@ -52,4 +52,11 @@
     profile authority policy and redacted policy/decision audit rows survive a
     database restart and a backup/restore round trip after an intervening
     policy mutation.
-- [ ] 4.4 Run strict OpenSpec validation and record results on #1932.
+- [x] 4.4 Run strict OpenSpec validation and record results on #1932.
+  - Final validation rerun on 2026-07-26:
+    `openspec validate add-profile-agent-authority-policy --strict --no-interactive`,
+    `go test ./internal/agentskills -count=1`,
+    `go test ./internal/profile -count=1`,
+    `go test ./internal/mcpserver -count=1`,
+    `go test ./internal/app -run 'Test(AgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy|ChatActionAPIsHonorReadOnlyProfileAuthority|TelegramAgentTextHonorsReadOnlyProfileAuthority)' -count=1`,
+    and `git diff --check` all passed.
