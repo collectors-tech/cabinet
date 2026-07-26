@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement UI-SCREEN-SETTINGS-STORAGE-003: Storage screen SHALL support optional migration
+### Requirement: UI-SCREEN-SETTINGS-STORAGE-003: Storage screen SHALL support optional migration
 Storage migration controls SHALL make canonical media migration state inspectable and recoverable without requiring log-file access.
 
 #### Scenario: Report canonical media migration readiness
