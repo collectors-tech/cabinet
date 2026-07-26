@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/agentcontext"
 	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/auth"
@@ -5977,15 +5978,22 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			message, err := chatSvc.CreateMessageWithAttachments(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, req.Context, req.AttachmentIDs)
+			messageContext := agentcontext.WithEnvelope(req.Context, agentcontext.NormalizeInput{
+				ProfileID:     req.ProfileID,
+				ThreadID:      req.ThreadID,
+				IntentText:    req.Content,
+				Context:       req.Context,
+				AttachmentIDs: req.AttachmentIDs,
+			})
+			message, err := chatSvc.CreateMessageWithAttachments(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, messageContext, req.AttachmentIDs)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_chat_message"}`, http.StatusBadRequest)
 				return
 			}
 			response := map[string]any{"message": message}
 			if strings.EqualFold(strings.TrimSpace(req.Role), "user") {
-				if assistantContext, ok := req.Context["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
-					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, req.Context, message.ID); handled {
+				if assistantContext, ok := messageContext["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
+					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
 						response["app_control"] = appControl
 					} else if chatMessageRequiresAssistantHandoff(req.Content) {
 						inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
@@ -5996,9 +6004,10 @@ func New(cfg config.Config) (*App, error) {
 							Title:     "Assistant handoff queued",
 							Summary:   strings.TrimSpace(req.Content),
 							Metadata: map[string]any{
-								"assistant": assistantContext,
-								"route":     req.Context["route"],
-								"selection": req.Context["selection"],
+								"assistant":     assistantContext,
+								"route":         messageContext["route"],
+								"selection":     messageContext["selection"],
+								"agent_context": messageContext["agent_context"],
 							},
 						})
 						if inboxErr == nil {

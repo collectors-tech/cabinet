@@ -15,6 +15,147 @@ import (
 	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
+func TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Context"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Agent Context Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	mainResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"summarize the active chat",
+		"context":{
+			"route":{"pathname":"/chats/"},
+			"surface_id":"chats.main",
+			"source_channel":"in-app",
+			"assistant":{"provider":"openai","model":"gpt-4o-mini"}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if mainResp.Code != http.StatusCreated {
+		t.Fatalf("main chat message status=%d body=%s", mainResp.Code, mainResp.Body.String())
+	}
+
+	sideResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"what can you do with this selected item?",
+		"attachment_ids":["media-ctx-001"],
+		"context":{
+			"route":{"pathname":"/inventory"},
+			"surface_id":"chats.side-panel",
+			"source_channel":"in-app",
+			"selection":{"record_type":"inventory_item","record_id":"item-ctx-001"},
+			"permissions":{"state":"ask_before_local_changes"},
+			"setup":{"state":"ready"},
+			"workflow":{"run_id":"workflow-ctx-001"},
+			"assistant":{"provider":"openai","model":"gpt-4o-mini"}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if sideResp.Code != http.StatusBadRequest {
+		t.Fatalf("expected missing attachment fixture to fail before persist, got status=%d body=%s", sideResp.Code, sideResp.Body.String())
+	}
+
+	sideResp = doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"what can you do with this selected item?",
+		"context":{
+			"route":{"pathname":"/inventory"},
+			"surface_id":"chats.side-panel",
+			"source_channel":"in-app",
+			"selection":{"record_type":"inventory_item","record_id":"item-ctx-001"},
+			"permissions":{"state":"ask_before_local_changes"},
+			"setup":{"state":"ready"},
+			"workflow":{"run_id":"workflow-ctx-001"},
+			"assistant":{"provider":"openai","model":"gpt-4o-mini"}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if sideResp.Code != http.StatusCreated {
+		t.Fatalf("side-panel chat message status=%d body=%s", sideResp.Code, sideResp.Body.String())
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list messages status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Messages []struct {
+			Role    string         `json:"role"`
+			Content string         `json:"content"`
+			Context map[string]any `json:"context"`
+		} `json:"messages"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode messages: %v", err)
+	}
+	mainContext := findAgentContext(t, payload.Messages, "summarize the active chat")
+	sideContext := findAgentContext(t, payload.Messages, "what can you do with this selected item?")
+
+	for label, ctx := range map[string]map[string]any{"main": mainContext, "side": sideContext} {
+		if ctx["profile_id"] != p.ID || ctx["thread_id"] != thread.ID || ctx["source_channel"] != "in-app" {
+			t.Fatalf("%s context missing shared profile/thread/channel fields: %+v", label, ctx)
+		}
+	}
+	if mainContext["surface_id"] != "chats.main" || mainContext["route_id"] != "/chats/" || mainContext["intent_text"] != "summarize the active chat" {
+		t.Fatalf("unexpected main chat agent context: %+v", mainContext)
+	}
+	if sideContext["surface_id"] != "chats.side-panel" || sideContext["route_id"] != "/inventory" || sideContext["intent_text"] != "what can you do with this selected item?" {
+		t.Fatalf("unexpected side-panel agent context: %+v", sideContext)
+	}
+	selected, ok := sideContext["selected_record"].(map[string]any)
+	if !ok || selected["type"] != "inventory_item" || selected["id"] != "item-ctx-001" {
+		t.Fatalf("expected side-panel selected record context, got %+v", sideContext)
+	}
+	if sideContext["permission_state"] != "ask_before_local_changes" || sideContext["setup_state"] != "ready" || sideContext["workflow_run_id"] != "workflow-ctx-001" {
+		t.Fatalf("expected side-panel permission/setup/workflow context, got %+v", sideContext)
+	}
+	if strings.Contains(list.Body.String(), "openai_api_key") || strings.Contains(list.Body.String(), "secret") {
+		t.Fatalf("agent context evidence must not expose secret-looking fields: %s", list.Body.String())
+	}
+}
+
+func findAgentContext(t *testing.T, messages []struct {
+	Role    string         `json:"role"`
+	Content string         `json:"content"`
+	Context map[string]any `json:"context"`
+}, content string) map[string]any {
+	t.Helper()
+	for _, message := range messages {
+		if message.Role == "user" && message.Content == content {
+			ctx, ok := message.Context["agent_context"].(map[string]any)
+			if !ok {
+				t.Fatalf("message %q missing agent_context: %+v", content, message.Context)
+			}
+			return ctx
+		}
+	}
+	t.Fatalf("message %q not found in %+v", content, messages)
+	return nil
+}
+
 func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	t.Parallel()
 
