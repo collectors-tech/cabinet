@@ -45,6 +45,10 @@ func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, p
 		result["error"] = map[string]any{"code": intent.ErrorCode, "message": intent.ErrorMessage}
 	}
 
+	workflowInput := map[string]any{"content": content, "route": envelope["route"], "selection": envelope["selection"]}
+	if contextEvidence := agentContextEvidence(envelope); len(contextEvidence) > 0 {
+		workflowInput["agent_context"] = contextEvidence
+	}
 	run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 		ProfileID:         profileID,
 		WorkflowID:        "chat.app_control.dispatch",
@@ -52,7 +56,7 @@ func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, p
 		SourceChannel:     "in_app_chat",
 		SourceThreadID:    threadID,
 		SourceMessageID:   sourceMessageID,
-		Input:             map[string]any{"content": content, "route": envelope["route"], "selection": envelope["selection"]},
+		Input:             workflowInput,
 		ProviderTrace:     map[string]any{"mode": "deterministic_app_control_planner", "live_provider": false},
 		ConfirmationState: intent.ConfirmationState,
 	})
@@ -199,6 +203,63 @@ func planChatMessageAppControl(content string, envelope map[string]any) (chatApp
 		}, true
 	}
 	return chatAppControlIntent{}, false
+}
+
+func agentContextEvidence(envelope map[string]any) map[string]any {
+	rawAgentContext, _ := envelope["agent_context"].(map[string]any)
+	if len(rawAgentContext) == 0 {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	for _, key := range []string{
+		"profile_id",
+		"workspace_id",
+		"route_id",
+		"surface_id",
+		"thread_id",
+		"intent_text",
+		"source_channel",
+		"permission_state",
+		"setup_state",
+		"workflow_run_id",
+		"audit_id",
+	} {
+		if value := strings.TrimSpace(fmt.Sprint(rawAgentContext[key])); value != "" && value != "<nil>" {
+			out[key] = value
+		}
+	}
+	if selected, _ := rawAgentContext["selected_record"].(map[string]any); len(selected) > 0 {
+		selectedEvidence := map[string]any{}
+		for _, key := range []string{"type", "id"} {
+			if value := strings.TrimSpace(fmt.Sprint(selected[key])); value != "" && value != "<nil>" {
+				selectedEvidence[key] = value
+			}
+		}
+		if len(selectedEvidence) > 0 {
+			out["selected_record"] = selectedEvidence
+		}
+	}
+	if values := stringSliceEvidence(rawAgentContext["media_ids"]); len(values) > 0 {
+		out["media_ids"] = values
+	}
+	if values := stringSliceEvidence(rawAgentContext["attachment_ids"]); len(values) > 0 {
+		out["attachment_ids"] = values
+	}
+	return out
+}
+
+func stringSliceEvidence(raw any) []string {
+	rawSlice, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(rawSlice))
+	for _, entry := range rawSlice {
+		if value := strings.TrimSpace(fmt.Sprint(entry)); value != "" && value != "<nil>" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func requestsGuidedInventoryUpdate(normalized string) bool {

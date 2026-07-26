@@ -44,8 +44,12 @@
     and `AGENT-CONTEXT-004/#1714` Cypress coverage proves the same thread
     remains active after governed navigation while the next message records the
     changed route.
-- [ ] 3.4 Record context evidence in workflow/action/audit metadata without
+- [x] 3.4 Record context evidence in workflow/action/audit metadata without
   storing secrets or invented targets.
+  - App-control workflow runs now store sanitized `agent_context` evidence in
+    workflow input for Action Timeline review, including profile/source
+    surface/channel/route/thread/workflow/audit fields while omitting arbitrary
+    secret-looking request fields.
 
 ## 4. Evidence
 
@@ -54,6 +58,8 @@
   - `TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel` now
     covers explicit top-level chat `agent_context` normalization for side-panel
     selected-record context.
+  - `TestChatMessageAppControlPlannerDispatchesDeterministicActions` covers
+    sanitized context evidence in app-control workflow runs.
 - [x] 4.2 Add Cypress coverage for side-panel Agent context from at least one
   table/detail surface.
   - `AGENT-CONTEXT-003/#1714` covers an inventory row launch into side-panel

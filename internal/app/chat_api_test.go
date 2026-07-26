@@ -996,7 +996,25 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 		t.Fatalf("decode thread: %v", err)
 	}
 
-	routeResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"open media","context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	routeResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"open media",
+		"agent_context":{
+			"workspace_id":"planner-workspace",
+			"route_id":"/chats",
+			"surface_id":"chats.side-panel",
+			"source_channel":"in-app",
+			"permission_state":"ask_before_local_changes",
+			"setup_state":"ready",
+			"workflow_run_id":"planner-parent-run",
+			"audit_id":"audit-review-001",
+			"openai_api_key":"sk-should-not-persist",
+			"local_path":"C:\\secret\\cabinet.txt"
+		},
+		"context":{"route":{"pathname":"/chats"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}
+	}`), map[string]string{"Content-Type": "application/json"})
 	if routeResp.Code != http.StatusCreated {
 		t.Fatalf("route app-control status=%d body=%s", routeResp.Code, routeResp.Body.String())
 	}
@@ -1088,6 +1106,12 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 	}
 	if !strings.Contains(runs.Body.String(), `"workflow_id":"chat.app_control.dispatch"`) ||
 		!strings.Contains(runs.Body.String(), `"capability_id":"navigate.open_surface"`) ||
+		!strings.Contains(runs.Body.String(), `"agent_context"`) ||
+		!strings.Contains(runs.Body.String(), `"surface_id":"chats.side-panel"`) ||
+		!strings.Contains(runs.Body.String(), `"source_channel":"in-app"`) ||
+		!strings.Contains(runs.Body.String(), `"permission_state":"ask_before_local_changes"`) ||
+		!strings.Contains(runs.Body.String(), `"workflow_run_id":"planner-parent-run"`) ||
+		!strings.Contains(runs.Body.String(), `"audit_id":"audit-review-001"`) ||
 		!strings.Contains(runs.Body.String(), `"capability_id":"inventory.item.create"`) ||
 		!strings.Contains(runs.Body.String(), `"capability_id":"update_open_item_title"`) ||
 		!strings.Contains(runs.Body.String(), `"step_id":"preview-change"`) ||
@@ -1095,6 +1119,9 @@ func TestChatMessageAppControlPlannerDispatchesDeterministicActions(t *testing.T
 		!strings.Contains(runs.Body.String(), `"status":"failed"`) ||
 		!strings.Contains(runs.Body.String(), `"code":"unknown_surface"`) {
 		t.Fatalf("expected durable app-control workflow audit runs, body=%s", runs.Body.String())
+	}
+	if strings.Contains(runs.Body.String(), "sk-should-not-persist") || strings.Contains(runs.Body.String(), "C:\\secret") {
+		t.Fatalf("workflow context evidence must not persist secret-looking context, body=%s", runs.Body.String())
 	}
 }
 
