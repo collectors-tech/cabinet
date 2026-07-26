@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -95,8 +97,8 @@ func (p *OpenAIAssistantProvider) RunAssistantTurn(ctx context.Context, req Assi
 	}
 	text, err := p.service.runAssistantChatCompletion(ctx, apiKey, respBase.Model, req.Messages)
 	if err != nil {
-		respBase.ErrorClass = "provider_failure"
-		respBase.SetupNextAction = "retry_openai_assistant_turn"
+		respBase.ErrorClass = classifyAssistantProviderError(err)
+		respBase.SetupNextAction = assistantProviderFailureNextAction(respBase.ErrorClass)
 		return respBase, err
 	}
 	respBase.Text = text
@@ -207,11 +209,11 @@ func (s *Service) runAssistantChatCompletion(ctx context.Context, apiKey, model 
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", classifyAssistantProviderTransportError(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("assistant turn failed: status %d", resp.StatusCode)
+		return "", assistantProviderHTTPError{statusCode: resp.StatusCode}
 	}
 	var payload struct {
 		Choices []struct {
@@ -227,6 +229,93 @@ func (s *Service) runAssistantChatCompletion(ctx context.Context, apiKey, model 
 		return "", fmt.Errorf("no AI choices")
 	}
 	return strings.TrimSpace(payload.Choices[0].Message.Content), nil
+}
+
+type assistantProviderHTTPError struct {
+	statusCode int
+}
+
+func (e assistantProviderHTTPError) Error() string {
+	return fmt.Sprintf("assistant provider request failed: status %d", e.statusCode)
+}
+
+type assistantProviderClassifiedError struct {
+	class string
+	err   error
+}
+
+func (e assistantProviderClassifiedError) Error() string {
+	if e.err == nil {
+		return e.class
+	}
+	return e.err.Error()
+}
+
+func (e assistantProviderClassifiedError) Unwrap() error {
+	return e.err
+}
+
+func classifyAssistantProviderTransportError(err error) error {
+	if err == nil {
+		return nil
+	}
+	class := "transport_failure"
+	switch {
+	case errors.Is(err, context.Canceled):
+		class = "cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		class = "timeout"
+	default:
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			class = "timeout"
+		}
+	}
+	return assistantProviderClassifiedError{class: class, err: err}
+}
+
+func classifyAssistantProviderError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var classified assistantProviderClassifiedError
+	if errors.As(err, &classified) && strings.TrimSpace(classified.class) != "" {
+		return classified.class
+	}
+	var httpErr assistantProviderHTTPError
+	if errors.As(err, &httpErr) {
+		if httpErr.statusCode == http.StatusTooManyRequests {
+			return "rate_limit"
+		}
+		return "provider_failure"
+	}
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	default:
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return "timeout"
+		}
+		return "provider_failure"
+	}
+}
+
+func assistantProviderFailureNextAction(class string) string {
+	switch class {
+	case "cancelled":
+		return "retry_openai_assistant_turn"
+	case "timeout":
+		return "retry_openai_assistant_turn_after_timeout"
+	case "rate_limit":
+		return "wait_for_openai_rate_limit"
+	case "transport_failure":
+		return "retry_when_openai_network_is_available"
+	default:
+		return "retry_openai_assistant_turn"
+	}
 }
 
 func assistantTurnModel(requested, fallback string) string {

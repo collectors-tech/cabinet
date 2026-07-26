@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConnectivityAndSuggest(t *testing.T) {
@@ -270,6 +271,125 @@ func TestOpenAIAssistantProviderRejectsUnsupportedModelBeforeSecretOrNetwork(t *
 	}
 }
 
+func TestOpenAIAssistantProviderClassifiesProviderFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		status         int
+		delay          time.Duration
+		timeout        time.Duration
+		wantClass      string
+		wantNextAction string
+	}{
+		{
+			name:           "rate limit",
+			status:         http.StatusTooManyRequests,
+			wantClass:      "rate_limit",
+			wantNextAction: "wait_for_openai_rate_limit",
+		},
+		{
+			name:           "provider failure",
+			status:         http.StatusInternalServerError,
+			wantClass:      "provider_failure",
+			wantNextAction: "retry_openai_assistant_turn",
+		},
+		{
+			name:           "timeout",
+			status:         http.StatusOK,
+			delay:          50 * time.Millisecond,
+			timeout:        5 * time.Millisecond,
+			wantClass:      "timeout",
+			wantNextAction: "retry_openai_assistant_turn_after_timeout",
+		},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.delay > 0 {
+					time.Sleep(tc.delay)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				if tc.status < 300 {
+					_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+				} else {
+					_, _ = w.Write([]byte(`{"error":{"message":"provider failed with sk-live-sensitive detail"}}`))
+				}
+			}))
+			defer srv.Close()
+
+			ctx := context.Background()
+			if tc.timeout > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.timeout)
+				defer cancel()
+			}
+			resp, err := newReadyOpenAITestProvider(srv.URL).RunAssistantTurn(ctx, AssistantTurnRequest{
+				ProfileID: "profile-1",
+				ThreadID:  "thread-1",
+				Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+			})
+			if err == nil {
+				t.Fatal("expected classified provider error")
+			}
+			if resp.ErrorClass != tc.wantClass || resp.SetupNextAction != tc.wantNextAction {
+				t.Fatalf("expected %s/%s, got resp=%+v err=%v", tc.wantClass, tc.wantNextAction, resp, err)
+			}
+			if strings.Contains(err.Error(), "sk-live-sensitive") {
+				t.Fatalf("classified provider error leaked raw provider payload: %v", err)
+			}
+		})
+	}
+}
+
+func TestOpenAIAssistantProviderClassifiesTransportFailure(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("closed test server should not receive requests")
+	}))
+	baseURL := srv.URL
+	srv.Close()
+
+	resp, err := newReadyOpenAITestProvider(baseURL).RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err == nil {
+		t.Fatal("expected transport error")
+	}
+	if resp.ErrorClass != "transport_failure" || resp.SetupNextAction != "retry_when_openai_network_is_available" {
+		t.Fatalf("expected transport failure guidance, got resp=%+v err=%v", resp, err)
+	}
+	if strings.Contains(err.Error(), "sk-boundary-secret") {
+		t.Fatalf("transport error leaked secret detail: %v", err)
+	}
+}
+
+func TestOpenAIAssistantProviderClassifiesCancelledTurn(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	resp, err := newReadyOpenAITestProvider("https://example.invalid").RunAssistantTurn(ctx, AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	if resp.ErrorClass != "cancelled" {
+		t.Fatalf("expected cancelled error class, got resp=%+v err=%v", resp, err)
+	}
+}
+
 type fakeAssistantSetupResolver struct {
 	setup  AssistantProviderSetup
 	secret string
@@ -305,4 +425,20 @@ func (r countedAssistantSetupResolver) GetAssistantProviderSecret(context.Contex
 		(*r.secretCalls)++
 	}
 	return r.secret, nil
+}
+
+func newReadyOpenAITestProvider(baseURL string) *OpenAIAssistantProvider {
+	return NewOpenAIAssistantProvider(NewService(Config{BaseURL: baseURL}), fakeAssistantSetupResolver{
+		setup: AssistantProviderSetup{
+			ProviderID:       "openai",
+			Enabled:          true,
+			ActiveAuthMethod: "api_key",
+			DefaultModel:     "gpt-4o-mini",
+			SupportedModels:  []string{"gpt-4o-mini"},
+			APIKeySecretRef:  "integration.inst_123.openai_api_key",
+			HealthState:      "ready",
+			IntegrationID:    "inst_123",
+		},
+		secret: "sk-boundary-secret",
+	})
 }

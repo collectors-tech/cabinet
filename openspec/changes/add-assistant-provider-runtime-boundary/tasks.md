@@ -19,7 +19,7 @@
 
 ## 3. Safety and diagnostics
 
-- [ ] 3.1 Enforce timeout, cancellation, retry/rate-limit, and transport error
+- [x] 3.1 Enforce timeout, cancellation, retry/rate-limit, and transport error
   classification with bounded tests.
 - [ ] 3.2 Keep provider credentials inside Cabinet secret storage and redact
   logs, errors, workflow evidence, and health diagnostics.
