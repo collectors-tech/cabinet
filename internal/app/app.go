@@ -5797,6 +5797,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
 			return
 		}
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
 		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
 		if err != nil {
 			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
@@ -5836,6 +5841,11 @@ func New(cfg config.Config) (*App, error) {
 		registry := agentSkillRegistry(req.ProfileID)
 		if _, ok := registry.Resolve(req.SkillID); !ok {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
 			return
 		}
 		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
@@ -9516,6 +9526,91 @@ func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskil
 		}
 	}
 	return req
+}
+
+func agentSkillContextClarification(registry agentskills.Registry, req agentskills.PreviewRequest) (map[string]any, bool) {
+	if len(req.AgentContext) == 0 {
+		return nil, false
+	}
+	review, err := registry.ReviewRequirements(req)
+	if err != nil {
+		return nil, false
+	}
+	missing := append([]string(nil), review.MissingContext...)
+	for _, contextName := range review.RequiredContext {
+		switch contextName {
+		case "selected_item", "target_item":
+			if !agentSkillHasAnyParam(req.Parameters, "item_id", "selected_item", "target_item") {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "selected_media", "media":
+			if !agentSkillHasAnyParam(req.Parameters, "media_id", "selected_media", "media", "attachment_id") {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "provider":
+			if !agentSkillHasAnyParam(req.Parameters, "provider_id", "provider_name", "provider") {
+				missing = appendMissingContext(missing, contextName)
+			}
+		}
+	}
+	if strings.TrimSpace(req.SourceSurface) == "" && !agentSkillHasAnyParam(req.Parameters, "route_id") {
+		missing = appendMissingContext(missing, "route")
+	}
+	setupState := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", req.Parameters["setup_state"])))
+	if setupState != "ready" {
+		missing = appendMissingContext(missing, "setup_state")
+	}
+	if len(missing) == 0 {
+		return nil, false
+	}
+	guidance := map[string]string{}
+	for _, contextName := range missing {
+		guidance[contextName] = agentSkillContextGuidance(contextName)
+	}
+	return map[string]any{
+		"error":           "missing_context",
+		"blocker":         "missing_context",
+		"skill_id":        review.SkillID,
+		"missing_context": missing,
+		"clarification":   guidance,
+		"next_action":     "Ask for or capture the missing Agent context before previewing or applying this skill.",
+	}, true
+}
+
+func appendMissingContext(missing []string, contextName string) []string {
+	contextName = strings.TrimSpace(contextName)
+	if contextName == "" {
+		return missing
+	}
+	for _, existing := range missing {
+		if existing == contextName {
+			return missing
+		}
+	}
+	return append(missing, contextName)
+}
+
+func agentSkillContextGuidance(contextName string) string {
+	switch contextName {
+	case "profile":
+		return "Select or create the active Cabinet profile for this Agent request."
+	case "workspace":
+		return "Open the Cabinet workspace that owns the requested records."
+	case "thread":
+		return "Attach the active chat thread before invoking this Agent skill."
+	case "route":
+		return "Launch Agent from a Cabinet route or provide the target route in the context envelope."
+	case "selected_item", "target_item":
+		return "Select the inventory item that Agent should use as the target."
+	case "selected_media", "media":
+		return "Select the media asset that Agent should use as the target."
+	case "provider":
+		return "Choose the integration or marketplace provider before invoking this skill."
+	case "setup_state":
+		return "Complete the required setup so the Agent context reports setup_state=ready."
+	default:
+		return "Provide this required Cabinet context before invoking the Agent skill."
+	}
 }
 
 func agentContextString(ctx map[string]any, key string) string {

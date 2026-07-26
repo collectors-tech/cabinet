@@ -21,6 +21,10 @@
     responses.
 - [ ] 2.3 Return clarification/setup guidance when required profile, route,
   selection, provider, permission, or setup context is missing.
+  - Added a pre-authority clarification response for Agent Skill preview/apply
+    requests launched with `agent_context`; missing route, explicit selected
+    target, provider, and setup readiness now return actionable
+    `missing_context` guidance instead of invented direct API placeholders.
 
 ## 3. Entry points
 
