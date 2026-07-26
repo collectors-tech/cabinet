@@ -33,8 +33,11 @@
     main Chat and side-panel Chat requests preserving profile/thread/channel
     fields through the same `agent_context` shape while retaining surface and
     selected-record differences.
-- [ ] 3.2 Add at least one supported table/detail surface launch path that
+- [x] 3.2 Add at least one supported table/detail surface launch path that
   passes selected-record context.
+  - Inventory row selection now persists a canonical selected-record bridge for
+    side-panel Agent launches and sends `inventory.item.detail` context to
+    Agent Skill preview/apply requests.
 - [ ] 3.3 Preserve profile/thread/workflow context across governed route changes
   while keeping side-panel Chat state available.
 - [ ] 3.4 Record context evidence in workflow/action/audit metadata without
@@ -44,7 +47,10 @@
 
 - [ ] 4.1 Add focused Go/API coverage for main Chat context, side-panel context,
   selected item context, missing context, and route-change continuity.
-- [ ] 4.2 Add Cypress coverage for side-panel Agent context from at least one
+- [x] 4.2 Add Cypress coverage for side-panel Agent context from at least one
   table/detail surface.
+  - `AGENT-CONTEXT-003/#1714` covers an inventory row launch into side-panel
+    Agent Skill preview with route, surface, thread, source channel, and
+    selected inventory item context.
 - [ ] 4.3 Run touched UI validation, focused Go tests, strict OpenSpec
   validation, and `git diff --check`.

@@ -166,6 +166,35 @@ type InventoryItem = {
   source_urls: string[]
 }
 
+function agentSelectedRecordKey(profileID: string) {
+  return `cabinet.agent.selected_record.${profileID || 'local'}`
+}
+
+function persistAgentSelectedInventoryItem(
+  profileID: string,
+  item: InventoryItem | null
+) {
+  if (typeof window === 'undefined') return
+  const key = agentSelectedRecordKey(profileID)
+  try {
+    if (!item) {
+      window.localStorage.removeItem(key)
+      window.localStorage.removeItem(agentSelectedRecordKey('local'))
+      return
+    }
+    const payload = JSON.stringify({
+      type: 'inventory_item',
+      id: item.id,
+      label: item.part_number || item.title || item.id,
+      title: item.title,
+    })
+    window.localStorage.setItem(key, payload)
+    window.localStorage.setItem(agentSelectedRecordKey('local'), payload)
+  } catch {
+    // Keep row focus usable if localStorage is unavailable.
+  }
+}
+
 type InventoryItemDraft = {
   part_number: string
   title: string
@@ -2213,10 +2242,14 @@ export function Collection({
   )
   const activeWorkspaceCollectionRef = useRef(activeWorkspaceCollection)
 
-  const selectInventoryItem = useCallback((item: InventoryItem | null) => {
-    setSelectedItemID(item?.id ?? '')
-    setSelectedItemLabel(item ? item.part_number || item.id : '')
-  }, [])
+  const selectInventoryItem = useCallback(
+    (item: InventoryItem | null) => {
+      setSelectedItemID(item?.id ?? '')
+      setSelectedItemLabel(item ? item.part_number || item.id : '')
+      persistAgentSelectedInventoryItem(activeProfileID, item)
+    },
+    [activeProfileID]
+  )
 
   useEffect(() => {
     selectedItemIDRef.current = selectedItemID

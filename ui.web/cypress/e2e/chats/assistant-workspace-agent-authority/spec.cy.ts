@@ -188,4 +188,85 @@ describe('chats/assistant-workspace-agent-authority', () => {
       'INV-1932-BYPASS'
     ).should('not.exist')
   })
+
+  it('AGENT-CONTEXT-003/#1714 sends selected inventory row context with side-panel Agent Skill preview', () => {
+    cy.intercept('GET', '/api/items*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-agent-context-1',
+            part_number: 'CTX-1714-ROW',
+            title: 'Agent Context Row',
+            status: 'todo',
+            condition: 'new',
+            category: 'feature',
+            item_type: 'car',
+            packaging_grade_type: 'carded',
+            brand: 'AFX',
+            priority: 'medium',
+            description: '',
+            notes: '',
+            tags: [],
+            source_urls: [],
+          },
+        ],
+      },
+    }).as('itemsForAgentContext')
+    bootstrapInventory()
+    seedAssistantThread()
+    cy.wait('@itemsForAgentContext')
+    cy.get('[data-testid="inventory-item-row-item-agent-context-1"]')
+      .should('be.visible')
+      .click()
+    cy.intercept('POST', '/api/agent/skills/preview').as('agentSkillPreview')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-selected-record-context"]').should(
+      'contain',
+      'inventory_item:CTX-1714-ROW'
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.inventory.update_item',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('item-agent-context-1', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('Agent Context Row renamed', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@agentSkillPreview').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.skill_id).to.eq('cabinet.inventory.update_item')
+      expect(request.body.agent_context.route_id).to.match(/^\/inventory\/?$/)
+      expect(request.body.agent_context.surface_id).to.eq(
+        'inventory.item.detail'
+      )
+      expect(request.body.agent_context.source_channel).to.eq('in-app')
+      expect(request.body.agent_context.thread_id)
+        .to.be.a('string')
+        .and.not.eq('')
+      expect(request.body.agent_context.selected_record).to.deep.eq({
+        type: 'inventory_item',
+        id: 'item-agent-context-1',
+      })
+      expect(request.body.parameters.item_id).to.eq('item-agent-context-1')
+      expect(response?.statusCode).to.eq(200)
+      expect(response?.body.source_channel).to.eq('in-app')
+      expect(response?.body.source_thread_id).to.eq(
+        request.body.agent_context.thread_id
+      )
+    })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.inventory.update_item')
+      .and('contain', 'confirmation_required')
+  })
 })
