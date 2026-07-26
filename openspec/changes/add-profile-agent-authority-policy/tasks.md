@@ -38,12 +38,15 @@
 ## 4. Evidence
 
 - [x] 4.1 Add focused unit coverage for the shared authority guard.
-- [ ] 4.2 Add API and end-to-end coverage for allowed, blocked, and bypass
+- [x] 4.2 Add API and end-to-end coverage for allowed, blocked, and bypass
   attempt paths across Chat, side panel, direct API, MCP, and Telegram.
   - Current evidence includes direct Skill API, Chat action API, Telegram Agent
     text API, MCP `tools/call`, and side-panel Agent Skill read-only blocker
-    coverage, plus Settings > Skills policy save coverage. Remaining follow-up
-    should fill any missing allowed/bypass matrix cells before closing the item.
+    coverage, plus Settings > Skills policy save coverage. Side-panel E2E
+    evidence now also covers a late-apply bypass attempt: preview is prepared in
+    `ask_before_local_changes`, the profile is changed to `read_only`, the user
+    confirms apply, and the direct API apply path returns
+    `agent_authority_read_only` without creating the inventory item.
 - [x] 4.3 Add restart plus backup/restore persistence coverage.
   - `TestAgentAuthorityPolicySurvivesRestartAndBackupRestore` proves the
     profile authority policy and redacted policy/decision audit rows survive a

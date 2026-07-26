@@ -111,4 +111,81 @@ describe('chats/assistant-workspace-agent-authority', () => {
       'not.exist'
     )
   })
+
+  it('AGENT-AUTHORITY-007/#1932 blocks side-panel Agent Skill apply after policy changes to read-only', () => {
+    bootstrapInventory()
+    seedAssistantThread()
+    cy.request('PUT', '/api/profiles/e2e-profile-001/settings', {
+      settings: {
+        'agent.authority.external_write_approved': 'false',
+        'agent.authority.mode': 'ask_before_local_changes',
+      },
+    })
+    cy.intercept('POST', '/api/agent/skills/preview').as('agentSkillPreview')
+    cy.intercept('POST', '/api/agent/skills/apply').as('agentSkillApply')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.inventory.create_item',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('INV-1932-BYPASS', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('Side panel late apply bypass item', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@agentSkillPreview').then(({ response }) => {
+      expect(response?.statusCode).to.eq(200)
+      expect(response?.body.skill_id).to.eq('cabinet.inventory.create_item')
+      expect(response?.body.confirmation_required).to.eq(true)
+      expect(response?.body.blocker).to.eq('confirmation_required')
+    })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.inventory.create_item')
+      .and('contain', 'confirmation_required')
+
+    cy.request('PUT', '/api/profiles/e2e-profile-001/settings', {
+      settings: {
+        'agent.authority.external_write_approved': 'false',
+        'agent.authority.mode': 'read_only',
+      },
+    })
+    cy.get('[data-testid="shell-assistant-agent-skill-apply"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click({
+      force: true,
+    })
+
+    cy.wait('@agentSkillApply').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.skill_id).to.eq('cabinet.inventory.create_item')
+      expect(request.body.parameters.part_number).to.eq('INV-1932-BYPASS')
+      expect(response?.statusCode).to.eq(409)
+      expect(response?.body.error).to.eq('agent_authority_read_only')
+      expect(response?.body.authority.entry_point).to.eq('direct-api')
+    })
+    cy.get('[data-testid="shell-assistant-error"]')
+      .should('contain', 'agent_authority_read_only')
+      .and('contain', 'direct-api')
+    cy.get('[data-testid="shell-assistant-permission-guidance"]').should(
+      'contain',
+      'Switch the profile Agent authority mode'
+    )
+    cy.contains(
+      '[data-testid="inventory-list-item"]',
+      'INV-1932-BYPASS'
+    ).should('not.exist')
+  })
 })
