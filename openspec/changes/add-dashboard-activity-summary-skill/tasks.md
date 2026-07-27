@@ -3,8 +3,11 @@
 - [x] 1.1 Define the Dashboard activity summary Agent Skill contract,
   read-only safety boundary, Dashboard data source, truthful time-window
   behavior, and validation plan for #1942.
-- [ ] 1.2 Update OpenSpec traceability and the #1701 Agent skill coverage matrix
+- [x] 1.2 Update OpenSpec traceability and the #1701 Agent skill coverage matrix
   with implemented Dashboard summary evidence.
+  - Added traceability row `AGENT-SKILLS-REGISTRY-012` and updated the
+    Dashboard row in `openspec/traceability/agent-skill-coverage.md` with the
+    direct read-only Dashboard summary registry/API evidence.
 
 ## 2. Skill registration and runtime
 
@@ -20,8 +23,10 @@
   items, destination links, and record identifiers.
 - [x] 2.3 Distinguish current snapshot values from evidence-backed time-window
   changes without implying unavailable history.
-- [ ] 2.4 Preserve source context and create non-secret audit/workflow evidence
+- [x] 2.4 Preserve source context and create non-secret audit/workflow evidence
   for direct skill execution.
+  - Direct apply coverage asserts source context retention and a non-secret
+    applied authority audit row for `cabinet.dashboard.summarise_activity`.
 
 ## 3. Edge states
 
