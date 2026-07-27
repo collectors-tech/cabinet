@@ -24,7 +24,7 @@
 
 ## 4. Evidence
 
-- [ ] 4.1 Add focused Cypress coverage for representative action regions,
+- [x] 4.1 Add focused Cypress coverage for representative action regions,
   action order, icons, accessible labels, disabled/loading states, and no
   duplicate controls.
 - [x] 4.2 Add desktop and narrow-window coverage for header overflow and

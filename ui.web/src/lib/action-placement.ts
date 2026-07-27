@@ -85,6 +85,20 @@ export type RouteActionRegionContract = {
   wholePageActionIds: string[]
 }
 
+export type ActionPlacementAuditSummary = {
+  routeCount: number
+  routesMissingContract: string[]
+  routesWithPageActions: string[]
+  routesWithoutPageActions: string[]
+  duplicateWholePageActionIds: string[]
+  pageActionRegionOrder: ActionPlacementRegionID[]
+  wholePageActionLabels: Array<{
+    route: string
+    id: string
+    label: string
+  }>
+}
+
 export const actionPlacementRegions: ActionPlacementRegion[] = [
   {
     id: 'page-header',
@@ -131,6 +145,52 @@ export const shellUtilityActionIds = [
   'profile-menu',
   'sidebar-toggle',
 ] as const
+
+export const authenticatedActionPlacementRoutes = [
+  '/dashboard',
+  '/inventory',
+  '/collections',
+  '/wishlist',
+  '/media',
+  '/purchases',
+  '/integrations',
+  '/chats',
+  '/inbox',
+  '/discoveries',
+  '/reports',
+  '/scanner',
+  '/settings/profile',
+  '/settings/account',
+  '/settings/appearance',
+  '/settings/display',
+  '/settings/billing',
+  '/settings/categories',
+  '/settings/integrations',
+  '/settings/notifications',
+  '/settings/operations',
+  '/settings/skills',
+  '/settings/storage',
+  '/users',
+  '/help-center',
+] as const
+
+const wholePageActionLabels: Record<string, string> = {
+  'inventory-new-item': 'New Item',
+  'inventory-import': 'Import',
+  'inventory-export': 'Export',
+  'collections-new': 'New Collection',
+  'wishlist-add': 'Add Wanted Item',
+  'wishlist-import': 'Import',
+  'wishlist-export': 'Export',
+  'media-upload': 'Upload Media',
+  'purchases-new': 'New Purchase',
+  'purchases-export': 'Export',
+  'reports-refresh': 'Refresh',
+  'reports-export': 'Export',
+  'market-watch-create': 'Create Saved Watch',
+  'market-watch-run': 'Run Scheduled Watches',
+  'users-add': 'Add User',
+}
 
 export const routeActionRegionContracts: RouteActionRegionContract[] = [
   {
@@ -280,6 +340,44 @@ export function getRouteActionRegionContract(route: string) {
   return routeActionRegionContracts.find(
     (contract) => contract.route === route
   )
+}
+
+export function getActionPlacementAuditSummary(): ActionPlacementAuditSummary {
+  const contractRoutes = new Set(
+    routeActionRegionContracts.map((contract) => contract.route)
+  )
+  const actionCounts = new Map<string, number>()
+  const wholePageActionLabelRows: ActionPlacementAuditSummary['wholePageActionLabels'] =
+    []
+
+  routeActionRegionContracts.forEach((contract) => {
+    contract.wholePageActionIds.forEach((id) => {
+      actionCounts.set(id, (actionCounts.get(id) ?? 0) + 1)
+      wholePageActionLabelRows.push({
+        route: contract.route,
+        id,
+        label: wholePageActionLabels[id] ?? id,
+      })
+    })
+  })
+
+  return {
+    routeCount: authenticatedActionPlacementRoutes.length,
+    routesMissingContract: authenticatedActionPlacementRoutes.filter(
+      (route) => !contractRoutes.has(route)
+    ),
+    routesWithPageActions: routeActionRegionContracts
+      .filter((contract) => contract.wholePageActionIds.length > 0)
+      .map((contract) => contract.route),
+    routesWithoutPageActions: routeActionRegionContracts
+      .filter((contract) => contract.wholePageActionIds.length === 0)
+      .map((contract) => contract.route),
+    duplicateWholePageActionIds: [...actionCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([id]) => id),
+    pageActionRegionOrder: [...actionPlacementRegionOrder],
+    wholePageActionLabels: wholePageActionLabelRows,
+  }
 }
 
 export function isPageActionRegion(action: ActionPlacementDefinition) {

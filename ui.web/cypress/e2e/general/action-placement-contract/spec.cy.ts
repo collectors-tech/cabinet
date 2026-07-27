@@ -3,6 +3,7 @@ import {
   buildActionPlacementChecklist,
   buildPageHeaderActionLayout,
   buildShellActionBoundary,
+  getActionPlacementAuditSummary,
   getRouteActionRegionContract,
   getActionPlacementRegion,
   isPageActionRegion,
@@ -253,5 +254,47 @@ describe('action placement contract', () => {
     expect(
       getRouteActionRegionContract('/help-center')?.wholePageActionIds
     ).to.deep.eq([])
+  })
+
+  it('UI-ACTION-PLACEMENT-007 audits authenticated route action coverage without duplicate page actions', () => {
+    const audit = getActionPlacementAuditSummary()
+
+    expect(audit.routeCount).to.eq(25)
+    expect(audit.routesMissingContract).to.deep.eq([])
+    expect(audit.duplicateWholePageActionIds).to.deep.eq([])
+    expect(audit.routesWithPageActions).to.deep.eq([
+      '/inventory',
+      '/collections',
+      '/wishlist',
+      '/media',
+      '/purchases',
+      '/reports',
+      '/scanner',
+      '/users',
+    ])
+    expect(audit.routesWithoutPageActions).to.include.members([
+      '/dashboard',
+      '/integrations',
+      '/settings/display',
+      '/help-center',
+    ])
+    expect(audit.pageActionRegionOrder).to.deep.eq([
+      'page-header',
+      'table-toolbar',
+      'bulk-toolbar',
+      'row-menu',
+      'dialog-footer',
+      'shell-utility',
+    ])
+    expect(audit.wholePageActionLabels).to.deep.include({
+      id: 'reports-refresh',
+      label: 'Refresh',
+      route: '/reports',
+    })
+    expect(audit.wholePageActionLabels).to.deep.include({
+      id: 'market-watch-create',
+      label: 'Create Saved Watch',
+      route: '/scanner',
+    })
   })
 })
