@@ -27,7 +27,7 @@
 - [ ] 4.1 Add focused Cypress coverage for representative action regions,
   action order, icons, accessible labels, disabled/loading states, and no
   duplicate controls.
-- [ ] 4.2 Add desktop and narrow-window coverage for header overflow and
+- [x] 4.2 Add desktop and narrow-window coverage for header overflow and
   non-overlap.
 - [x] 4.3 Add or update packaged shell contract checks for expected action
   regions by route.

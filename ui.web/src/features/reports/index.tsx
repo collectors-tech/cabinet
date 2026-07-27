@@ -194,17 +194,23 @@ export function Reports() {
             onClick={() => void loadReports()}
             disabled={loading}
             data-testid='reports-refresh-button'
+            aria-label='Refresh reports'
+            title='Refresh reports'
           >
             <RefreshCw className='h-4 w-4' />
-            {loading ? 'Refreshing...' : 'Refresh Reports'}
+            <span className='sr-only 2xl:not-sr-only'>
+              {loading ? 'Refreshing...' : 'Refresh Reports'}
+            </span>
           </Button>
           <Button
             data-testid='reports-export-button'
             onClick={() => void exportReport()}
             disabled={exportDisabled}
+            aria-label='Export CSV'
+            title='Export CSV'
           >
             <Download className='h-4 w-4' />
-            Export CSV
+            <span className='sr-only 2xl:not-sr-only'>Export CSV</span>
           </Button>
         </div>
         <div
