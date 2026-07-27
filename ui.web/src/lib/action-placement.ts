@@ -64,6 +64,20 @@ export type PageHeaderActionLayout = {
   }
 }
 
+export type ActionBoundaryPlacement = {
+  placement: ActionPlacementRegionID
+  includedInPageOverflow: boolean
+  ownsGlobalChrome: boolean
+}
+
+export type ShellActionBoundary = {
+  shellUtilityActionIds: string[]
+  pageActionIds: string[]
+  nonPageActionIds: string[]
+  shellUtilityPlacement: ActionBoundaryPlacement
+  pageActionPlacement: ActionBoundaryPlacement
+}
+
 export const actionPlacementRegions: ActionPlacementRegion[] = [
   {
     id: 'page-header',
@@ -189,5 +203,36 @@ export function buildPageHeaderActionLayout(
             keyboardReachable: true,
           }
         : undefined,
+  }
+}
+
+export function buildShellActionBoundary(
+  actions: readonly ActionPlacementDefinition[]
+): ShellActionBoundary {
+  const shellUtilityActions = actions.filter(
+    (action) => action.placement === 'shell-utility'
+  )
+  const pageActions = actions.filter(isPageActionRegion)
+  const pageActionIDs = new Set(pageActions.map((action) => action.id))
+
+  return {
+    shellUtilityActionIds: shellUtilityActions.map((action) => action.id),
+    pageActionIds: pageActions.map((action) => action.id),
+    nonPageActionIds: actions
+      .filter(
+        (action) =>
+          action.placement !== 'shell-utility' && !pageActionIDs.has(action.id)
+      )
+      .map((action) => action.id),
+    shellUtilityPlacement: {
+      placement: 'shell-utility',
+      includedInPageOverflow: false,
+      ownsGlobalChrome: true,
+    },
+    pageActionPlacement: {
+      placement: 'page-header',
+      includedInPageOverflow: true,
+      ownsGlobalChrome: false,
+    },
   }
 }

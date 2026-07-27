@@ -2,6 +2,7 @@ import {
   actionPlacementRegionOrder,
   buildActionPlacementChecklist,
   buildPageHeaderActionLayout,
+  buildShellActionBoundary,
   getActionPlacementRegion,
   isPageActionRegion,
   shellUtilityActionIds,
@@ -185,5 +186,43 @@ describe('action placement contract', () => {
     ])
     expect(wideLayout.overflowActions).to.deep.eq([])
     expect(wideLayout.overflowMenu).to.eq(undefined)
+  })
+
+  it('UI-ACTION-PLACEMENT-005 documents the shell utility and page action boundary', () => {
+    const boundary = buildShellActionBoundary([
+      {
+        id: 'profile-menu',
+        label: 'Profile',
+        placement: 'shell-utility',
+        kind: 'shell',
+      },
+      {
+        id: 'reports-refresh',
+        label: 'Refresh',
+        placement: 'page-header',
+        kind: 'refresh',
+        priority: 'primary',
+      },
+      {
+        id: 'inventory-search',
+        label: 'Search inventory',
+        placement: 'table-toolbar',
+        kind: 'filter',
+      },
+    ])
+
+    expect(boundary.shellUtilityActionIds).to.deep.eq(['profile-menu'])
+    expect(boundary.pageActionIds).to.deep.eq(['reports-refresh'])
+    expect(boundary.nonPageActionIds).to.deep.eq(['inventory-search'])
+    expect(boundary.shellUtilityPlacement).to.deep.include({
+      placement: 'shell-utility',
+      includedInPageOverflow: false,
+      ownsGlobalChrome: true,
+    })
+    expect(boundary.pageActionPlacement).to.deep.include({
+      placement: 'page-header',
+      includedInPageOverflow: true,
+      ownsGlobalChrome: false,
+    })
   })
 })

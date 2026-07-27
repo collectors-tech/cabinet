@@ -10,7 +10,7 @@
   table/list toolbar, row menu, bulk actions, and dialog footer expectations.
 - [x] 2.2 Add responsive overflow rules for page-header actions without hiding
   the primary action from keyboard or screen-reader users.
-- [ ] 2.3 Document or implement the boundary between shell utilities and page
+- [x] 2.3 Document or implement the boundary between shell utilities and page
   actions.
 
 ## 3. Page Migration
