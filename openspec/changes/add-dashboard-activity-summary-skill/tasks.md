@@ -47,7 +47,11 @@
 
 - [x] 4.1 Add focused Go/API tests for populated, empty, partial/unavailable,
   time-window caveat, no-mutation, and profile-isolation paths.
-- [ ] 4.2 Add main Chat and side-panel proof when the governed dispatch path can
+- [x] 4.2 Add main Chat and side-panel proof when the governed dispatch path can
   invoke the skill.
+  - Added side-panel Agent Skill dispatcher proof in
+    `ui.web/cypress/e2e/chats/assistant-workspace-dashboard-summary/spec.cy.ts`.
+    Main Chat natural-language routing remains sequenced behind #1933, so this
+    slice records available side-panel dispatch evidence without claiming #1933.
 - [ ] 4.3 Run strict OpenSpec validation, focused Go tests, touched UI/API
   validation where relevant, and `git diff --check`.
