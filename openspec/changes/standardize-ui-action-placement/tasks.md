@@ -19,7 +19,7 @@
   region and remove duplicated page title/description content.
 - [x] 3.2 Move Market Watch Create/Run actions into the canonical action
   regions while preserving form and toolbar behavior.
-- [ ] 3.3 Audit and adjust remaining authenticated pages so whole-page, toolbar,
+- [x] 3.3 Audit and adjust remaining authenticated pages so whole-page, toolbar,
   row, bulk, and dialog actions match the matrix.
 
 ## 4. Evidence

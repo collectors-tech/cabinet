@@ -41,6 +41,64 @@ describe('settings/storage', () => {
     cy.get('main').find('h1').should('not.exist')
   })
 
+  it('UI-SCREEN-SETTINGS-STORAGE-013 keeps storage actions scoped to cards, rows, and dialogs', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: {
+        backups: [
+          {
+            path: 'C:/cabinet/backups/cabinet-2026-04-21-120000.db',
+            file_name: 'cabinet-2026-04-21-120000.db',
+            size_bytes: 2048,
+            created_at: '2026-04-21T12:00:00Z',
+            archive_format: 'db',
+            download_url: '/api/backup/download?file_name=cabinet-2026-04-21-120000.db',
+            integrity_check: 'ok',
+          },
+        ],
+      },
+    }).as('backupList')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-global-header-actions"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="settings-storage-backup-section"]').within(() => {
+      cy.get('[data-testid="settings-storage-backup-run"]').should('be.visible')
+      cy.get('[data-testid="settings-storage-backup-table"]').should(
+        'be.visible'
+      )
+    })
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .within(() => {
+        cy.get('[data-testid="settings-storage-backup-download"]').should(
+          'be.visible'
+        )
+        cy.get('[data-testid="settings-storage-backup-restore"]').click()
+      })
+    cy.get('[data-testid="settings-storage-restore-confirm"]').within(() => {
+      cy.get('[data-testid="settings-storage-restore-submit"]').should(
+        'be.visible'
+      )
+    })
+  })
+
   it('UI-SCREEN-SETTINGS-STORAGE-004 renders storage paths and keeps diagnostics actions disabled in degraded mode', () => {
     let storageAttempt = 0
     cy.intercept('GET', '/api/profiles/active', {
