@@ -2,6 +2,7 @@ import {
   authenticatedRouteMetadata,
   getRouteMetadata,
 } from '../../../../src/lib/route-metadata'
+import { getDocumentTitle } from '../../../../src/lib/document-title'
 
 const expectedRoutes = [
   { path: '/', title: 'Home', documentTitle: 'Cabinet - Home' },
@@ -146,6 +147,14 @@ describe('route metadata registry', () => {
       )
       expect(metadata?.testIds.headerIcon, `${path} header icon id`).to.match(
         /^[a-z0-9-]+-header-icon$/
+      )
+    })
+  })
+
+  it('UI-ROUTE-METADATA-002 resolves document titles from canonical route metadata', () => {
+    expectedRoutes.forEach(({ path, documentTitle }) => {
+      expect(getDocumentTitle(path), `${path} document title`).to.eq(
+        documentTitle
       )
     })
   })

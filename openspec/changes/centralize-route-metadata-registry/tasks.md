@@ -10,7 +10,7 @@
 - [x] 2.1 Add a typed route metadata registry with canonical path or pattern,
   title, description, icon, navigation group, document-title eligibility, and
   stable test IDs.
-- [ ] 2.2 Add document-title resolution from the registry, including
+- [x] 2.2 Add document-title resolution from the registry, including
   `/purchases` and the `/scanner` -> `Market Watch` correction.
 - [ ] 2.3 Connect sidebar/search navigation and `HeaderTitle` consumers to the
   shared metadata where practical without changing navigation architecture.
