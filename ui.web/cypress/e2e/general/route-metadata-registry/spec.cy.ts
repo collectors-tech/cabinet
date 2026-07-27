@@ -3,7 +3,10 @@ import {
   getRouteMetadata,
 } from '../../../../src/lib/route-metadata'
 import { getDocumentTitle } from '../../../../src/lib/document-title'
-import { buildSearchNavigationResults } from '../../../../src/lib/route-navigation'
+import {
+  buildSearchNavigationResults,
+  getRouteHeaderTitleProps,
+} from '../../../../src/lib/route-navigation'
 
 const expectedRoutes = [
   { path: '/', title: 'Home', documentTitle: 'Cabinet - Home' },
@@ -183,5 +186,15 @@ describe('route metadata registry', () => {
     })
     expect(byPath.has('/errors/*'), 'system error route excluded').to.eq(false)
     expect(byPath.has('/404'), 'system not-found route excluded').to.eq(false)
+  })
+
+  it('UI-ROUTE-METADATA-004 exposes HeaderTitle props from canonical route metadata', () => {
+    const marketWatchHeader = getRouteHeaderTitleProps('/scanner')
+
+    expect(marketWatchHeader).to.include({
+      title: 'Market Watch',
+      description: 'Run saved market searches and review provider results.',
+    })
+    expect(marketWatchHeader?.icon).to.equal(getRouteMetadata('/scanner')?.icon)
   })
 })

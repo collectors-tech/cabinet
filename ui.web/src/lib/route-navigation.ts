@@ -1,4 +1,8 @@
-import { authenticatedRouteMetadata, type RouteMetadata } from './route-metadata'
+import {
+  authenticatedRouteMetadata,
+  getRouteMetadata,
+  type RouteMetadata,
+} from './route-metadata'
 
 export type SearchNavigationResult = {
   id: string
@@ -7,6 +11,11 @@ export type SearchNavigationResult = {
   path: string
   value: string
 }
+
+export type RouteHeaderTitleProps = Pick<
+  RouteMetadata,
+  'title' | 'description' | 'icon'
+>
 
 function navigationPathFor(metadata: RouteMetadata) {
   if (metadata.path === '/') {
@@ -44,4 +53,18 @@ export function buildSearchNavigationResults() {
   return authenticatedRouteMetadata
     .filter((metadata) => metadata.navigationGroup !== 'System')
     .map(toSearchNavigationResult)
+}
+
+export function getRouteHeaderTitleProps(pathname: string) {
+  const metadata = getRouteMetadata(pathname)
+
+  if (!metadata) {
+    return undefined
+  }
+
+  return {
+    title: metadata.title,
+    description: metadata.description,
+    icon: metadata.icon,
+  } satisfies RouteHeaderTitleProps
 }
