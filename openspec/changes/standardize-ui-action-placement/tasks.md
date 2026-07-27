@@ -31,5 +31,5 @@
   non-overlap.
 - [x] 4.3 Add or update packaged shell contract checks for expected action
   regions by route.
-- [ ] 4.4 Run focused action-placement tests, UI build, strict OpenSpec
+- [x] 4.4 Run focused action-placement tests, UI build, strict OpenSpec
   validation, and `git diff --check`.
