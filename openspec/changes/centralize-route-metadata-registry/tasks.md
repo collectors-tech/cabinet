@@ -7,7 +7,7 @@
 
 ## 2. Shared registry
 
-- [ ] 2.1 Add a typed route metadata registry with canonical path or pattern,
+- [x] 2.1 Add a typed route metadata registry with canonical path or pattern,
   title, description, icon, navigation group, document-title eligibility, and
   stable test IDs.
 - [ ] 2.2 Add document-title resolution from the registry, including
@@ -19,7 +19,7 @@
 
 ## 3. Evidence
 
-- [ ] 3.1 Add table-driven tests that cover every authenticated route in the
+- [x] 3.1 Add table-driven tests that cover every authenticated route in the
   registry and fail when a route lacks canonical metadata.
 - [ ] 3.2 Add focused UI coverage for visible headers, icons, document titles,
   and responsive non-overlap on representative desktop and narrow widths.
