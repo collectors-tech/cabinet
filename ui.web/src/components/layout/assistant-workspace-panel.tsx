@@ -201,6 +201,14 @@ type AgentSkillOption = {
 
 const agentSkillOptions = [
   {
+    id: 'cabinet.dashboard.summarise_activity',
+    label: 'Summarise dashboard',
+    surface: 'dashboard.home',
+    primaryLabel: 'Time window',
+    contextLabel: 'Workspace ID',
+    secretLabel: 'Optional note',
+  },
+  {
     id: 'cabinet.integrations.test_connection',
     label: 'Test provider connection',
     surface: 'settings.integrations.provider.card',
@@ -1406,6 +1414,18 @@ export function AssistantWorkspacePanel() {
     const context = agentSkillSetupStep.trim()
     const secretOrTarget = agentSkillSecret.trim()
     const params: Record<string, string> = {}
+    if (agentSkillID === 'cabinet.dashboard.summarise_activity') {
+      if (primary) {
+        params.window = primary
+      }
+      if (context) {
+        params.workspace_id = context
+      }
+      if (secretOrTarget) {
+        params.notes = secretOrTarget
+      }
+      return params
+    }
     if (agentSkillID.startsWith('cabinet.integrations.')) {
       params.provider_id = primary
       if (context) {
@@ -2487,9 +2507,7 @@ export function AssistantWorkspacePanel() {
                             setConfirmTarget('agent-skill')
                             setConfirmApplyOpen(true)
                           }}
-                          disabled={
-                            !agentSkillPreview?.confirmation_required || sending
-                          }
+                          disabled={!agentSkillPreview || sending}
                         >
                           Apply skill
                         </Button>
