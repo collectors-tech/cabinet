@@ -21,7 +21,7 @@
 
 - [x] 3.1 Add table-driven tests that cover every authenticated route in the
   registry and fail when a route lacks canonical metadata.
-- [ ] 3.2 Add focused UI coverage for visible headers, icons, document titles,
+- [x] 3.2 Add focused UI coverage for visible headers, icons, document titles,
   and responsive non-overlap on representative desktop and narrow widths.
-- [ ] 3.3 Run focused route metadata tests, UI build, strict OpenSpec
+- [x] 3.3 Run focused route metadata tests, UI build, strict OpenSpec
   validation, and `git diff --check`.
