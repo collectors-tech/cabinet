@@ -5,6 +5,7 @@ import {
 import { getDocumentTitle } from '../../../../src/lib/document-title'
 import {
   buildSearchNavigationResults,
+  buildSidebarNavigationGroups,
   getRouteHeaderTitleProps,
 } from '../../../../src/lib/route-navigation'
 
@@ -196,5 +197,40 @@ describe('route metadata registry', () => {
       description: 'Run saved market searches and review provider results.',
     })
     expect(marketWatchHeader?.icon).to.equal(getRouteMetadata('/scanner')?.icon)
+  })
+
+  it('UI-ROUTE-METADATA-005 builds sidebar navigation groups from canonical route metadata', () => {
+    const sidebarGroups = buildSidebarNavigationGroups()
+    const generalItems = sidebarGroups.find((group) => group.title === 'General')
+      ?.items
+    const otherItems = sidebarGroups.find((group) => group.title === 'Other')
+      ?.items
+    const settingsMenu = otherItems?.find(
+      (item) => item.title === 'Settings' && 'items' in item
+    )
+
+    expect(generalItems?.[0]).to.include({
+      title: 'Home',
+      testIdKey: 'dashboard',
+      url: '/dashboard',
+    })
+    expect(generalItems?.map((item) => item.title)).to.include.members([
+      'Market Watch',
+      'Purchases',
+    ])
+    const settingsItems = settingsMenu && 'items' in settingsMenu
+      ? settingsMenu.items
+      : []
+
+    expect(settingsItems.map((item) => item.title)).to.include.members([
+      'Profile Settings',
+      'Display Settings',
+      'Storage Settings',
+    ])
+    expect(settingsItems.map((item) => item.testIdKey)).to.include.members([
+      'profile',
+      'display',
+      'storage',
+    ])
   })
 })

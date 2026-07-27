@@ -12,9 +12,9 @@
   stable test IDs.
 - [x] 2.2 Add document-title resolution from the registry, including
   `/purchases` and the `/scanner` -> `Market Watch` correction.
-- [ ] 2.3 Connect sidebar/search navigation and `HeaderTitle` consumers to the
+- [x] 2.3 Connect sidebar/search navigation and `HeaderTitle` consumers to the
   shared metadata where practical without changing navigation architecture.
-- [ ] 2.4 Add Settings child route metadata with specific titles/icons while
+- [x] 2.4 Add Settings child route metadata with specific titles/icons while
   retaining Settings grouping.
 
 ## 3. Evidence

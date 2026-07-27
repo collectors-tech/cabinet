@@ -17,6 +17,27 @@ export type RouteHeaderTitleProps = Pick<
   'title' | 'description' | 'icon'
 >
 
+export type SidebarNavigationItem = {
+  title: string
+  url: string
+  icon: RouteMetadata['icon']
+  testIdKey: string
+}
+
+export type SidebarNavigationGroup = {
+  title: 'General' | 'Other'
+  testIdKey: 'general' | 'other'
+  items: (
+    | SidebarNavigationItem
+    | {
+        title: 'Settings'
+        testIdKey: 'settings'
+        icon: RouteMetadata['icon']
+        items: SidebarNavigationItem[]
+      }
+  )[]
+}
+
 function navigationPathFor(metadata: RouteMetadata) {
   if (metadata.path === '/') {
     return metadata.aliases?.[0] ?? metadata.path
@@ -49,10 +70,71 @@ function toSearchNavigationResult(
   }
 }
 
+function sidebarTestKeyFor(metadata: RouteMetadata) {
+  const sidebarLink = metadata.testIds.sidebarLink
+  if (!sidebarLink) {
+    return metadata.title.trim().toLowerCase().replace(/\s+/g, '-')
+  }
+
+  return sidebarLink.replace(/^sidebar-nav-link-/, '')
+}
+
+function toSidebarNavigationItem(
+  metadata: RouteMetadata
+): SidebarNavigationItem {
+  return {
+    title: metadata.title,
+    url: navigationPathFor(metadata),
+    icon: metadata.icon,
+    testIdKey: sidebarTestKeyFor(metadata),
+  }
+}
+
 export function buildSearchNavigationResults() {
   return authenticatedRouteMetadata
     .filter((metadata) => metadata.navigationGroup !== 'System')
     .map(toSearchNavigationResult)
+}
+
+export function buildSidebarNavigationGroups(): SidebarNavigationGroup[] {
+  const generalItems = authenticatedRouteMetadata
+    .filter((metadata) => metadata.navigationGroup === 'General')
+    .map(toSidebarNavigationItem)
+  const settingsItems = authenticatedRouteMetadata
+    .filter((metadata) => metadata.navigationGroup === 'Settings')
+    .map(toSidebarNavigationItem)
+  const otherItems = authenticatedRouteMetadata
+    .filter((metadata) => metadata.navigationGroup === 'Other')
+    .map(toSidebarNavigationItem)
+  const settingsIcon =
+    authenticatedRouteMetadata.find(
+      (metadata) => metadata.path === '/settings/operations'
+    )?.icon ?? settingsItems[0]?.icon
+
+  return [
+    {
+      title: 'General',
+      testIdKey: 'general',
+      items: generalItems,
+    },
+    {
+      title: 'Other',
+      testIdKey: 'other',
+      items: [
+        ...(settingsIcon
+          ? [
+              {
+                title: 'Settings',
+                testIdKey: 'settings',
+                icon: settingsIcon,
+                items: settingsItems,
+              } as const,
+            ]
+          : []),
+        ...otherItems,
+      ],
+    },
+  ]
 }
 
 export function getRouteHeaderTitleProps(pathname: string) {
