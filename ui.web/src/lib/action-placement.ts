@@ -45,6 +45,23 @@ export type ActionPlacementDefinition = {
   label: string
   placement: ActionPlacementRegionID
   kind: ActionPlacementKind
+  priority?: 'primary' | 'secondary'
+}
+
+export type PageHeaderActionLayoutOptions = {
+  viewport: 'wide' | 'narrow'
+  maxVisibleActions: number
+}
+
+export type PageHeaderActionLayout = {
+  visibleActions: ActionPlacementDefinition[]
+  overflowActions: ActionPlacementDefinition[]
+  shellUtilityActions: ActionPlacementDefinition[]
+  overflowMenu?: {
+    ariaLabel: 'More page actions'
+    testId: 'page-header-action-overflow'
+    keyboardReachable: true
+  }
 }
 
 export const actionPlacementRegions: ActionPlacementRegion[] = [
@@ -103,7 +120,7 @@ export function isPageActionRegion(action: ActionPlacementDefinition) {
 }
 
 export function buildActionPlacementChecklist(
-  actions: ActionPlacementDefinition[]
+  actions: readonly ActionPlacementDefinition[]
 ) {
   return {
     pageActions: actions.filter((action) => action.placement === 'page-header'),
@@ -118,5 +135,59 @@ export function buildActionPlacementChecklist(
     shellUtilityActions: actions.filter(
       (action) => action.placement === 'shell-utility'
     ),
+  }
+}
+
+export function buildPageHeaderActionLayout(
+  actions: readonly ActionPlacementDefinition[],
+  options: PageHeaderActionLayoutOptions
+): PageHeaderActionLayout {
+  const pageActions = actions.filter(isPageActionRegion)
+  const shellUtilityActions = actions.filter(
+    (action) => action.placement === 'shell-utility'
+  )
+  const primaryActions = pageActions.filter(
+    (action) => action.priority === 'primary'
+  )
+  const secondaryActions = pageActions.filter(
+    (action) => action.priority !== 'primary'
+  )
+  const maxVisibleActions = Math.max(options.maxVisibleActions, 1)
+
+  if (options.viewport === 'wide') {
+    return {
+      visibleActions: pageActions.slice(0, maxVisibleActions),
+      overflowActions: pageActions.slice(maxVisibleActions),
+      shellUtilityActions,
+      overflowMenu:
+        pageActions.length > maxVisibleActions
+          ? {
+              ariaLabel: 'More page actions',
+              testId: 'page-header-action-overflow',
+              keyboardReachable: true,
+            }
+          : undefined,
+    }
+  }
+
+  const visibleActions = [
+    ...primaryActions,
+    ...secondaryActions.slice(0, Math.max(maxVisibleActions - primaryActions.length, 0)),
+  ].slice(0, maxVisibleActions)
+  const visibleIDs = new Set(visibleActions.map((action) => action.id))
+  const overflowActions = pageActions.filter((action) => !visibleIDs.has(action.id))
+
+  return {
+    visibleActions,
+    overflowActions,
+    shellUtilityActions,
+    overflowMenu:
+      overflowActions.length > 0
+        ? {
+            ariaLabel: 'More page actions',
+            testId: 'page-header-action-overflow',
+            keyboardReachable: true,
+          }
+        : undefined,
   }
 }

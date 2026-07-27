@@ -1,6 +1,7 @@
 import {
   actionPlacementRegionOrder,
   buildActionPlacementChecklist,
+  buildPageHeaderActionLayout,
   getActionPlacementRegion,
   isPageActionRegion,
   shellUtilityActionIds,
@@ -119,5 +120,70 @@ describe('action placement contract', () => {
         kind: 'create',
       })
     ).to.eq(true)
+  })
+
+  it('UI-ACTION-PLACEMENT-004 keeps primary header actions visible and moves secondary actions into accessible overflow', () => {
+    const actions = [
+      {
+        id: 'market-watch-new-query',
+        label: 'New query',
+        placement: 'page-header',
+        kind: 'create',
+        priority: 'primary',
+      },
+      {
+        id: 'market-watch-run',
+        label: 'Run search',
+        placement: 'page-header',
+        kind: 'run',
+        priority: 'secondary',
+      },
+      {
+        id: 'market-watch-export',
+        label: 'Export',
+        placement: 'page-header',
+        kind: 'export',
+        priority: 'secondary',
+      },
+      {
+        id: 'theme-switch',
+        label: 'Theme',
+        placement: 'shell-utility',
+        kind: 'shell',
+      },
+    ] as const
+
+    const narrowLayout = buildPageHeaderActionLayout(actions, {
+      viewport: 'narrow',
+      maxVisibleActions: 1,
+    })
+
+    expect(narrowLayout.visibleActions.map((action) => action.id)).to.deep.eq([
+      'market-watch-new-query',
+    ])
+    expect(narrowLayout.overflowActions.map((action) => action.id)).to.deep.eq([
+      'market-watch-run',
+      'market-watch-export',
+    ])
+    expect(narrowLayout.shellUtilityActions.map((action) => action.id)).to.deep
+      .eq(['theme-switch'])
+    expect(narrowLayout.overflowMenu).to.deep.include({
+      ariaLabel: 'More page actions',
+      testId: 'page-header-action-overflow',
+      keyboardReachable: true,
+    })
+
+    const wideLayout = buildPageHeaderActionLayout(actions, {
+      viewport: 'wide',
+      maxVisibleActions: 3,
+    })
+
+    expect(wideLayout.visibleActions.map((action) => action.id)).to.deep.eq([
+      'market-watch-new-query',
+      'market-watch-run',
+      'market-watch-export',
+    ])
+    expect(wideLayout.overflowActions).to.deep.eq([])
+    expect(wideLayout.overflowMenu).to.eq(undefined)
   })
 })
