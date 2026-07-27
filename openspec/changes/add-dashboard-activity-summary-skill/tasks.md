@@ -15,10 +15,10 @@
     profile/workspace context, Dashboard capability/workflow bindings,
     output schema refs, missing-context blocker, and read-only profile
     authority allowance.
-- [ ] 2.2 Add a Dashboard summary service/runtime adapter that reuses canonical
+- [x] 2.2 Add a Dashboard summary service/runtime adapter that reuses canonical
   Dashboard data and returns structured totals, attention signals, recent
   items, destination links, and record identifiers.
-- [ ] 2.3 Distinguish current snapshot values from evidence-backed time-window
+- [x] 2.3 Distinguish current snapshot values from evidence-backed time-window
   changes without implying unavailable history.
 - [ ] 2.4 Preserve source context and create non-secret audit/workflow evidence
   for direct skill execution.
@@ -29,9 +29,9 @@
   output and usable destination links.
 - [ ] 3.2 Handle partial or unavailable Dashboard dependencies with actionable
   warnings instead of fabricated totals.
-- [ ] 3.3 Prove profile isolation so one profile cannot read another profile's
+- [x] 3.3 Prove profile isolation so one profile cannot read another profile's
   Dashboard summary.
-- [ ] 3.4 Prove the read-only skill never creates mutation previews,
+- [x] 3.4 Prove the read-only skill never creates mutation previews,
   confirmation tokens, or applied mutations.
 
 ## 4. Evidence

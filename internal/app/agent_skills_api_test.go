@@ -817,6 +817,118 @@ func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *te
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesDashboardActivitySummary(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Dashboard A"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != http.StatusCreated {
+		t.Fatalf("create profile a status=%d body=%s", createA.Code, createA.Body.String())
+	}
+	var profileA struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile a: %v", err)
+	}
+	createB := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Dashboard B"}`), map[string]string{"Content-Type": "application/json"})
+	if createB.Code != http.StatusCreated {
+		t.Fatalf("create profile b status=%d body=%s", createB.Code, createB.Body.String())
+	}
+	var profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile b: %v", err)
+	}
+
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, created_at)
+		VALUES
+			('dash-skill-item-a', ?, 'AFX', 'Slot', 'DSA-1', 'Dashboard Skill A Camaro', '2026-06-01T10:00:00Z'),
+			('dash-skill-item-b', ?, 'AFX', 'Slot', 'DSB-1', 'Dashboard Skill B Porsche', '2026-06-02T10:00:00Z');
+		INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes)
+		VALUES
+			('dash-skill-inst-a','dash-skill-item-a','used','loose',2,'shelf',15,'',''),
+			('dash-skill-inst-b','dash-skill-item-b','used','loose',9,'case',25,'','');
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json)
+		VALUES ('dash-skill-query-a', ?, 'A', '["dsa"]', '[]'),('dash-skill-query-b', ?, 'B', '["dsb"]', '[]');
+		INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count)
+		VALUES
+			('dash-skill-cand-a', ?, 'dash-skill-query-a', 'DSA-L1', 'Dashboard Skill A DSA-1', 20, 0, 'http://a.example', '', 'seller-a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'low_stock', 2),
+			('dash-skill-cand-b', ?, 'dash-skill-query-b', 'DSB-L1', 'Dashboard Skill B DSB-1', 20, 0, 'http://b.example', '', 'seller-b', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'low_stock', 2);
+		INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+		VALUES
+			('dash-skill-cand-a', '', 'not_in_collection', 0, 1, 'DSA-1', CURRENT_TIMESTAMP),
+			('dash-skill-cand-b', '', 'not_in_collection', 0, 1, 'DSB-1', CURRENT_TIMESTAMP);
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
+		VALUES
+			('dash-skill-wish-a', ?, 'dash-skill-item-a', 30, 'high', '', 1),
+			('dash-skill-wish-b', ?, 'dash-skill-item-b', 30, 'high', '', 1);
+		INSERT INTO price_snapshots(id, item_id, snapshot_date, source, min_price, median_price, latest_price, stock_count)
+		VALUES
+			('dash-skill-price-a1','dash-skill-item-a','2026-02-20','ebay',15,15,15,0),
+			('dash-skill-price-a2','dash-skill-item-a','2026-02-21','ebay',12,12,12,4),
+			('dash-skill-price-b1','dash-skill-item-b','2026-02-20','ebay',25,25,25,0),
+			('dash-skill-price-b2','dash-skill-item-b','2026-02-21','ebay',22,22,22,6)
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed dashboard skill data: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+profileA.ID+`",
+		"skill_id":"cabinet.dashboard.summarise_activity",
+		"source_surface":"dashboard.home",
+		"source_channel":"web",
+		"source_thread_id":"dashboard-thread-1942",
+		"parameters":{"workspace_id":"workspace-dashboard","window":"last_7_days"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("dashboard summary status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	body := resp.Body.String()
+	for _, want := range []string{
+		`"skill_id":"cabinet.dashboard.summarise_activity"`,
+		`"mutation_applied":false`,
+		`"operation":"dashboard.activity.summary"`,
+		`"read_only":true`,
+		`"source_surface":"dashboard.home"`,
+		`"requested_window":"last_7_days"`,
+		`"evidence_backed":false`,
+		`"snapshot_only":true`,
+		`"total_items":1`,
+		`"total_instances":2`,
+		`"estimated_value":30`,
+		`"new_discoveries"`,
+		`"price_drops"`,
+		`"restocks"`,
+		`"Dashboard Skill A Camaro"`,
+		`"item_id":"dash-skill-item-a"`,
+		`"destination_links"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dashboard summary response missing %s: body=%s", want, body)
+		}
+	}
+	if strings.Contains(body, "Dashboard Skill B Porsche") || strings.Contains(body, "dash-skill-item-b") {
+		t.Fatalf("dashboard summary leaked another profile, body=%s", body)
+	}
+	var auditCount int
+	if err := a.db.QueryRow(`
+		SELECT COUNT(1)
+		FROM audit_events
+		WHERE entity_type = 'profile_agent_authority_decision'
+			AND entity_id = ?
+			AND source = 'direct-api'
+			AND json_extract(after_json, '$.outcome') = 'applied'
+	`, profileA.ID).Scan(&auditCount); err != nil {
+		t.Fatalf("count dashboard skill authority audit: %v", err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("expected one non-secret direct authority audit row, got %d", auditCount)
+	}
+}
+
 func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {
 	t.Parallel()
 

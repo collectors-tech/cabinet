@@ -11,6 +11,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/dashboard"
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
 	"github.com/collectors-tech/cabinet/internal/media"
@@ -75,6 +76,8 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.collections.soft_delete",
 		"cabinet.collections.move_items_on_delete":
 		return applyAgentCollectionsSkill(ctx, conn, skillID, profileID, params)
+	case "cabinet.dashboard.summarise_activity":
+		return applyAgentDashboardSkill(ctx, conn, profileID, params)
 	case "cabinet.media.search",
 		"cabinet.media.upload_or_import",
 		"cabinet.media.attach_to_item",
@@ -149,6 +152,129 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 	default:
 		return nil, "skill_apply_not_supported", fmt.Errorf("skill apply not supported")
 	}
+}
+
+func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (map[string]any, string, error) {
+	if conn == nil {
+		return nil, "dashboard_store_required", fmt.Errorf("database connection required")
+	}
+	summary, err := dashboard.NewService(conn).Summary(ctx, profileID)
+	if err != nil {
+		return nil, "dashboard_summary_failed", err
+	}
+	recentItems, err := agentDashboardRecentItems(ctx, conn, profileID, 5)
+	if err != nil {
+		return nil, "dashboard_recent_items_failed", err
+	}
+	requestedWindow := firstNonEmptyString(stringMapParam(params, "window"), stringMapParam(params, "time_window"), "current")
+	attentionSignals := []map[string]any{
+		agentDashboardSignal("new_discoveries", "New discoveries", summary.NewDiscoveries, "/discoveries"),
+		agentDashboardSignal("wishlist_hits", "Wishlist hits", summary.WishlistHits, "/wishlist"),
+		agentDashboardSignal("price_drops", "Price drops", summary.PriceDrops, "/pricing"),
+		agentDashboardSignal("low_stock_discoveries", "Low-stock discoveries", summary.LowStockDiscoveries, "/discoveries"),
+		agentDashboardSignal("restocks", "Restocks", summary.Restocks, "/pricing"),
+	}
+	return map[string]any{
+		"profile_id":        profileID,
+		"operation":         "dashboard.activity.summary",
+		"read_only":         true,
+		"collection":        agentDashboardCollectionSummary(summary.Collection),
+		"attention_signals": attentionSignals,
+		"recent_items":      recentItems,
+		"destination_links": agentDashboardDestinationLinks(summary.Cards),
+		"time_window": map[string]any{
+			"requested_window": requestedWindow,
+			"evidence_backed":  false,
+			"snapshot_only":    true,
+			"caveat":           "Dashboard currently exposes current snapshot values; historical time-window changes require event history that is not yet available.",
+		},
+		"record_identifiers": map[string]any{
+			"recent_items":                  recentItems,
+			"recent_item_identifiers_found": len(recentItems),
+		},
+		"warnings":    []string{"Dashboard activity summary is read-only and reports current snapshots, not historical deltas."},
+		"next_action": "Open Dashboard, Discoveries, Wishlist, Pricing, or Collections using the destination links to inspect the underlying records.",
+	}, "", nil
+}
+
+func agentDashboardCollectionSummary(stats dashboard.CollectionStats) map[string]any {
+	return map[string]any{
+		"total_items":     stats.TotalItems,
+		"total_instances": stats.TotalInstances,
+		"estimated_value": stats.EstimatedValue,
+	}
+}
+
+func agentDashboardSignal(id, label string, count int, route string) map[string]any {
+	return map[string]any{
+		"id":               id,
+		"label":            label,
+		"count":            count,
+		"destination_link": route,
+	}
+}
+
+func agentDashboardDestinationLinks(cards []dashboard.Card) []map[string]any {
+	links := make([]map[string]any, 0, len(cards))
+	for _, card := range cards {
+		if strings.TrimSpace(card.Link) == "" {
+			continue
+		}
+		links = append(links, map[string]any{
+			"id":    agentDashboardLinkID(card.Title),
+			"label": card.Title,
+			"value": card.Value,
+			"route": card.Link,
+		})
+	}
+	return links
+}
+
+func agentDashboardLinkID(label string) string {
+	id := strings.ToLower(strings.TrimSpace(label))
+	id = strings.ReplaceAll(id, " ", "_")
+	id = strings.ReplaceAll(id, "-", "_")
+	return id
+}
+
+func agentDashboardRecentItems(ctx context.Context, conn *sql.DB, profileID string, limit int) ([]map[string]any, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	query := `
+		SELECT id, title
+		FROM canonical_items
+		WHERE COALESCE(status, '') != 'deleted'
+	`
+	args := []any{}
+	if profileID != "" {
+		query += " AND profile_id = ?"
+		args = append(args, profileID)
+	}
+	query += " ORDER BY datetime(created_at) DESC, id DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []map[string]any{}
+	for rows.Next() {
+		var id, title string
+		if err := rows.Scan(&id, &title); err != nil {
+			return nil, err
+		}
+		items = append(items, map[string]any{
+			"item_id":          id,
+			"title":            title,
+			"destination_link": "/collections",
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func applyAgentInventorySkill(ctx context.Context, conn *sql.DB, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
