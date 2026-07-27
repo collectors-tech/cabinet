@@ -53,5 +53,9 @@
     `ui.web/cypress/e2e/chats/assistant-workspace-dashboard-summary/spec.cy.ts`.
     Main Chat natural-language routing remains sequenced behind #1933, so this
     slice records available side-panel dispatch evidence without claiming #1933.
-- [ ] 4.3 Run strict OpenSpec validation, focused Go tests, touched UI/API
+- [x] 4.3 Run strict OpenSpec validation, focused Go tests, touched UI/API
   validation where relevant, and `git diff --check`.
+  - Final handoff validation passed with focused Dashboard summary API,
+    Dashboard service, Agent Skill registry, local and npm OpenSpec strict
+    validation, UI production build, `git diff --check`, and focused Cypress
+    side-panel proof.
