@@ -20,7 +20,7 @@ type RuntimeSetupStatus = {
   default_runtime_port?: number
   default_runtime_port_mode?: 'auto' | 'fixed'
   default_runtime_url?: string
-  default_auth_mode?: 'local' | 'clerk' | 'zitadel'
+  default_auth_mode?: 'local' | 'zitadel'
 }
 
 type RuntimeSetupCompletePayload = {
@@ -28,7 +28,7 @@ type RuntimeSetupCompletePayload = {
   instance_name?: string
   profile_key?: string
   config_path?: string
-  auth_mode?: 'local' | 'clerk' | 'zitadel'
+  auth_mode?: 'local' | 'zitadel'
   local_login_username?: string
   local_login_password?: string
   data_dir?: string
@@ -45,17 +45,13 @@ type SetupFormState = {
   portableMode: boolean
   runtimePortMode: 'auto' | 'fixed'
   runtimeFixedPort: number
-  authMode: 'local' | 'clerk' | 'zitadel'
-  clerkPublishableKey: string
+  authMode: 'local' | 'zitadel'
   featureChat: boolean
   featureProviders: boolean
   featureScanner: boolean
 }
 
 type SetupEntryMode = 'welcome' | 'form' | 'import'
-
-const BUILT_IN_CLERK_PUBLISHABLE_KEY =
-  'pk_test_Y2FyZWZ1bC1vd2wtNTYuY2xlcmsuYWNjb3VudHMuZGV2JA'
 
 export function SignIn() {
   const { redirect, auth_error: authError } = useSearch({
@@ -87,7 +83,6 @@ export function SignIn() {
     runtimePortMode: 'auto',
     runtimeFixedPort: 17880,
     authMode: 'local',
-    clerkPublishableKey: '',
     featureChat: true,
     featureProviders: true,
     featureScanner: true,
@@ -122,9 +117,7 @@ export function SignIn() {
             authMode:
               payload.default_auth_mode === 'zitadel'
                 ? 'zitadel'
-                : payload.default_auth_mode === 'clerk'
-                  ? 'clerk'
-                  : 'local',
+                : 'local',
           }))
         }
       } catch (error) {
@@ -179,7 +172,7 @@ export function SignIn() {
     if (setupForm.authMode === 'zitadel') {
       return 'Ready when this environment has its isolated Cabinet ZITADEL application, exact callback and required role grants.'
     }
-    return 'Built-in Clerk key configured and not editable'
+    return 'Ready: local-device mode; no password, passkey, cloud account, or encrypted-at-rest lock is verified.'
   }
 
   async function goToNextStep() {
@@ -231,13 +224,6 @@ export function SignIn() {
         )
         return
       }
-    }
-    if (setupStep === 3) {
-      setSetupForm((previous) => ({
-        ...previous,
-        clerkPublishableKey:
-          previous.authMode === 'clerk' ? BUILT_IN_CLERK_PUBLISHABLE_KEY : '',
-      }))
     }
     setSetupError(null)
     setSetupStep((previous) => Math.min(previous + 1, totalSteps - 1))
@@ -302,10 +288,7 @@ export function SignIn() {
       runtime_fixed_port:
         setupForm.runtimePortMode === 'fixed' ? setupForm.runtimeFixedPort : 0,
       auth_mode: setupForm.authMode,
-      clerk_publishable_key:
-        setupForm.authMode === 'clerk'
-          ? BUILT_IN_CLERK_PUBLISHABLE_KEY
-          : '',
+      clerk_publishable_key: '',
       feature_chat: setupForm.featureChat,
       feature_providers: setupForm.featureProviders,
       feature_scanner: setupForm.featureScanner,
@@ -815,19 +798,12 @@ export function SignIn() {
                         authMode:
                           event.target.value === 'zitadel'
                             ? 'zitadel'
-                            : event.target.value === 'clerk'
-                              ? 'clerk'
-                              : 'local',
-                        clerkPublishableKey:
-                          event.target.value === 'clerk'
-                            ? BUILT_IN_CLERK_PUBLISHABLE_KEY
-                            : '',
+                            : 'local',
                       }))
                     }
                     data-testid='setup-auth-mode'
                   >
                     <option value='local'>local</option>
-                    <option value='clerk'>clerk</option>
                     <option value='zitadel'>zitadel</option>
                   </select>
                 </label>
@@ -837,15 +813,6 @@ export function SignIn() {
                 >
                   {authReadinessLabel()}
                 </p>
-                {setupForm.authMode === 'clerk' ? (
-                  <p
-                    className='rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground'
-                    data-testid='setup-clerk-built-in-key'
-                  >
-                    Cabinet uses the built-in Clerk publishable key for this
-                    local setup. The key is not editable in the setup wizard.
-                  </p>
-                ) : null}
               </div>
             ) : null}
             {setupEntryMode === 'form' && setupStep === 4 ? (
@@ -934,12 +901,6 @@ export function SignIn() {
                 <p>
                   <strong>Auth Mode:</strong> {setupForm.authMode}
                 </p>
-                {setupForm.authMode === 'clerk' ? (
-                  <p>
-                    <strong>Clerk Key:</strong>{' '}
-                    {setupForm.clerkPublishableKey ? 'Configured' : 'Missing'}
-                  </p>
-                ) : null}
                 <p>
                   <strong>Features:</strong>{' '}
                   {[

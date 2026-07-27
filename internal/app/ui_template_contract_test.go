@@ -627,6 +627,35 @@ func TestClerkSessionBootstrapContract(t *testing.T) {
 	}
 }
 
+func TestSetupWizardAuthModeOptionsRetireClerk(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/auth/sign-in/index.tsx")
+	if err != nil {
+		t.Fatalf("read sign-in setup feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"<option value='local'>local</option>",
+		"<option value='zitadel'>zitadel</option>",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("setup wizard missing active auth option token: %s", token)
+		}
+	}
+	forbidden := []string{
+		"<option value='clerk'>clerk</option>",
+		"setup-clerk-built-in-key",
+		"BUILT_IN_CLERK_PUBLISHABLE_KEY",
+	}
+	for _, token := range forbidden {
+		if strings.Contains(src, token) {
+			t.Fatalf("setup wizard still exposes retired Clerk auth token: %s", token)
+		}
+	}
+}
+
 func TestIntegrationsEditPersistenceContract(t *testing.T) {
 	t.Parallel()
 
