@@ -3,6 +3,7 @@ import {
   getRouteMetadata,
 } from '../../../../src/lib/route-metadata'
 import { getDocumentTitle } from '../../../../src/lib/document-title'
+import { buildSearchNavigationResults } from '../../../../src/lib/route-navigation'
 
 const expectedRoutes = [
   { path: '/', title: 'Home', documentTitle: 'Cabinet - Home' },
@@ -157,5 +158,30 @@ describe('route metadata registry', () => {
         documentTitle
       )
     })
+  })
+
+  it('UI-ROUTE-METADATA-003 builds search navigation from canonical route metadata', () => {
+    const navigationResults = buildSearchNavigationResults()
+    const byPath = new Map(
+      navigationResults.map((result) => [result.path, result])
+    )
+
+    expect(byPath.get('/scanner')).to.include({
+      title: 'Market Watch',
+      group: 'General',
+      path: '/scanner',
+    })
+    expect(byPath.get('/purchases')).to.include({
+      title: 'Purchases',
+      group: 'General',
+      path: '/purchases',
+    })
+    expect(byPath.get('/settings/profile')).to.include({
+      title: 'Profile Settings',
+      group: 'Settings',
+      path: '/settings/profile',
+    })
+    expect(byPath.has('/errors/*'), 'system error route excluded').to.eq(false)
+    expect(byPath.has('/404'), 'system not-found route excluded').to.eq(false)
   })
 })
