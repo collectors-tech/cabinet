@@ -6,7 +6,7 @@
 
 ## 2. Shared Placement Model
 
-- [ ] 2.1 Add typed action-region helpers or fixtures for page header,
+- [x] 2.1 Add typed action-region helpers or fixtures for page header,
   table/list toolbar, row menu, bulk actions, and dialog footer expectations.
 - [ ] 2.2 Add responsive overflow rules for page-header actions without hiding
   the primary action from keyboard or screen-reader users.
