@@ -9,11 +9,17 @@ import (
 func TestUITemplateSidebarMappingContract(t *testing.T) {
 	t.Parallel()
 
-	b, err := os.ReadFile("../../ui.web/src/components/layout/data/sidebar-data.ts")
+	b, err := os.ReadFile("../../ui.web/src/lib/route-metadata.ts")
 	if err != nil {
-		t.Fatalf("read sidebar data: %v", err)
+		t.Fatalf("read route metadata: %v", err)
 	}
 	src := string(b)
+
+	b, err = os.ReadFile("../../ui.web/src/lib/route-navigation.ts")
+	if err != nil {
+		t.Fatalf("read route navigation: %v", err)
+	}
+	src += "\n" + string(b)
 
 	required := []string{
 		"title: 'Inventory'",
@@ -30,6 +36,15 @@ func TestUITemplateSidebarMappingContract(t *testing.T) {
 		}
 	}
 
+	b, err = os.ReadFile("../../ui.web/src/components/layout/data/sidebar-data.ts")
+	if err != nil {
+		t.Fatalf("read sidebar data: %v", err)
+	}
+	sidebarSrc := string(b)
+	if !strings.Contains(sidebarSrc, "buildSidebarNavigationGroups()") {
+		t.Fatal("sidebar data must use canonical route metadata groups")
+	}
+
 	forbidden := []string{
 		"title: 'Tasks'",
 		"title: 'Apps'",
@@ -39,7 +54,7 @@ func TestUITemplateSidebarMappingContract(t *testing.T) {
 		"title: 'Upgrade to Pro'",
 	}
 	for _, token := range forbidden {
-		if strings.Contains(src, token) {
+		if strings.Contains(sidebarSrc, token) {
 			t.Fatalf("forbidden template token still present: %s", token)
 		}
 	}

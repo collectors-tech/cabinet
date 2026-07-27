@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
+import { buildSearchNavigationResults } from '@/lib/route-navigation'
 import {
   Command,
   CommandEmpty,
@@ -9,59 +10,11 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { sidebarData } from './data/sidebar-data'
-import { type NavItem } from './types'
-
-type SearchNavResult = {
-  id: string
-  title: string
-  group: string
-  path: string
-  value: string
-}
-
-function navResultKey(group: string, title: string, path: string) {
-  return `${group}:${title}:${path}`.toLowerCase()
-}
-
-function flattenNavItems(
-  groupTitle: string,
-  item: NavItem,
-  parentTitle?: string
-): SearchNavResult[] {
-  if ('items' in item) {
-    return (item.items ?? []).flatMap((child) =>
-      flattenNavItems(groupTitle, child, item.title)
-    )
-  }
-
-  if (!item.url) {
-    return []
-  }
-
-  const title = parentTitle ? `${parentTitle} / ${item.title}` : item.title
-  const value = `${title} ${groupTitle} ${item.url}`
-  return [
-    {
-      id: navResultKey(groupTitle, title, item.url),
-      title,
-      group: groupTitle,
-      path: item.url,
-      value,
-    },
-  ]
-}
-
-function buildNavigationResults(): SearchNavResult[] {
-  return sidebarData.navGroups.flatMap((group) =>
-    group.items.flatMap((item) => flattenNavItems(group.title, item))
-  )
-}
 
 export function SearchWorkspacePanel() {
   const navigate = useNavigate()
   const [searchValue, setSearchValue] = useState('')
-  const navigationResults = useMemo(() => buildNavigationResults(), [])
+  const navigationResults = useMemo(() => buildSearchNavigationResults(), [])
 
   return (
     <aside

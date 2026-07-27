@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, ScanSearch } from 'lucide-react'
+import { getRouteHeaderTitleProps } from '@/lib/route-navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -35,6 +36,8 @@ type Failure = {
   retry_guidance?: string
   next_action?: string
 }
+
+const marketWatchHeader = getRouteHeaderTitleProps('/scanner')
 
 type ProviderHealth = {
   provider?: string
@@ -2013,9 +2016,12 @@ export function Scanner() {
       <Header fixed>
         <Search />
         <HeaderTitle
-          title='Market Watch'
-          description='Saved integration searches, provider health, and discovery inboxes.'
-          icon={ScanSearch}
+          title={marketWatchHeader?.title ?? 'Market Watch'}
+          description={
+            marketWatchHeader?.description ??
+            'Saved integration searches, provider health, and discovery inboxes.'
+          }
+          icon={marketWatchHeader?.icon ?? ScanSearch}
           testId='market-watch-header-title'
           iconTestId='market-watch-page-icon'
         />

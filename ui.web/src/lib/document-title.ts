@@ -1,3 +1,5 @@
+import { getRouteMetadata } from './route-metadata'
+
 const PRODUCT_NAME = 'Cabinet'
 
 type TitleRule = {
@@ -28,8 +30,10 @@ const TITLE_RULES: TitleRule[] = [
 
 export function getDocumentTitle(pathname: string) {
   const normalized = pathname === '' ? '/' : pathname
-  if (normalized === '/' || normalized === '/dashboard/') {
-    return `${PRODUCT_NAME} - Home`
+  const routeMetadata = getRouteMetadata(normalized)
+
+  if (routeMetadata) {
+    return routeMetadata.documentTitle
   }
 
   const matched = TITLE_RULES.find(

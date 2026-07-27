@@ -1,4 +1,5 @@
-import { Outlet } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { Outlet, useLocation } from '@tanstack/react-router'
 import {
   Monitor,
   Bell,
@@ -21,6 +22,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { getRouteMetadata } from '@/lib/route-metadata'
 import { SidebarNav } from './components/sidebar-nav'
 
 const sidebarNavItems = [
@@ -82,17 +84,29 @@ const sidebarNavItems = [
 ]
 
 export function Settings() {
+  const { pathname } = useLocation()
+  const routeMetadata = getRouteMetadata(pathname)
+
+  useEffect(() => {
+    if (routeMetadata) {
+      document.title = routeMetadata.documentTitle
+    }
+  }, [routeMetadata])
+
   return (
     <>
       {/* ===== Top Heading ===== */}
       <Header>
         <Search />
         <HeaderTitle
-          title='Settings'
-          description='Manage account, appearance, storage, and operations preferences.'
-          icon={SettingsIcon}
-          testId='settings-header-title'
-          iconTestId='settings-page-icon'
+          title={routeMetadata?.title ?? 'Settings'}
+          description={
+            routeMetadata?.description ??
+            'Manage account, appearance, storage, and operations preferences.'
+          }
+          icon={routeMetadata?.icon ?? SettingsIcon}
+          testId={routeMetadata?.testIds.headerTitle ?? 'settings-header-title'}
+          iconTestId={routeMetadata?.testIds.headerIcon ?? 'settings-header-icon'}
         />
         <div
           className='ms-auto flex items-center space-x-4'
