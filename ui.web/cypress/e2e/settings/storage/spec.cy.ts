@@ -13,6 +13,34 @@ describe('settings/storage', () => {
     cy.clearLocalStorage()
   })
 
+  it('UI-SCREEN-SETTINGS-STORAGE-012 uses the route header as the only visible page title', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-header-title"]')
+      .should('be.visible')
+      .and('contain.text', 'Storage Settings')
+    cy.get('main').find('h1').should('not.exist')
+  })
+
   it('UI-SCREEN-SETTINGS-STORAGE-004 renders storage paths and keeps diagnostics actions disabled in degraded mode', () => {
     let storageAttempt = 0
     cy.intercept('GET', '/api/profiles/active', {
