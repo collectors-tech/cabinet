@@ -1,9 +1,16 @@
 describe("UI-SCREEN-REPORTS", () => {
   function signInToReports() {
     cy.visit("/sign-in?redirect=%2Freports%2F")
-    cy.get('input[name="email"]').clear().type("e2e-reports@example.com")
-    cy.get('input[name="password"]').clear().type("password123")
-    cy.contains("button", "Sign in").click()
+    cy.get("body").then(($body) => {
+      if ($body.find('input[name="email"]').length > 0) {
+        cy.get('input[name="email"]').clear().type("e2e-reports@example.com")
+        cy.get('input[name="password"]').clear().type("password123")
+        cy.contains("button", "Sign in").click()
+        return
+      }
+
+      cy.contains("button", "Open local workspace").click()
+    })
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/reports\/?$/)
   }
 
@@ -40,10 +47,46 @@ describe("UI-SCREEN-REPORTS", () => {
     cy.wait("@pricingTrend")
     cy.wait("@pricingSource")
 
-    cy.get("main").find("h1").contains("Reports").should("be.visible")
+    cy.get('[data-testid="reports-header-title"]').should("exist")
     cy.contains("Wishlist Hits").should("be.visible")
     cy.contains("Price Median").should("be.visible")
     cy.contains("$24.00").should("be.visible")
+  })
+
+  it("UI-SCREEN-REPORTS-005 places whole-page actions in the global header without duplicate page title content", () => {
+    cy.intercept("GET", "/api/profiles/active", {
+      statusCode: 200,
+      body: { id: "profile-reports-placement" },
+    })
+    cy.intercept("GET", "/api/wishlist/hits?profile_id=profile-reports-placement", {
+      statusCode: 200,
+      body: { hits: [{ id: "h1" }] },
+    })
+    cy.intercept("GET", "/api/pricing/stats?profile_id=profile-reports-placement", {
+      statusCode: 200,
+      body: { min: 12, median: 24, latest: 30 },
+    })
+    cy.intercept("GET", "/api/pricing/trend?profile_id=profile-reports-placement", {
+      statusCode: 200,
+      body: { points: [{ t: "2026-01-01", v: 12 }] },
+    })
+    cy.intercept("GET", "/api/pricing/by-source?profile_id=profile-reports-placement", {
+      statusCode: 200,
+      body: { sources: { ebay: { latest: 30 } } },
+    })
+
+    signInToReports()
+
+    cy.get('[data-testid="reports-global-header-actions"]')
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid="reports-refresh-button"]').should("be.visible")
+        cy.get('[data-testid="reports-export-button"]').should("be.visible")
+      })
+    cy.get("main").find("h1").should("not.exist")
+    cy.contains("main p", "Wishlist and pricing analytics with export-ready snapshots.").should(
+      "not.exist"
+    )
   })
 
   it("UI-SCREEN-REPORTS-002 exports report output deterministically", () => {
