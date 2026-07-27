@@ -971,6 +971,94 @@ func TestAgentSkillApplyAPIHandlesEmptyDashboardActivitySummary(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesPartialAndUnavailableDashboardActivitySummary(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Partial Dashboard"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, created_at)
+		VALUES ('dash-partial-item', ?, 'AFX', 'Slot', 'PARTIAL-1', 'Partial Dashboard Item', '2026-06-03T10:00:00Z');
+		INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes)
+		VALUES ('dash-partial-inst', 'dash-partial-item', 'used', 'loose', 1, 'shelf', 12, '', '');
+	`, p.ID); err != nil {
+		t.Fatalf("seed partial dashboard profile: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		ALTER TABLE canonical_items RENAME TO canonical_items_full;
+		CREATE VIEW canonical_items AS
+			SELECT id, profile_id, brand, category, part_number, title, created_at
+			FROM canonical_items_full;
+	`); err != nil {
+		t.Fatalf("make recent-item dependency partial: %v", err)
+	}
+
+	partial := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.dashboard.summarise_activity",
+		"parameters":{"workspace_id":"workspace-partial-dashboard","window":"today"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if partial.Code != http.StatusOK {
+		t.Fatalf("partial dashboard summary status=%d body=%s", partial.Code, partial.Body.String())
+	}
+	partialBody := partial.Body.String()
+	for _, want := range []string{
+		`"operation":"dashboard.activity.summary"`,
+		`"mutation_applied":false`,
+		`"status":"partial"`,
+		`"recent_items_unavailable":true`,
+		`"total_items":1`,
+		`"requested_window":"today"`,
+		`"Recent Dashboard item identifiers are unavailable`,
+	} {
+		if !strings.Contains(partialBody, want) {
+			t.Fatalf("partial dashboard summary missing %s: body=%s", want, partialBody)
+		}
+	}
+	if strings.Contains(partialBody, "no such column") || strings.Contains(partialBody, "canonical_items") {
+		t.Fatalf("partial dashboard summary leaked storage error details, body=%s", partialBody)
+	}
+	if _, err := a.db.Exec(`DROP VIEW canonical_items; ALTER TABLE canonical_items_full RENAME TO canonical_items; ALTER TABLE scanner_matches RENAME TO scanner_matches_unavailable;`); err != nil {
+		t.Fatalf("make dashboard dependency unavailable: %v", err)
+	}
+
+	unavailable := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.dashboard.summarise_activity",
+		"parameters":{"workspace_id":"workspace-unavailable-dashboard"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if unavailable.Code != http.StatusOK {
+		t.Fatalf("unavailable dashboard summary status=%d body=%s", unavailable.Code, unavailable.Body.String())
+	}
+	unavailableBody := unavailable.Body.String()
+	for _, want := range []string{
+		`"operation":"dashboard.activity.summary"`,
+		`"mutation_applied":false`,
+		`"status":"unavailable"`,
+		`"reason":"dashboard_summary_unavailable"`,
+		`"collection":{"unavailable":true}`,
+		`"recent_items":[]`,
+		`"Dashboard activity data is unavailable right now`,
+		`"route":"/dashboard"`,
+	} {
+		if !strings.Contains(unavailableBody, want) {
+			t.Fatalf("unavailable dashboard summary missing %s: body=%s", want, unavailableBody)
+		}
+	}
+	if strings.Contains(unavailableBody, "no such table") || strings.Contains(unavailableBody, "scanner_matches") {
+		t.Fatalf("unavailable dashboard summary leaked storage error details, body=%s", unavailableBody)
+	}
+}
+
 func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {
 	t.Parallel()
 

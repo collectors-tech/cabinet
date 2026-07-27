@@ -156,15 +156,20 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 
 func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (map[string]any, string, error) {
 	if conn == nil {
-		return nil, "dashboard_store_required", fmt.Errorf("database connection required")
+		return agentDashboardUnavailableResult(profileID, params, "dashboard_store_unavailable"), "", nil
 	}
 	summary, err := dashboard.NewService(conn).Summary(ctx, profileID)
 	if err != nil {
-		return nil, "dashboard_summary_failed", err
+		return agentDashboardUnavailableResult(profileID, params, "dashboard_summary_unavailable"), "", nil
 	}
 	recentItems, err := agentDashboardRecentItems(ctx, conn, profileID, 5)
+	dependencyWarnings := []string{}
+	dependencyStatus := "available"
+	recentItemsUnavailable := false
 	if err != nil {
-		return nil, "dashboard_recent_items_failed", err
+		dependencyStatus = "partial"
+		recentItemsUnavailable = true
+		dependencyWarnings = append(dependencyWarnings, "Recent Dashboard item identifiers are unavailable; current totals and attention counts still come from the canonical Dashboard service.")
 	}
 	requestedWindow := firstNonEmptyString(stringMapParam(params, "window"), stringMapParam(params, "time_window"), "current")
 	attentionSignals := []map[string]any{
@@ -181,15 +186,21 @@ func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID strin
 		summary.Restocks == 0 &&
 		len(recentItems) == 0
 	return map[string]any{
-		"profile_id":              profileID,
-		"operation":               "dashboard.activity.summary",
-		"read_only":               true,
-		"nothing_needs_attention": nothingNeedsAttention,
-		"empty_state":             agentDashboardEmptyState(nothingNeedsAttention),
-		"collection":              agentDashboardCollectionSummary(summary.Collection),
-		"attention_signals":       attentionSignals,
-		"recent_items":            recentItems,
-		"destination_links":       agentDashboardDestinationLinks(summary.Cards),
+		"profile_id":               profileID,
+		"operation":                "dashboard.activity.summary",
+		"read_only":                true,
+		"nothing_needs_attention":  nothingNeedsAttention,
+		"empty_state":              agentDashboardEmptyState(nothingNeedsAttention),
+		"collection":               agentDashboardCollectionSummary(summary.Collection),
+		"attention_signals":        attentionSignals,
+		"recent_items":             recentItems,
+		"recent_items_unavailable": recentItemsUnavailable,
+		"destination_links":        agentDashboardDestinationLinks(summary.Cards),
+		"dependency_state": map[string]any{
+			"status":      dependencyStatus,
+			"warnings":    dependencyWarnings,
+			"next_action": agentDashboardDependencyNextAction(dependencyStatus),
+		},
 		"time_window": map[string]any{
 			"requested_window": requestedWindow,
 			"evidence_backed":  false,
@@ -203,6 +214,49 @@ func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID strin
 		"warnings":    []string{"Dashboard activity summary is read-only and reports current snapshots, not historical deltas."},
 		"next_action": "Open Dashboard, Discoveries, Wishlist, Pricing, or Collections using the destination links to inspect the underlying records.",
 	}, "", nil
+}
+
+func agentDashboardUnavailableResult(profileID string, params map[string]any, reason string) map[string]any {
+	requestedWindow := firstNonEmptyString(stringMapParam(params, "window"), stringMapParam(params, "time_window"), "current")
+	warning := "Dashboard activity data is unavailable right now; no totals or attention counts were inferred."
+	return map[string]any{
+		"profile_id":               profileID,
+		"operation":                "dashboard.activity.summary",
+		"read_only":                true,
+		"nothing_needs_attention":  false,
+		"empty_state":              map[string]any{"active": false},
+		"collection":               map[string]any{"unavailable": true},
+		"attention_signals":        []map[string]any{},
+		"recent_items":             []map[string]any{},
+		"recent_items_unavailable": true,
+		"destination_links":        agentDashboardFallbackDestinationLinks(),
+		"dependency_state": map[string]any{
+			"status":      "unavailable",
+			"reason":      reason,
+			"warnings":    []string{warning},
+			"next_action": agentDashboardDependencyNextAction("unavailable"),
+		},
+		"time_window": map[string]any{
+			"requested_window": requestedWindow,
+			"evidence_backed":  false,
+			"snapshot_only":    true,
+			"caveat":           "Dashboard currently exposes current snapshot values when dependencies are available; historical time-window changes require event history that is not yet available.",
+		},
+		"record_identifiers": map[string]any{
+			"recent_items":                  []map[string]any{},
+			"recent_item_identifiers_found": 0,
+			"unavailable":                   true,
+		},
+		"warnings":    []string{warning, "Dashboard activity summary is read-only and reports current snapshots, not historical deltas."},
+		"next_action": agentDashboardDependencyNextAction("unavailable"),
+	}
+}
+
+func agentDashboardDependencyNextAction(status string) string {
+	if status == "available" {
+		return "Open Dashboard, Discoveries, Wishlist, Pricing, or Collections using the destination links to inspect the underlying records."
+	}
+	return "Open Dashboard or run a maintenance safe check to verify the local data store before relying on this summary."
 }
 
 func agentDashboardEmptyState(nothingNeedsAttention bool) map[string]any {
@@ -246,6 +300,16 @@ func agentDashboardDestinationLinks(cards []dashboard.Card) []map[string]any {
 		})
 	}
 	return links
+}
+
+func agentDashboardFallbackDestinationLinks() []map[string]any {
+	return []map[string]any{
+		{"id": "dashboard", "label": "Dashboard", "route": "/dashboard"},
+		{"id": "discoveries", "label": "Discoveries", "route": "/discoveries"},
+		{"id": "wishlist", "label": "Wishlist", "route": "/wishlist"},
+		{"id": "pricing", "label": "Pricing", "route": "/pricing"},
+		{"id": "collections", "label": "Collections", "route": "/collections"},
+	}
 }
 
 func agentDashboardLinkID(label string) string {

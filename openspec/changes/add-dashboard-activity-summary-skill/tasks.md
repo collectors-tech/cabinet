@@ -27,8 +27,12 @@
 
 - [x] 3.1 Handle empty Dashboard data with truthful "nothing needs attention"
   output and usable destination links.
-- [ ] 3.2 Handle partial or unavailable Dashboard dependencies with actionable
+- [x] 3.2 Handle partial or unavailable Dashboard dependencies with actionable
   warnings instead of fabricated totals.
+  - Added focused API coverage proving partial recent-item dependency failures
+    return current Dashboard totals plus sanitized warnings, and unavailable
+    Dashboard dependencies return no inferred totals with fallback destination
+    links and no raw storage error leakage.
 - [x] 3.3 Prove profile isolation so one profile cannot read another profile's
   Dashboard summary.
 - [x] 3.4 Prove the read-only skill never creates mutation previews,
@@ -36,7 +40,7 @@
 
 ## 4. Evidence
 
-- [ ] 4.1 Add focused Go/API tests for populated, empty, partial/unavailable,
+- [x] 4.1 Add focused Go/API tests for populated, empty, partial/unavailable,
   time-window caveat, no-mutation, and profile-isolation paths.
 - [ ] 4.2 Add main Chat and side-panel proof when the governed dispatch path can
   invoke the skill.
