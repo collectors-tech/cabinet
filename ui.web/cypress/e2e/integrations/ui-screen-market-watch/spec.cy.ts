@@ -1,9 +1,16 @@
 describe('integrations/ui-screen-market-watch', () => {
   function signInToMarketWatch(redirectPath = '/scanner/') {
     cy.visit(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`)
-    cy.get('input[name="email"]').clear().type('e2e-market-watch@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.get('body').then(($body) => {
+      if ($body.find('input[name="email"]').length > 0) {
+        cy.get('input[name="email"]').clear().type('e2e-market-watch@example.com')
+        cy.get('input[name="password"]').clear().type('password123')
+        cy.contains('button', 'Sign in').click()
+        return
+      }
+
+      cy.contains('button', 'Open local workspace').click()
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
   }
 
@@ -114,7 +121,11 @@ describe('integrations/ui-screen-market-watch', () => {
     signInToMarketWatch()
     cy.wait(['@querySets', '@failures', '@providerHealth', '@runs'])
 
-    cy.contains('Track saved searches across integrations').should('be.visible')
+    cy.get('[data-testid="market-watch-header-title"]').should(
+      'have.attr',
+      'title',
+      'Run saved market searches and review provider results.'
+    )
     cy.get('[data-testid="market-watch-dashboard-summary"]')
       .should('contain', 'Active watches')
       .and('contain', 'New discoveries')
@@ -156,6 +167,40 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-capture-reveal"]')
       .should('be.visible')
       .and('contain', 'Add listing manually')
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-022 places whole-page Create and Run actions in the global header without duplicate page title content', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: { query_sets: [] },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { provider: 'ebay', status: 'ok', state: 'healthy' },
+    }).as('providerHealth')
+    cy.intercept('GET', '/api/scanner/runs?limit=25', {
+      statusCode: 200,
+      body: { runs: [] },
+    }).as('runs')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth', '@runs'])
+
+    cy.get('[data-testid="market-watch-global-header-actions"]')
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="scanner-create-query"]').should('be.visible')
+        cy.get('[data-testid="scanner-run-scheduled-refresh"]').should('be.visible')
+      })
+    cy.get('[data-testid="market-watch-toolbar-create-query"]').should('not.exist')
+    cy.get('main').find('h1').should('not.exist')
+    cy.contains(
+      'main p',
+      'Track saved searches across integrations, review new discoveries, and recover provider issues without leaving the dashboard.'
+    ).should('not.exist')
   })
 
   it('UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history', () => {
@@ -327,7 +372,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-provider-single"]').select('amazon')
     cy.get('[data-testid="scanner-new-query-name"]').type('Amazon Scope')
     cy.get('[data-testid="scanner-new-query-keywords"]').type('slot')
-    cy.get('[data-testid="market-watch-toolbar-create-query"]').click()
+    cy.get('[data-testid="scanner-create-query"]').click()
     cy.wait('@createScopedQuery')
     cy.get('[data-testid="scanner-query-providers-qs-mw-1"]').should('contain', 'amazon')
   })
