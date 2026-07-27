@@ -34,7 +34,7 @@ func TestAuthProviderOptionsDefaults(t *testing.T) {
 	}
 }
 
-func TestAuthProviderOptionsRespectsEnv(t *testing.T) {
+func TestAuthProviderOptionsIgnoresRetiredClerkEnv(t *testing.T) {
 	t.Setenv("CABINET_AUTH_IDENTITY_MODE", "clerk")
 	t.Setenv("VITE_CLERK_PUBLISHABLE_KEY", "pk_test_123")
 	t.Setenv("CABINET_AUTH_PROVIDER_APPLE_ENABLED", "false")
@@ -56,11 +56,11 @@ func TestAuthProviderOptionsRespectsEnv(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode provider-options payload: %v", err)
 	}
-	if payload.IdentityMode != "clerk" {
-		t.Fatalf("expected clerk identity mode, got %s", payload.IdentityMode)
+	if payload.IdentityMode != "local" {
+		t.Fatalf("expected retired clerk mode to fall back to local, got %s", payload.IdentityMode)
 	}
-	if !payload.ClerkConfigured {
-		t.Fatalf("expected clerk configured=true when publishable key is set")
+	if payload.ClerkConfigured {
+		t.Fatalf("retired clerk publishable key must not report an active configured provider")
 	}
 	foundApple := false
 	for _, provider := range payload.Providers {

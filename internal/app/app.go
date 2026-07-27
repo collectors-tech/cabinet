@@ -7891,18 +7891,11 @@ func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidatio
 	if authMode == "" {
 		authMode = "local"
 	}
-	if authMode != "local" && authMode != "clerk" && authMode != "zitadel" {
+	if authMode != "local" && authMode != "zitadel" {
 		return &runtimeSetupValidationError{
 			Code:    "SETUP_AUTH_MODE_INVALID",
-			Message: "Auth mode must be local, clerk or zitadel.",
+			Message: "Auth mode must be local or zitadel.",
 			Field:   "auth_mode",
-		}
-	}
-	if authMode == "clerk" && strings.TrimSpace(req.ClerkPublishableKey) == "" {
-		return &runtimeSetupValidationError{
-			Code:    "SETUP_CLERK_PUBLISHABLE_KEY_REQUIRED",
-			Message: "Clerk publishable key is required.",
-			Field:   "clerk_publishable_key",
 		}
 	}
 	portMode := strings.TrimSpace(strings.ToLower(req.RuntimePortMode))
@@ -8106,11 +8099,8 @@ func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {
 	if authMode == "" {
 		return fmt.Errorf("auth.mode is required")
 	}
-	if authMode != "local" && authMode != "clerk" && authMode != "zitadel" {
-		return fmt.Errorf("auth.mode must be local, clerk or zitadel")
-	}
-	if authMode == "clerk" && strings.TrimSpace(payload.Auth.Clerk.PublishableKey) == "" {
-		return fmt.Errorf("auth.clerk.publishableKey is required for clerk mode")
+	if authMode != "local" && authMode != "zitadel" {
+		return fmt.Errorf("auth.mode must be local or zitadel")
 	}
 	if strings.TrimSpace(payload.Meta.CreatedAt) == "" {
 		return fmt.Errorf("meta.createdAt is required")
