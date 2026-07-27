@@ -8,8 +8,13 @@
 
 ## 2. Skill registration and runtime
 
-- [ ] 2.1 Register `cabinet.dashboard.summarise_activity` as a built-in
+- [x] 2.1 Register `cabinet.dashboard.summarise_activity` as a built-in
   read-only skill with explicit profile context and no mutation permissions.
+  - Added focused registry coverage in `internal/agentskills/registry_test.go`
+    proving built-in source metadata, read-only/no-confirm permissions,
+    profile/workspace context, Dashboard capability/workflow bindings,
+    output schema refs, missing-context blocker, and read-only profile
+    authority allowance.
 - [ ] 2.2 Add a Dashboard summary service/runtime adapter that reuses canonical
   Dashboard data and returns structured totals, attention signals, recent
   items, destination links, and record identifiers.

@@ -44,6 +44,7 @@ func TestSkillRegistryListsAndResolvesBuiltInAndImportedSkills(t *testing.T) {
 		"cabinet.collections.soft_delete",
 		"cabinet.collections.move_items_on_delete",
 		"cabinet.collection.assign_item",
+		"cabinet.dashboard.summarise_activity",
 		"cabinet.guided.inventory.update_item",
 		"cabinet.chat.action_timeline.view",
 		"cabinet.inbox.search_notifications",
@@ -633,6 +634,69 @@ func TestSkillPreviewBlocksUnboundInboxAndUsersMutations(t *testing.T) {
 	}
 	if protectedRemove.Allowed || protectedRemove.MutationApplied || protectedRemove.Blocker != "users_admin_protected_owner_remove_blocked" {
 		t.Fatalf("expected protected owner removal blocker without mutation, got %+v", protectedRemove)
+	}
+}
+
+func TestDashboardActivitySummarySkillExposesReadOnlyProfileBoundary(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry(nil)
+
+	summary, ok := registry.Resolve("cabinet.dashboard.summarise_activity")
+	if !ok {
+		t.Fatalf("expected Dashboard activity summary skill")
+	}
+	if summary.Source != SourceBuiltIn || !summary.BuiltIn || summary.Removable {
+		t.Fatalf("expected immutable built-in Dashboard skill metadata, got %+v", summary)
+	}
+	if summary.Category != "dashboard" || summary.SafetyLevel != SafetyReadOnly || !summary.Executable {
+		t.Fatalf("expected executable read-only Dashboard skill, got %+v", summary)
+	}
+	if !summary.Permissions.LocalRead || summary.Permissions.LocalWrite ||
+		summary.Permissions.ExternalWrite || summary.Permissions.Destructive ||
+		summary.Permissions.RequiresConfirm {
+		t.Fatalf("expected read-only no-confirm Dashboard permissions, got %+v", summary.Permissions)
+	}
+	for _, context := range []string{"profile", "workspace"} {
+		if !slices.Contains(summary.RequiredContext, context) {
+			t.Fatalf("expected Dashboard skill to require %q context, got %+v", context, summary.RequiredContext)
+		}
+	}
+	if !slices.Contains(summary.Capabilities, "dashboard.summary.read") ||
+		!slices.Contains(summary.IntegrationWorkflows, "dashboard.activity.summary") {
+		t.Fatalf("expected Dashboard summary bindings, capabilities=%+v workflows=%+v", summary.Capabilities, summary.IntegrationWorkflows)
+	}
+	for _, ref := range []string{"dashboard_activity_window", "dashboard_attention_summary"} {
+		if !slices.Contains(summary.OutputSchemaRefs, ref) {
+			t.Fatalf("expected Dashboard output schema ref %q, got %+v", ref, summary.OutputSchemaRefs)
+		}
+	}
+
+	missing, err := registry.ReviewRequirements(PreviewRequest{SkillID: "cabinet.dashboard.summarise_activity"})
+	if err != nil {
+		t.Fatalf("review Dashboard summary requirements: %v", err)
+	}
+	if missing.Allowed || missing.Blocker != "missing_context" || !slices.Contains(missing.MissingContext, "profile") {
+		t.Fatalf("expected missing profile/workspace context blocker, got %+v", missing)
+	}
+
+	ready, err := registry.ReviewAuthority(PreviewRequest{
+		SkillID:   "cabinet.dashboard.summarise_activity",
+		ProfileID: "profile-a",
+		Parameters: map[string]any{
+			"workspace_id": "workspace-a",
+			"window":       "today",
+		},
+	}, AgentAuthorityPolicy{
+		ProfileID:  "profile-a",
+		Mode:       AgentAuthorityReadOnly,
+		EntryPoint: "direct-api",
+	})
+	if err != nil {
+		t.Fatalf("review Dashboard summary authority: %v", err)
+	}
+	if !ready.Allowed || !ready.PreviewAllowed || !ready.ApplyAllowed || ready.Blocker != "" || ready.ConfirmationRequired {
+		t.Fatalf("expected Dashboard summary to remain allowed in read-only mode, got %+v", ready)
 	}
 }
 
