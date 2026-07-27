@@ -25,7 +25,7 @@
 
 ## 3. Edge states
 
-- [ ] 3.1 Handle empty Dashboard data with truthful "nothing needs attention"
+- [x] 3.1 Handle empty Dashboard data with truthful "nothing needs attention"
   output and usable destination links.
 - [ ] 3.2 Handle partial or unavailable Dashboard dependencies with actionable
   warnings instead of fabricated totals.

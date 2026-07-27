@@ -929,6 +929,48 @@ func TestAgentSkillApplyAPIHandlesDashboardActivitySummary(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesEmptyDashboardActivitySummary(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Empty Dashboard"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.dashboard.summarise_activity",
+		"parameters":{"workspace_id":"workspace-empty-dashboard"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("empty dashboard summary status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	body := resp.Body.String()
+	for _, want := range []string{
+		`"operation":"dashboard.activity.summary"`,
+		`"read_only":true`,
+		`"mutation_applied":false`,
+		`"nothing_needs_attention":true`,
+		`"total_items":0`,
+		`"total_instances":0`,
+		`"recent_items":[]`,
+		`"destination_links"`,
+		`"route":"/discoveries"`,
+		`"route":"/collections"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("empty dashboard summary response missing %s: body=%s", want, body)
+		}
+	}
+}
+
 func TestAgentSkillPreviewAPIBlocksWishlistAndCollectionMissingContext(t *testing.T) {
 	t.Parallel()
 

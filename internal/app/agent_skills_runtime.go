@@ -174,14 +174,22 @@ func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID strin
 		agentDashboardSignal("low_stock_discoveries", "Low-stock discoveries", summary.LowStockDiscoveries, "/discoveries"),
 		agentDashboardSignal("restocks", "Restocks", summary.Restocks, "/pricing"),
 	}
+	nothingNeedsAttention := summary.NewDiscoveries == 0 &&
+		summary.WishlistHits == 0 &&
+		summary.PriceDrops == 0 &&
+		summary.LowStockDiscoveries == 0 &&
+		summary.Restocks == 0 &&
+		len(recentItems) == 0
 	return map[string]any{
-		"profile_id":        profileID,
-		"operation":         "dashboard.activity.summary",
-		"read_only":         true,
-		"collection":        agentDashboardCollectionSummary(summary.Collection),
-		"attention_signals": attentionSignals,
-		"recent_items":      recentItems,
-		"destination_links": agentDashboardDestinationLinks(summary.Cards),
+		"profile_id":              profileID,
+		"operation":               "dashboard.activity.summary",
+		"read_only":               true,
+		"nothing_needs_attention": nothingNeedsAttention,
+		"empty_state":             agentDashboardEmptyState(nothingNeedsAttention),
+		"collection":              agentDashboardCollectionSummary(summary.Collection),
+		"attention_signals":       attentionSignals,
+		"recent_items":            recentItems,
+		"destination_links":       agentDashboardDestinationLinks(summary.Cards),
 		"time_window": map[string]any{
 			"requested_window": requestedWindow,
 			"evidence_backed":  false,
@@ -195,6 +203,16 @@ func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID strin
 		"warnings":    []string{"Dashboard activity summary is read-only and reports current snapshots, not historical deltas."},
 		"next_action": "Open Dashboard, Discoveries, Wishlist, Pricing, or Collections using the destination links to inspect the underlying records.",
 	}, "", nil
+}
+
+func agentDashboardEmptyState(nothingNeedsAttention bool) map[string]any {
+	if !nothingNeedsAttention {
+		return map[string]any{"active": false}
+	}
+	return map[string]any{
+		"active":  true,
+		"message": "Nothing needs attention in the current Dashboard snapshot.",
+	}
 }
 
 func agentDashboardCollectionSummary(stats dashboard.CollectionStats) map[string]any {
