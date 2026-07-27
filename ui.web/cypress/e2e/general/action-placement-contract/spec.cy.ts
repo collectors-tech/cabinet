@@ -3,6 +3,7 @@ import {
   buildActionPlacementChecklist,
   buildPageHeaderActionLayout,
   buildShellActionBoundary,
+  getRouteActionRegionContract,
   getActionPlacementRegion,
   isPageActionRegion,
   shellUtilityActionIds,
@@ -224,5 +225,33 @@ describe('action placement contract', () => {
       includedInPageOverflow: true,
       ownsGlobalChrome: false,
     })
+  })
+
+  it('UI-ACTION-PLACEMENT-006 publishes route-level page action regions for packaged shell checks', () => {
+    expect(getRouteActionRegionContract('/reports')).to.deep.include({
+      route: '/reports',
+      pageActionRegionTestId: 'reports-global-header-actions',
+    })
+    expect(
+      getRouteActionRegionContract('/reports')?.wholePageActionIds
+    ).to.deep.eq(['reports-refresh', 'reports-export'])
+
+    expect(getRouteActionRegionContract('/scanner')).to.deep.include({
+      route: '/scanner',
+      pageActionRegionTestId: 'market-watch-global-header-actions',
+    })
+    expect(
+      getRouteActionRegionContract('/scanner')?.wholePageActionIds
+    ).to.deep.eq(['market-watch-create', 'market-watch-run'])
+
+    expect(getRouteActionRegionContract('/help-center')).to.deep.include({
+      route: '/help-center',
+    })
+    expect(getRouteActionRegionContract('/help-center')).not.to.have.property(
+      'pageActionRegionTestId'
+    )
+    expect(
+      getRouteActionRegionContract('/help-center')?.wholePageActionIds
+    ).to.deep.eq([])
   })
 })

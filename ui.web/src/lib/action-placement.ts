@@ -78,6 +78,13 @@ export type ShellActionBoundary = {
   pageActionPlacement: ActionBoundaryPlacement
 }
 
+export type RouteActionRegionContract = {
+  route: string
+  surface: string
+  pageActionRegionTestId?: string
+  wholePageActionIds: string[]
+}
+
 export const actionPlacementRegions: ActionPlacementRegion[] = [
   {
     id: 'page-header',
@@ -125,8 +132,154 @@ export const shellUtilityActionIds = [
   'sidebar-toggle',
 ] as const
 
+export const routeActionRegionContracts: RouteActionRegionContract[] = [
+  {
+    route: '/dashboard',
+    surface: 'Dashboard',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/inventory',
+    surface: 'Inventory',
+    pageActionRegionTestId: 'inventory-global-header-actions',
+    wholePageActionIds: [
+      'inventory-new-item',
+      'inventory-import',
+      'inventory-export',
+    ],
+  },
+  {
+    route: '/collections',
+    surface: 'Collections',
+    pageActionRegionTestId: 'collections-global-header-actions',
+    wholePageActionIds: ['collections-new'],
+  },
+  {
+    route: '/wishlist',
+    surface: 'Wishlist',
+    pageActionRegionTestId: 'wishlist-global-header-actions',
+    wholePageActionIds: ['wishlist-add', 'wishlist-import', 'wishlist-export'],
+  },
+  {
+    route: '/media',
+    surface: 'Media',
+    pageActionRegionTestId: 'media-global-header-actions',
+    wholePageActionIds: ['media-upload'],
+  },
+  {
+    route: '/purchases',
+    surface: 'Purchases',
+    pageActionRegionTestId: 'purchases-global-header-actions',
+    wholePageActionIds: ['purchases-new', 'purchases-export'],
+  },
+  {
+    route: '/integrations',
+    surface: 'Integrations',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/chats',
+    surface: 'Chats',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/inbox',
+    surface: 'Inbox',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/discoveries',
+    surface: 'Discoveries',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/reports',
+    surface: 'Reports',
+    pageActionRegionTestId: 'reports-global-header-actions',
+    wholePageActionIds: ['reports-refresh', 'reports-export'],
+  },
+  {
+    route: '/scanner',
+    surface: 'Market Watch',
+    pageActionRegionTestId: 'market-watch-global-header-actions',
+    wholePageActionIds: ['market-watch-create', 'market-watch-run'],
+  },
+  {
+    route: '/settings/profile',
+    surface: 'Settings Profile',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/account',
+    surface: 'Settings Account',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/appearance',
+    surface: 'Settings Appearance',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/display',
+    surface: 'Settings Display',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/billing',
+    surface: 'Settings Billing',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/categories',
+    surface: 'Settings Categories',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/integrations',
+    surface: 'Settings Integrations',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/notifications',
+    surface: 'Settings Notifications',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/operations',
+    surface: 'Settings Operations',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/skills',
+    surface: 'Settings Skills',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/settings/storage',
+    surface: 'Settings Storage',
+    wholePageActionIds: [],
+  },
+  {
+    route: '/users',
+    surface: 'Users',
+    pageActionRegionTestId: 'users-global-header-actions',
+    wholePageActionIds: ['users-add'],
+  },
+  {
+    route: '/help-center',
+    surface: 'Help Center',
+    wholePageActionIds: [],
+  },
+]
+
 export function getActionPlacementRegion(id: string) {
   return actionPlacementRegions.find((region) => region.id === id)
+}
+
+export function getRouteActionRegionContract(route: string) {
+  return routeActionRegionContracts.find(
+    (contract) => contract.route === route
+  )
 }
 
 export function isPageActionRegion(action: ActionPlacementDefinition) {

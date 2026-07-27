@@ -60,6 +60,74 @@ func TestUITemplateSidebarMappingContract(t *testing.T) {
 	}
 }
 
+func TestUITemplateActionRegionContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/lib/action-placement.ts")
+	if err != nil {
+		t.Fatalf("read action placement: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"routeActionRegionContracts",
+		"route: '/dashboard'",
+		"route: '/inventory'",
+		"route: '/collections'",
+		"route: '/wishlist'",
+		"route: '/media'",
+		"route: '/purchases'",
+		"route: '/integrations'",
+		"route: '/chats'",
+		"route: '/inbox'",
+		"route: '/discoveries'",
+		"route: '/reports'",
+		"route: '/scanner'",
+		"route: '/settings/profile'",
+		"route: '/settings/account'",
+		"route: '/settings/appearance'",
+		"route: '/settings/display'",
+		"route: '/settings/billing'",
+		"route: '/settings/categories'",
+		"route: '/settings/integrations'",
+		"route: '/settings/notifications'",
+		"route: '/settings/operations'",
+		"route: '/settings/skills'",
+		"route: '/settings/storage'",
+		"route: '/users'",
+		"route: '/help-center'",
+		"pageActionRegionTestId: 'reports-global-header-actions'",
+		"pageActionRegionTestId: 'market-watch-global-header-actions'",
+		"wholePageActionIds: ['reports-refresh', 'reports-export']",
+		"wholePageActionIds: ['market-watch-create', 'market-watch-run']",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("missing action-region contract token: %s", token)
+		}
+	}
+
+	files := []string{
+		"../../ui.web/src/features/reports/index.tsx",
+		"../../ui.web/src/features/scanner/index.tsx",
+	}
+	for _, file := range files {
+		b, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		pageSrc := string(b)
+		for _, token := range []string{
+			"global-header-actions",
+			"<HeaderTitle",
+		} {
+			if !strings.Contains(pageSrc, token) {
+				t.Fatalf("%s missing packaged shell action region token: %s", file, token)
+			}
+		}
+	}
+}
+
 func TestUITemplateProfileMenusContract(t *testing.T) {
 	t.Parallel()
 
