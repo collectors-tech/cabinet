@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, ScanSearch } from 'lucide-react'
+import { Play, Plus, ScanSearch } from 'lucide-react'
 import { getRouteHeaderTitleProps } from '@/lib/route-navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -2026,7 +2026,28 @@ export function Scanner() {
           iconTestId='market-watch-page-icon'
         />
         <div
-          className='ms-auto flex items-center space-x-4'
+          className='ms-auto flex items-center gap-2'
+          data-header-title-avoid='true'
+          data-testid='market-watch-global-header-actions'
+        >
+          <Button
+            onClick={() => void createQuerySet()}
+            data-testid='scanner-create-query'
+          >
+            <Plus className='h-4 w-4' aria-hidden='true' />
+            Create Saved Watch
+          </Button>
+          <Button
+            variant='outline'
+            onClick={() => void runScheduledRefresh()}
+            data-testid='scanner-run-scheduled-refresh'
+          >
+            <Play className='h-4 w-4' aria-hidden='true' />
+            Run Scheduled Watches
+          </Button>
+        </div>
+        <div
+          className='flex items-center space-x-4'
           data-header-title-avoid='true'
         >
           <LanguageSwitch />
@@ -2037,14 +2058,6 @@ export function Scanner() {
       </Header>
 
       <Main className='space-y-4'>
-        <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Market Watch</h1>
-          <p className='text-muted-foreground'>
-            Track saved searches across integrations, review new discoveries,
-            and recover provider issues without leaving the dashboard.
-          </p>
-        </div>
-
         <section
           className='grid gap-2 sm:grid-cols-2 lg:grid-cols-6'
           data-testid='market-watch-dashboard-summary'
@@ -2235,31 +2248,8 @@ export function Scanner() {
               ))}
             </div>
           )}
-          <Button
-            onClick={() => void createQuerySet()}
-            data-testid='scanner-create-query'
-          >
-            Create Saved Watch
-          </Button>
-          <Button
-            variant='outline'
-            onClick={() => void runScheduledRefresh()}
-            data-testid='scanner-run-scheduled-refresh'
-          >
-            Run Scheduled Watches
-          </Button>
         </section>
         <section className='flex flex-wrap items-center gap-2'>
-          <Button
-            type='button'
-            size='sm'
-            aria-label='Create Market Watch query'
-            title='Create Market Watch query'
-            data-testid='market-watch-toolbar-create-query'
-            onClick={() => void createQuerySet()}
-          >
-            <Plus className='h-4 w-4' aria-hidden='true' />
-          </Button>
           <Button
             type='button'
             size='sm'

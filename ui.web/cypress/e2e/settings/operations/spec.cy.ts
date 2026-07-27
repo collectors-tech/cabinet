@@ -1,9 +1,7 @@
 describe('settings/operations', () => {
   function signInToOperations() {
     cy.visit('/sign-in?redirect=%2Fsettings%2Foperations')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/settings\/operations\/?$/
@@ -59,6 +57,72 @@ describe('settings/operations', () => {
       'contain',
       'Recovery required'
     )
+  })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-016 keeps operations controls in local action regions', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-action-placement',
+        build_date: '2026-04-23',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: {
+        id: 'profile-ops-placement',
+      },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/profile-ops-placement/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          scanner_schedule: '0 */6 * * *',
+        },
+      },
+    }).as('profileSettings')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+    cy.wait('@activeProfile')
+    cy.wait('@profileSettings')
+
+    cy.get('[data-testid="settings-operations-global-header-actions"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="settings-operations-runtime-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-retry"]').should('be.visible')
+    })
+    cy.get('[data-testid="settings-operations-logs-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-export-logs"]').should(
+        'be.visible'
+      )
+    })
+    cy.get('[data-testid="settings-operations-data-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-export-json"]').should(
+        'be.visible'
+      )
+    })
+    cy.get('[data-testid="settings-operations-queue-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-queue-pause"]').should(
+        'be.visible'
+      )
+      cy.get('[data-testid="settings-operations-queue-resume"]').should(
+        'be.visible'
+      )
+    })
   })
 
   it('UI-SCREEN-SETTINGS-OPERATIONS-002 retries runtime visibility without route reload', () => {

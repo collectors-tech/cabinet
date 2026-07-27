@@ -688,7 +688,10 @@ export function SettingsStorage() {
               )}
             </div>
           </div>
-          <div className='space-y-3 rounded-md border p-3'>
+          <div
+            className='space-y-3 rounded-md border p-3'
+            data-testid='settings-storage-backup-section'
+          >
             <div className='flex items-start justify-between gap-3'>
               <div>
                 <p className='font-medium'>Backups</p>
