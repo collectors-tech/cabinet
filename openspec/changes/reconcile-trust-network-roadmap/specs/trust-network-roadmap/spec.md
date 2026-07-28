@@ -51,6 +51,22 @@ reputation, transport, governance, and failure recovery before code work begins.
 - **AND** only explicitly selected claims or hash-only proofs MAY leave the
   local workspace.
 
+### Requirement: Canonical trust-network glossary
+
+Cabinet MUST maintain one canonical glossary for the trust-network roadmap so
+future implementation issues use consistent terms for identities, items,
+signed objects, governance records, and infrastructure roles.
+
+#### Scenario: Required trust-network terms are defined
+
+- **GIVEN** an architecture decision, schema, test vector, or follow-up issue
+  references trust-network objects
+- **WHEN** the roadmap is validated
+- **THEN** the glossary MUST define identity, specimen, catalogue item,
+  proposal, reservation, receipt, ownership event, feedback, attestation,
+  endorsement, registry, and node
+- **AND** each definition MUST state its authority or privacy boundary.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation

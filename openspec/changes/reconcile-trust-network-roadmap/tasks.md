@@ -2,7 +2,7 @@
 
 - [x] 1.1 Create the OpenSpec proposal, task plan, and initial decision matrix
   for #1957.
-- [ ] 1.2 Add canonical glossary entries for identity, specimen, catalogue
+- [x] 1.2 Add canonical glossary entries for identity, specimen, catalogue
   item, proposal, reservation, receipt, ownership event, feedback,
   attestation, endorsement, registry, and node.
 - [ ] 1.3 Complete the source-area decision matrix with canonical rule,
