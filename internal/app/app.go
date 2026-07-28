@@ -7430,7 +7430,7 @@ func New(cfg config.Config) (*App, error) {
 			"features": entitlementFeaturesFromPlan(plan),
 		})
 	})
-	mux.HandleFunc("/api/auth/cloud/clerk/webhook", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/cloud/zitadel/webhook", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -7441,7 +7441,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_body"}`, http.StatusBadRequest)
 			return
 		}
-		secret := strings.TrimSpace(os.Getenv("CABINET_CLERK_WEBHOOK_SECRET"))
+		secret := strings.TrimSpace(os.Getenv("CABINET_ZITADEL_WEBHOOK_SECRET"))
 		if secret == "" {
 			secret = "dev-secret"
 		}
@@ -7455,7 +7455,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		userID, plan, err := clerkWebhookPlanTransition(payload)
+		userID, plan, err := zitadelWebhookPlanTransition(payload)
 		if err != nil {
 			http.Error(w, `{"error":"invalid_webhook_payload"}`, http.StatusBadRequest)
 			return
@@ -8868,7 +8868,7 @@ func displayListContains(values []string, value string) bool {
 	return false
 }
 
-func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {
+func zitadelWebhookPlanTransition(payload map[string]any) (string, string, error) {
 	data, _ := payload["data"].(map[string]any)
 	if data == nil {
 		return "", "", fmt.Errorf("missing data")
