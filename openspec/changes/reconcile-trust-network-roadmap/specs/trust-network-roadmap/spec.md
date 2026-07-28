@@ -298,6 +298,59 @@ trade implementation issues open.
 - **AND** the resolution MAY update local derived state but MUST NOT erase the
   original conflicting signed objects or force remote peers to accept it.
 
+### Requirement: Financial capability stays outside Cabinet core
+
+Cabinet MUST define a financial boundary that permits external consideration
+notation while excluding escrow, held balances, checkout, stored value, payment
+accounts, payment credentials, and payment processing from core trust-network
+work.
+
+#### Scenario: Receipts record external consideration only
+
+- **GIVEN** a proposal, reservation, receipt, dispute, ownership event, or
+  manual resolution references value exchanged outside Cabinet
+- **WHEN** Cabinet serializes, signs, publishes, exchanges, or reconciles that
+  object
+- **THEN** the object MAY include external consideration notation such as type
+  label, amount, currency, external method label, user-supplied reference,
+  acknowledgement timestamp, participant acknowledgements, and redacted evidence
+  refs
+- **AND** it MUST NOT contain payment credentials, Cabinet balances, held funds,
+  checkout state, processor secrets, settlement state, or fund-custody actions.
+
+#### Scenario: Payment references cannot drive ownership automatically
+
+- **GIVEN** Cabinet receives an external payment reference, webhook-like
+  evidence, screenshot, email, or participant-supplied payment note
+- **WHEN** trust-network state is evaluated
+- **THEN** the payment reference MAY contribute scoped evidence to transaction
+  confidence
+- **AND** it MUST NOT override signed-object validation, reservation expiry,
+  double-trade conflicts, revoked keys, privacy rules, or local participant
+  acceptance.
+
+#### Scenario: UI language does not imply Cabinet custody
+
+- **GIVEN** a trust-network flow records or displays external consideration
+- **WHEN** users review the flow, signed preview, receipt, dispute, or public
+  claim
+- **THEN** Cabinet MUST describe it as external payment notation or
+  consideration acknowledged outside Cabinet
+- **AND** it MUST NOT use product language that implies Cabinet escrow, top-up,
+  wallet balance, checkout, fund release, refund processing, or payment
+  protection.
+
+#### Scenario: Follow-up issues preserve the no-custody boundary
+
+- **GIVEN** a future implementation issue references payments, providers,
+  receipts, disputes, or transaction evidence
+- **WHEN** that issue is opened from the roadmap
+- **THEN** it MUST state whether it is notation-only, evidence-import, or a
+  separately approved non-core commerce integration
+- **AND** it MUST include tests proving forbidden payment states, credentials,
+  and custody/checkout language are absent from schemas, APIs, logs, UI, and
+  serialized trust objects by default.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation

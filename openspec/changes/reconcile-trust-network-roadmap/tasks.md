@@ -28,7 +28,7 @@
   retirement, appeal, and compromised-key recovery.
 - [x] 3.3 Define offline idempotency, reservation expiry, double-trade
   detection, conflict evidence, and manual resolution.
-- [ ] 3.4 Define the financial boundary so Cabinet records external payment
+- [x] 3.4 Define the financial boundary so Cabinet records external payment
   notation only and excludes escrow, held balance, checkout, and payment
   processing.
 
