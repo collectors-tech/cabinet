@@ -117,6 +117,34 @@ test vectors.
   evidence
 - **AND** the other trust scores MUST NOT silently make the interaction valid.
 
+### Requirement: Signed trust objects define authority
+
+Cabinet MUST define versioned signed-object authority for receipts, feedback,
+attestations, endorsements, revocations, mirrors, and catalogue manifests before
+opening trust-network implementation issues.
+
+#### Scenario: Signed-object authority is verified before use
+
+- **GIVEN** Cabinet receives or loads a receipt, feedback object, attestation,
+  endorsement, revocation, mirror manifest, or catalogue manifest
+- **WHEN** the object is used as trust-network evidence
+- **THEN** Cabinet MUST verify the signing envelope, object schema, issuer key
+  purpose, referenced identity state, revocation state, and previous-state hash
+- **AND** unknown critical fields, unsupported schema versions, broken
+  signatures, revoked issuer keys, or unresolved authority conflicts MUST fail
+  closed.
+
+#### Scenario: Carriers never replace signed authority
+
+- **GIVEN** a signed trust object is carried through QR, manual export, local
+  queue, peer session, Git mirror, Radicle mirror, DHT advert, catalogue
+  bundle, or search/index projection
+- **WHEN** Cabinet evaluates that object
+- **THEN** the signed Cabinet object MUST remain the authority
+- **AND** the carrier MUST NOT mutate private local state, reputation,
+  registry membership, or catalogue trust without a valid signed object and the
+  required local acceptance or conflict checks.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation

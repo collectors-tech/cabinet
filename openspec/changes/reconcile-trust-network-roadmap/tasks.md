@@ -15,7 +15,7 @@
   recovery, and compatibility suite without assuming secure enclave support.
 - [x] 2.2 Separate identity validation, transaction confidence, and reputation
   models with bounded ranges and deterministic test vectors.
-- [ ] 2.3 Define signed-object authority for receipts, feedback,
+- [x] 2.3 Define signed-object authority for receipts, feedback,
   attestations, endorsements, revocations, mirrors, and catalogue manifests.
 - [ ] 2.4 Define privacy/publication boundaries for private local records,
   participant-shared records, public claims, and hash-only publication.
