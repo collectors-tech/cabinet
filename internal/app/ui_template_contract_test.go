@@ -645,11 +645,12 @@ func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
 	for _, file := range []string{
 		"../../ui.web/src/assets/clerk-full-logo.tsx",
 		"../../ui.web/src/assets/clerk-logo.tsx",
+		"../../scripts/runtime/start-exploration-clerk.ps1",
 	} {
 		if _, err := os.Stat(file); err == nil {
-			t.Fatalf("frontend still ships retired Clerk asset: %s", file)
+			t.Fatalf("retired Clerk surface still exists: %s", file)
 		} else if !os.IsNotExist(err) {
-			t.Fatalf("stat retired Clerk asset %s: %v", file, err)
+			t.Fatalf("stat retired Clerk surface %s: %v", file, err)
 		}
 	}
 
@@ -658,6 +659,7 @@ func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
 		"../../ui.web/src/features/auth/sign-in/components/user-auth-form.tsx",
 		"../../ui.web/package.json",
 		"../../ui.web/package-lock.json",
+		"../../scripts/runtime/start-exploration-local.ps1",
 	}
 	for _, file := range files {
 		b, err := os.ReadFile(file)
@@ -669,6 +671,7 @@ func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
 			"@clerk/clerk-react",
 			"/clerk",
 			"VITE_CLERK_PUBLISHABLE_KEY",
+			"CABINET_AUTH_IDENTITY_MODE=clerk",
 			"identity_mode === 'clerk'",
 		}
 		for _, token := range forbidden {
