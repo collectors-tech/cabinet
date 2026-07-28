@@ -13,7 +13,7 @@
 
 - [x] 2.1 Define the canonical identity, signature, key-rotation, revocation,
   recovery, and compatibility suite without assuming secure enclave support.
-- [ ] 2.2 Separate identity validation, transaction confidence, and reputation
+- [x] 2.2 Separate identity validation, transaction confidence, and reputation
   models with bounded ranges and deterministic test vectors.
 - [ ] 2.3 Define signed-object authority for receipts, feedback,
   attestations, endorsements, revocations, mirrors, and catalogue manifests.

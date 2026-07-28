@@ -92,6 +92,31 @@ issues.
 - **AND** they MUST NOT replace the Cabinet identity object and signature
   envelope as the canonical authority.
 
+### Requirement: Separate trust scoring models
+
+Cabinet MUST keep identity validation, transaction confidence, and ongoing
+reputation as separate explainable models with bounded ranges and deterministic
+test vectors.
+
+#### Scenario: Trust models have independent inputs and ranges
+
+- **GIVEN** Cabinet evaluates a trust-network identity, interaction, or history
+- **WHEN** a score or explanation is produced
+- **THEN** identity validation MUST use the integer range `0..100`
+- **AND** transaction confidence MUST use the decimal range `0.00..1.00`
+- **AND** ongoing reputation MUST use the decimal range `0.00..1.00`
+- **AND** each model MUST name its own inputs and exclusions.
+
+#### Scenario: Strong reputation cannot override invalid evidence
+
+- **GIVEN** a participant has high ongoing reputation or strong identity
+  validation
+- **WHEN** a transaction has a broken required signature, revoked signing key,
+  or unresolved double-trade evidence
+- **THEN** transaction confidence MUST be forced or capped by that direct
+  evidence
+- **AND** the other trust scores MUST NOT silently make the interaction valid.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation
