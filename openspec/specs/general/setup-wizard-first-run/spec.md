@@ -210,32 +210,34 @@ Runtime step MUST expose deterministic runtime port strategy (`auto` or `fixed`)
 - **AND** when fixed mode is selected `runtime.port` MUST equal selected fixed port
 - **AND** `runtime.resolvedUrl` and completion runtime URL preview MUST match resolved runtime host+port
 
-#### Scenario: Clerk mode config requirements
-- **GIVEN** user selects auth mode `clerk`
+#### Scenario: Retired Clerk mode rejected
+- **GIVEN** setup completion receives retired auth mode `clerk`
 - **WHEN** completion is attempted
-- **THEN** required Clerk keys/settings refs MUST be present in config payload or completion MUST fail with actionable validation message
+- **THEN** completion MUST fail with actionable invalid-auth-mode validation
+- **AND** accepted setup auth modes MUST remain constrained to `local` and `zitadel`
 
-### Requirement SETUP-WIZ-015: Auth step MUST expose deterministic Local/Clerk readiness state before review
-Auth step MUST provide explicit mode selection and readiness state so users can resolve Clerk requirements before proceeding.
+### Requirement SETUP-WIZ-015: Auth step MUST expose deterministic Local/ZITADEL readiness state before review
+Auth step MUST provide explicit mode selection and readiness state so users can resolve ZITADEL requirements before proceeding.
 
 #### Scenario: Auth mode switch contract
 - **GIVEN** setup wizard auth step is active
-- **WHEN** user switches auth mode between `local` and `clerk`
+- **WHEN** user switches auth mode between `local` and `zitadel`
 - **THEN** mode control MUST update deterministically
 - **AND** mode-specific controls MUST appear/disappear without stale values leaking into inactive mode UI
 
-#### Scenario: Clerk readiness uses built-in publishable key
-- **GIVEN** auth mode is set to `clerk`
+#### Scenario: ZITADEL readiness does not require a Clerk key
+- **GIVEN** auth mode is set to `zitadel`
 - **WHEN** auth step is evaluated
-- **THEN** readiness status MUST report the built-in Clerk publishable key is configured
+- **THEN** readiness status MUST report the environment-scoped ZITADEL setup expectation
 - **AND** setup wizard MUST NOT expose an editable Clerk publishable-key field
 - **AND** `Next` transition MUST proceed without manual key entry
 
-#### Scenario: Clerk readiness configured state
-- **GIVEN** auth mode is set to `clerk`
+#### Scenario: ZITADEL readiness configured state
+- **GIVEN** auth mode is set to `zitadel`
 - **WHEN** user continues to review and completes setup
 - **THEN** readiness status MUST render as configured
-- **AND** config payload MUST persist `auth.mode=clerk`, `auth.clerk.enabled=true`, and the built-in key value
+- **AND** config payload MUST persist `auth.mode=zitadel`
+- **AND** retired `auth.clerk.enabled` MUST remain `false` with an empty publishable key
 
 ### Requirement SETUP-WIZ-016: Integrations baseline step MUST capture optional connector toggles with editable-later guidance
 Integrations baseline step MUST allow users to toggle scanner/chat/provider features during setup and clearly communicate settings can be changed later.
@@ -367,7 +369,7 @@ When setup completes in local auth mode, the completion screen MUST show the ini
 | UC-SW-06 | Progress template parity | Step header shows `STEP X OF N` + progress %, footer actions match step state | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-06 setup-wizard-progress-template shows step header, percentage, and footer actions` |
 | UC-SW-07 | Final complete transition | `Complete` transitions to `Config complete` + `Start App` action | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-07 setup-wizard-complete-to-launch transitions to config complete with start action` |
 | UC-SW-08 | Initial config schema write | `cabinet.json` contains deterministic required sections/fields after completion | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-08 setup-wizard-config-schema-write persists deterministic cabinet.json payload`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupStatusAndCompleteContract` |
-| UC-SW-09 | Clerk config validation | Clerk mode blocks completion when required keys/settings refs are missing | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompleteRequiresClerkPublishableKey` |
+| UC-SW-09 | ZITADEL config validation | ZITADEL mode completes without any retired Clerk key and retired Clerk mode is rejected by the API | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-09 setup-wizard-zitadel-completes without retired Clerk key`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompleteRejectsClerkAuthMode`, `TestRuntimeSetupCompletePersistsZitadelAuthConfiguration` |
 | UC-SW-10 | Startup runtime URL sync | Existing config receives `meta.currentUrl` matching resolved runtime URL on startup | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupSyncCurrentURLUpdatesConfigMetadata` |
 | UC-SW-11 | PID-only runtime lifecycle file | Runtime writes PID-only file and cleanup keeps PID lifecycle separate from config | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimePIDFileContainsPIDOnly` |
 | UC-SW-12 | Welcome actions before form | Step 1 shows `Start Setup` + `Import Existing Config` and hides editors until start | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-12 setup-wizard-welcome-actions renders start/import actions before form fields` |
@@ -381,9 +383,9 @@ When setup completes in local auth mode, the completion screen MUST show the ini
 | UC-SW-20 | Runtime defaults | Runtime step defaults to auto mode and shows resolved URL preview | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-20 setup-wizard-runtime-defaults shows auto mode with resolved URL preview` |
 | UC-SW-21 | Runtime fixed port validation | Runtime fixed mode validates required/valid port before next | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-21 setup-wizard-runtime-fixed-port-validation blocks invalid fixed port` |
 | UC-SW-22 | Runtime persistence | Runtime port strategy and resolved URL persist in setup config payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-22 setup-wizard-runtime-selection persists fixed port and resolved URL`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFixedPortRuntime` |
-| UC-SW-23 | Auth mode switch | Auth step toggles Local/Clerk mode and mode-specific controls deterministically | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-23 setup-wizard-auth-mode-switch toggles clerk controls and readiness state` |
-| UC-SW-24 | Clerk built-in readiness | Clerk mode uses a built-in publishable key, exposes no editable key field, and allows progression without manual entry | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-24 setup-wizard-auth-readiness-built-in allows next without manual key entry`; `SETUP-WIZ-015 + #1412 uses built-in Clerk publishable key without editable setup field` |
-| UC-SW-25 | Clerk readiness configured persistence | Clerk mode shows built-in configured readiness and persists the built-in clerk auth payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsClerkAuthConfiguration` |
+| UC-SW-23 | Auth mode switch | Auth step toggles Local/ZITADEL mode and mode-specific controls deterministically while retired Clerk controls stay absent | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-23 setup-wizard-auth-mode-switch toggles local and ZITADEL controls and readiness state`; `internal/app/ui_template_contract_test.go` `TestSetupWizardAuthModeOptionsRetireClerk` |
+| UC-SW-24 | ZITADEL readiness | ZITADEL mode exposes no editable Clerk key field and allows progression without Clerk key entry | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-24 setup-wizard-zitadel-readiness allows next without Clerk key entry`; `SETUP-WIZ-015 + #1968 keeps retired Clerk key out of setup payload` |
+| UC-SW-25 | ZITADEL readiness configured persistence | ZITADEL mode shows configured readiness and persists the ZITADEL auth mode while the retired Clerk payload remains disabled and empty | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-25 setup-wizard-zitadel-readiness persists auth config`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsZitadelAuthConfiguration` |
 | UC-SW-26 | Integrations defaults | Integrations step defaults scanner/chat/providers to enabled and shows editable-later guidance | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-26 setup-wizard-integrations-defaults shows enabled toggles and guidance` |
 | UC-SW-27 | Integrations toggle persistence | Integrations toggles persist into setup config `features` payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-27 setup-wizard-integrations-persistence writes feature toggles`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFeatureToggles` |
 | UC-SW-28 | Integrations optional progression | Integrations step allows Next without required-field validation | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-28 setup-wizard-integrations-optional-step-allows-next` |
