@@ -7483,7 +7483,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "zitadel" {
 			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
 			return
 		}
