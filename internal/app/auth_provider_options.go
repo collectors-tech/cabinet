@@ -49,7 +49,6 @@ func resolveAuthProviderOptions() authProviderOptionsPayload {
 }
 
 func defaultAuthProviderOptionsFromEnv() authProviderOptionsPayload {
-	clerkKeyConfigured := strings.TrimSpace(os.Getenv("VITE_CLERK_PUBLISHABLE_KEY")) != ""
 	zitadelConfigured := strings.TrimSpace(os.Getenv("CABINET_ZITADEL_ISSUER")) != "" &&
 		strings.TrimSpace(os.Getenv("CABINET_ZITADEL_CLIENT_ID")) != "" &&
 		strings.TrimSpace(os.Getenv("CABINET_ZITADEL_AUDIENCE")) != "" &&
@@ -57,19 +56,15 @@ func defaultAuthProviderOptionsFromEnv() authProviderOptionsPayload {
 
 	identityMode := strings.TrimSpace(strings.ToLower(os.Getenv("CABINET_AUTH_IDENTITY_MODE")))
 	if identityMode == "" {
-		if clerkKeyConfigured {
-			identityMode = "clerk"
-		} else {
-			identityMode = "local"
-		}
+		identityMode = "local"
 	}
-	if identityMode != "clerk" && identityMode != "zitadel" {
+	if identityMode != "zitadel" {
 		identityMode = "local"
 	}
 
 	return authProviderOptionsPayload{
 		IdentityMode:      identityMode,
-		ClerkConfigured:   clerkKeyConfigured,
+		ClerkConfigured:   false,
 		ZitadelConfigured: zitadelConfigured,
 		ZitadelLoginPath:  "/api/auth/zitadel/login",
 		Providers: []authProviderOption{

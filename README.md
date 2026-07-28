@@ -196,7 +196,7 @@ openspec validate --changes --strict --no-interactive
 - `POST /api/auth/recovery/reset/begin` with `{ "profile_id": "<id>", "passphrase": "..." }`
 - `POST /api/auth/session/validate` with `{ "session_token": "..." }`
 - `POST /api/auth/session/lock` with `{ "session_token": "..." }`
-- `POST /api/auth/cloud/session/bootstrap` with `{ "provider": "clerk", "token": "<jwt>" }`
+- `POST /api/auth/cloud/session/bootstrap` with `{ "provider": "zitadel", "token": "<jwt>" }`
 - `POST /api/onboarding/sample-data`
 
 ## Environment Variables
@@ -213,12 +213,14 @@ openspec validate --changes --strict --no-interactive
 - `CABINET_WEBAUTHN_ORIGIN` default: `http://127.0.0.1:17880`
 - `CABINET_WEBAUTHN_RP_NAME` default: `Cabinet`
 - `CABINET_BACKUP_INTERVAL_MINUTES` default: `60`
-- `VITE_CLERK_PUBLISHABLE_KEY` enables Clerk sign-in gate and cloud entitlement bootstrap in the web UI
+- `CABINET_AUTH_IDENTITY_MODE` values: `local`, `zitadel` (default `local`)
+- `CABINET_ZITADEL_ISSUER`, `CABINET_ZITADEL_CLIENT_ID`, and `CABINET_ZITADEL_AUDIENCE` enable the ZITADEL-backed application login when `CABINET_AUTH_IDENTITY_MODE=zitadel`
+- `CABINET_ZITADEL_WEBHOOK_SECRET` verifies cloud billing entitlement webhook requests at `/api/auth/cloud/zitadel/webhook`
 
 Exploratory auth setup guide:
 - `docs/auth/exploration-auth-setup.md`
 - preferred local exploration launcher: `scripts/runtime/start-exploration-local.ps1`
-- preferred Clerk exploration launcher: `scripts/runtime/start-exploration-clerk.ps1`
+- ZITADEL exploration uses the normal runtime with `CABINET_AUTH_IDENTITY_MODE=zitadel` and the required `CABINET_ZITADEL_*` environment values
 
 eBay provider settings are stored per profile via `PUT /api/profiles/{profileID}/settings`:
 - `ebay_bearer_token`

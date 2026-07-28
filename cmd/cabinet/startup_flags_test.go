@@ -15,7 +15,7 @@ func TestParseStartupArgsBuildsEnvOverrides(t *testing.T) {
 		"--port", "19090",
 		"--data-dir", "/tmp/cabinet-data",
 		"--profile", "demo-profile",
-		"--auth-mode", "clerk",
+		"--auth-mode", "zitadel",
 		"--base-url", "http://127.0.0.1:19090",
 		"--restart",
 		"--allow-parallel",
@@ -35,10 +35,10 @@ func TestParseStartupArgsBuildsEnvOverrides(t *testing.T) {
 	if overrides.Env["CABINET_PROFILE"] != "demo-profile" {
 		t.Fatalf("expected CABINET_PROFILE override")
 	}
-	if overrides.Env["CABINET_AUTH_MODE"] != "clerk" {
+	if overrides.Env["CABINET_AUTH_MODE"] != "zitadel" {
 		t.Fatalf("expected CABINET_AUTH_MODE override")
 	}
-	if overrides.Env["CABINET_AUTH_IDENTITY_MODE"] != "clerk" {
+	if overrides.Env["CABINET_AUTH_IDENTITY_MODE"] != "zitadel" {
 		t.Fatalf("expected CABINET_AUTH_IDENTITY_MODE override")
 	}
 	if overrides.Env["CABINET_BASE_URL"] != "http://127.0.0.1:19090" {
@@ -82,6 +82,18 @@ func TestParseStartupArgsRejectsInvalidAuthMode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "auth-mode") {
 		t.Fatalf("expected auth-mode error, got %v", err)
+	}
+}
+
+func TestParseStartupArgsRejectsClerkAuthMode(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseStartupArgs([]string{"--auth-mode", "clerk"})
+	if err == nil {
+		t.Fatal("expected clerk auth-mode validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected local or zitadel") {
+		t.Fatalf("expected local/zitadel guidance, got %v", err)
 	}
 }
 

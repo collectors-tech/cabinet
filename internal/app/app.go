@@ -7353,7 +7353,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "zitadel" {
 			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
 			return
 		}
@@ -7391,7 +7391,7 @@ func New(cfg config.Config) (*App, error) {
 		_ = persistCloudPlan(r.Context(), conn, userID, plan)
 		_ = persistCloudSessionContext(r.Context(), conn, userID, email, role)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"provider":           "clerk",
+			"provider":           "zitadel",
 			"user_id":            userID,
 			"email":              email,
 			"role":               role,
@@ -7422,7 +7422,7 @@ func New(cfg config.Config) (*App, error) {
 			role = "member"
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"provider": "clerk",
+			"provider": "zitadel",
 			"user_id":  strings.TrimSpace(userID),
 			"email":    strings.TrimSpace(email),
 			"role":     strings.TrimSpace(strings.ToLower(role)),
@@ -7430,7 +7430,7 @@ func New(cfg config.Config) (*App, error) {
 			"features": entitlementFeaturesFromPlan(plan),
 		})
 	})
-	mux.HandleFunc("/api/auth/cloud/clerk/webhook", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/cloud/zitadel/webhook", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -7441,7 +7441,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_body"}`, http.StatusBadRequest)
 			return
 		}
-		secret := strings.TrimSpace(os.Getenv("CABINET_CLERK_WEBHOOK_SECRET"))
+		secret := strings.TrimSpace(os.Getenv("CABINET_ZITADEL_WEBHOOK_SECRET"))
 		if secret == "" {
 			secret = "dev-secret"
 		}
@@ -7455,7 +7455,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		userID, plan, err := clerkWebhookPlanTransition(payload)
+		userID, plan, err := zitadelWebhookPlanTransition(payload)
 		if err != nil {
 			http.Error(w, `{"error":"invalid_webhook_payload"}`, http.StatusBadRequest)
 			return
@@ -7483,7 +7483,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "zitadel" {
 			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
 			return
 		}
@@ -7891,18 +7891,11 @@ func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidatio
 	if authMode == "" {
 		authMode = "local"
 	}
-	if authMode != "local" && authMode != "clerk" && authMode != "zitadel" {
+	if authMode != "local" && authMode != "zitadel" {
 		return &runtimeSetupValidationError{
 			Code:    "SETUP_AUTH_MODE_INVALID",
-			Message: "Auth mode must be local, clerk or zitadel.",
+			Message: "Auth mode must be local or zitadel.",
 			Field:   "auth_mode",
-		}
-	}
-	if authMode == "clerk" && strings.TrimSpace(req.ClerkPublishableKey) == "" {
-		return &runtimeSetupValidationError{
-			Code:    "SETUP_CLERK_PUBLISHABLE_KEY_REQUIRED",
-			Message: "Clerk publishable key is required.",
-			Field:   "clerk_publishable_key",
 		}
 	}
 	portMode := strings.TrimSpace(strings.ToLower(req.RuntimePortMode))
@@ -8006,7 +7999,7 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			Mode: authMode,
 			Clerk: runtimeSetupClerkAuthConfig{
 				PublishableKey: strings.TrimSpace(req.ClerkPublishableKey),
-				Enabled:        authMode == "clerk",
+				Enabled:        false,
 			},
 		},
 		Bootstrap: runtimeSetupBootstrapConfig{
@@ -8106,11 +8099,8 @@ func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {
 	if authMode == "" {
 		return fmt.Errorf("auth.mode is required")
 	}
-	if authMode != "local" && authMode != "clerk" && authMode != "zitadel" {
-		return fmt.Errorf("auth.mode must be local, clerk or zitadel")
-	}
-	if authMode == "clerk" && strings.TrimSpace(payload.Auth.Clerk.PublishableKey) == "" {
-		return fmt.Errorf("auth.clerk.publishableKey is required for clerk mode")
+	if authMode != "local" && authMode != "zitadel" {
+		return fmt.Errorf("auth.mode must be local or zitadel")
 	}
 	if strings.TrimSpace(payload.Meta.CreatedAt) == "" {
 		return fmt.Errorf("meta.createdAt is required")
@@ -8878,7 +8868,7 @@ func displayListContains(values []string, value string) bool {
 	return false
 }
 
-func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {
+func zitadelWebhookPlanTransition(payload map[string]any) (string, string, error) {
 	data, _ := payload["data"].(map[string]any)
 	if data == nil {
 		return "", "", fmt.Errorf("missing data")

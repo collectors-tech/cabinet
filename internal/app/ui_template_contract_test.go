@@ -605,24 +605,79 @@ func TestInventoryWishlistViewToggleAccessibilityContract(t *testing.T) {
 	}
 }
 
-func TestClerkSessionBootstrapContract(t *testing.T) {
+func TestSetupWizardAuthModeOptionsRetireClerk(t *testing.T) {
 	t.Parallel()
 
-	b, err := os.ReadFile("../../ui.web/src/routes/clerk/_authenticated/route.tsx")
+	b, err := os.ReadFile("../../ui.web/src/features/auth/sign-in/index.tsx")
 	if err != nil {
-		t.Fatalf("read clerk authenticated route: %v", err)
+		t.Fatalf("read sign-in setup feature: %v", err)
 	}
 	src := string(b)
 	required := []string{
-		"useAuth",
-		"useUser",
-		"/api/auth/cloud/session/bootstrap",
-		"auth.setUser",
-		"auth.setAccessToken",
+		"<option value='local'>local</option>",
+		"<option value='zitadel'>zitadel</option>",
 	}
 	for _, token := range required {
 		if !strings.Contains(src, token) {
-			t.Fatalf("clerk bootstrap route missing required token: %s", token)
+			t.Fatalf("setup wizard missing active auth option token: %s", token)
+		}
+	}
+	forbidden := []string{
+		"<option value='clerk'>clerk</option>",
+		"setup-clerk-built-in-key",
+		"BUILT_IN_CLERK_PUBLISHABLE_KEY",
+	}
+	for _, token := range forbidden {
+		if strings.Contains(src, token) {
+			t.Fatalf("setup wizard still exposes retired Clerk auth token: %s", token)
+		}
+	}
+}
+
+func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
+	t.Parallel()
+
+	if _, err := os.Stat("../../ui.web/src/routes/clerk"); err == nil {
+		t.Fatal("frontend still ships retired Clerk route source directory")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat Clerk route source directory: %v", err)
+	}
+	for _, file := range []string{
+		"../../ui.web/src/assets/clerk-full-logo.tsx",
+		"../../ui.web/src/assets/clerk-logo.tsx",
+		"../../scripts/runtime/start-exploration-clerk.ps1",
+	} {
+		if _, err := os.Stat(file); err == nil {
+			t.Fatalf("retired Clerk surface still exists: %s", file)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat retired Clerk surface %s: %v", file, err)
+		}
+	}
+
+	files := []string{
+		"../../ui.web/src/routeTree.gen.ts",
+		"../../ui.web/src/features/auth/sign-in/components/user-auth-form.tsx",
+		"../../ui.web/package.json",
+		"../../ui.web/package-lock.json",
+		"../../scripts/runtime/start-exploration-local.ps1",
+	}
+	for _, file := range files {
+		b, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		src := string(b)
+		forbidden := []string{
+			"@clerk/clerk-react",
+			"/clerk",
+			"VITE_CLERK_PUBLISHABLE_KEY",
+			"CABINET_AUTH_IDENTITY_MODE=clerk",
+			"identity_mode === 'clerk'",
+		}
+		for _, token := range forbidden {
+			if strings.Contains(src, token) {
+				t.Fatalf("%s still contains retired Clerk frontend token: %s", file, token)
+			}
 		}
 	}
 }

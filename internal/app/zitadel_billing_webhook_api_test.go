@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-func TestClerkBillingWebhookRejectsInvalidSignature(t *testing.T) {
-	_ = os.Setenv("CABINET_CLERK_WEBHOOK_SECRET", "test-secret")
-	t.Cleanup(func() { _ = os.Unsetenv("CABINET_CLERK_WEBHOOK_SECRET") })
+func TestZitadelBillingWebhookRejectsInvalidSignature(t *testing.T) {
+	_ = os.Setenv("CABINET_ZITADEL_WEBHOOK_SECRET", "test-secret")
+	t.Cleanup(func() { _ = os.Unsetenv("CABINET_ZITADEL_WEBHOOK_SECRET") })
 	a := newTestApp(t)
 
 	body := `{"type":"subscription.updated","data":{"user_id":"user_sig","plan":"pro"}}`
@@ -20,7 +20,7 @@ func TestClerkBillingWebhookRejectsInvalidSignature(t *testing.T) {
 		t,
 		a,
 		http.MethodPost,
-		"/api/auth/cloud/clerk/webhook",
+		"/api/auth/cloud/zitadel/webhook",
 		strings.NewReader(body),
 		map[string]string{
 			"Content-Type":                "application/json",
@@ -32,10 +32,33 @@ func TestClerkBillingWebhookRejectsInvalidSignature(t *testing.T) {
 	}
 }
 
-func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
+func TestZitadelBillingWebhookRejectsRetiredClerkRoute(t *testing.T) {
 	secret := "test-secret"
-	_ = os.Setenv("CABINET_CLERK_WEBHOOK_SECRET", secret)
-	t.Cleanup(func() { _ = os.Unsetenv("CABINET_CLERK_WEBHOOK_SECRET") })
+	_ = os.Setenv("CABINET_ZITADEL_WEBHOOK_SECRET", secret)
+	t.Cleanup(func() { _ = os.Unsetenv("CABINET_ZITADEL_WEBHOOK_SECRET") })
+	a := newTestApp(t)
+
+	body := `{"type":"subscription.updated","data":{"user_id":"user_sig","plan":"pro"}}`
+	resp := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/auth/cloud/clerk/webhook",
+		strings.NewReader(body),
+		map[string]string{
+			"Content-Type":                "application/json",
+			"X-Cabinet-Webhook-Signature": hmacSignature(secret, body),
+		},
+	)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("retired clerk webhook expected 404, got %d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestZitadelBillingWebhookAppliesPlanTransitions(t *testing.T) {
+	secret := "test-secret"
+	_ = os.Setenv("CABINET_ZITADEL_WEBHOOK_SECRET", secret)
+	t.Cleanup(func() { _ = os.Unsetenv("CABINET_ZITADEL_WEBHOOK_SECRET") })
 	a := newTestApp(t)
 
 	bootstrapToken := "e30.eyJzdWIiOiJ1c2VyX2JpbGxpbmciLCJlbWFpbCI6ImJpbGxpbmdAZXhhbXBsZS5jb20iLCJwbGFuIjoiZnJlZSJ9.e30"
@@ -44,7 +67,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+bootstrapToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+bootstrapToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if before.Code != http.StatusOK || !strings.Contains(before.Body.String(), `"plan":"free"`) {
@@ -56,7 +79,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		t,
 		a,
 		http.MethodPost,
-		"/api/auth/cloud/clerk/webhook",
+		"/api/auth/cloud/zitadel/webhook",
 		strings.NewReader(upgradeBody),
 		map[string]string{
 			"Content-Type":                "application/json",
@@ -72,7 +95,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+bootstrapToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+bootstrapToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if afterUpgrade.Code != http.StatusOK || !strings.Contains(afterUpgrade.Body.String(), `"plan":"pro"`) {
@@ -84,7 +107,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		t,
 		a,
 		http.MethodPost,
-		"/api/auth/cloud/clerk/webhook",
+		"/api/auth/cloud/zitadel/webhook",
 		strings.NewReader(downgradeBody),
 		map[string]string{
 			"Content-Type":                "application/json",
@@ -100,7 +123,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+bootstrapToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+bootstrapToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if afterDowngrade.Code != http.StatusOK || !strings.Contains(afterDowngrade.Body.String(), `"plan":"free"`) {

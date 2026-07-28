@@ -171,7 +171,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('eq', 200);
 
     cy.request('POST', '/api/test/auth/provider-options', {
-      identity_mode: 'clerk',
+      identity_mode: 'zitadel',
       providers: [
         { id: 'google', enabled: true },
         { id: 'apple', enabled: false },
@@ -182,7 +182,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('eq', 200);
 
     cy.visit('/sign-in');
-    cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'clerk');
+    cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'zitadel');
     cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
     cy.get('[data-testid="provider-apple"]').should('be.visible').and('be.disabled');
     cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
@@ -401,7 +401,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('eq', 200);
 
     cy.request('POST', '/api/test/auth/provider-options', {
-      identity_mode: 'clerk',
+      identity_mode: 'zitadel',
       providers: [
         { id: 'google', enabled: true },
         { id: 'apple', enabled: false },
@@ -421,7 +421,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       cy.get('[data-testid="sign-in-forgot-password-link"]')
         .should('be.visible')
         .and('have.attr', 'href', '/forgot-password');
-      cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'clerk');
+      cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'zitadel');
       cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
       cy.get('[data-testid="provider-apple"]').should('be.visible').and('be.disabled');
       cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');

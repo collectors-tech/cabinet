@@ -249,7 +249,7 @@ func TestRuntimeSetupStatusPathUsesDataDirCabinetJSON(t *testing.T) {
 	}
 }
 
-func TestRuntimeSetupCompleteRequiresClerkPublishableKey(t *testing.T) {
+func TestRuntimeSetupCompleteRejectsClerkAuthMode(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -271,13 +271,13 @@ func TestRuntimeSetupCompleteRequiresClerkPublishableKey(t *testing.T) {
 	}
 	resp := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
 	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing clerk key, got %d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("expected 400 for retired clerk mode, got %d body=%s", resp.Code, resp.Body.String())
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode validation payload: %v", err)
 	}
-	if payload["error_code"] != "SETUP_CLERK_PUBLISHABLE_KEY_REQUIRED" {
+	if payload["error_code"] != "SETUP_AUTH_MODE_INVALID" {
 		t.Fatalf("unexpected error code: %v", payload["error_code"])
 	}
 	if _, err := os.Stat(setupPath); !os.IsNotExist(err) {
@@ -549,7 +549,7 @@ func TestRuntimeSetupCompletePersistsFixedPortRuntime(t *testing.T) {
 	}
 }
 
-func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
+func TestRuntimeSetupCompletePersistsZitadelAuthConfiguration(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -557,11 +557,10 @@ func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
 	_ = os.Remove(setupPath)
 
 	completeReq := map[string]any{
-		"instance_name":          "Clerk Persist",
+		"instance_name":          "ZITADEL Persist",
 		"profile_key":            "",
 		"storage_mode":           "exe_local",
-		"auth_mode":              "clerk",
-		"clerk_publishable_key":  "pk_test_wave25",
+		"auth_mode":              "zitadel",
 		"runtime_port_mode":      "auto",
 		"bootstrap_workspace":    "Local Workspace",
 		"bootstrap_database_ref": "Primary DB",
@@ -586,18 +585,18 @@ func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected auth object in setup config")
 	}
-	if strings.TrimSpace(asString(authPayload["mode"])) != "clerk" {
-		t.Fatalf("expected auth.mode=clerk, got %v", authPayload["mode"])
+	if strings.TrimSpace(asString(authPayload["mode"])) != "zitadel" {
+		t.Fatalf("expected auth.mode=zitadel, got %v", authPayload["mode"])
 	}
 	clerkPayload, ok := authPayload["clerk"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected auth.clerk object in setup config")
 	}
-	if clerkPayload["enabled"] != true {
-		t.Fatalf("expected auth.clerk.enabled=true, got %v", clerkPayload["enabled"])
+	if clerkPayload["enabled"] != false {
+		t.Fatalf("retired clerk config must stay disabled for zitadel mode, got %v", clerkPayload["enabled"])
 	}
-	if strings.TrimSpace(asString(clerkPayload["publishableKey"])) != "pk_test_wave25" {
-		t.Fatalf("expected auth.clerk.publishableKey=pk_test_wave25, got %v", clerkPayload["publishableKey"])
+	if strings.TrimSpace(asString(clerkPayload["publishableKey"])) != "" {
+		t.Fatalf("retired clerk publishable key must not be persisted, got %v", clerkPayload["publishableKey"])
 	}
 }
 
