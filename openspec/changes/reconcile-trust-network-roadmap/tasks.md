@@ -5,7 +5,7 @@
 - [x] 1.2 Add canonical glossary entries for identity, specimen, catalogue
   item, proposal, reservation, receipt, ownership event, feedback,
   attestation, endorsement, registry, and node.
-- [ ] 1.3 Complete the source-area decision matrix with canonical rule,
+- [x] 1.3 Complete the source-area decision matrix with canonical rule,
   rejected alternative, unresolved decision, security/privacy impact, and
   delivery phase for every source area listed in #1957.
 
