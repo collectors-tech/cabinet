@@ -35,12 +35,12 @@ Social/enterprise sign-in options SHALL include Google, Apple, and Microsoft in 
 - **THEN** UI MUST include buttons for `Google`, `Apple`, and `Microsoft` with matching provider icons and deterministic enabled/disabled state based on configuration
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-007: Identity provider platform decision SHALL be explicit and configurable
-Authentication implementation SHALL define whether Clerk is the source-of-truth identity platform and expose provider configuration deterministically.
+Authentication implementation SHALL define whether local or ZITADEL is the source-of-truth identity platform and expose provider configuration deterministically.
 
 #### Scenario: Resolve identity platform
 - **GIVEN** runtime auth configuration is loaded
 - **WHEN** sign-in screen initializes
-- **THEN** app MUST resolve identity platform mode (for example Clerk-based vs local provider stack) and render only configured provider actions
+- **THEN** app MUST resolve identity platform mode (`local` or `zitadel`) and render only configured provider actions
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-008: Sign-in SHALL support passkeys (WebAuthn) for passwordless login
 Sign-in flow SHALL support passkey authentication compatible with platform authenticators and password managers (for example 1Password passkeys).

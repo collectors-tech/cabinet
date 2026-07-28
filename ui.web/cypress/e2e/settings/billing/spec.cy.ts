@@ -18,7 +18,7 @@ describe('settings billing screen', () => {
 
   it('UI-SCREEN-SETTINGS-BILLING-001 renders disabled static billing state without portal mutation', () => {
     cy.intercept('GET', '/api/auth/cloud/session/effective', {
-      provider: 'clerk',
+      provider: 'zitadel',
       user_id: 'user_billing',
       email: 'billing@example.com',
       role: 'member',
