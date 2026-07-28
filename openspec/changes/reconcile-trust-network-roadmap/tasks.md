@@ -37,7 +37,7 @@
 - [x] 4.1 Map threat-model requirements to tests and user-visible recovery for
   fake peer/store, Sybil/eclipse, tampering, forged/deleted feedback, key
   compromise, catalogue poisoning, and privacy leakage.
-- [ ] 4.2 Produce the paper-prototype plan for connection drop, counterfeit
+- [x] 4.2 Produce the paper-prototype plan for connection drop, counterfeit
   abort, broken signature, stale mirror, feedback mismatch, store attestation,
   unknown peer, and post-event confirmation.
 - [ ] 4.3 Add OpenSpec traceability rows for the approved roadmap and

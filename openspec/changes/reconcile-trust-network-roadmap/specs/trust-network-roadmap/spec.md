@@ -351,6 +351,34 @@ work.
   and custody/checkout language are absent from schemas, APIs, logs, UI, and
   serialized trust objects by default.
 
+### Requirement: Paper prototypes cover trust failure flows
+
+Cabinet MUST define paper-prototype scripts for trust-network failure flows
+before production P2P, registry, catalogue, reputation, or signed-receipt
+implementation issues open.
+
+#### Scenario: Failure prototypes preserve evidence and recovery choices
+
+- **GIVEN** a trust-network failure prototype covers connection drop,
+  counterfeit abort, broken signature, stale mirror, feedback mismatch, store
+  attestation, unknown peer, or post-event confirmation
+- **WHEN** users work through the paper or clickable flow
+- **THEN** the prototype MUST show the preserved evidence, exact blocker or
+  degraded state, user choices, and stop condition
+- **AND** it MUST verify the user does not believe Cabinet has silently changed
+  ownership, funds, reputation, registry state, or publication state.
+
+#### Scenario: Implementation waits for prototype evidence
+
+- **GIVEN** a follow-up implementation issue would build a trust-network failure
+  flow
+- **WHEN** that issue is opened from the roadmap
+- **THEN** it MUST reference the relevant `TV-PAPER-*` prototype vector,
+  `TV-THREAT-*` threat vector, findings note, and expected user-visible recovery
+  state
+- **AND** it MUST remain blocked from implementation if the paper prototype
+  hides failing evidence, blocker copy, or recovery choices.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation
