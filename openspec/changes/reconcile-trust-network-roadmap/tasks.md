@@ -34,7 +34,7 @@
 
 ## 4. Evidence and Follow-up
 
-- [ ] 4.1 Map threat-model requirements to tests and user-visible recovery for
+- [x] 4.1 Map threat-model requirements to tests and user-visible recovery for
   fake peer/store, Sybil/eclipse, tampering, forged/deleted feedback, key
   compromise, catalogue poisoning, and privacy leakage.
 - [ ] 4.2 Produce the paper-prototype plan for connection drop, counterfeit

@@ -14,3 +14,14 @@ coverage and user-visible recovery behavior before implementation work begins.
   catalogue poisoning, and privacy leakage where applicable
 - **AND** it MUST name the expected mitigation, architecture test vector, and
   user-visible recovery or warning behavior.
+
+#### Scenario: Threat tests include user-facing recovery
+
+- **GIVEN** a follow-up implementation issue touches peer exchange, registry,
+  mirrors, signatures, feedback, catalogue bundles, reputation, publication, or
+  recovery
+- **WHEN** its test plan is created
+- **THEN** at least one deterministic `TV-THREAT-*` vector MUST be referenced
+- **AND** the test MUST assert both the machine decision and the user-facing
+  state such as blocked, degraded, retry, manual review, redaction, revocation,
+  appeal, or alternate mirror/import.
