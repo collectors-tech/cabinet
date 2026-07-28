@@ -7999,7 +7999,7 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			Mode: authMode,
 			Clerk: runtimeSetupClerkAuthConfig{
 				PublishableKey: strings.TrimSpace(req.ClerkPublishableKey),
-				Enabled:        authMode == "clerk",
+				Enabled:        false,
 			},
 		},
 		Bootstrap: runtimeSetupBootstrapConfig{

@@ -307,8 +307,8 @@ When setup completes in local auth mode, the completion screen MUST show the ini
 - **AND** completion UI MUST clearly tell the user to write the credentials down before continuing
 - **AND** the displayed credentials MUST work for the first local sign-in flow
 
-#### Scenario: Clerk completion omits local credentials
-- **GIVEN** setup wizard auth mode is `clerk`
+#### Scenario: ZITADEL completion omits local credentials
+- **GIVEN** setup wizard auth mode is `zitadel`
 - **WHEN** setup completion succeeds
 - **THEN** completion UI MUST NOT show local login credential values
 

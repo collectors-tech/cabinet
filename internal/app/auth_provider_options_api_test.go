@@ -106,7 +106,7 @@ func TestAuthProviderOptionsE2EOverrideHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Unsetenv("CABINET_E2E_MODE") })
 
 	a := newTestApp(t)
-	override := `{"identity_mode":"clerk","providers":[{"id":"google","label":"Google","enabled":true},{"id":"apple","label":"Apple","enabled":false},{"id":"microsoft","label":"Microsoft","enabled":true}]}`
+	override := `{"identity_mode":"zitadel","providers":[{"id":"google","label":"Google","enabled":true},{"id":"apple","label":"Apple","enabled":false},{"id":"microsoft","label":"Microsoft","enabled":true}]}`
 	hookResp := doRequest(t, a, http.MethodPost, "/api/test/auth/provider-options", strings.NewReader(override), map[string]string{"Content-Type": "application/json"})
 	if hookResp.Code != http.StatusOK {
 		t.Fatalf("provider-options override hook expected 200, got %d body=%s", hookResp.Code, hookResp.Body.String())
@@ -116,8 +116,8 @@ func TestAuthProviderOptionsE2EOverrideHook(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("provider-options expected 200, got %d body=%s", resp.Code, resp.Body.String())
 	}
-	if !strings.Contains(resp.Body.String(), `"identity_mode":"clerk"`) {
-		t.Fatalf("expected clerk identity mode in overridden response: %s", resp.Body.String())
+	if !strings.Contains(resp.Body.String(), `"identity_mode":"zitadel"`) {
+		t.Fatalf("expected zitadel identity mode in overridden response: %s", resp.Body.String())
 	}
 	if !strings.Contains(resp.Body.String(), `"id":"apple","label":"Apple","enabled":false`) {
 		t.Fatalf("expected overridden apple provider state in response: %s", resp.Body.String())
