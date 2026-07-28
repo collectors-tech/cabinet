@@ -17,7 +17,7 @@
   models with bounded ranges and deterministic test vectors.
 - [x] 2.3 Define signed-object authority for receipts, feedback,
   attestations, endorsements, revocations, mirrors, and catalogue manifests.
-- [ ] 2.4 Define privacy/publication boundaries for private local records,
+- [x] 2.4 Define privacy/publication boundaries for private local records,
   participant-shared records, public claims, and hash-only publication.
 
 ## 3. Transport, Ledger, and Governance Decisions

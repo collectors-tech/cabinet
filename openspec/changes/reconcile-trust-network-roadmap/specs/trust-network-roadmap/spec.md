@@ -145,6 +145,38 @@ opening trust-network implementation issues.
   registry membership, or catalogue trust without a valid signed object and the
   required local acceptance or conflict checks.
 
+### Requirement: Privacy and publication boundaries are explicit
+
+Cabinet MUST separate private local records, participant-shared records, public
+claims, and hash-only publication before trust-network implementation issues
+open.
+
+#### Scenario: Private data remains local unless selected
+
+- **GIVEN** Cabinet stores inventory rows, locations, private notes, condition
+  details, purchase costs, values, attachments, contact details, draft
+  proposals, disputes, or local trust explanations
+- **WHEN** a trust-network flow prepares data for a peer, mirror, catalogue,
+  registry, or public profile
+- **THEN** Cabinet MUST default those fields to private local records
+- **AND** data MUST leave the workspace only after an explicit field-level
+  selection, visibility class, recipient or destination, expiry where
+  applicable, and signed preview.
+
+#### Scenario: Publication classes restrict sensitive fields
+
+- **GIVEN** a user publishes or shares participant-scoped, public, or hash-only
+  trust-network evidence
+- **WHEN** Cabinet serializes the selected object
+- **THEN** participant-shared records MUST include only data needed for the
+  named proposal, reservation, receipt, dispute, recovery, or moderation flow
+- **AND** public claims MUST exclude private inventory fields, precise
+  locations, private contact details, collection values, hidden attachments,
+  full payment details, and unredacted recovery contacts
+- **AND** hash-only publication MUST NOT include plaintext private content,
+  reversible sensitive identifiers, or enough metadata to reconstruct private
+  inventory.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation
