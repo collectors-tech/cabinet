@@ -656,6 +656,51 @@ func TestSetupWizardAuthModeOptionsRetireClerk(t *testing.T) {
 	}
 }
 
+func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
+	t.Parallel()
+
+	if _, err := os.Stat("../../ui.web/src/routes/clerk"); err == nil {
+		t.Fatal("frontend still ships retired Clerk route source directory")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat Clerk route source directory: %v", err)
+	}
+	for _, file := range []string{
+		"../../ui.web/src/assets/clerk-full-logo.tsx",
+		"../../ui.web/src/assets/clerk-logo.tsx",
+	} {
+		if _, err := os.Stat(file); err == nil {
+			t.Fatalf("frontend still ships retired Clerk asset: %s", file)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat retired Clerk asset %s: %v", file, err)
+		}
+	}
+
+	files := []string{
+		"../../ui.web/src/routeTree.gen.ts",
+		"../../ui.web/src/features/auth/sign-in/components/user-auth-form.tsx",
+		"../../ui.web/package.json",
+		"../../ui.web/package-lock.json",
+	}
+	for _, file := range files {
+		b, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		src := string(b)
+		forbidden := []string{
+			"@clerk/clerk-react",
+			"/clerk",
+			"VITE_CLERK_PUBLISHABLE_KEY",
+			"identity_mode === 'clerk'",
+		}
+		for _, token := range forbidden {
+			if strings.Contains(src, token) {
+				t.Fatalf("%s still contains retired Clerk frontend token: %s", file, token)
+			}
+		}
+	}
+}
+
 func TestIntegrationsEditPersistenceContract(t *testing.T) {
 	t.Parallel()
 

@@ -218,9 +218,7 @@ export function UserAuthForm({
         const nextMode =
           payload.identity_mode === 'zitadel'
             ? 'zitadel'
-            : payload.identity_mode === 'clerk'
-              ? 'clerk'
-              : 'local'
+            : 'local'
         setIdentityMode(nextMode)
         setZitadelConfigured(Boolean(payload.zitadel_configured))
         if (payload.zitadel_login_path?.startsWith('/')) {
