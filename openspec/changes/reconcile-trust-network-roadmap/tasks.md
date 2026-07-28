@@ -40,7 +40,7 @@
 - [x] 4.2 Produce the paper-prototype plan for connection drop, counterfeit
   abort, broken signature, stale mirror, feedback mismatch, store attestation,
   unknown peer, and post-event confirmation.
-- [ ] 4.3 Add OpenSpec traceability rows for the approved roadmap and
+- [x] 4.3 Add OpenSpec traceability rows for the approved roadmap and
   deterministic test-vector requirements.
 - [ ] 4.4 Create dependency-ordered follow-up implementation issues only after
   the decisions are approved.

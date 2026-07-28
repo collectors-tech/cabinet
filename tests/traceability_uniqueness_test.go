@@ -100,6 +100,27 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope",
 			"fixture/proof-packet validation from live production-channel validation",
 		},
+		"TRUST-NETWORK-ROADMAP-001": {
+			"| partial |",
+			"#1957",
+			"reconcile-trust-network-roadmap",
+			"identity/signature suite",
+			"paper-prototype failure flows",
+		},
+		"TRUST-NETWORK-TEST-VECTORS-001": {
+			"| partial |",
+			"#1957",
+			"TV-TRUST-001",
+			"TV-THREAT-001",
+			"TV-PAPER-001",
+		},
+		"SECURITY-TRUST-NETWORK-001": {
+			"| partial |",
+			"#1957",
+			"fake peer/store",
+			"catalogue poisoning",
+			"user-visible",
+		},
 		"INTEGRATION-063": {
 			"| partial |",
 			"#1463",
