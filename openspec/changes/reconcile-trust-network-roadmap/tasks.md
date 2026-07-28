@@ -11,7 +11,7 @@
 
 ## 2. Trust and Authority Models
 
-- [ ] 2.1 Define the canonical identity, signature, key-rotation, revocation,
+- [x] 2.1 Define the canonical identity, signature, key-rotation, revocation,
   recovery, and compatibility suite without assuming secure enclave support.
 - [ ] 2.2 Separate identity validation, transaction confidence, and reputation
   models with bounded ranges and deterministic test vectors.

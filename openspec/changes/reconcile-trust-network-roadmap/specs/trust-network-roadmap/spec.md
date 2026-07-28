@@ -67,6 +67,31 @@ signed objects, governance records, and infrastructure roles.
   endorsement, registry, and node
 - **AND** each definition MUST state its authority or privacy boundary.
 
+### Requirement: Canonical identity and signature suite
+
+Cabinet MUST define one identity, signature, key-rotation, recovery,
+revocation, and compatibility suite before opening trust-network implementation
+issues.
+
+#### Scenario: Identity authority does not depend on secure enclaves
+
+- **GIVEN** a user, organization, custodian, or infrastructure node registers a
+  trust-network identity
+- **WHEN** Cabinet validates that identity or a signed trust object
+- **THEN** the canonical suite MUST define the identity object, signing
+  envelope, key purpose, rotation event, recovery proof, revocation object, and
+  compatibility policy
+- **AND** validation MUST NOT require every device to expose a secure enclave.
+
+#### Scenario: External key systems are anchors, not authority
+
+- **GIVEN** a Cabinet identity references PGP, GPG, SSH, `did:key`, wallet,
+  hardware, or future external identifiers
+- **WHEN** Cabinet evaluates signed trust-network objects
+- **THEN** those external identifiers MAY act as signed anchors
+- **AND** they MUST NOT replace the Cabinet identity object and signature
+  envelope as the canonical authority.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation
