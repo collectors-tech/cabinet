@@ -44,4 +44,6 @@
   deterministic test-vector requirements.
 - [ ] 4.4 Create dependency-ordered follow-up implementation issues only after
   the decisions are approved.
+  - [x] Record the approval-gated dependency map for the child issues.
+  - [ ] Open the child GitHub issues after roadmap approval evidence exists.
 - [ ] 4.5 Run strict OpenSpec validation and record the final #1957 handoff.
