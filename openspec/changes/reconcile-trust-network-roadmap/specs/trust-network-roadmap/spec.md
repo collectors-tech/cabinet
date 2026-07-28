@@ -207,6 +207,47 @@ instead of implicit trust-network authority.
   conflict-resolution, or bundle-rejection behaviour instead of silently
   accepting the component state.
 
+### Requirement: Public registry governance is versioned
+
+Cabinet MUST define public-registry bootstrap, governance quorum, revocation,
+retirement, appeal, and compromised-key recovery before registry, node, or
+community-governance implementation issues open.
+
+#### Scenario: Bootstrap authority cannot hide as community governance
+
+- **GIVEN** Cabinet consumes a public registry root, custodian list, mirror
+  list, catalogue release approval, or governance charter
+- **WHEN** the record comes from a bootstrap authority
+- **THEN** the signed registry record MUST declare bootstrap state, issuer,
+  key purpose, expiry, migration target, appeal path, previous root hash, and
+  exact authority scope
+- **AND** readers MUST surface bootstrap or transition state instead of
+  presenting temporary central control as community-owned governance.
+
+#### Scenario: Governance actions require quorum evidence
+
+- **GIVEN** a governance action revokes, retires, restores, migrates, approves,
+  or appeals an identity, key, node, mirror, registry record, attestation,
+  endorsement, or catalogue release
+- **WHEN** Cabinet evaluates the action
+- **THEN** the action MUST reference a signed proposal, voting window, voter
+  eligibility snapshot, threshold, signer set, evidence refs, and previous
+  registry root hash
+- **AND** registry-wide decisions MUST require at least three eligible
+  governance signers and at least two-thirds approval unless a versioned
+  emergency quorum applies only to time-limited containment.
+
+#### Scenario: Revocation and recovery preserve history
+
+- **GIVEN** an identity, key, node, mirror, catalogue release, or registry
+  record is revoked, retired, appealed, or recovered
+- **WHEN** Cabinet calculates current trust-network state
+- **THEN** Cabinet MUST evaluate the ordered chain of signed registry roots,
+  revocations, retirements, appeals, and recovery records
+- **AND** successful appeal or recovery MAY supersede operational effect but
+  MUST NOT erase the original signed evidence or make post-revocation objects
+  signed by compromised keys valid.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation
