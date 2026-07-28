@@ -248,6 +248,56 @@ community-governance implementation issues open.
   MUST NOT erase the original signed evidence or make post-revocation objects
   signed by compromised keys valid.
 
+### Requirement: Offline exchange conflicts are explicit and idempotent
+
+Cabinet MUST define offline idempotency, reservation expiry, double-trade
+detection, conflict evidence, and manual resolution before local P2P or offline
+trade implementation issues open.
+
+#### Scenario: Replayed signed events do not duplicate state
+
+- **GIVEN** Cabinet imports or receives a signed proposal, reservation, receipt,
+  ownership event, cancellation, dispute, supersession, or manual resolution
+  through an offline queue, QR/manual handoff, peer session, CRDT replica, Git
+  mirror, or Radicle mirror
+- **WHEN** the same canonical event ID is processed more than once
+- **THEN** Cabinet MUST treat the replay as idempotent
+- **AND** it MUST NOT create duplicate reservations, receipts, ownership
+  events, feedback, audit records, or derived local state.
+
+#### Scenario: Expired reservations cannot silently transfer ownership
+
+- **GIVEN** a participant-shared reservation has an explicit expiry time,
+  specimen or catalogue scope, participants, consideration notation class, and
+  previous-state hash
+- **WHEN** a receipt or ownership event references that reservation after
+  expiry without a valid signed extension or renewed reservation
+- **THEN** Cabinet MUST block automatic ownership transfer
+- **AND** it MUST surface expiry or clock-skew evidence with retry, renewal, or
+  manual-review guidance.
+
+#### Scenario: Double-trade conflicts stay visible until resolved
+
+- **GIVEN** two or more valid signed receipt or ownership chains claim
+  incompatible transfer state for the same specimen, catalogue serial identity,
+  or mutually exclusive reservation window
+- **WHEN** Cabinet reconciles offline or peer-supplied evidence
+- **THEN** Cabinet MUST preserve each conflicting signed chain as conflict
+  evidence
+- **AND** identity validation or reputation MUST NOT automatically choose the
+  winner without a signed correction or explicit manual resolution.
+
+#### Scenario: Manual resolution is signed local evidence
+
+- **GIVEN** a user resolves an offline ownership, reservation, or receipt
+  conflict locally
+- **WHEN** Cabinet records the selected chain and rejected alternatives
+- **THEN** the decision MUST be a signed local resolution event containing
+  actor identity, rationale, evidence refs, timestamp, privacy class, and
+  consequences
+- **AND** the resolution MAY update local derived state but MUST NOT erase the
+  original conflicting signed objects or force remote peers to accept it.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation
