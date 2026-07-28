@@ -22,7 +22,7 @@
 
 ## 3. Transport, Ledger, and Governance Decisions
 
-- [ ] 3.1 Document Git, Radicle, libp2p, DHT, CRDT, and Merkle roles as
+- [x] 3.1 Document Git, Radicle, libp2p, DHT, CRDT, and Merkle roles as
   storage, transport, or verification components, not implicit authority.
 - [ ] 3.2 Define public-registry bootstrap, governance quorum, revocation,
   retirement, appeal, and compromised-key recovery.

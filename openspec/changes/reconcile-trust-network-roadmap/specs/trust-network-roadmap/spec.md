@@ -177,6 +177,36 @@ open.
   reversible sensitive identifiers, or enough metadata to reconstruct private
   inventory.
 
+### Requirement: Transport and verification components are non-authoritative
+
+Cabinet MUST document Git, Radicle, libp2p, DHT, CRDT, and Merkle roles as
+storage, transport, discovery, reconciliation, or verification components
+instead of implicit trust-network authority.
+
+#### Scenario: Component data is validated before trust use
+
+- **GIVEN** Cabinet reads trust-network data from Git, Radicle, libp2p, DHT,
+  CRDT replication, or Merkle proofs
+- **WHEN** Cabinet evaluates that data for identity, ownership, reputation,
+  registry, catalogue, or conflict state
+- **THEN** Cabinet MUST validate the referenced signed object, manifest, or hash
+  commitment against schema, signature, key purpose, revocation, privacy class,
+  freshness, and local acceptance rules
+- **AND** component availability, hosting history, peer presence, graph
+  membership, CRDT convergence, or Merkle inclusion MUST NOT become authority by
+  itself.
+
+#### Scenario: Component failures degrade safely
+
+- **GIVEN** a mirror is stale, a DHT advert is malicious, a peer session drops,
+  a CRDT ownership conflict appears, or a Merkle proof mismatches
+- **WHEN** Cabinet surfaces the result to a user or follow-up implementation
+  test
+- **THEN** Cabinet MUST preserve the signed evidence and failing proof context
+- **AND** it MUST show degraded discovery, stale mirror, retry/fallback,
+  conflict-resolution, or bundle-rejection behaviour instead of silently
+  accepting the component state.
+
 ### Requirement: Trust-network follow-up issue sequencing
 
 Cabinet MUST create only small, dependency-ordered, post-beta implementation
