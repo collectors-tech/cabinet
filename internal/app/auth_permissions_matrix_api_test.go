@@ -37,7 +37,7 @@ func TestAuthPermissionsPlanCapabilityMatrix(t *testing.T) {
 				a,
 				http.MethodPost,
 				"/api/auth/cloud/session/bootstrap",
-				strings.NewReader(`{"provider":"clerk","token":"`+token+`"}`),
+				strings.NewReader(`{"provider":"zitadel","token":"`+token+`"}`),
 				map[string]string{"Content-Type": "application/json"},
 			)
 			if resp.Code != http.StatusOK {
@@ -85,7 +85,7 @@ func TestAuthPermissionsLegacyPlanAliasesNormalizeToBetaPlans(t *testing.T) {
 				a,
 				http.MethodPost,
 				"/api/auth/cloud/session/bootstrap",
-				strings.NewReader(`{"provider":"clerk","token":"`+token+`"}`),
+				strings.NewReader(`{"provider":"zitadel","token":"`+token+`"}`),
 				map[string]string{"Content-Type": "application/json"},
 			)
 			if resp.Code != http.StatusOK {
@@ -154,7 +154,7 @@ func TestAuthPermissionsEffectiveDiagnosticsContract(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+token+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+token+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if bootstrap.Code != http.StatusOK {

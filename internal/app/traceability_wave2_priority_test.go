@@ -23,7 +23,7 @@ func TestWave2CloudBootstrapRequiresVerifiedTokenInStrictMode(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"e30.eyJzdWIiOiJ1c2VyX3N0cmljdCIsImVtYWlsIjoic3RyaWN0QGV4YW1wbGUuY29tIiwicGxhbiI6InBybyJ9.e30"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"e30.eyJzdWIiOiJ1c2VyX3N0cmljdCIsImVtYWlsIjoic3RyaWN0QGV4YW1wbGUuY29tIiwicGxhbiI6InBybyJ9.e30"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if unsigned.Code != http.StatusUnauthorized {
@@ -40,7 +40,7 @@ func TestWave2CloudBootstrapRequiresVerifiedTokenInStrictMode(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+signed+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+signed+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if verified.Code != http.StatusOK {

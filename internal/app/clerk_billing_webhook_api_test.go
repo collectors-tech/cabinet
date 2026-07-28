@@ -44,7 +44,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+bootstrapToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+bootstrapToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if before.Code != http.StatusOK || !strings.Contains(before.Body.String(), `"plan":"free"`) {
@@ -72,7 +72,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+bootstrapToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+bootstrapToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if afterUpgrade.Code != http.StatusOK || !strings.Contains(afterUpgrade.Body.String(), `"plan":"pro"`) {
@@ -100,7 +100,7 @@ func TestClerkBillingWebhookAppliesPlanTransitions(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+bootstrapToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+bootstrapToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if afterDowngrade.Code != http.StatusOK || !strings.Contains(afterDowngrade.Body.String(), `"plan":"free"`) {

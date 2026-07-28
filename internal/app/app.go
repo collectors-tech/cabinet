@@ -7353,7 +7353,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "zitadel" {
 			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
 			return
 		}
@@ -7391,7 +7391,7 @@ func New(cfg config.Config) (*App, error) {
 		_ = persistCloudPlan(r.Context(), conn, userID, plan)
 		_ = persistCloudSessionContext(r.Context(), conn, userID, email, role)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"provider":           "clerk",
+			"provider":           "zitadel",
 			"user_id":            userID,
 			"email":              email,
 			"role":               role,
@@ -7422,7 +7422,7 @@ func New(cfg config.Config) (*App, error) {
 			role = "member"
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"provider": "clerk",
+			"provider": "zitadel",
 			"user_id":  strings.TrimSpace(userID),
 			"email":    strings.TrimSpace(email),
 			"role":     strings.TrimSpace(strings.ToLower(role)),
