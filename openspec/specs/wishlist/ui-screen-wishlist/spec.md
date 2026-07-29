@@ -28,6 +28,12 @@ Wishlist screen SHALL expose primary actions for create and import dialogs.
 
 Wishlist screen SHALL support row/card selection and bulk action controls.
 
+#### Scenario: Select multiple wishlist entries
+
+- **GIVEN** wishlist rows/cards are visible
+- **WHEN** user selects multiple entries
+- **THEN** bulk action controls MUST appear and selected state MUST remain consistent through pagination changes
+
 ### Requirement UI-SCREEN-WISHLIST-006: Wishlist table SHALL support title sorting
 
 Wishlist table rows view SHALL expose sortable `Title` column with deterministic ordering behavior.
@@ -37,12 +43,6 @@ Wishlist table rows view SHALL expose sortable `Title` column with deterministic
 - **GIVEN** wishlist rows view is visible
 - **WHEN** user clicks `Title` column sort control
 - **THEN** wishlist entries MUST reorder by title with deterministic ascending/descending toggle behavior
-
-#### Scenario: Select multiple wishlist entries
-
-- **GIVEN** wishlist rows/cards are visible
-- **WHEN** user selects multiple entries
-- **THEN** bulk action controls MUST appear and selected state MUST remain consistent through pagination changes
 
 ### Requirement UI-SCREEN-WISHLIST-004: Wishlist screen SHALL expose compact icon header actions
 
