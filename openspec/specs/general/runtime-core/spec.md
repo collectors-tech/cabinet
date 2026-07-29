@@ -66,8 +66,34 @@ After successful listener bind, Cabinet MUST print a machine-parseable startup l
 ### Requirement RUNTIME-CORE-005: Startup console output SHALL include human banner and structured JSON line
 After successful listener bind, Cabinet MUST emit human-readable startup lines and a structured JSON line while preserving existing key-value machine output.
 
+#### Scenario: Human startup banner lines
+- **GIVEN** runtime starts and listener bind succeeds with resolved address known
+- **WHEN** startup console output is emitted
+- **THEN** output MUST include human-readable lines containing `Cabinet Started`, `URL`, `Instance`, `Profile`, `Data Dir`, `Port`, and `Bind`
+- **AND** when stdout is TTY, banner title MAY include emoji decoration
+- **AND** when stdout is non-TTY, banner title MUST fall back to plain text without emoji requirement
+
+#### Scenario: Structured startup JSON line
+- **GIVEN** runtime starts and listener bind succeeds
+- **WHEN** startup console output is emitted
+- **THEN** output MUST include exactly one line prefixed `CABINET_STARTUP_JSON `
+- **AND** the JSON payload MUST include keys `url`, `requested_addr`, `resolved_addr`, `instance`, `profile`, `data_dir`, `requested_port`, and `resolved_port`
+- **AND** existing key-value startup line `CABINET_STARTUP ...` MUST remain present for backwards compatibility
+
 ### Requirement RUNTIME-CORE-006: Project-local execution SHALL prefer `bin` folder runtime path over ephemeral temp locations
 When running from a project workspace, startup and validation workflows MUST prefer executable path under project-local `bin` (or equivalent configured project runtime path) and MUST NOT default to transient template/temp directories.
+
+#### Scenario: Project run-path resolution
+- **GIVEN** Cabinet project root is available and contains `bin/cabinet(.exe)`
+- **WHEN** run instructions or automation resolves executable path
+- **THEN** runtime MUST launch from project-local `bin` executable by default
+- **AND** logs/checkpoints MUST record resolved executable path used for run
+
+#### Scenario: Equivalent configured runtime path
+- **GIVEN** project defines an explicit runtime executable path different from `bin`
+- **WHEN** run instructions resolve launch target
+- **THEN** runtime MAY use configured project-local equivalent path
+- **AND** transient template/temp-folder executable paths MUST be rejected unless explicitly forced for a test case
 
 ### Requirement RUNTIME-CORE-007: CLI SHALL support browser auto-open suppression for automation runs
 Runtime CLI SHALL provide a flag to suppress browser auto-open on startup (e.g., `--no-open-browser`) for CI/agent/Cypress flows.
@@ -82,32 +108,6 @@ Runtime CLI SHALL provide a flag to suppress browser auto-open on startup (e.g.,
 - **GIVEN** Cabinet is launched without browser-suppression flag
 - **WHEN** startup completes successfully
 - **THEN** default browser-open behavior MUST remain unchanged unless overridden by config
-
-#### Scenario: Project run-path resolution
-- **GIVEN** Cabinet project root is available and contains `bin/cabinet(.exe)`
-- **WHEN** run instructions or automation resolves executable path
-- **THEN** runtime MUST launch from project-local `bin` executable by default
-- **AND** logs/checkpoints MUST record resolved executable path used for run
-
-#### Scenario: Equivalent configured runtime path
-- **GIVEN** project defines an explicit runtime executable path different from `bin`
-- **WHEN** run instructions resolve launch target
-- **THEN** runtime MAY use configured project-local equivalent path
-- **AND** transient template/temp-folder executable paths MUST be rejected unless explicitly forced for a test case
-
-#### Scenario: Human startup banner lines
-- **GIVEN** runtime starts and listener bind succeeds with resolved address known
-- **WHEN** startup console output is emitted
-- **THEN** output MUST include human-readable lines containing `Cabinet Started`, `URL`, `Instance`, `Profile`, `Data Dir`, `Port`, and `Bind`
-- **AND** when stdout is TTY, banner title MAY include emoji decoration
-- **AND** when stdout is non-TTY, banner title MUST fall back to plain text without emoji requirement
-
-#### Scenario: Structured startup JSON line
-- **GIVEN** runtime starts and listener bind succeeds
-- **WHEN** startup console output is emitted
-- **THEN** output MUST include exactly one line prefixed `CABINET_STARTUP_JSON `
-- **AND** the JSON payload MUST include keys `url`, `requested_addr`, `resolved_addr`, `instance`, `profile`, `data_dir`, `requested_port`, and `resolved_port`
-- **AND** existing key-value startup line `CABINET_STARTUP ...` MUST remain present for backwards compatibility
 
 ### Requirement RUNTIME-CORE-008: Runtime CLI SHALL support deterministic startup parameter overrides
 Runtime startup SHALL support explicit CLI overrides for address/port, data path, profile context, auth mode, base URL, parallel guard, and log level.
