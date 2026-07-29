@@ -94,6 +94,11 @@ Cabinet SHALL parse stock/availability from webshop listing pages where availabl
 ### Requirement OPS-001: AU webshop providers MUST enforce robots/terms policy and throttling
 Cabinet MUST store per-domain crawling policy metadata including robots/terms review status, crawl delay/rate limit, and failure backoff behavior.
 
+#### Scenario: Domain throttle applied
+- **GIVEN** domain policy declares `crawl_delay_ms` and `max_requests_per_minute`
+- **WHEN** scanner executes multiple AU webshop requests in one run window
+- **THEN** scheduler MUST enforce throttle policy and transition provider state to `degraded` after repeated policy violations
+
 ### Requirement OPS-002: Provider ingestion MUST support configurable items-per-page with safe limits
 Provider query execution SHALL support per-provider `items_per_page` configuration to control request volume and avoid overscraping behavior.
 
@@ -127,6 +132,18 @@ Bonza provider ingestion SHALL attempt configured page-size target (36 where sup
 
 ### Requirement INTEGRATION-014: Bonza watched-car stock enrichment MUST be API-first with detail-page fallback
 For watched Bonza cars, ingestion SHALL prefer WooCommerce Store API stock fields and use detail-page parsing only when API stock data is missing/insufficient.
+
+#### Scenario: Watched car stock-level enrichment (API-first)
+- **GIVEN** watched car candidate exists for Bonza source
+- **WHEN** product data is fetched from `wp-json/wc/store/v1/products`
+- **THEN** runtime MUST extract stock signal from API fields first (e.g., `is_in_stock`, `low_stock_remaining`, `add_to_cart` availability)
+- **AND** normalized stock state MUST update integration stock observation for purchase prompting logic
+
+#### Scenario: Detail-page fallback enrichment
+- **GIVEN** API stock signal is missing/insufficient for watched car candidate
+- **WHEN** enrichment fallback runs
+- **THEN** runtime MUST request Bonza product detail page for that candidate
+- **AND** extracted fallback stock signal MUST be merged with source attribution (`api|detail_page`)
 
 ### Requirement PROVIDER-AU-WEBSHOPS-BONZA-URL-001: Bonza product URL ingestion SHALL populate Cabinet item draft data
 Bonza provider ingestion SHALL support direct product URL ingestion for `bonzaslotcars.com.au/product/<slug>/` and return a normalized Cabinet item draft.
@@ -193,6 +210,19 @@ AU webshop providers that cannot safely complete normal catalogue crawling SHALL
 ### Requirement INTEGRATION-015: Frontline provider config discovery SHALL be runtime-resolved from site assets with safe fallback
 Frontline integration SHALL discover Algolia runtime config (application ID, search key, index names) from maintained site assets (e.g., `pd-search.js`) and use cached last-known-good config when discovery fails.
 
+#### Scenario: Frontline config discovery from asset
+- **GIVEN** Frontline provider run starts
+- **WHEN** runtime fetches configured discovery asset path(s)
+- **THEN** parser MUST extract Algolia application ID, public search key, and index names from script content
+- **AND** discovery output MUST be versioned and timestamped in provider metadata
+- **AND** saved-search run output MUST persist normalized `source="frontlinehobbies"` candidates into the shared scanner/Discoveries candidate store and hydrate latest-run query-set snapshot metadata after reload
+
+#### Scenario: Config drift/fallback handling
+- **GIVEN** asset parsing fails or values change unexpectedly
+- **WHEN** provider query executes
+- **THEN** runtime MUST fallback to last-known-good config if available
+- **AND** emit drift warning/event for operator review without hard-crashing entire provider lane
+
 ### Requirement INTEGRATION-016: Hobbytech provider SHALL support Shopify search via Boost/mybcapps endpoint with runtime config discovery
 Hobbytech integration SHALL support Shopify-backed search using Boost Commerce endpoint (`services.mybcapps.com/bc-sf-filter/search`) with runtime discovery of required query/session parameters and resilient fallback behavior.
 
@@ -217,36 +247,6 @@ Hobbytech integration SHALL support Shopify-backed search using Boost Commerce e
 - **AND** the workflow MUST advertise catalogue/source-matching use only, without credentials, login, cart, checkout, payment, or purchase automation
 - **AND** registry metadata MUST distinguish the public Parts Finder page from robots-disallowed search-query paths so runtime probes stay rate-limited and read-only
 - **AND** manual product URL capture MUST remain the fallback when a parts path cannot be parsed safely
-
-#### Scenario: Frontline config discovery from asset
-- **GIVEN** Frontline provider run starts
-- **WHEN** runtime fetches configured discovery asset path(s)
-- **THEN** parser MUST extract Algolia application ID, public search key, and index names from script content
-- **AND** discovery output MUST be versioned and timestamped in provider metadata
-- **AND** saved-search run output MUST persist normalized `source="frontlinehobbies"` candidates into the shared scanner/Discoveries candidate store and hydrate latest-run query-set snapshot metadata after reload
-
-#### Scenario: Config drift/fallback handling
-- **GIVEN** asset parsing fails or values change unexpectedly
-- **WHEN** provider query executes
-- **THEN** runtime MUST fallback to last-known-good config if available
-- **AND** emit drift warning/event for operator review without hard-crashing entire provider lane
-
-#### Scenario: Watched car stock-level enrichment (API-first)
-- **GIVEN** watched car candidate exists for Bonza source
-- **WHEN** product data is fetched from `wp-json/wc/store/v1/products`
-- **THEN** runtime MUST extract stock signal from API fields first (e.g., `is_in_stock`, `low_stock_remaining`, `add_to_cart` availability)
-- **AND** normalized stock state MUST update integration stock observation for purchase prompting logic
-
-#### Scenario: Detail-page fallback enrichment
-- **GIVEN** API stock signal is missing/insufficient for watched car candidate
-- **WHEN** enrichment fallback runs
-- **THEN** runtime MUST request Bonza product detail page for that candidate
-- **AND** extracted fallback stock signal MUST be merged with source attribution (`api|detail_page`)
-
-#### Scenario: Domain throttle applied
-- **GIVEN** domain policy declares `crawl_delay_ms` and `max_requests_per_minute`
-- **WHEN** scanner executes multiple AU webshop requests in one run window
-- **THEN** scheduler MUST enforce throttle policy and transition provider state to `degraded` after repeated policy violations
 
 ### Requirement PROVIDER-AU-WEBSHOPS-LIGHTSPEED-001: Acer provider SHALL use a Lightspeed storefront adapter
 Cabinet SHALL register Acer RC Models (`acercmodels.com`) as a `lightspeed-storefront` catalogue/source-matching provider instead of a generic webshop fallback.

@@ -1,5 +1,5 @@
 ## Purpose
-Define wishlist item lifecycle behavior.
+Define wishlist item lifecycle behavior for canonical item links, target pricing metadata, owned conversion, and downstream purchase/delivery synchronization.
 
 ## Requirements
 ### Requirement WISHLIST-PRICING-DASHBOARD-001: Wishlist entries SHALL link to canonical items and target pricing

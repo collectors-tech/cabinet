@@ -5,6 +5,11 @@ Define Integrations screen behavior for configured integration tables, provider 
 ### Requirement UI-SCREEN-INTEGRATIONS-001: Integrations screen SHALL support search/filter/sort over provider cards
 Integrations screen SHALL support text filter, connection-type filter, and sort controls.
 
+#### Scenario: Filter and sort integrations
+- **GIVEN** integrations route is loaded with provider cards
+- **WHEN** user applies text filter, type filter, and sort order
+- **THEN** rendered provider cards MUST reflect active filter/sort state
+
 ### Requirement UI-SCREEN-INTEGRATIONS-012: Integrations screen SHALL support integration-type selector and rows/cards view toggles
 Integrations screen SHALL expose integration-type selector (default `All Integrations`) and explicit `Rows`/`Cards` view toggles.
 
@@ -110,11 +115,6 @@ Integrations screen SHALL render the primary configured integrations list as a s
 - **THEN** the visible rows MUST advance between pages
 - **AND** pagination status MUST report the visible range and current page
 - **AND** filter/type/sort changes MUST reset pagination to the first matching page
-
-#### Scenario: Filter and sort integrations
-- **GIVEN** integrations route is loaded with provider cards
-- **WHEN** user applies text filter, type filter, and sort order
-- **THEN** rendered provider cards MUST reflect active filter/sort state
 
 ### Requirement UI-SCREEN-INTEGRATIONS-002: Integrations screen SHALL support connect/edit provider modal workflow
 Integrations screen SHALL open provider modal from card action and allow editing connection values.

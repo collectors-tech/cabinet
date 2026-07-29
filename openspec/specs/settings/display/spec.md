@@ -1,5 +1,5 @@
 ## Purpose
-Define Display settings screen behavior.
+Define Display settings screen behavior for sidebar item visibility, validation, persistence feedback, and missing active-profile recovery.
 
 ## Requirements
 ### Requirement UI-SCREEN-SETTINGS-DISPLAY-001: Display screen SHALL manage sidebar visibility preferences

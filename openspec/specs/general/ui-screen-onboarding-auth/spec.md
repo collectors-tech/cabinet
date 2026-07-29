@@ -188,6 +188,23 @@ Sign-up SHALL expose GitHub and Facebook provider actions with explicit visible/
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-011: Sign-up submit SHALL provide deterministic completion feedback
 Sign-up flow SHALL provide a deterministic outcome after valid submission so first-time users are never left on a dead-end state.
 
+#### Scenario: Successful sign-up completion
+- **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
+- **WHEN** user activates `Create Account`
+- **THEN** UI MUST show in-progress state while submitting
+- **AND** on success MUST authenticate the new user session and navigate to the canonical authenticated dashboard destination (`/dashboard`)
+
+#### Scenario: Failed sign-up completion
+- **GIVEN** user submits valid sign-up payload and backend returns failure
+- **WHEN** submission fails
+- **THEN** UI MUST show actionable error feedback and remain recoverable on `/sign-up`
+
+#### Scenario: Sign-up in-flight duplicate-submit guard
+- **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
+- **WHEN** user activates `Create Account`
+- **THEN** the submit control MUST enter an in-flight disabled state before route handoff
+- **AND** duplicate account-creation submits MUST be blocked while the first submit is pending
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-011B: Sign-in password visibility toggle SHALL be deterministic and keyboard-accessible
 Sign-in password field SHALL expose a visibility toggle that switches the input type deterministically, updates accessible state/label, and remains keyboard-activatable.
 
@@ -242,23 +259,6 @@ The `/sign-in-2` passkey flow SHALL preserve the same redirect semantics as pass
 - **WHEN** passkey auth attempt fails or is unavailable
 - **THEN** UI MUST show actionable fallback guidance
 - **AND** MUST keep password and provider sign-in methods visible on `/sign-in-2`
-
-#### Scenario: Successful sign-up completion
-- **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
-- **WHEN** user activates `Create Account`
-- **THEN** UI MUST show in-progress state while submitting
-- **AND** on success MUST authenticate the new user session and navigate to the canonical authenticated dashboard destination (`/dashboard`)
-
-#### Scenario: Failed sign-up completion
-- **GIVEN** user submits valid sign-up payload and backend returns failure
-- **WHEN** submission fails
-- **THEN** UI MUST show actionable error feedback and remain recoverable on `/sign-up`
-
-#### Scenario: Sign-up in-flight duplicate-submit guard
-- **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
-- **WHEN** user activates `Create Account`
-- **THEN** the submit control MUST enter an in-flight disabled state before route handoff
-- **AND** duplicate account-creation submits MUST be blocked while the first submit is pending
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-012: Forgot-password submit SHALL provide deterministic recovery handoff
 Forgot-password flow SHALL provide a deterministic next-step outcome after valid email submission so users are never left on a cleared form with no recovery guidance.

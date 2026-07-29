@@ -29,6 +29,11 @@ Failed actions MUST be linked to focused issues with expected vs actual behavior
 ### Requirement CONT-UI-CAB-004: Scheduled validation SHALL maintain OpenSpec + commit traceability
 Validation outputs MUST update OpenSpec/traceability when contracts are missing and commit changes with issue-linked messages.
 
+#### Scenario: Spec gap discovered
+- **GIVEN** action exists without explicit requirement coverage
+- **WHEN** validation run reconciles action-to-spec mapping
+- **THEN** spec IDs SHALL be added append-only and committed with linked issue reference
+
 ### Requirement CONT-UI-CAB-005: Validation SHALL verify control intent outcomes, not click-only execution
 For each interactive control, validation SHALL assert intended outcome (route/state/data/error feedback), not merely that click action executed.
 
@@ -52,11 +57,6 @@ Before running exploratory UI scripts, validator runtime SHALL ensure required N
 - **GIVEN** validator is about to run `node scripts/cabinet_ui_cycle.mjs`
 - **WHEN** dependency preflight executes
 - **THEN** missing dependencies SHALL be installed or reported with actionable remediation prior to exploration execution
-
-#### Scenario: Spec gap discovered
-- **GIVEN** action exists without explicit requirement coverage
-- **WHEN** validation run reconciles action-to-spec mapping
-- **THEN** spec IDs SHALL be added append-only and committed with linked issue reference
 
 ### Requirement CONT-UI-CAB-008: Cypress validation SHALL have a project-local container image path
 Cabinet SHALL provide a repo-local container image definition for isolated Cypress runtime lanes so browser validation can start from a known build artifact instead of a stale shared desktop runtime.

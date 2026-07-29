@@ -1,5 +1,5 @@
 ## Purpose
-Define Notifications settings screen behavior.
+Define Notifications settings screen behavior for notification channel toggles, guarded controls, persistence feedback, and missing active-profile recovery.
 
 ## Requirements
 ### Requirement UI-SCREEN-SETTINGS-NOTIFICATIONS-001: Notifications screen SHALL support notification scope and channel toggles
