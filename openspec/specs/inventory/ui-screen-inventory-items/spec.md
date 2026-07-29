@@ -40,6 +40,13 @@ The screen SHALL remain usable with both starter and stress datasets.
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-004: Inventory Collection layout SHALL keep controls compact and non-duplicated
 Inventory Collection layout SHALL avoid duplicate control strips and keep summary context inside the Collection Browser header area.
 
+#### Scenario: Compact summary in browser header and no duplicate command/summary blocks
+- **GIVEN** an authenticated user opens `/inventory` with a resolved collection dataset
+- **WHEN** the Inventory workspace renders the Collection Browser region
+- **THEN** the standalone `Command Row` section MUST NOT render
+- **AND** the standalone `Summary Strip` card MUST NOT render
+- **AND** the Collection Browser header MUST render a one-line summary with `Folders`, `Items`, `Active Brand`, and `Active Category` directly above the filter bar
+
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-005: Inventory screen SHALL expose dedicated New action and adjacent Create menu
 Inventory SHALL provide a dedicated `New` button for primary inventory entry creation and an adjacent `Create` menu for quick create actions.
 
@@ -52,6 +59,11 @@ Inventory SHALL provide a dedicated `New` button for primary inventory entry cre
 
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-006: Inventory detail collection picker SHALL support inline quick-create
 Inventory item details collection picker MUST support `+ New Collection` inline create.
+
+#### Scenario: Quick-create collection while assigning inventory item
+- **GIVEN** user edits inventory item and opens collection picker
+- **WHEN** user creates a new collection from picker
+- **THEN** collection MUST be created and selected without leaving inventory edit flow
 
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-007: Inventory toolbar SHALL expose explicit create and folder actions
 Inventory toolbar SHALL expose primary create-item and folder-creation actions (`Add Item`, `Add Folder`) with deterministic behavior.
@@ -84,18 +96,6 @@ Inventory rows view MUST render Cabinet inventory item semantics instead of gene
 - **THEN** rows header semantics MUST render `Part #`, `Title`, `Condition`, and `Category`
 - **AND** row identity MUST align to inventory `part_number` values when available
 - **AND** UI MUST NOT render generic task-template headers such as `Task` or `Priority`
-
-#### Scenario: Quick-create collection while assigning inventory item
-- **GIVEN** user edits inventory item and opens collection picker
-- **WHEN** user creates a new collection from picker
-- **THEN** collection MUST be created and selected without leaving inventory edit flow
-
-#### Scenario: Compact summary in browser header and no duplicate command/summary blocks
-- **GIVEN** an authenticated user opens `/inventory` with a resolved collection dataset
-- **WHEN** the Inventory workspace renders the Collection Browser region
-- **THEN** the standalone `Command Row` section MUST NOT render
-- **AND** the standalone `Summary Strip` card MUST NOT render
-- **AND** the Collection Browser header MUST render a one-line summary with `Folders`, `Items`, `Active Brand`, and `Active Category` directly above the filter bar
 
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-012: Inventory rows SHALL keep dense item columns readable
 Inventory rows view SHALL preserve readable Part #, Title, Condition, Item type, Packaging, Category, and action columns at normal desktop review widths by allocating stable column widths and using horizontal scrolling when the full dense table exceeds the available viewport.
