@@ -237,7 +237,8 @@ Auth step MUST provide explicit mode selection and readiness state so users can 
 - **WHEN** user continues to review and completes setup
 - **THEN** readiness status MUST render as configured
 - **AND** config payload MUST persist `auth.mode=zitadel`
-- **AND** retired `auth.clerk.enabled` MUST remain `false` with an empty publishable key
+- **AND** config payload MUST persist canonical `auth.zitadel`
+- **AND** config payload MUST NOT include retired `auth.clerk` fields
 
 ### Requirement SETUP-WIZ-016: Integrations baseline step MUST capture optional connector toggles with editable-later guidance
 Integrations baseline step MUST allow users to toggle scanner/chat/provider features during setup and clearly communicate settings can be changed later.
@@ -331,10 +332,7 @@ When setup completes in local auth mode, the completion screen MUST show the ini
   },
   "auth": {
     "mode": "local",
-    "clerk": {
-      "publishableKey": "",
-      "enabled": false
-    }
+    "zitadel": {}
   },
   "bootstrap": {
     "workspace": "Local Workspace",

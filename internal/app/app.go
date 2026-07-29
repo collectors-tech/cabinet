@@ -7670,7 +7670,6 @@ type runtimeSetupRequest struct {
 	StorageDataDir       string `json:"storage_data_dir"`
 	PortableMode         bool   `json:"portable_mode"`
 	AuthMode             string `json:"auth_mode"`
-	ClerkPublishableKey  string `json:"clerk_publishable_key"`
 	RuntimePortMode      string `json:"runtime_port_mode"`
 	RuntimeFixedPort     int    `json:"runtime_fixed_port"`
 	FeatureChat          *bool  `json:"feature_chat"`

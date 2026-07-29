@@ -288,7 +288,6 @@ export function SignIn() {
       runtime_fixed_port:
         setupForm.runtimePortMode === 'fixed' ? setupForm.runtimeFixedPort : 0,
       auth_mode: setupForm.authMode,
-      clerk_publishable_key: '',
       feature_chat: setupForm.featureChat,
       feature_providers: setupForm.featureProviders,
       feature_scanner: setupForm.featureScanner,
@@ -308,7 +307,6 @@ export function SignIn() {
         runtime_port_mode: 'auto',
         runtime_fixed_port: 0,
         auth_mode: 'local',
-        clerk_publishable_key: '',
         feature_chat: true,
         feature_providers: true,
         feature_scanner: true,
