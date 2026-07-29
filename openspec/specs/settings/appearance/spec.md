@@ -1,5 +1,5 @@
 ## Purpose
-Define Appearance settings screen behavior.
+Define Appearance settings screen behavior for theme, font, language, persistence feedback, and missing active-profile recovery.
 
 ## Requirements
 ### Requirement UI-SCREEN-SETTINGS-APPEARANCE-001: Appearance screen SHALL manage theme and font preferences
