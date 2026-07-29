@@ -276,7 +276,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: local-device mode');
   });
 
-  it('UC-SW-24 setup-wizard-zitadel-readiness allows next without Clerk key entry', () => {
+  it('UC-SW-24 setup-wizard-zitadel-readiness allows next without manual provider key entry', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
@@ -289,7 +289,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 5 OF 6');
   });
 
-  it('SETUP-WIZ-015 + #1968 keeps retired Clerk key out of setup payload', () => {
+  it('SETUP-WIZ-015 + #1968 keeps unsupported provider key out of setup payload', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('ZITADEL Setup');
     cy.get('[data-testid="setup-next"]').click();
@@ -641,7 +641,7 @@ describe('SETUP-WIZ', () => {
       });
   });
 
-  it('UC-SW-09 setup-wizard-zitadel-completes without retired Clerk key', () => {
+  it('UC-SW-09 setup-wizard-zitadel-completes with canonical auth config', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();

@@ -34,7 +34,7 @@ func TestAuthProviderOptionsDefaults(t *testing.T) {
 	}
 }
 
-func TestAuthProviderOptionsIgnoresRetiredClerkEnv(t *testing.T) {
+func TestAuthProviderOptionsRejectsUnsupportedIdentityEnv(t *testing.T) {
 	t.Setenv("CABINET_AUTH_IDENTITY_MODE", "clerk")
 	t.Setenv("VITE_CLERK_PUBLISHABLE_KEY", "pk_test_123")
 	t.Setenv("CABINET_AUTH_PROVIDER_APPLE_ENABLED", "false")
@@ -56,14 +56,14 @@ func TestAuthProviderOptionsIgnoresRetiredClerkEnv(t *testing.T) {
 		t.Fatalf("decode provider-options payload: %v", err)
 	}
 	if payload.IdentityMode != "local" {
-		t.Fatalf("expected retired clerk mode to fall back to local, got %s", payload.IdentityMode)
+		t.Fatalf("expected unsupported identity mode to fall back to local, got %s", payload.IdentityMode)
 	}
 	var rawPayload map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &rawPayload); err != nil {
 		t.Fatalf("decode provider-options raw payload: %v", err)
 	}
 	if _, ok := rawPayload["clerk_configured"]; ok {
-		t.Fatalf("provider options must not expose retired clerk_configured compatibility field: %s", resp.Body.String())
+		t.Fatalf("provider options must not expose unsupported clerk_configured compatibility field: %s", resp.Body.String())
 	}
 	foundApple := false
 	for _, provider := range payload.Providers {

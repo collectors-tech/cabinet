@@ -246,7 +246,7 @@ func TestRuntimeSetupStatusPathUsesDataDirCabinetJSON(t *testing.T) {
 	}
 }
 
-func TestRuntimeSetupCompleteRejectsClerkAuthMode(t *testing.T) {
+func TestRuntimeSetupCompleteRejectsUnsupportedAuthMode(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -268,7 +268,7 @@ func TestRuntimeSetupCompleteRejectsClerkAuthMode(t *testing.T) {
 	}
 	resp := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
 	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for retired clerk mode, got %d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("expected 400 for unsupported auth mode, got %d body=%s", resp.Code, resp.Body.String())
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
@@ -363,7 +363,7 @@ func TestRuntimeSetupImportExistingConfigContract(t *testing.T) {
 	}
 }
 
-func TestRuntimeSetupImportRejectsClerkShapedAuthConfig(t *testing.T) {
+func TestRuntimeSetupImportRejectsUnsupportedAuthSubkey(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -423,11 +423,11 @@ func TestRuntimeSetupImportRejectsClerkShapedAuthConfig(t *testing.T) {
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected setup-import 400 for Clerk-shaped auth config, got %d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("expected setup-import 400 for unsupported auth config subkey, got %d body=%s", resp.Code, resp.Body.String())
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode Clerk-shaped import payload: %v", err)
+		t.Fatalf("decode unsupported auth config import payload: %v", err)
 	}
 	if payload["error_code"] != "SETUP_IMPORT_FAILED" {
 		t.Fatalf("unexpected setup-import error code: %v", payload["error_code"])

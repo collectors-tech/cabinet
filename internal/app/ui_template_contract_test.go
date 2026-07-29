@@ -605,7 +605,7 @@ func TestInventoryWishlistViewToggleAccessibilityContract(t *testing.T) {
 	}
 }
 
-func TestSetupWizardAuthModeOptionsRetireClerk(t *testing.T) {
+func TestSetupWizardAuthModeOptionsExcludeUnsupportedProvider(t *testing.T) {
 	t.Parallel()
 
 	b, err := os.ReadFile("../../ui.web/src/features/auth/sign-in/index.tsx")
@@ -629,18 +629,18 @@ func TestSetupWizardAuthModeOptionsRetireClerk(t *testing.T) {
 	}
 	for _, token := range forbidden {
 		if strings.Contains(src, token) {
-			t.Fatalf("setup wizard still exposes retired Clerk auth token: %s", token)
+			t.Fatalf("setup wizard still exposes unsupported auth token: %s", token)
 		}
 	}
 }
 
-func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
+func TestFrontendExcludesUnsupportedProviderRouteDependencySurface(t *testing.T) {
 	t.Parallel()
 
 	if _, err := os.Stat("../../ui.web/src/routes/clerk"); err == nil {
-		t.Fatal("frontend still ships retired Clerk route source directory")
+		t.Fatal("frontend still ships unsupported provider route source directory")
 	} else if !os.IsNotExist(err) {
-		t.Fatalf("stat Clerk route source directory: %v", err)
+		t.Fatalf("stat unsupported provider route source directory: %v", err)
 	}
 	for _, file := range []string{
 		"../../ui.web/src/assets/clerk-full-logo.tsx",
@@ -648,9 +648,9 @@ func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
 		"../../scripts/runtime/start-exploration-clerk.ps1",
 	} {
 		if _, err := os.Stat(file); err == nil {
-			t.Fatalf("retired Clerk surface still exists: %s", file)
+			t.Fatalf("unsupported provider surface still exists: %s", file)
 		} else if !os.IsNotExist(err) {
-			t.Fatalf("stat retired Clerk surface %s: %v", file, err)
+			t.Fatalf("stat unsupported provider surface %s: %v", file, err)
 		}
 	}
 
@@ -676,7 +676,7 @@ func TestFrontendRetiresClerkRouteDependencySurface(t *testing.T) {
 		}
 		for _, token := range forbidden {
 			if strings.Contains(src, token) {
-				t.Fatalf("%s still contains retired Clerk frontend token: %s", file, token)
+				t.Fatalf("%s still contains unsupported provider frontend token: %s", file, token)
 			}
 		}
 	}

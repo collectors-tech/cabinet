@@ -49,7 +49,7 @@ func TestCloudOfflineLeaseIssueAndValidate(t *testing.T) {
 	}
 }
 
-func TestCloudOfflineLeaseIssueRejectsRetiredClerkProvider(t *testing.T) {
+func TestCloudOfflineLeaseIssueRejectsUnsupportedProvider(t *testing.T) {
 	a := newTestApp(t)
 	token := "e30.eyJzdWIiOiJ1c2VyX2xlYXNlIiwiZW1haWwiOiJsZWFzZUBleGFtcGxlLmNvbSIsInBsYW4iOiJwcm8ifQ.e30"
 
@@ -62,7 +62,7 @@ func TestCloudOfflineLeaseIssueRejectsRetiredClerkProvider(t *testing.T) {
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if issue.Code != http.StatusBadRequest {
-		t.Fatalf("retired clerk provider expected 400, got %d body=%s", issue.Code, issue.Body.String())
+		t.Fatalf("unsupported provider expected 400, got %d body=%s", issue.Code, issue.Body.String())
 	}
 	if !strings.Contains(issue.Body.String(), `"error":"unsupported_provider"`) {
 		t.Fatalf("expected unsupported_provider error, got %s", issue.Body.String())
