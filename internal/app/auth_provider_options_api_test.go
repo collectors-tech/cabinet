@@ -46,9 +46,8 @@ func TestAuthProviderOptionsIgnoresRetiredClerkEnv(t *testing.T) {
 	}
 
 	var payload struct {
-		IdentityMode    string `json:"identity_mode"`
-		ClerkConfigured bool   `json:"clerk_configured"`
-		Providers       []struct {
+		IdentityMode string `json:"identity_mode"`
+		Providers    []struct {
 			ID      string `json:"id"`
 			Enabled bool   `json:"enabled"`
 		} `json:"providers"`
@@ -59,8 +58,12 @@ func TestAuthProviderOptionsIgnoresRetiredClerkEnv(t *testing.T) {
 	if payload.IdentityMode != "local" {
 		t.Fatalf("expected retired clerk mode to fall back to local, got %s", payload.IdentityMode)
 	}
-	if payload.ClerkConfigured {
-		t.Fatalf("retired clerk publishable key must not report an active configured provider")
+	var rawPayload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &rawPayload); err != nil {
+		t.Fatalf("decode provider-options raw payload: %v", err)
+	}
+	if _, ok := rawPayload["clerk_configured"]; ok {
+		t.Fatalf("provider options must not expose retired clerk_configured compatibility field: %s", resp.Body.String())
 	}
 	foundApple := false
 	for _, provider := range payload.Providers {

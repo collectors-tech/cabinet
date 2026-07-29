@@ -14,7 +14,6 @@ type authProviderOption struct {
 
 type authProviderOptionsPayload struct {
 	IdentityMode      string               `json:"identity_mode"`
-	ClerkConfigured   bool                 `json:"clerk_configured"`
 	ZitadelConfigured bool                 `json:"zitadel_configured"`
 	ZitadelLoginPath  string               `json:"zitadel_login_path,omitempty"`
 	Providers         []authProviderOption `json:"providers"`
@@ -64,7 +63,6 @@ func defaultAuthProviderOptionsFromEnv() authProviderOptionsPayload {
 
 	return authProviderOptionsPayload{
 		IdentityMode:      identityMode,
-		ClerkConfigured:   false,
 		ZitadelConfigured: zitadelConfigured,
 		ZitadelLoginPath:  "/api/auth/zitadel/login",
 		Providers: []authProviderOption{
