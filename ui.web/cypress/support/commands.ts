@@ -96,13 +96,17 @@ Cypress.Commands.add("e2eCompleteSetupHelper", (overrides = {}) => {
     .request("POST", "/api/runtime/setup-complete", {
       instance_name: instanceName,
       profile_key: profileKey,
-      auth: { mode: "local", clerk_publishable_key: "", clerk_sign_in_url: "" },
-      storage: { mode: "exe_local", data_dir: "", media_dir: "", portable_mode: false },
-      runtime: {
-        mode: runtimeMode,
-        fixed_port: runtimeMode === "fixed" ? fixedPort ?? 17880 : 0,
-      },
-      features: { scanner: true, providers: true, chat: true },
+      auth_mode: "local",
+      storage_mode: "exe_local",
+      storage_data_dir: "",
+      portable_mode: false,
+      runtime_port_mode: runtimeMode,
+      runtime_fixed_port: runtimeMode === "fixed" ? fixedPort ?? 17880 : 0,
+      feature_scanner: true,
+      feature_providers: true,
+      feature_chat: true,
+      bootstrap_workspace: "Local Workspace",
+      bootstrap_database_ref: "Primary DB",
     })
     .then((resp) => {
       expect(resp.status).to.eq(200);
