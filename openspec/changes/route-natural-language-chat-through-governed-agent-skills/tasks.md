@@ -8,7 +8,7 @@
 
 ## 2. Planner and provider boundary
 
-- [ ] 2.1 Add a deterministic fake-provider planner test path for structured
+- [x] 2.1 Add a deterministic fake-provider planner test path for structured
   skill selections without network calls.
 - [ ] 2.2 Invoke the active healthy assistant provider through the #1481
   provider-neutral runtime boundary when Chat needs natural-language planning.
