@@ -182,6 +182,13 @@ Folder create and folder-properties workflows MUST save the resulting tree state
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-016: Tree SHALL support persisted inventory item assignment through direct drag-drop
 Users MUST be able to drag inventory items onto folder rows and have the assignment survive refresh in the live runtime.
 
+#### Scenario: Drop inventory item onto folder and refresh
+- **GIVEN** an inventory item is visible in the inventory workspace
+- **WHEN** user drags that item onto a valid folder row
+- **THEN** the item MUST become assigned to that folder's scope
+- **AND** selecting that folder MUST show the moved item in the corresponding filtered inventory view
+- **AND** refreshing the workspace MUST preserve the assignment outcome for the same active profile
+
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-017: Tree SHALL provide deterministic root-level A/Z sorting
 Users MUST be able to apply a root-level alphabetical sort without disturbing child hierarchy under each root node.
 
@@ -191,13 +198,6 @@ Users MUST be able to apply a root-level alphabetical sort without disturbing ch
 - **THEN** root-level folders MUST reorder alphabetically by visible folder name
 - **AND** the pinned global root context (`All Items`) MUST remain at the top if present
 - **AND** nested child ordering within each root folder MUST remain unchanged unless explicitly sorted by a separate child-level action
-
-#### Scenario: Drop inventory item onto folder and refresh
-- **GIVEN** an inventory item is visible in the inventory workspace
-- **WHEN** user drags that item onto a valid folder row
-- **THEN** the item MUST become assigned to that folder's scope
-- **AND** selecting that folder MUST show the moved item in the corresponding filtered inventory view
-- **AND** refreshing the workspace MUST preserve the assignment outcome for the same active profile
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-018: Browse picker SHALL support searchable folder selection
 The inventory Browse popup MUST provide a compact folder search control above the picker tree so users can find folders in large hierarchies without leaving the selector context.
