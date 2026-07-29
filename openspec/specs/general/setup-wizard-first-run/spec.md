@@ -63,8 +63,20 @@ Wizard completion MUST display and persist resolved config/runtime metadata.
 ### Requirement SETUP-WIZ-005: Home dashboard MUST NOT embed setup-starter card
 Setup onboarding controls MUST NOT appear as dashboard card in authenticated app shell.
 
+#### Scenario: Authenticated shell excludes setup starter
+- **GIVEN** setup has completed and the authenticated app shell is loaded
+- **WHEN** the home dashboard renders
+- **THEN** setup starter controls MUST NOT appear as an authenticated dashboard card
+- **AND** setup actions MUST remain available only through explicit setup-required or settings flows
+
 ### Requirement SETUP-WIZ-007: Initial config payload MUST follow deterministic `cabinet.json` schema
 Setup Wizard MUST produce a deterministic initial config object containing required runtime/bootstrap fields before app launch.
+
+#### Scenario: Build initial config payload
+- **GIVEN** wizard required fields are completed
+- **WHEN** user clicks `Complete`
+- **THEN** wizard MUST write `cabinet.json` with required sections: `instance`, `storage`, `runtime`, `auth`, `bootstrap`, and `meta`
+- **AND** missing required fields MUST block completion with inline validation
 
 ### Requirement SETUP-WIZ-008: Wizard SHALL provide explicit `Use Defaults` skip path
 Setup Wizard SHALL provide a one-action path to apply safe defaults and continue app startup without full manual step entry.
@@ -80,12 +92,6 @@ Setup Wizard SHALL provide a one-action path to apply safe defaults and continue
 - **WHEN** config is generated
 - **THEN** defaults MUST include deterministic baseline values for instance name, local data directory, runtime mode/port policy, and auth mode
 - **AND** defaults MUST be editable later in settings
-
-#### Scenario: Build initial config payload
-- **GIVEN** wizard required fields are completed
-- **WHEN** user clicks `Complete`
-- **THEN** wizard MUST write `cabinet.json` with required sections: `instance`, `storage`, `runtime`, `auth`, `bootstrap`, and `meta`
-- **AND** missing required fields MUST block completion with inline validation
 
 ### Requirement SETUP-WIZ-020: Startup MUST synchronize current runtime URL into config metadata
 When `cabinet.json` exists, runtime startup MUST reconcile and persist the resolved runtime URL into metadata for deterministic post-launch introspection.
