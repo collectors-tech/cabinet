@@ -145,11 +145,8 @@ func TestRuntimeSetupSyncCurrentURLUpdatesConfigMetadata(t *testing.T) {
 			ResolvedURL: "http://127.0.0.1:17880",
 		},
 		Auth: runtimeSetupAuthConfig{
-			Mode: "local",
-			Clerk: runtimeSetupClerkAuthConfig{
-				PublishableKey: "",
-				Enabled:        false,
-			},
+			Mode:    "local",
+			Zitadel: runtimeSetupZitadelAuthConfig{},
 		},
 		Bootstrap: runtimeSetupBootstrapConfig{
 			Workspace:       "Local Workspace",
@@ -363,6 +360,83 @@ func TestRuntimeSetupImportExistingConfigContract(t *testing.T) {
 	}
 	if invalidPayload["error_code"] != "SETUP_IMPORT_SOURCE_PATH_REQUIRED" {
 		t.Fatalf("unexpected setup-import error code: %v", invalidPayload["error_code"])
+	}
+}
+
+func TestRuntimeSetupImportRejectsClerkShapedAuthConfig(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	sourcePath := filepath.Join(a.cfg.DataDir, "clerk-shaped-import.json")
+	raw := []byte(`{
+  "version": 1,
+  "instance": {
+    "name": "Clerk Shaped",
+    "profile": "clerk-shaped"
+  },
+  "storage": {
+    "dataDir": "C:/cabinet/data",
+    "mediaDir": "C:/cabinet/data/media",
+    "portableMode": false
+  },
+  "runtime": {
+    "portMode": "auto",
+    "port": null,
+    "resolvedUrl": "http://127.0.0.1:17880"
+  },
+  "auth": {
+    "mode": "zitadel",
+    "clerk": {
+      "enabled": false,
+      "publishableKey": "pk_test_retired"
+    }
+  },
+  "bootstrap": {
+    "workspace": "Local Workspace",
+    "databaseProfile": "Primary DB"
+  },
+  "features": {
+    "chat": true,
+    "providers": true,
+    "scanner": true
+  },
+  "meta": {
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z",
+    "wizardVersion": "1",
+    "currentUrl": "http://127.0.0.1:17880"
+  }
+}`)
+	if err := os.WriteFile(sourcePath, raw, 0o644); err != nil {
+		t.Fatalf("write clerk-shaped import source: %v", err)
+	}
+
+	resp := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/runtime/setup-import",
+		strings.NewReader(fmt.Sprintf(`{"source_path":%q}`, sourcePath)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected setup-import 400 for Clerk-shaped auth config, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode Clerk-shaped import payload: %v", err)
+	}
+	if payload["error_code"] != "SETUP_IMPORT_FAILED" {
+		t.Fatalf("unexpected setup-import error code: %v", payload["error_code"])
+	}
+	if !strings.Contains(strings.ToLower(asString(payload["message"])), "auth.clerk") {
+		t.Fatalf("expected auth.clerk rejection message, got %v", payload["message"])
+	}
+	if _, err := os.Stat(setupPath); !os.IsNotExist(err) {
+		t.Fatalf("setup file should not be created from Clerk-shaped import")
 	}
 }
 
@@ -588,15 +662,11 @@ func TestRuntimeSetupCompletePersistsZitadelAuthConfiguration(t *testing.T) {
 	if strings.TrimSpace(asString(authPayload["mode"])) != "zitadel" {
 		t.Fatalf("expected auth.mode=zitadel, got %v", authPayload["mode"])
 	}
-	clerkPayload, ok := authPayload["clerk"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected auth.clerk object in setup config")
+	if _, ok := authPayload["clerk"]; ok {
+		t.Fatalf("auth.clerk must not be persisted in setup config: %+v", authPayload["clerk"])
 	}
-	if clerkPayload["enabled"] != false {
-		t.Fatalf("retired clerk config must stay disabled for zitadel mode, got %v", clerkPayload["enabled"])
-	}
-	if strings.TrimSpace(asString(clerkPayload["publishableKey"])) != "" {
-		t.Fatalf("retired clerk publishable key must not be persisted, got %v", clerkPayload["publishableKey"])
+	if _, ok := authPayload["zitadel"].(map[string]any); !ok {
+		t.Fatalf("expected auth.zitadel object in setup config")
 	}
 }
 

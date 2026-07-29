@@ -1,8 +1,8 @@
 package app
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -31,11 +31,8 @@ func TestRuntimeStartupConsoleOutputsResolvedURLAndContext(t *testing.T) {
 			ResolvedURL: "http://127.0.0.1:17880",
 		},
 		Auth: runtimeSetupAuthConfig{
-			Mode: "local",
-			Clerk: runtimeSetupClerkAuthConfig{
-				PublishableKey: "",
-				Enabled:        false,
-			},
+			Mode:    "local",
+			Zitadel: runtimeSetupZitadelAuthConfig{},
 		},
 		Bootstrap: runtimeSetupBootstrapConfig{
 			Workspace:       "Local Workspace",
