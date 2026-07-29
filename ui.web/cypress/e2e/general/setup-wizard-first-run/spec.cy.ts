@@ -311,8 +311,8 @@ describe('SETUP-WIZ', () => {
       .its('body')
       .then((payload) => {
         expect(payload.auth.mode).to.eq('zitadel');
-        expect(payload.auth.clerk.enabled).to.eq(false);
-        expect(payload.auth.clerk.publishableKey).to.eq('');
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
       });
   });
 
@@ -338,8 +338,8 @@ describe('SETUP-WIZ', () => {
       .its('body')
       .then((payload) => {
         expect(payload.auth.mode).to.eq('zitadel');
-        expect(payload.auth.clerk.enabled).to.eq(false);
-        expect(payload.auth.clerk.publishableKey).to.eq('');
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
       });
   });
 
@@ -631,7 +631,8 @@ describe('SETUP-WIZ', () => {
           /^http:\/\/(127\.0\.0\.1|0\.0\.0\.0):/
         );
         expect(payload.auth.mode).to.eq('local');
-        expect(payload.auth.clerk.enabled).to.eq(false);
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
         expect(String(payload.bootstrap.workspace).trim()).not.to.equal('');
         expect(payload.features.chat).to.eq(true);
         expect(payload.features.providers).to.eq(true);
@@ -655,8 +656,8 @@ describe('SETUP-WIZ', () => {
       .its('body')
       .then((payload) => {
         expect(payload.auth.mode).to.eq('zitadel');
-        expect(payload.auth.clerk.enabled).to.eq(false);
-        expect(payload.auth.clerk.publishableKey).to.eq('');
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
       });
   });
 
