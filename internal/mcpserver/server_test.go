@@ -12,9 +12,562 @@ import (
 	"time"
 
 	"github.com/collectors-tech/cabinet/internal/agentskills"
+	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestToolsListDerivesFromEnabledExecutableAgentSkillRegistry(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", []agentskills.Skill{
+		{
+			ID:              "local.archive.enabled_reader",
+			Version:         "0.1.0",
+			DisplayName:     "Enabled archive reader",
+			Description:     "Read archived Cabinet metadata.",
+			Category:        "testing",
+			Status:          agentskills.StatusAvailable,
+			SafetyLevel:     agentskills.SafetyReadOnly,
+			RequiredContext: []string{"profile"},
+			InputSchemaRefs: []string{"archive_query"},
+			Enabled:         true,
+		},
+		{
+			ID:          "local.archive.disabled_writer",
+			Version:     "0.1.0",
+			DisplayName: "Disabled archive writer",
+			Description: "Write archived Cabinet metadata.",
+			Category:    "testing",
+			Status:      agentskills.StatusAvailable,
+			SafetyLevel: agentskills.SafetyConfirmRequired,
+			Enabled:     true,
+		},
+		{
+			ID:          "local.archive.invalid_reader",
+			Version:     "0.1.0",
+			DisplayName: "Invalid archive reader",
+			Description: "Invalid imported Cabinet metadata reader.",
+			Category:    "testing",
+			Status:      agentskills.StatusAvailable,
+			SafetyLevel: agentskills.SafetyReadOnly,
+			Enabled:     true,
+		},
+	}, []agentskills.InstalledSkillState{
+		{ProfileID: "profile-main", SkillID: "local.archive.disabled_writer", Enabled: false},
+		{ProfileID: "profile-main", SkillID: "local.archive.invalid_reader", Enabled: true, Status: agentskills.StatusInvalid},
+	})
+
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:tools-list",
+		SessionIDSeed: "mcp-tools-list-test-session",
+		SkillRegistry: registry,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-tools-list-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	result := clientSession.InitializeResult()
+	if result == nil || result.Capabilities.Tools == nil {
+		t.Fatalf("initialize should advertise MCP tool list capability, got %#v", result)
+	}
+
+	tools, err := clientSession.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	byName := map[string]*mcp.Tool{}
+	for _, tool := range tools.Tools {
+		byName[tool.Name] = tool
+	}
+	for _, expected := range []string{
+		"cabinet.inventory.search_items",
+		"cabinet.inventory.create_item",
+		"local.archive.enabled_reader",
+	} {
+		if byName[expected] == nil {
+			t.Fatalf("tools/list omitted enabled executable skill %q; names=%v", expected, toolNames(tools.Tools))
+		}
+	}
+	for _, omitted := range []string{
+		"cabinet.guided.inventory.update_item",
+		"local.archive.disabled_writer",
+		"local.archive.invalid_reader",
+	} {
+		if byName[omitted] != nil {
+			t.Fatalf("tools/list exposed disabled, unavailable, or unimplemented skill %q", omitted)
+		}
+	}
+	inventorySearch := byName["cabinet.inventory.search_items"]
+	if inventorySearch.Description == "" || inventorySearch.InputSchema == nil {
+		t.Fatalf("inventory search tool should carry registry description and deterministic input schema, got %+v", inventorySearch)
+	}
+}
+
+func TestReadOnlyToolsCallDispatchesThroughGovernedAgentSkillPath(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", nil, nil)
+	var reviewed agentskills.PreviewRequest
+	var dispatched agentskills.PreviewRequest
+	var receipts []OperationReceipt
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:read-only-call",
+		SessionIDSeed: "mcp-read-only-call-test-session",
+		SkillRegistry: registry,
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			reviewed = req
+			return registry.ReviewAuthority(req, agentskills.AgentAuthorityPolicy{
+				ProfileID:  "profile-main",
+				Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+				EntryPoint: "mcp",
+			})
+		}),
+		SkillDispatcher: AgentSkillDispatcherFunc(func(_ context.Context, req agentskills.PreviewRequest) (map[string]any, string, error) {
+			dispatched = req
+			return map[string]any{
+				"operation":  "inventory.item.search",
+				"profile_id": req.ProfileID,
+				"read_only":  true,
+				"query":      req.Parameters["query"],
+				"items": []map[string]any{{
+					"item_id": "item-main-1",
+					"title":   "Main profile Charizard",
+				}},
+				"total": 1,
+			}, "", nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-read-only-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	result, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.inventory.search_items",
+		Arguments: map[string]any{
+			"query":      "Charizard",
+			"profile_id": "profile-other",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	payload, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("StructuredContent = %T, want map[string]any: %#v", result.StructuredContent, result.StructuredContent)
+	}
+	if payload["profile_id"] != "profile-main" || payload["operation"] != "inventory.item.search" || payload["read_only"] != true {
+		t.Fatalf("tool result should be grounded to the bound profile and read-only operation, got %#v", payload)
+	}
+	if reviewed.SkillID != "cabinet.inventory.search_items" ||
+		reviewed.ProfileID != "profile-main" ||
+		reviewed.SourceChannel != "mcp" ||
+		reviewed.SourceSurface != "mcp.tools.call" ||
+		reviewed.Parameters["query"] != "Charizard" {
+		t.Fatalf("unexpected authority request: %+v", reviewed)
+	}
+	if dispatched.SkillID != "cabinet.inventory.search_items" ||
+		dispatched.ProfileID != "profile-main" ||
+		dispatched.SourceChannel != "mcp" ||
+		dispatched.SourceSurface != "mcp.tools.call" ||
+		dispatched.Parameters["query"] != "Charizard" {
+		t.Fatalf("unexpected governed dispatch request: %+v", dispatched)
+	}
+	if dispatched.Parameters["profile_id"] != "profile-other" {
+		t.Fatalf("dispatcher should receive original arguments while binding execution to cfg profile, got %+v", dispatched.Parameters)
+	}
+	var applyReceipt *OperationReceipt
+	for i := range receipts {
+		if receipts[i].Method == "tools/call" &&
+			receipts[i].Capability == "tool:cabinet.inventory.search_items" &&
+			receipts[i].Outcome == "apply_allowed" {
+			applyReceipt = &receipts[i]
+			break
+		}
+	}
+	if applyReceipt == nil || applyReceipt.ProfileID != "profile-main" || applyReceipt.VersionDigest != "git:read-only-call" {
+		t.Fatalf("expected redacted allowed authority receipt for read-only call, got %+v", receipts)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal receipts: %v", err)
+	}
+	for _, forbidden := range []string{"Charizard", "profile-other"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("read-only MCP receipt leaked tool argument %q: %s", forbidden, body)
+		}
+	}
+}
+
+func TestLocalWriteToolsCallReturnsPreviewWithoutDispatchingMutation(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", nil, nil)
+	var reviewed agentskills.PreviewRequest
+	dispatched := false
+	var receipts []OperationReceipt
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:local-write-preview",
+		SessionIDSeed: "mcp-local-write-preview-test-session",
+		SkillRegistry: registry,
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			reviewed = req
+			return registry.ReviewAuthority(req, agentskills.AgentAuthorityPolicy{
+				ProfileID:  "profile-main",
+				Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+				EntryPoint: "mcp",
+			})
+		}),
+		SkillDispatcher: AgentSkillDispatcherFunc(func(_ context.Context, req agentskills.PreviewRequest) (map[string]any, string, error) {
+			dispatched = true
+			return map[string]any{"unexpected": req.SkillID}, "", nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-local-write-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	result, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.inventory.create_item",
+		Arguments: map[string]any{
+			"title":       "Preview Only MCP Item",
+			"part_number": "MCP-PREVIEW-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	payload, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("StructuredContent = %T, want map[string]any: %#v", result.StructuredContent, result.StructuredContent)
+	}
+	if payload["skill_id"] != "cabinet.inventory.create_item" ||
+		payload["profile_id"] != "profile-main" ||
+		payload["preview_only"] != true ||
+		payload["mutation_applied"] != false ||
+		payload["confirmation_required"] != true ||
+		payload["confirmation_state"] != "preview_required" {
+		t.Fatalf("local-write MCP call should return a confirmation-gated preview, got %#v", payload)
+	}
+	if dispatched {
+		t.Fatal("local-write MCP preview must not dispatch the mutation apply path")
+	}
+	if reviewed.SkillID != "cabinet.inventory.create_item" ||
+		reviewed.ProfileID != "profile-main" ||
+		reviewed.Confirm ||
+		reviewed.SourceChannel != "mcp" ||
+		reviewed.SourceSurface != "mcp.tools.call" {
+		t.Fatalf("unexpected local-write authority request: %+v", reviewed)
+	}
+	if reviewed.Parameters["title"] != "Preview Only MCP Item" || reviewed.Parameters["part_number"] != "MCP-PREVIEW-1" {
+		t.Fatalf("expected tool arguments to reach authority preview review, got %+v", reviewed.Parameters)
+	}
+	var previewReceipt *OperationReceipt
+	for i := range receipts {
+		if receipts[i].Method == "tools/call" &&
+			receipts[i].Capability == "tool:cabinet.inventory.create_item" &&
+			receipts[i].Outcome == "preview_allowed" {
+			previewReceipt = &receipts[i]
+			break
+		}
+	}
+	if previewReceipt == nil || previewReceipt.ProfileID != "profile-main" || previewReceipt.VersionDigest != "git:local-write-preview" {
+		t.Fatalf("expected redacted preview authority receipt for local-write call, got %+v", receipts)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal receipts: %v", err)
+	}
+	for _, forbidden := range []string{"Preview Only MCP Item", "MCP-PREVIEW-1"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("local-write MCP receipt leaked tool argument %q: %s", forbidden, body)
+		}
+	}
+}
+
+func TestMCPAgentSkillPreviewApplyCancelTokensUseChatConfirmationBoundary(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", nil, nil)
+	var previewInput chat.PreviewActionInput
+	var applyInputs []chat.ApplyActionInput
+	var cancelInput chat.ApplyActionInput
+	var receipts []OperationReceipt
+	applyCount := 0
+	appliedTokens := map[string]chat.ApplyActionResult{}
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:mcp-confirmation",
+		SessionIDSeed: "mcp-confirmation-test-session",
+		SkillRegistry: registry,
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			return registry.ReviewAuthority(req, agentskills.AgentAuthorityPolicy{
+				ProfileID:  "profile-main",
+				Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+				EntryPoint: "mcp",
+			})
+		}),
+		ActionPreviewer: ActionPreviewerFunc(func(_ context.Context, in chat.PreviewActionInput) (chat.ActionPreview, error) {
+			previewInput = in
+			return chat.ActionPreview{
+				ID:           "preview-mcp-1",
+				ProfileID:    in.ProfileID,
+				ThreadID:     in.ThreadID,
+				CapabilityID: in.CapabilityID,
+				Action:       "create_inventory_item",
+				Status:       "previewed",
+				Payload:      in.Payload,
+			}, nil
+		}),
+		ActionConfirmer: ActionConfirmerFunc{
+			Apply: func(_ context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+				applyInputs = append(applyInputs, in)
+				if !in.Confirm {
+					return chat.ApplyActionResult{}, errors.New("confirm_required")
+				}
+				if result, ok := appliedTokens[in.PreviewID]; ok {
+					return result, nil
+				}
+				applyCount++
+				result := chat.ApplyActionResult{
+					Applied:   true,
+					Action:    "create_inventory_item",
+					ItemID:    "item-mcp-1",
+					PreviewID: in.PreviewID,
+					Title:     "Confirmed MCP Item",
+				}
+				appliedTokens[in.PreviewID] = result
+				return result, nil
+			},
+			Cancel: func(_ context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+				cancelInput = in
+				return chat.ApplyActionResult{
+					Applied:   false,
+					Action:    "create_inventory_item",
+					PreviewID: in.PreviewID,
+				}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-confirmation-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	previewResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.inventory.create_item",
+		Arguments: map[string]any{
+			"title":       "Confirmed MCP Item",
+			"part_number": "MCP-CONFIRM-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("preview CallTool() error = %v", err)
+	}
+	previewPayload, ok := previewResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("preview StructuredContent = %T, want map[string]any", previewResult.StructuredContent)
+	}
+	if previewPayload["preview_id"] != "preview-mcp-1" ||
+		previewPayload["confirmation_state"] != "pending" ||
+		previewPayload["apply_tool"] != "cabinet.agent_skill.apply_preview" ||
+		previewPayload["cancel_tool"] != "cabinet.agent_skill.cancel_preview" ||
+		previewPayload["mutation_applied"] != false {
+		t.Fatalf("preview should expose durable apply/cancel token guidance, got %#v", previewPayload)
+	}
+	if previewInput.ProfileID != "profile-main" ||
+		previewInput.ThreadID != "mcp-confirmation-test-session" ||
+		previewInput.CapabilityID != "inventory.item.create" ||
+		previewInput.Payload["workspace_id"] != "profile:profile-main" {
+		t.Fatalf("preview input should be profile/thread bound to Chat action boundary, got %+v", previewInput)
+	}
+
+	confirmMissingResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.apply_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-1",
+			"thread_id":  "mcp-confirmation-test-session",
+			"confirm":    false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("apply without confirm=true should return a tool error result, got transport error %v", err)
+	}
+	if confirmMissingResult == nil || !confirmMissingResult.IsError {
+		t.Fatalf("apply without confirm=true should be rejected as a tool error result, got %#v", confirmMissingResult)
+	}
+	if len(applyInputs) != 0 {
+		t.Fatalf("apply without confirm=true must not reach Chat confirmation boundary, got %+v", applyInputs)
+	}
+
+	applyResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.apply_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-1",
+			"thread_id":  "mcp-confirmation-test-session",
+			"confirm":    true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("apply CallTool() error = %v", err)
+	}
+	applyPayload, ok := applyResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("apply StructuredContent = %T, want map[string]any", applyResult.StructuredContent)
+	}
+	if applyPayload["preview_id"] != "preview-mcp-1" ||
+		applyPayload["confirmation_state"] != "confirmed" ||
+		applyPayload["mutation_applied"] != true ||
+		applyPayload["item_id"] != "item-mcp-1" {
+		t.Fatalf("apply result should expose confirmed mutation evidence, got %#v", applyPayload)
+	}
+	if len(applyInputs) != 1 ||
+		applyInputs[0].ProfileID != "profile-main" ||
+		applyInputs[0].ThreadID != "mcp-confirmation-test-session" ||
+		applyInputs[0].PreviewID != "preview-mcp-1" ||
+		!applyInputs[0].Confirm {
+		t.Fatalf("apply input should be bound to configured profile with explicit confirmation, got %+v", applyInputs)
+	}
+
+	replayResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.apply_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-1",
+			"thread_id":  "mcp-confirmation-test-session",
+			"confirm":    true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("replay CallTool() error = %v", err)
+	}
+	replayPayload, _ := replayResult.StructuredContent.(map[string]any)
+	if replayPayload["item_id"] != "item-mcp-1" || applyCount != 1 {
+		t.Fatalf("replay should return the idempotent applied result without a second mutation, payload=%#v applyCount=%d", replayPayload, applyCount)
+	}
+
+	cancelResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.cancel_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-2",
+			"thread_id":  "mcp-confirmation-test-session",
+		},
+	})
+	if err != nil {
+		t.Fatalf("cancel CallTool() error = %v", err)
+	}
+	cancelPayload, ok := cancelResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("cancel StructuredContent = %T, want map[string]any", cancelResult.StructuredContent)
+	}
+	if cancelPayload["preview_id"] != "preview-mcp-2" ||
+		cancelPayload["confirmation_state"] != "cancelled" ||
+		cancelPayload["mutation_applied"] != false {
+		t.Fatalf("cancel result should expose non-mutating cancellation evidence, got %#v", cancelPayload)
+	}
+	if cancelInput.ProfileID != "profile-main" ||
+		cancelInput.ThreadID != "mcp-confirmation-test-session" ||
+		cancelInput.PreviewID != "preview-mcp-2" ||
+		cancelInput.Confirm {
+		t.Fatalf("cancel input should be bound to configured profile without confirmation apply, got %+v", cancelInput)
+	}
+	if got := countConfirmationReceipts(receipts, "tool:cabinet.agent_skill.apply_preview", "confirm_required"); got != 1 {
+		t.Fatalf("expected one confirm-required confirmation receipt, got %d receipts=%+v", got, receipts)
+	}
+	if got := countConfirmationReceipts(receipts, "tool:cabinet.agent_skill.apply_preview", "confirmed"); got != 2 {
+		t.Fatalf("expected confirmed apply and idempotent replay receipts, got %d receipts=%+v", got, receipts)
+	}
+	if got := countConfirmationReceipts(receipts, "tool:cabinet.agent_skill.cancel_preview", "cancelled"); got != 1 {
+		t.Fatalf("expected one cancelled confirmation receipt, got %d receipts=%+v", got, receipts)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal confirmation receipts: %v", err)
+	}
+	for _, forbidden := range []string{"Confirmed MCP Item", "MCP-CONFIRM-1", "preview-mcp-1", "preview-mcp-2"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("MCP confirmation receipt leaked token or payload value %q: %s", forbidden, body)
+		}
+	}
+}
 
 func TestInitializeAdvertisesCabinetIdentityAndProfileBinding(t *testing.T) {
 	server, err := NewServer(Config{
@@ -552,6 +1105,19 @@ func assertStructuredProtocolErrorDoesNotLeakProfile(t *testing.T, resp *jsonrpc
 	}
 }
 
+func countConfirmationReceipts(receipts []OperationReceipt, capability string, outcome string) int {
+	count := 0
+	for _, receipt := range receipts {
+		if receipt.Method == "tools/call" &&
+			receipt.Capability == capability &&
+			receipt.InputClass == "confirmation_token" &&
+			receipt.Outcome == outcome {
+			count++
+		}
+	}
+	return count
+}
+
 func writeRawLine(t *testing.T, writer *io.PipeWriter, raw string) {
 	t.Helper()
 	if _, err := writer.Write([]byte(raw + "\n")); err != nil {
@@ -614,4 +1180,12 @@ func readResponse(t *testing.T, conn mcp.Connection) *jsonrpc.Response {
 		t.Fatalf("Read() returned %T, want *jsonrpc.Response", msg)
 	}
 	return resp
+}
+
+func toolNames(tools []*mcp.Tool) []string {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.Name)
+	}
+	return names
 }
