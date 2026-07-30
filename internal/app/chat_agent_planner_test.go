@@ -81,8 +81,14 @@ func TestChatAgentPlannerUsesDeterministicFakeProviderSkillSelection(t *testing.
 
 	var exposed struct {
 		Skills []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+			ID                 string         `json:"id"`
+			Status             string         `json:"status"`
+			InputSchema        map[string]any `json:"input_schema"`
+			SafetyDeclaration  map[string]any `json:"safety_declaration"`
+			RequiredActions    []string       `json:"required_actions"`
+			InputSchemaRefs    []string       `json:"input_schema_refs"`
+			RequiredContext    []string       `json:"required_context"`
+			ConfirmationNeeded bool           `json:"confirmation_required"`
 		} `json:"skills"`
 	}
 	rawSkills, err := json.Marshal(provider.req.Context)
@@ -97,6 +103,24 @@ func TestChatAgentPlannerUsesDeterministicFakeProviderSkillSelection(t *testing.
 		ids = append(ids, skill.ID)
 		if skill.ID == "cabinet.inventory.create_item" {
 			t.Fatalf("disabled skill was exposed to provider: %+v", exposed.Skills)
+		}
+		if skill.ID == "cabinet.inventory.search_items" {
+			if skill.InputSchema["type"] != "object" || skill.InputSchema["additionalProperties"] != false {
+				t.Fatalf("planner skill missing closed JSON input schema: %+v", skill)
+			}
+			properties, ok := skill.InputSchema["properties"].(map[string]any)
+			if !ok || properties["query"] == nil {
+				t.Fatalf("planner read skill schema missing query property: %+v", skill.InputSchema)
+			}
+			if skill.SafetyDeclaration["side_effect_level"] != "read-only" ||
+				skill.SafetyDeclaration["local_read"] != true ||
+				skill.SafetyDeclaration["local_write"] != false ||
+				skill.ConfirmationNeeded {
+				t.Fatalf("planner read skill missing explicit read-only safety declaration: %+v", skill)
+			}
+			if !slices.Contains(skill.RequiredActions, "inventory.item.search") || len(skill.RequiredContext) == 0 {
+				t.Fatalf("planner skill missing required actions/context: %+v", skill)
+			}
 		}
 	}
 	if !slices.Contains(ids, "cabinet.inventory.search_items") {

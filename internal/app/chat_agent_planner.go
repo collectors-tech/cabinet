@@ -106,14 +106,84 @@ func plannerSkillMetadata(skills []agentskills.Skill) []map[string]any {
 			"description":           skill.Description,
 			"status":                string(skill.Status),
 			"safety_level":          string(skill.SafetyLevel),
+			"safety_declaration":    plannerSkillSafetyDeclaration(skill),
 			"required_context":      skill.RequiredContext,
+			"required_actions":      plannerSkillRequiredActions(skill),
+			"capabilities":          skill.Capabilities,
 			"input_schema_refs":     skill.InputSchemaRefs,
+			"input_schema":          plannerSkillInputSchema(skill),
 			"permissions":           skill.Permissions,
 			"audit_behavior":        skill.AuditBehavior,
 			"confirmation_required": skill.Permissions.RequiresConfirm,
 		})
 	}
 	return out
+}
+
+func plannerSkillRequiredActions(skill agentskills.Skill) []string {
+	if len(skill.RequiredActions) > 0 {
+		return append([]string{}, skill.RequiredActions...)
+	}
+	return append([]string{}, skill.Capabilities...)
+}
+
+func plannerSkillInputSchema(skill agentskills.Skill) map[string]any {
+	properties := map[string]any{}
+	required := []string{}
+	for _, ref := range skill.InputSchemaRefs {
+		key := strings.TrimSpace(ref)
+		if key == "" {
+			continue
+		}
+		properties[key] = plannerSchemaPropertyForKey(key)
+		required = append(required, key)
+	}
+	if len(properties) == 0 && skill.SafetyLevel == agentskills.SafetyReadOnly && strings.Contains(skill.ID, ".search") {
+		properties["query"] = map[string]any{
+			"type":        "string",
+			"description": "Optional user search text, identifier, part number, or filter term.",
+		}
+	}
+	schema := map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties":           properties,
+	}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
+}
+
+func plannerSchemaPropertyForKey(key string) map[string]any {
+	lower := strings.ToLower(key)
+	property := map[string]any{"type": "string", "description": "Structured planner input for " + key + "."}
+	switch {
+	case strings.Contains(lower, "id"):
+		property["description"] = "Stable Cabinet identifier for " + key + "."
+	case strings.Contains(lower, "price") || strings.Contains(lower, "quantity") || strings.Contains(lower, "count"):
+		property["type"] = []string{"number", "string"}
+		property["description"] = "Numeric or formatted value for " + key + "."
+	case strings.Contains(lower, "confirm"):
+		property["type"] = "boolean"
+		property["description"] = "Explicit confirmation flag for " + key + "."
+	}
+	return property
+}
+
+func plannerSkillSafetyDeclaration(skill agentskills.Skill) map[string]any {
+	return map[string]any{
+		"side_effect_level":      string(skill.SafetyLevel),
+		"local_read":             skill.Permissions.LocalRead,
+		"local_write":            skill.Permissions.LocalWrite,
+		"external_read":          skill.Permissions.ExternalRead,
+		"external_write":         skill.Permissions.ExternalWrite,
+		"secret_access":          skill.Permissions.SecretAccess,
+		"destructive":            skill.Permissions.Destructive,
+		"confirmation_required":  skill.Permissions.RequiresConfirm,
+		"preview_only":           skill.SafetyLevel == agentskills.SafetyPreviewOnly,
+		"cabinet_dispatch_owner": "cabinet",
+	}
 }
 
 func plannerSkillExposed(skillID string, exposed []map[string]any) bool {

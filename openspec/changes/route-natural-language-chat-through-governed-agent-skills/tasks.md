@@ -12,7 +12,7 @@
   skill selections without network calls.
 - [x] 2.2 Invoke the active healthy assistant provider through the #1481
   provider-neutral runtime boundary when Chat needs natural-language planning.
-- [ ] 2.3 Supply only enabled/available skill metadata, JSON schemas, safety
+- [x] 2.3 Supply only enabled/available skill metadata, JSON schemas, safety
   declarations, and the canonical Agent context envelope to the planner.
 - [ ] 2.4 Reject or clarify ambiguous, unsupported, disabled, or unavailable
   selections without fabricating completed work.
