@@ -62,6 +62,13 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestAgentSkillAPIPropagatesInvocationSourceContext",
 			"broader skill execution timeline coverage remains planned",
 		},
+		"AGENT-SKILLS-REGISTRY-012": {
+			"| partial |",
+			"#1942/#1701",
+			"TestDashboardActivitySummarySkillExposesReadOnlyProfileBoundary",
+			"side-panel Agent Skill dispatch",
+			"main Chat natural-language routing remains sequenced behind #1933",
+		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
 			"#1701/#1702/#1666",
@@ -76,10 +83,11 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"preserve profile/route/thread/selection/source context",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-002": {
-			"| planned |",
-			"#1701/#1712/#1708/#1709/#1710/#1711/#1715",
-			"TestAgentExplainsAvailableSkillsAndSetupStates",
-			"read-only, preview-only, confirm-required, external-write, blocked, and unavailable work",
+			"| partial |",
+			"#1701/#1977/#1712/#1708/#1709/#1710/#1711/#1715",
+			"TestAgentCapabilityExplanationDerivesFromRegistryAndProfileAuthority",
+			"TestChatMessagesExplainAgentCapabilitiesForMainAndSidePanel",
+			"read-only, preview-only, confirm-required, external-write/setup-required",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-004": {
 			"| planned |",
@@ -164,6 +172,13 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"live credential/capability evidence",
 			"TestProviderWorkflowTraceabilityPartialRowsAreActionable",
 			"TestRemainingTraceabilityBacklogRowsAreExplicit",
+		},
+		"RUNTIME-CORE-020": {
+			"| partial |",
+			"#1869",
+			"openspec/migration/beta-packaged-core-workflow-acceptance.md",
+			"TestPackagedCoreWorkflowAcceptanceChecklistCoversIssue1869",
+			"#1864 release approval guardrails",
 		},
 	}
 
