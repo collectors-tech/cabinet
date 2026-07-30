@@ -187,6 +187,47 @@ func TestOpenAIAssistantProviderUsesProfileSecretBoundary(t *testing.T) {
 	}
 }
 
+func TestOpenAIAssistantProviderUsesSetupBaseURL(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("unexpected OpenAI path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ready from setup base url"}}]}`))
+	}))
+	defer srv.Close()
+
+	provider := NewOpenAIAssistantProvider(NewService(Config{BaseURL: "http://127.0.0.1:1"}), fakeAssistantSetupResolver{
+		setup: AssistantProviderSetup{
+			ProviderID:       "openai",
+			Enabled:          true,
+			ActiveAuthMethod: "api_key",
+			DefaultModel:     "gpt-4o-mini",
+			SupportedModels:  []string{"gpt-4o-mini"},
+			BaseURL:          srv.URL,
+			APIKeySecretRef:  "integration.inst_123.openai_api_key",
+			HealthState:      "ready",
+			IntegrationID:    "inst_123",
+		},
+		secret: "sk-boundary-secret",
+	})
+	resp, err := provider.RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-1",
+		ThreadID:  "thread-1",
+		Messages:  []AssistantTurnMessage{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("RunAssistantTurn() error = %v", err)
+	}
+	if !called || resp.Text != "ready from setup base url" || resp.Metadata["base_domain"] == "" {
+		t.Fatalf("expected setup base URL to drive assistant request, called=%v resp=%+v", called, resp)
+	}
+}
+
 func TestOpenAIAssistantProviderDoesNotReceiveCabinetToolAuthority(t *testing.T) {
 	t.Parallel()
 

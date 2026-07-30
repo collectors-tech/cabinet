@@ -98,7 +98,7 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		}
 	}
 
-	specPath := filepath.Join("..", "openspec", "changes", "define-agent-skill-registry", "specs", "agent-skills-registry", "spec.md")
+	specPath := filepath.Join("..", "openspec", "specs", "agent-skills-registry", "spec.md")
 	specRaw, err := os.ReadFile(specPath)
 	if err != nil {
 		t.Fatalf("read agent skill registry spec: %v", err)
