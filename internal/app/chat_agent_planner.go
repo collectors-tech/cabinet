@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/agentskills"
@@ -317,7 +318,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	} else {
 		result["decision"] = selection.Decision
 		result["skill_id"] = selection.SkillID
-		result["parameters"] = selection.Parameters
+		result["parameters"] = redactPlannerEvidenceMap(selection.Parameters)
 		result["message"] = selection.Message
 		if selection.ErrorCode != "" {
 			result["error"] = map[string]any{"code": selection.ErrorCode, "message": selection.Message}
@@ -365,6 +366,8 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 			}
 		}
 	}
+	evidence := plannerWorkflowEvidence(providerID, selection, agentCtx, confirmationState, status, result, runError)
+	result["evidence"] = evidence
 	if chatSvc != nil {
 		run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 			ProfileID:         profileID,
@@ -373,9 +376,10 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 			SourceChannel:     "in_app_chat",
 			SourceThreadID:    threadID,
 			SourceMessageID:   sourceMessageID,
-			Input:             map[string]any{"content": content, "agent_context": agentCtx},
+			Input:             map[string]any{"content": content, "agent_context": agentCtx, "evidence": evidence},
 			ProviderTrace:     stringMapToAny(selection.ProviderTrace),
 			ConfirmationState: confirmationState,
+			BulkItems:         plannerWorkflowEvidenceSteps(evidence),
 		})
 		if runErr == nil {
 			updated, updateErr := chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
@@ -386,6 +390,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 				Error:             runError,
 				ProviderTrace:     stringMapToAny(selection.ProviderTrace),
 				ConfirmationState: confirmationState,
+				BulkItems:         plannerWorkflowEvidenceSteps(evidence),
 			})
 			if updateErr == nil {
 				result["workflow_run"] = updated
@@ -514,7 +519,7 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 		ProfileID: profileID,
 		ThreadID:  threadID,
 		Action:    action,
-		Payload:   copyActionPayload(req.Parameters),
+		Payload:   plannerNonSecretActionPayload(req.Parameters),
 	})
 	if err != nil {
 		return nil, review, fmt.Errorf("create chat action preview for %s: %w", action, err)
@@ -529,6 +534,197 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 		"mutation_applied":      false,
 		"next_action":           "Review the preview and confirm through the existing Chat confirmation endpoint before Cabinet applies this local change.",
 	}, review, nil
+}
+
+func plannerWorkflowEvidence(providerID string, selection chatAgentSkillSelection, agentCtx map[string]any, confirmationState, status string, result map[string]any, runError map[string]any) map[string]any {
+	previewID := ""
+	action := ""
+	mutationApplied := false
+	if previewResult, _ := result["preview_result"].(map[string]any); previewResult != nil {
+		previewID = strings.TrimSpace(fmt.Sprint(previewResult["preview_id"]))
+		action = strings.TrimSpace(fmt.Sprint(previewResult["action"]))
+		if applied, ok := previewResult["mutation_applied"].(bool); ok {
+			mutationApplied = applied
+		}
+	}
+	if executionResult, _ := result["execution_result"].(map[string]any); executionResult != nil {
+		if applied, ok := executionResult["mutation_applied"].(bool); ok {
+			mutationApplied = applied
+		}
+	}
+	errCode := ""
+	if runError != nil {
+		errCode = strings.TrimSpace(fmt.Sprint(runError["code"]))
+	}
+	if errCode == "" {
+		if errPayload, _ := result["error"].(map[string]any); errPayload != nil {
+			errCode = strings.TrimSpace(fmt.Sprint(errPayload["code"]))
+		}
+	}
+	tokenState := map[string]any{
+		"confirmation_state": confirmationState,
+		"apply_state":        "not_applicable",
+		"mutation_applied":   mutationApplied,
+	}
+	if previewID != "" && previewID != "<nil>" {
+		tokenState["preview_id"] = previewID
+		tokenState["action"] = action
+		tokenState["apply_state"] = "pending_explicit_confirmation"
+		tokenState["apply_endpoint"] = "/api/chat/actions/apply"
+	}
+	evidence := map[string]any{
+		"provider":                  providerID,
+		"entry_point":               "chat.agent_planner",
+		"governed_dispatch_owner":   "cabinet",
+		"raw_provider_payload_kept": false,
+		"selected_skill":            strings.TrimSpace(selection.SkillID),
+		"decision":                  strings.TrimSpace(selection.Decision),
+		"context":                   plannerContextEvidenceSummary(agentCtx),
+		"parameters":                plannerParameterEvidence(selection.Parameters),
+		"preview_apply_token_state": tokenState,
+		"final_outcome": map[string]any{
+			"status":           status,
+			"error_code":       errCode,
+			"recoverable":      result["recoverable"] == true,
+			"confirmation":     confirmationState,
+			"mutation_applied": mutationApplied,
+		},
+	}
+	if selection.ProviderTrace != nil {
+		evidence["provider_trace"] = stringMapToAny(selection.ProviderTrace)
+	}
+	return evidence
+}
+
+func plannerWorkflowEvidenceSteps(evidence map[string]any) []map[string]any {
+	if len(evidence) == 0 {
+		return nil
+	}
+	steps := []map[string]any{
+		{
+			"id":      "provider-planner",
+			"command": "assistant.provider.plan",
+			"status":  "completed",
+			"evidence": map[string]any{
+				"provider":    evidence["provider"],
+				"entry_point": evidence["entry_point"],
+				"decision":    evidence["decision"],
+			},
+		},
+		{
+			"id":      "cabinet-authority",
+			"command": "agent_skill.authority_review",
+			"status":  "completed",
+			"evidence": map[string]any{
+				"selected_skill": evidence["selected_skill"],
+				"context":        evidence["context"],
+			},
+		},
+		{
+			"id":      "final-outcome",
+			"command": "chat.agent_planner.outcome",
+			"status":  "completed",
+			"evidence": map[string]any{
+				"preview_apply_token_state": evidence["preview_apply_token_state"],
+				"final_outcome":             evidence["final_outcome"],
+			},
+		},
+	}
+	return steps
+}
+
+func plannerContextEvidenceSummary(agentCtx map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, key := range []string{"profile_id", "workspace_id", "thread_id", "route_id", "surface_id", "source_channel", "setup_state", "permission_state", "workflow_run_id"} {
+		value := strings.TrimSpace(fmt.Sprint(agentCtx[key]))
+		if value != "" && value != "<nil>" {
+			out[key] = value
+		}
+	}
+	if selected, _ := agentCtx["selected_record"].(map[string]any); selected != nil {
+		summary := map[string]any{}
+		for _, key := range []string{"type", "id"} {
+			value := strings.TrimSpace(fmt.Sprint(selected[key]))
+			if value != "" && value != "<nil>" {
+				summary[key] = value
+			}
+		}
+		if len(summary) > 0 {
+			out["selected_record"] = summary
+		}
+	}
+	return out
+}
+
+func plannerParameterEvidence(params map[string]any) map[string]any {
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return map[string]any{
+		"keys":            keys,
+		"values":          redactPlannerEvidenceMap(params),
+		"secret_redacted": containsSecretParameter(params),
+	}
+}
+
+func redactPlannerEvidenceMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		if plannerSensitiveEvidenceKey(key) {
+			out[key] = "[redacted]"
+			continue
+		}
+		out[key] = redactPlannerEvidenceValue(value)
+	}
+	return out
+}
+
+func plannerNonSecretActionPayload(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		if plannerSensitiveEvidenceKey(key) {
+			continue
+		}
+		out[key] = value
+	}
+	return copyActionPayload(out)
+}
+
+func redactPlannerEvidenceValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return redactPlannerEvidenceMap(typed)
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, redactPlannerEvidenceValue(item))
+		}
+		return out
+	case string:
+		lower := strings.ToLower(typed)
+		if strings.Contains(lower, "sk-") || strings.Contains(lower, "secret") || strings.Contains(lower, "bearer ") {
+			return "[redacted]"
+		}
+		return typed
+	default:
+		return value
+	}
+}
+
+func plannerSensitiveEvidenceKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	return strings.Contains(normalized, "secret") ||
+		strings.Contains(normalized, "token") ||
+		strings.Contains(normalized, "api_key") ||
+		strings.Contains(normalized, "password")
 }
 
 func hydratePlannerSelectedRecordParams(params map[string]any, agentCtx map[string]any) {

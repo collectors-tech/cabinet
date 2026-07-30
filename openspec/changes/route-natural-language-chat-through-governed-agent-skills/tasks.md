@@ -30,7 +30,7 @@
 
 ## 4. Evidence
 
-- [ ] 4.1 Record provider, entry point, selected skill, context, preview/apply
+- [x] 4.1 Record provider, entry point, selected skill, context, preview/apply
   token state, decision, and final outcome in workflow/action evidence without
   secrets or raw provider payloads.
 - [ ] 4.2 Add Go/API tests for tool selection, clarification, read-only

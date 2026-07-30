@@ -366,7 +366,7 @@ func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) 
 	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
 		a.db,
 		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
-		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.create_item","parameters":{"part_number":"PLAN-WRITE-1","title":"Planner Preview Item","brand":"AFX","category":"Slot"},"message":"I prepared a preview for the new item."}`}),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.create_item","parameters":{"part_number":"PLAN-WRITE-1","title":"Planner Preview Item","brand":"AFX","category":"Slot","provider_secret":"sk-planner-preview-secret"},"message":"I prepared a preview for the new item."}`}),
 		agentskills.NewRegistry(nil),
 		profile.ID,
 		thread.ID,
@@ -400,6 +400,31 @@ func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) 
 	}
 	if result["confirmation_state"] != "preview_required" {
 		t.Fatalf("expected planner workflow to require preview confirmation, got %+v", result)
+	}
+	evidence, ok := result["evidence"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected planner evidence summary, got %+v", result)
+	}
+	tokenState, _ := evidence["preview_apply_token_state"].(map[string]any)
+	if evidence["provider"] != "openai" ||
+		evidence["entry_point"] != "chat.agent_planner" ||
+		evidence["selected_skill"] != "cabinet.inventory.create_item" ||
+		evidence["decision"] != "select_skill" ||
+		evidence["raw_provider_payload_kept"] != false ||
+		tokenState["preview_id"] != previewID ||
+		tokenState["apply_state"] != "pending_explicit_confirmation" {
+		t.Fatalf("planner evidence missing provider/decision/preview token state, evidence=%+v result=%+v", evidence, result)
+	}
+	workflowRun, _ := result["workflow_run"].(chat.WorkflowRun)
+	if len(workflowRun.BulkItems) != 3 || workflowRun.BulkItems[2]["id"] != "final-outcome" {
+		t.Fatalf("expected workflow evidence steps for planner outcome, run=%+v", workflowRun)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal planner preview result: %v", err)
+	}
+	if strings.Contains(string(body), "sk-planner-preview-secret") {
+		t.Fatalf("planner evidence or preview leaked secret-like provider parameter: %s", string(body))
 	}
 
 	itemsAfterPreview := doRequest(t, a, "GET", "/api/items?profile_id="+profile.ID, nil, nil)
