@@ -42,6 +42,7 @@ type AssistantProviderSetup struct {
 	ActiveAuthMethod  string
 	DefaultModel      string
 	SupportedModels   []string
+	BaseURL           string
 	APIKeySecretRef   string
 	HealthState       string
 	IntegrationMode   string

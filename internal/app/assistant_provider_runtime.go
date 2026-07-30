@@ -39,12 +39,14 @@ func (r profileAssistantProviderSetupResolver) ResolveAssistantProviderSetup(ctx
 	}
 	activeMethod := firstNonEmpty(instance.Config["openai.active_auth_method"], settings["openai.active_auth_method"], settings["openai_active_auth_method"])
 	defaultModel := firstNonEmpty(instance.Config["assistant_default_model"], settings["assistant_default_model"], "gpt-4o-mini")
+	baseURL := firstNonEmpty(instance.Config["openai_base_url"], instance.Config["base_url"], settings["openai_base_url"], settings["integration.openai.base_url"])
 	return ai.AssistantProviderSetup{
 		ProviderID:        "openai",
 		Enabled:           instance.Enabled,
 		ActiveAuthMethod:  activeMethod,
 		DefaultModel:      defaultModel,
 		SupportedModels:   openAIAssistantSupportedModels(),
+		BaseURL:           baseURL,
 		APIKeySecretRef:   strings.TrimSpace(instance.SecretRefs["openai_api_key"]),
 		HealthState:       firstNonEmpty(instance.HealthState, "unknown"),
 		IntegrationMode:   "assistant_workflows",
