@@ -38,5 +38,5 @@
 - [x] 4.3 Add side-panel/main Chat coverage for the shared planner contract.
 - [x] 4.4 Add packaged Windows smoke evidence for a provider-backed
   conversational read and a confirmed local write.
-- [ ] 4.5 Run strict OpenSpec validation, focused Go/API/UI tests, packaged smoke
+- [x] 4.5 Run strict OpenSpec validation, focused Go/API/UI tests, packaged smoke
   where required, and `git diff --check`.
