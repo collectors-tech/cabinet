@@ -409,6 +409,114 @@ func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) 
 	}
 }
 
+func TestChatAgentPlannerUsesSelectedRecordForRenameOrClarifiesMissingTarget(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Rename"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority) VALUES (?, ?, 'AFX', 'Slot', 'PLAN-RENAME-1', 'Original Planner Title', 'active', 'medium')`, "planner-rename-item", profile.ID); err != nil {
+		t.Fatalf("seed rename item: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Rename"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	chatSvc := chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments"))
+	registry := agentskills.NewRegistry(nil)
+
+	selectedResult, selectedHandled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chatSvc,
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.update_item","parameters":{"title":"Selected Planner Title"},"message":"I prepared a rename preview."}`}),
+		registry,
+		profile.ID,
+		thread.ID,
+		"Rename this item to Selected Planner Title",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/inventory/planner-rename-item",
+				"surface_id":     "inventory.item.detail",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Rename this item to Selected Planner Title",
+				"selected_record": map[string]any{
+					"type": "inventory_item",
+					"id":   "planner-rename-item",
+				},
+			},
+		},
+		"message-rename-selected",
+	)
+	if !selectedHandled {
+		t.Fatal("expected planner dispatch to handle selected-record rename")
+	}
+	selectedPreview, ok := selectedResult["preview_result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected selected-record rename preview, got %+v", selectedResult)
+	}
+	payload, _ := selectedPreview["payload"].(map[string]any)
+	if payload["item_id"] != "planner-rename-item" || payload["title"] != "Selected Planner Title" {
+		t.Fatalf("expected preview payload to hydrate selected item id, got %+v", selectedPreview)
+	}
+	itemsAfterSelectedPreview := doRequest(t, a, "GET", "/api/items?profile_id="+profile.ID, nil, nil)
+	if strings.Contains(itemsAfterSelectedPreview.Body.String(), "Selected Planner Title") {
+		t.Fatalf("rename preview must not mutate selected item before confirmation, body=%s", itemsAfterSelectedPreview.Body.String())
+	}
+
+	missingResult, missingHandled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chatSvc,
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.update_item","parameters":{"title":"Missing Target Title"},"message":"I need the target item before renaming."}`}),
+		registry,
+		profile.ID,
+		thread.ID,
+		"Rename this item to Missing Target Title",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/inventory",
+				"surface_id":     "inventory.list",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Rename this item to Missing Target Title",
+			},
+		},
+		"message-rename-missing",
+	)
+	if !missingHandled {
+		t.Fatal("expected planner dispatch to handle missing-target rename")
+	}
+	if missingResult["decision"] != "clarify" {
+		t.Fatalf("missing selected target must clarify, got %+v", missingResult)
+	}
+	errPayload, _ := missingResult["error"].(map[string]any)
+	if errPayload["code"] != "missing_context" || missingResult["preview_result"] != nil {
+		t.Fatalf("missing selected target must not create preview or fabricate apply, got %+v", missingResult)
+	}
+}
+
 func mustResolveSkill(t *testing.T, registry agentskills.Registry, id string) agentskills.Skill {
 	t.Helper()
 	skill, ok := registry.Resolve(id)

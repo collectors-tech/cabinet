@@ -329,16 +329,28 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		} else if previewResult, authority, previewErr := previewLocalWritePlannerSelection(ctx, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); previewErr != nil {
 			status = "failed"
 			runError = map[string]any{"code": "planner_preview_failed", "message": "Cabinet could not create a confirmation preview for the selected skill."}
+			if detail := strings.TrimSpace(previewErr.Error()); detail != "" {
+				runError["detail"] = detail
+			}
 			result["error"] = runError
 			result["next_action"] = "Review the selected skill requirements and retry before confirming any local change."
 			if authority.SkillID != "" {
 				result["authority"] = authority
 			}
 		} else if previewResult != nil {
-			confirmationState = "preview_required"
-			result["preview_result"] = previewResult
-			result["authority"] = authority
-			result["confirmation_state"] = confirmationState
+			if previewResult["decision"] == "clarify" {
+				result["decision"] = "clarify"
+				result["message"] = previewResult["message"]
+				result["error"] = previewResult["error"]
+				result["next_action"] = previewResult["next_action"]
+				result["clarification"] = previewResult["clarification"]
+				result["missing_context"] = previewResult["missing_context"]
+			} else {
+				confirmationState = "preview_required"
+				result["preview_result"] = previewResult
+				result["authority"] = authority
+				result["confirmation_state"] = confirmationState
+			}
 		}
 	}
 	if chatSvc != nil {
@@ -402,6 +414,20 @@ func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc 
 		AgentContext:    agentCtx,
 		Parameters:      selection.Parameters,
 	}
+	req = normalizeAgentSkillContextRequest(req)
+	hydratePlannerSelectedRecordParams(req.Parameters, agentCtx)
+	if plannerSkillNeedsSelectedTarget(skill) {
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			return map[string]any{
+				"decision":        "clarify",
+				"message":         "I need the target Cabinet record before previewing that change.",
+				"error":           map[string]any{"code": "missing_context", "message": "Cabinet needs selected-record context before creating this preview."},
+				"missing_context": clarification["missing_context"],
+				"clarification":   clarification["clarification"],
+				"next_action":     clarification["next_action"],
+			}, agentskills.AgentAuthorityReview{}, nil
+		}
+	}
 	review, err := registry.ReviewAuthority(agentSkillAuthorityRequest(req), agentskills.AgentAuthorityPolicy{
 		ProfileID:  profileID,
 		Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
@@ -447,6 +473,20 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 		AgentContext:    agentCtx,
 		Parameters:      selection.Parameters,
 	}
+	req = normalizeAgentSkillContextRequest(req)
+	hydratePlannerSelectedRecordParams(req.Parameters, agentCtx)
+	if plannerSkillNeedsSelectedTarget(skill) {
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			return map[string]any{
+				"decision":        "clarify",
+				"message":         "I need the target Cabinet record before previewing that change.",
+				"error":           map[string]any{"code": "missing_context", "message": "Cabinet needs selected-record context before creating this preview."},
+				"missing_context": clarification["missing_context"],
+				"clarification":   clarification["clarification"],
+				"next_action":     clarification["next_action"],
+			}, agentskills.AgentAuthorityReview{}, nil
+		}
+	}
 	review, err := registry.ReviewAuthority(agentSkillAuthorityRequest(req), agentskills.AgentAuthorityPolicy{
 		ProfileID:  profileID,
 		Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
@@ -462,10 +502,10 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 		ProfileID: profileID,
 		ThreadID:  threadID,
 		Action:    action,
-		Payload:   copyActionPayload(selection.Parameters),
+		Payload:   copyActionPayload(req.Parameters),
 	})
 	if err != nil {
-		return nil, review, err
+		return nil, review, fmt.Errorf("create chat action preview for %s: %w", action, err)
 	}
 	return map[string]any{
 		"preview_id":            preview.ID,
@@ -477,6 +517,48 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 		"mutation_applied":      false,
 		"next_action":           "Review the preview and confirm through the existing Chat confirmation endpoint before Cabinet applies this local change.",
 	}, review, nil
+}
+
+func hydratePlannerSelectedRecordParams(params map[string]any, agentCtx map[string]any) {
+	if params == nil {
+		return
+	}
+	selected, _ := agentCtx["selected_record"].(map[string]any)
+	selectedType := strings.TrimSpace(fmt.Sprint(selected["type"]))
+	selectedID := strings.TrimSpace(fmt.Sprint(selected["id"]))
+	if selectedID != "" && selectedID != "<nil>" {
+		putAgentContextParamIfMissing(params, "selected_record_type", selectedType)
+		putAgentContextParamIfMissing(params, "selected_record_id", selectedID)
+		switch selectedType {
+		case "inventory_item", "item":
+			putAgentContextParamIfMissing(params, "item_id", selectedID)
+		case "media", "media_asset":
+			putAgentContextParamIfMissing(params, "media_id", selectedID)
+		case "wishlist_entry":
+			putAgentContextParamIfMissing(params, "wishlist_entry_id", selectedID)
+		case "inbox_notification", "notification":
+			putAgentContextParamIfMissing(params, "selected_notification", selectedID)
+		case "collection":
+			putAgentContextParamIfMissing(params, "collection_name", selectedID)
+		}
+	}
+	if !agentSkillHasAnyParam(params, "item_id") {
+		routeID := strings.Trim(strings.TrimSpace(fmt.Sprint(agentCtx["route_id"])), "/")
+		parts := strings.Split(routeID, "/")
+		if len(parts) >= 2 && parts[0] == "inventory" && strings.TrimSpace(parts[len(parts)-1]) != "" {
+			putAgentContextParamIfMissing(params, "item_id", parts[len(parts)-1])
+		}
+	}
+}
+
+func plannerSkillNeedsSelectedTarget(skill agentskills.Skill) bool {
+	for _, contextName := range skill.RequiredContext {
+		switch strings.TrimSpace(contextName) {
+		case "selected_item", "target_item":
+			return true
+		}
+	}
+	return false
 }
 
 func plannerChatActionForSkill(skillID string) string {

@@ -23,7 +23,7 @@
   Cabinet results and profile isolation.
 - [x] 3.2 Convert local-write selections into previews only, then apply exactly
   once through the existing confirmation endpoint.
-- [ ] 3.3 Preserve selected-record context for update/rename requests and ask for
+- [x] 3.3 Preserve selected-record context for update/rename requests and ask for
   clarification when the selected target is absent or ambiguous.
 - [ ] 3.4 Keep provider/tool failures recoverable with redacted next-action
   guidance in both main Chat and side-panel Chat.
