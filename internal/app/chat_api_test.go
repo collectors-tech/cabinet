@@ -150,6 +150,100 @@ func TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel(t *testing
 	}
 }
 
+func TestChatMessagesUseSharedAgentPlannerContractForMainAndSidePanel(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Chat Planner Surfaces"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Planner Surface Contract"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	mainResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"find inventory item with part number SURFACE-MAIN-1",
+		"context":{"route":{"pathname":"/chats"},"assistant":{"provider":"anthropic","model":"fake-planner-model"}}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if mainResp.Code != http.StatusCreated {
+		t.Fatalf("main planner message status=%d body=%s", mainResp.Code, mainResp.Body.String())
+	}
+	mainBody := mainResp.Body.String()
+	if !strings.Contains(mainBody, `"agent_planner"`) ||
+		!strings.Contains(mainBody, `"mode":"provider_planner"`) ||
+		!strings.Contains(mainBody, `"provider":"anthropic"`) ||
+		!strings.Contains(mainBody, `"source_surface":"chats.main"`) ||
+		!strings.Contains(mainBody, `"recoverable":true`) ||
+		!strings.Contains(mainBody, `"code":"assistant_planner_failed"`) {
+		t.Fatalf("expected main Chat to use shared recoverable agent planner contract, body=%s", mainBody)
+	}
+
+	sideResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"find inventory item with part number SURFACE-SIDE-1",
+		"agent_context":{
+			"workspace_id":"planner-workspace",
+			"route_id":"/inventory",
+			"surface_id":"chats.side-panel",
+			"source_channel":"in-app",
+			"setup_state":"ready"
+		},
+		"context":{"route":{"pathname":"/inventory"},"assistant":{"provider":"anthropic","model":"fake-planner-model"}}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if sideResp.Code != http.StatusCreated {
+		t.Fatalf("side-panel planner message status=%d body=%s", sideResp.Code, sideResp.Body.String())
+	}
+	sideBody := sideResp.Body.String()
+	if !strings.Contains(sideBody, `"agent_planner"`) ||
+		!strings.Contains(sideBody, `"mode":"provider_planner"`) ||
+		!strings.Contains(sideBody, `"provider":"anthropic"`) ||
+		!strings.Contains(sideBody, `"source_surface":"chats.side-panel"`) ||
+		!strings.Contains(sideBody, `"recoverable":true`) ||
+		!strings.Contains(sideBody, `"code":"assistant_planner_failed"`) {
+		t.Fatalf("expected side-panel Chat to use shared recoverable agent planner contract, body=%s", sideBody)
+	}
+
+	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if runs.Code != http.StatusOK {
+		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
+	}
+	runsBody := runs.Body.String()
+	for _, token := range []string{
+		`"workflow_id":"chat.agent_planner.dispatch"`,
+		`"capability_id":"assistant.agent_planner"`,
+		`"entry_point":"chat.agent_planner"`,
+		`"surface_id":"chats.main"`,
+		`"surface_id":"chats.side-panel"`,
+		`"source_channel":"in-app"`,
+		`"provider":"anthropic"`,
+		`"status":"failed"`,
+		`"recoverable":true`,
+	} {
+		if !strings.Contains(runsBody, token) {
+			t.Fatalf("workflow evidence missing %s, body=%s", token, runsBody)
+		}
+	}
+}
+
 func findAgentContext(t *testing.T, messages []struct {
 	Role    string         `json:"role"`
 	Content string         `json:"content"`

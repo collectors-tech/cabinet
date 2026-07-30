@@ -35,7 +35,7 @@
   secrets or raw provider payloads.
 - [x] 4.2 Add Go/API tests for tool selection, clarification, read-only
   execution, preview/confirm/apply, denial, and replay/idempotency.
-- [ ] 4.3 Add side-panel/main Chat coverage for the shared planner contract.
+- [x] 4.3 Add side-panel/main Chat coverage for the shared planner contract.
 - [ ] 4.4 Add packaged Windows smoke evidence for a provider-backed
   conversational read and a confirmed local write.
 - [ ] 4.5 Run strict OpenSpec validation, focused Go/API/UI tests, packaged smoke
