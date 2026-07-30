@@ -171,6 +171,7 @@ func New(cfg config.Config) (*App, error) {
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
 	companionSvc := companion.DefaultService()
 	aiSvc := ai.NewService(ai.Config{})
+	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles)))
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	logSvc := logging.NewService(conn)
 	authService, err := auth.NewService(cfg, conn, profiles)
@@ -6065,6 +6066,8 @@ func New(cfg config.Config) (*App, error) {
 								response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
 							}
 						}
+					} else if agentPlanner, handled := dispatchChatAgentProviderPlanner(r.Context(), chatSvc, assistantProviders, agentSkillRegistry(req.ProfileID), req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
+						response["agent_planner"] = agentPlanner
 					} else {
 						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", directAssistantChatResponse(req.Content), map[string]any{
 							"assistant_response": map[string]any{

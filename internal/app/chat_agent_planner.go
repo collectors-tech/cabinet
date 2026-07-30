@@ -9,6 +9,7 @@ import (
 
 	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
+	"github.com/collectors-tech/cabinet/internal/chat"
 )
 
 type chatAgentPlannerInput struct {
@@ -140,4 +141,117 @@ func plannerProviderTrace(resp ai.AssistantTurnResponse) map[string]string {
 		}
 	}
 	return trace
+}
+
+func dispatchChatAgentProviderPlanner(ctx context.Context, chatSvc *chat.Service, providers *ai.AssistantProviderRegistry, registry agentskills.Registry, profileID, threadID, content string, envelope map[string]any, sourceMessageID string) (map[string]any, bool) {
+	if !chatMessageNeedsNaturalLanguageAgentPlanning(content) {
+		return nil, false
+	}
+	assistantContext, _ := envelope["assistant"].(map[string]any)
+	providerID := strings.ToLower(strings.TrimSpace(fmt.Sprint(assistantContext["provider"])))
+	if providerID == "" || providerID == "<nil>" {
+		providerID = "openai"
+	}
+	provider, ok := providers.Provider(providerID)
+	if !ok {
+		return map[string]any{
+			"error":       map[string]any{"code": "assistant_provider_unavailable", "message": "The selected assistant provider is not available for Chat planning."},
+			"next_action": "Choose a configured assistant provider before retrying this natural-language request.",
+		}, true
+	}
+	model := strings.TrimSpace(fmt.Sprint(assistantContext["model"]))
+	if model == "<nil>" {
+		model = ""
+	}
+	selection, err := planChatAgentSkill(ctx, provider, chatAgentPlannerInput{
+		ProfileID:    profileID,
+		ThreadID:     threadID,
+		Intent:       content,
+		Provider:     providerID,
+		Model:        model,
+		AgentContext: agentContextEvidence(envelope),
+		Skills:       registry.List(),
+	})
+	result := map[string]any{
+		"mode":           "provider_planner",
+		"provider":       providerID,
+		"source_msg_id":  sourceMessageID,
+		"provider_trace": selection.ProviderTrace,
+	}
+	status := "completed"
+	confirmationState := "not_required"
+	var runError map[string]any
+	if err != nil {
+		status = "failed"
+		runError = map[string]any{"code": "assistant_planner_failed", "message": "Assistant planning did not return a usable governed skill selection."}
+		result["error"] = runError
+		result["next_action"] = "Review assistant provider setup and retry the request."
+	} else {
+		result["decision"] = selection.Decision
+		result["skill_id"] = selection.SkillID
+		result["parameters"] = selection.Parameters
+		result["message"] = selection.Message
+	}
+	if chatSvc != nil {
+		run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+			ProfileID:         profileID,
+			WorkflowID:        "chat.agent_planner.dispatch",
+			CapabilityID:      "assistant.agent_planner",
+			SourceChannel:     "in_app_chat",
+			SourceThreadID:    threadID,
+			SourceMessageID:   sourceMessageID,
+			Input:             map[string]any{"content": content, "agent_context": agentContextEvidence(envelope)},
+			ProviderTrace:     stringMapToAny(selection.ProviderTrace),
+			ConfirmationState: confirmationState,
+		})
+		if runErr == nil {
+			updated, updateErr := chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+				ProfileID:         profileID,
+				RunID:             run.ID,
+				Status:            status,
+				Result:            result,
+				Error:             runError,
+				ProviderTrace:     stringMapToAny(selection.ProviderTrace),
+				ConfirmationState: confirmationState,
+			})
+			if updateErr == nil {
+				result["workflow_run"] = updated
+			}
+		}
+		messageText := strings.TrimSpace(selection.Message)
+		if messageText == "" {
+			if err != nil {
+				messageText = "I could not complete provider-backed planning for that request. Review assistant provider setup, then retry."
+			} else {
+				messageText = "I selected a governed Cabinet skill for this request. Cabinet still controls dispatch and confirmation."
+			}
+		}
+		if assistantMessage, messageErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", messageText, map[string]any{"agent_planner": result}); messageErr == nil {
+			result["thread_message"] = assistantMessage
+		}
+	}
+	return result, true
+}
+
+func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
+	normalized := normalizePlannerText(content)
+	if normalized == "" {
+		return false
+	}
+	return (strings.Contains(normalized, "find") ||
+		strings.Contains(normalized, "search") ||
+		strings.Contains(normalized, "look up") ||
+		strings.Contains(normalized, "lookup")) &&
+		(strings.Contains(normalized, "item") ||
+			strings.Contains(normalized, "inventory") ||
+			strings.Contains(normalized, "wishlist") ||
+			strings.Contains(normalized, "part number"))
+}
+
+func stringMapToAny(values map[string]string) map[string]any {
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }

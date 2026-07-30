@@ -3,11 +3,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
+	"github.com/collectors-tech/cabinet/internal/chat"
 )
 
 type captureAssistantProvider struct {
@@ -101,6 +104,66 @@ func TestChatAgentPlannerUsesDeterministicFakeProviderSkillSelection(t *testing.
 	}
 	if provider.req.Context["agent_context"] == nil {
 		t.Fatalf("provider request missing canonical agent context: %+v", provider.req.Context)
+	}
+}
+
+func TestChatAgentPlannerDispatchInvokesProviderNeutralRuntime(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Runtime"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Planner Runtime"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	provider := &captureAssistantProvider{}
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(provider),
+		agentskills.NewRegistry(nil),
+		p.ID,
+		thread.ID,
+		"Find the item with part number AFX-123",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     p.ID,
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"intent_text":    "Find the item with part number AFX-123",
+			},
+		},
+		"message-provider-runtime",
+	)
+	if !handled {
+		t.Fatal("expected natural-language planner dispatch to handle item lookup")
+	}
+	if result["skill_id"] != "cabinet.inventory.search_items" {
+		t.Fatalf("expected provider-selected inventory search skill, got %+v", result)
+	}
+	if provider.req.ProfileID != p.ID || provider.req.ThreadID != thread.ID || provider.req.Model != "fake-planner-model" {
+		t.Fatalf("provider-neutral runtime request missing chat context: %+v", provider.req)
+	}
+	if provider.req.Metadata["entry_point"] != "chat.agent_planner" || provider.req.Metadata["governed_dispatch_owner"] != "cabinet" {
+		t.Fatalf("provider-neutral request missing governed metadata: %+v", provider.req.Metadata)
 	}
 }
 
