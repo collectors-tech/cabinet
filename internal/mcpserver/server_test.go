@@ -16,6 +16,111 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+func TestToolsListDerivesFromEnabledExecutableAgentSkillRegistry(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", []agentskills.Skill{
+		{
+			ID:              "local.archive.enabled_reader",
+			Version:         "0.1.0",
+			DisplayName:     "Enabled archive reader",
+			Description:     "Read archived Cabinet metadata.",
+			Category:        "testing",
+			Status:          agentskills.StatusAvailable,
+			SafetyLevel:     agentskills.SafetyReadOnly,
+			RequiredContext: []string{"profile"},
+			InputSchemaRefs: []string{"archive_query"},
+			Enabled:         true,
+		},
+		{
+			ID:          "local.archive.disabled_writer",
+			Version:     "0.1.0",
+			DisplayName: "Disabled archive writer",
+			Description: "Write archived Cabinet metadata.",
+			Category:    "testing",
+			Status:      agentskills.StatusAvailable,
+			SafetyLevel: agentskills.SafetyConfirmRequired,
+			Enabled:     true,
+		},
+		{
+			ID:          "local.archive.invalid_reader",
+			Version:     "0.1.0",
+			DisplayName: "Invalid archive reader",
+			Description: "Invalid imported Cabinet metadata reader.",
+			Category:    "testing",
+			Status:      agentskills.StatusAvailable,
+			SafetyLevel: agentskills.SafetyReadOnly,
+			Enabled:     true,
+		},
+	}, []agentskills.InstalledSkillState{
+		{ProfileID: "profile-main", SkillID: "local.archive.disabled_writer", Enabled: false},
+		{ProfileID: "profile-main", SkillID: "local.archive.invalid_reader", Enabled: true, Status: agentskills.StatusInvalid},
+	})
+
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:tools-list",
+		SessionIDSeed: "mcp-tools-list-test-session",
+		SkillRegistry: registry,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-tools-list-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	result := clientSession.InitializeResult()
+	if result == nil || result.Capabilities.Tools == nil {
+		t.Fatalf("initialize should advertise MCP tool list capability, got %#v", result)
+	}
+
+	tools, err := clientSession.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	byName := map[string]*mcp.Tool{}
+	for _, tool := range tools.Tools {
+		byName[tool.Name] = tool
+	}
+	for _, expected := range []string{
+		"cabinet.inventory.search_items",
+		"cabinet.inventory.create_item",
+		"local.archive.enabled_reader",
+	} {
+		if byName[expected] == nil {
+			t.Fatalf("tools/list omitted enabled executable skill %q; names=%v", expected, toolNames(tools.Tools))
+		}
+	}
+	for _, omitted := range []string{
+		"cabinet.guided.inventory.update_item",
+		"local.archive.disabled_writer",
+		"local.archive.invalid_reader",
+	} {
+		if byName[omitted] != nil {
+			t.Fatalf("tools/list exposed disabled, unavailable, or unimplemented skill %q", omitted)
+		}
+	}
+	inventorySearch := byName["cabinet.inventory.search_items"]
+	if inventorySearch.Description == "" || inventorySearch.InputSchema == nil {
+		t.Fatalf("inventory search tool should carry registry description and deterministic input schema, got %+v", inventorySearch)
+	}
+}
+
 func TestInitializeAdvertisesCabinetIdentityAndProfileBinding(t *testing.T) {
 	server, err := NewServer(Config{
 		ProfileID:     "profile-main",
@@ -614,4 +719,12 @@ func readResponse(t *testing.T, conn mcp.Connection) *jsonrpc.Response {
 		t.Fatalf("Read() returned %T, want *jsonrpc.Response", msg)
 	}
 	return resp
+}
+
+func toolNames(tools []*mcp.Tool) []string {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.Name)
+	}
+	return names
 }

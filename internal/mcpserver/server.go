@@ -27,7 +27,12 @@ type Config struct {
 	SessionIDSeed string
 	ReceiptSink   ReceiptSink
 
+	SkillRegistry     AgentSkillRegistry
 	AuthorityReviewer AuthorityReviewer
+}
+
+type AgentSkillRegistry interface {
+	List() []agentskills.Skill
 }
 
 type AuthorityReviewer interface {
@@ -73,7 +78,53 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 	if cfg.ReceiptSink != nil {
 		server.AddReceivingMiddleware(receiptMiddleware(cfg, profileID, version))
 	}
+	registerAgentSkillTools(server, cfg.SkillRegistry)
 	return server, nil
+}
+
+func registerAgentSkillTools(server *mcp.Server, registry AgentSkillRegistry) {
+	if registry == nil {
+		return
+	}
+	for _, skill := range registry.List() {
+		if !skill.Enabled || !skill.Executable {
+			continue
+		}
+		skill := skill
+		server.AddTool(&mcp.Tool{
+			Name:        strings.TrimSpace(skill.ID),
+			Description: strings.TrimSpace(skill.Description),
+			InputSchema: mcpInputSchemaForAgentSkill(skill),
+		}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return nil, fmt.Errorf("mcp agent skill dispatch is not implemented yet: %s", skill.ID)
+		})
+	}
+}
+
+func mcpInputSchemaForAgentSkill(skill agentskills.Skill) map[string]any {
+	properties := map[string]any{}
+	for _, ref := range skill.InputSchemaRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		properties[ref] = map[string]any{
+			"type":        "string",
+			"description": "Cabinet Agent Skill input field " + ref + ".",
+		}
+	}
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": true,
+		"properties":           properties,
+		"x-cabinet-skill": map[string]any{
+			"id":               strings.TrimSpace(skill.ID),
+			"version":          strings.TrimSpace(skill.Version),
+			"safety_level":     strings.TrimSpace(string(skill.SafetyLevel)),
+			"status":           strings.TrimSpace(string(skill.Status)),
+			"requires_confirm": skill.Permissions.RequiresConfirm,
+		},
+	}
 }
 
 func authorityMiddleware(cfg Config, profileID string, version string) mcp.Middleware {
