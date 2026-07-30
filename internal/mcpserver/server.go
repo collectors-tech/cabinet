@@ -119,12 +119,6 @@ func registerAgentSkillTools(server *mcp.Server, cfg Config, profileID string) {
 }
 
 func dispatchAgentSkillToolCall(ctx context.Context, cfg Config, profileID string, skill agentskills.Skill, req *mcp.CallToolRequest, args map[string]any) (map[string]any, error) {
-	if cfg.SkillDispatcher == nil {
-		return nil, fmt.Errorf("mcp agent skill dispatch is not configured: %s", skill.ID)
-	}
-	if skill.SafetyLevel != agentskills.SafetyReadOnly || skill.Permissions.RequiresConfirm || skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive {
-		return nil, fmt.Errorf("mcp agent skill dispatch currently supports read-only skills only: %s", skill.ID)
-	}
 	if args == nil {
 		args = map[string]any{}
 	}
@@ -133,7 +127,7 @@ func dispatchAgentSkillToolCall(ctx context.Context, cfg Config, profileID strin
 		params[key] = value
 	}
 	params = mcpAgentSkillBoundParameters(profileID, params)
-	result, blocker, err := cfg.SkillDispatcher.ApplyAgentSkill(ctx, agentskills.PreviewRequest{
+	request := agentskills.PreviewRequest{
 		SkillID:        strings.TrimSpace(skill.ID),
 		ProfileID:      strings.TrimSpace(profileID),
 		Confirm:        false,
@@ -141,6 +135,24 @@ func dispatchAgentSkillToolCall(ctx context.Context, cfg Config, profileID strin
 		SourceChannel:  "mcp",
 		SourceThreadID: sessionIDForReceipt(req.GetSession(), strings.TrimSpace(cfg.SessionIDSeed)),
 		Parameters:     params,
+	}
+	if skill.Permissions.ExternalWrite || skill.Permissions.Destructive || skill.SafetyLevel == agentskills.SafetyExternalWrite || skill.SafetyLevel == agentskills.SafetyDestructive {
+		return nil, fmt.Errorf("mcp agent skill dispatch requires Cabinet confirmation for high-risk skill: %s", skill.ID)
+	}
+	if skill.Permissions.LocalWrite || skill.Permissions.RequiresConfirm || skill.SafetyLevel == agentskills.SafetyPreviewOnly || skill.SafetyLevel == agentskills.SafetyConfirmRequired {
+		return mcpAgentSkillPreviewResult(skill, request), nil
+	}
+	if cfg.SkillDispatcher == nil {
+		return nil, fmt.Errorf("mcp agent skill dispatch is not configured: %s", skill.ID)
+	}
+	result, blocker, err := cfg.SkillDispatcher.ApplyAgentSkill(ctx, agentskills.PreviewRequest{
+		SkillID:        request.SkillID,
+		ProfileID:      request.ProfileID,
+		Confirm:        request.Confirm,
+		SourceSurface:  request.SourceSurface,
+		SourceChannel:  request.SourceChannel,
+		SourceThreadID: request.SourceThreadID,
+		Parameters:     request.Parameters,
 	})
 	if err != nil {
 		if strings.TrimSpace(blocker) != "" {
@@ -152,6 +164,22 @@ func dispatchAgentSkillToolCall(ctx context.Context, cfg Config, profileID strin
 		result = map[string]any{}
 	}
 	return result, nil
+}
+
+func mcpAgentSkillPreviewResult(skill agentskills.Skill, req agentskills.PreviewRequest) map[string]any {
+	return map[string]any{
+		"skill_id":              strings.TrimSpace(skill.ID),
+		"status":                strings.TrimSpace(string(skill.Status)),
+		"safety_level":          strings.TrimSpace(string(skill.SafetyLevel)),
+		"profile_id":            strings.TrimSpace(req.ProfileID),
+		"source_channel":        strings.TrimSpace(req.SourceChannel),
+		"source_surface":        strings.TrimSpace(req.SourceSurface),
+		"preview_only":          true,
+		"mutation_applied":      false,
+		"confirmation_required": true,
+		"confirmation_state":    "preview_required",
+		"next_action":           firstNonEmptyMCPReceipt(strings.TrimSpace(skill.NextAction), "Review the preview in Cabinet and explicitly confirm before applying this Agent Skill."),
+	}
 }
 
 func mcpAgentSkillBoundParameters(profileID string, args map[string]any) map[string]any {
@@ -206,7 +234,7 @@ func authorityMiddleware(cfg Config, profileID string, version string) mcp.Middl
 			review, err := reviewer.ReviewAgentAuthority(ctx, agentskills.PreviewRequest{
 				SkillID:        toolName,
 				ProfileID:      profileID,
-				Confirm:        true,
+				Confirm:        false,
 				SourceSurface:  "mcp.tools.call",
 				SourceChannel:  "mcp",
 				SourceThreadID: sessionIDForReceipt(req.GetSession(), ""),
@@ -216,7 +244,7 @@ func authorityMiddleware(cfg Config, profileID string, version string) mcp.Middl
 				return nil, err
 			}
 			recordMCPAuthorityReceipt(ctx, cfg, req, toolName, profileID, version, review)
-			if !review.ApplyAllowed {
+			if !review.PreviewAllowed && !review.ApplyAllowed {
 				blocker := strings.TrimSpace(review.Blocker)
 				if blocker == "" {
 					blocker = "agent_authority_blocked"

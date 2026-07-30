@@ -237,6 +237,113 @@ func TestReadOnlyToolsCallDispatchesThroughGovernedAgentSkillPath(t *testing.T) 
 	}
 }
 
+func TestLocalWriteToolsCallReturnsPreviewWithoutDispatchingMutation(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", nil, nil)
+	var reviewed agentskills.PreviewRequest
+	dispatched := false
+	var receipts []OperationReceipt
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:local-write-preview",
+		SessionIDSeed: "mcp-local-write-preview-test-session",
+		SkillRegistry: registry,
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			reviewed = req
+			return registry.ReviewAuthority(req, agentskills.AgentAuthorityPolicy{
+				ProfileID:  "profile-main",
+				Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+				EntryPoint: "mcp",
+			})
+		}),
+		SkillDispatcher: AgentSkillDispatcherFunc(func(_ context.Context, req agentskills.PreviewRequest) (map[string]any, string, error) {
+			dispatched = true
+			return map[string]any{"unexpected": req.SkillID}, "", nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-local-write-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	result, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.inventory.create_item",
+		Arguments: map[string]any{
+			"title":       "Preview Only MCP Item",
+			"part_number": "MCP-PREVIEW-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	payload, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("StructuredContent = %T, want map[string]any: %#v", result.StructuredContent, result.StructuredContent)
+	}
+	if payload["skill_id"] != "cabinet.inventory.create_item" ||
+		payload["profile_id"] != "profile-main" ||
+		payload["preview_only"] != true ||
+		payload["mutation_applied"] != false ||
+		payload["confirmation_required"] != true ||
+		payload["confirmation_state"] != "preview_required" {
+		t.Fatalf("local-write MCP call should return a confirmation-gated preview, got %#v", payload)
+	}
+	if dispatched {
+		t.Fatal("local-write MCP preview must not dispatch the mutation apply path")
+	}
+	if reviewed.SkillID != "cabinet.inventory.create_item" ||
+		reviewed.ProfileID != "profile-main" ||
+		reviewed.Confirm ||
+		reviewed.SourceChannel != "mcp" ||
+		reviewed.SourceSurface != "mcp.tools.call" {
+		t.Fatalf("unexpected local-write authority request: %+v", reviewed)
+	}
+	if reviewed.Parameters["title"] != "Preview Only MCP Item" || reviewed.Parameters["part_number"] != "MCP-PREVIEW-1" {
+		t.Fatalf("expected tool arguments to reach authority preview review, got %+v", reviewed.Parameters)
+	}
+	var previewReceipt *OperationReceipt
+	for i := range receipts {
+		if receipts[i].Method == "tools/call" &&
+			receipts[i].Capability == "tool:cabinet.inventory.create_item" &&
+			receipts[i].Outcome == "preview_allowed" {
+			previewReceipt = &receipts[i]
+			break
+		}
+	}
+	if previewReceipt == nil || previewReceipt.ProfileID != "profile-main" || previewReceipt.VersionDigest != "git:local-write-preview" {
+		t.Fatalf("expected redacted preview authority receipt for local-write call, got %+v", receipts)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal receipts: %v", err)
+	}
+	for _, forbidden := range []string{"Preview Only MCP Item", "MCP-PREVIEW-1"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("local-write MCP receipt leaked tool argument %q: %s", forbidden, body)
+		}
+	}
+}
+
 func TestInitializeAdvertisesCabinetIdentityAndProfileBinding(t *testing.T) {
 	server, err := NewServer(Config{
 		ProfileID:     "profile-main",
