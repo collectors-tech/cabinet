@@ -77,10 +77,11 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-001": {
-			"| planned |",
-			"#1701/#1712/#1714",
-			"AGENT-UNIVERSAL-CHANNELS-001 opens Agent from supported surfaces with preserved context",
-			"preserve profile/route/thread/selection/source context",
+			"| partial |",
+			"#1701/#1979/#1712/#1714",
+			"TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel",
+			"AGENT-CONTEXT-003/#1714 sends selected inventory row context",
+			"AGENT-CONTEXT-004/#1714 preserves side-panel Agent context",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-002": {
 			"| partial |",
