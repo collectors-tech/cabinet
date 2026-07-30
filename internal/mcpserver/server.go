@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/collectors-tech/cabinet/internal/agentskills"
+	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -30,6 +31,8 @@ type Config struct {
 	SkillRegistry     AgentSkillRegistry
 	AuthorityReviewer AuthorityReviewer
 	SkillDispatcher   AgentSkillDispatcher
+	ActionPreviewer   ActionPreviewer
+	ActionConfirmer   ActionConfirmer
 }
 
 type AgentSkillRegistry interface {
@@ -54,6 +57,34 @@ type AgentSkillDispatcherFunc func(ctx context.Context, req agentskills.PreviewR
 
 func (f AgentSkillDispatcherFunc) ApplyAgentSkill(ctx context.Context, req agentskills.PreviewRequest) (map[string]any, string, error) {
 	return f(ctx, req)
+}
+
+type ActionPreviewer interface {
+	PreviewAction(ctx context.Context, in chat.PreviewActionInput) (chat.ActionPreview, error)
+}
+
+type ActionPreviewerFunc func(ctx context.Context, in chat.PreviewActionInput) (chat.ActionPreview, error)
+
+func (f ActionPreviewerFunc) PreviewAction(ctx context.Context, in chat.PreviewActionInput) (chat.ActionPreview, error) {
+	return f(ctx, in)
+}
+
+type ActionConfirmer interface {
+	ApplyAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
+	CancelAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
+}
+
+type ActionConfirmerFunc struct {
+	Apply  func(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
+	Cancel func(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
+}
+
+func (f ActionConfirmerFunc) ApplyAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+	return f.Apply(ctx, in)
+}
+
+func (f ActionConfirmerFunc) CancelAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+	return f.Cancel(ctx, in)
 }
 
 func NewServer(cfg Config) (*mcp.Server, error) {
@@ -93,8 +124,35 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 	if cfg.ReceiptSink != nil {
 		server.AddReceivingMiddleware(receiptMiddleware(cfg, profileID, version))
 	}
+	registerAgentSkillConfirmationTools(server, cfg, profileID)
 	registerAgentSkillTools(server, cfg, profileID)
 	return server, nil
+}
+
+func registerAgentSkillConfirmationTools(server *mcp.Server, cfg Config, profileID string) {
+	if cfg.ActionConfirmer == nil {
+		return
+	}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "cabinet.agent_skill.apply_preview",
+		Description: "Apply a Cabinet Agent Skill preview after explicit confirmation.",
+		InputSchema: mcpConfirmationInputSchema("confirm"),
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+		confirm, _ := args["confirm"].(bool)
+		if !confirm {
+			return nil, nil, errors.New("confirm_required")
+		}
+		result, err := cfg.ActionConfirmer.ApplyAction(ctx, mcpApplyActionInput(profileID, args))
+		return nil, mcpActionConfirmationResult("confirmed", result), err
+	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "cabinet.agent_skill.cancel_preview",
+		Description: "Cancel a pending Cabinet Agent Skill preview without applying a mutation.",
+		InputSchema: mcpConfirmationInputSchema("cancel"),
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+		result, err := cfg.ActionConfirmer.CancelAction(ctx, mcpCancelActionInput(profileID, args))
+		return nil, mcpActionConfirmationResult("cancelled", result), err
+	})
 }
 
 func registerAgentSkillTools(server *mcp.Server, cfg Config, profileID string) {
@@ -140,6 +198,18 @@ func dispatchAgentSkillToolCall(ctx context.Context, cfg Config, profileID strin
 		return nil, fmt.Errorf("mcp agent skill dispatch requires Cabinet confirmation for high-risk skill: %s", skill.ID)
 	}
 	if skill.Permissions.LocalWrite || skill.Permissions.RequiresConfirm || skill.SafetyLevel == agentskills.SafetyPreviewOnly || skill.SafetyLevel == agentskills.SafetyConfirmRequired {
+		if cfg.ActionPreviewer != nil {
+			preview, err := cfg.ActionPreviewer.PreviewAction(ctx, chat.PreviewActionInput{
+				ProfileID:    request.ProfileID,
+				ThreadID:     request.SourceThreadID,
+				CapabilityID: firstNonEmptyMCPReceipt(firstString(skill.RequiredActions), firstString(skill.Capabilities)),
+				Payload:      request.Parameters,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("mcp agent skill preview failed: %w", err)
+			}
+			return mcpAgentSkillDurablePreviewResult(skill, request, preview), nil
+		}
 		return mcpAgentSkillPreviewResult(skill, request), nil
 	}
 	if cfg.SkillDispatcher == nil {
@@ -179,6 +249,79 @@ func mcpAgentSkillPreviewResult(skill agentskills.Skill, req agentskills.Preview
 		"confirmation_required": true,
 		"confirmation_state":    "preview_required",
 		"next_action":           firstNonEmptyMCPReceipt(strings.TrimSpace(skill.NextAction), "Review the preview in Cabinet and explicitly confirm before applying this Agent Skill."),
+	}
+}
+
+func mcpAgentSkillDurablePreviewResult(skill agentskills.Skill, req agentskills.PreviewRequest, preview chat.ActionPreview) map[string]any {
+	result := mcpAgentSkillPreviewResult(skill, req)
+	result["preview_id"] = strings.TrimSpace(preview.ID)
+	result["thread_id"] = strings.TrimSpace(preview.ThreadID)
+	result["action"] = strings.TrimSpace(preview.Action)
+	result["capability_id"] = strings.TrimSpace(preview.CapabilityID)
+	result["status"] = strings.TrimSpace(preview.Status)
+	result["confirmation_state"] = "pending"
+	result["apply_tool"] = "cabinet.agent_skill.apply_preview"
+	result["cancel_tool"] = "cabinet.agent_skill.cancel_preview"
+	result["next_action"] = "Call cabinet.agent_skill.apply_preview with confirm=true, or cabinet.agent_skill.cancel_preview to cancel this preview."
+	return result
+}
+
+func mcpApplyActionInput(profileID string, args map[string]any) chat.ApplyActionInput {
+	if args == nil {
+		args = map[string]any{}
+	}
+	confirm, _ := args["confirm"].(bool)
+	return chat.ApplyActionInput{
+		ProfileID: strings.TrimSpace(profileID),
+		ThreadID:  strings.TrimSpace(fmt.Sprint(args["thread_id"])),
+		PreviewID: strings.TrimSpace(fmt.Sprint(args["preview_id"])),
+		Confirm:   confirm,
+	}
+}
+
+func mcpCancelActionInput(profileID string, args map[string]any) chat.ApplyActionInput {
+	input := mcpApplyActionInput(profileID, args)
+	input.Confirm = false
+	return input
+}
+
+func mcpActionConfirmationResult(state string, result chat.ApplyActionResult) map[string]any {
+	return map[string]any{
+		"preview_id":         strings.TrimSpace(result.PreviewID),
+		"action":             strings.TrimSpace(result.Action),
+		"confirmation_state": strings.TrimSpace(state),
+		"mutation_applied":   result.Applied,
+		"applied":            result.Applied,
+		"item_id":            strings.TrimSpace(result.ItemID),
+		"wishlist_id":        strings.TrimSpace(result.WishlistID),
+		"collection_name":    strings.TrimSpace(result.CollectionName),
+		"part_number":        strings.TrimSpace(result.PartNumber),
+		"title":              strings.TrimSpace(result.Title),
+	}
+}
+
+func mcpConfirmationInputSchema(action string) map[string]any {
+	properties := map[string]any{
+		"preview_id": map[string]any{
+			"type":        "string",
+			"description": "Cabinet Agent Skill preview token.",
+		},
+		"thread_id": map[string]any{
+			"type":        "string",
+			"description": "Cabinet Chat thread that owns the preview token.",
+		},
+	}
+	if action == "confirm" {
+		properties["confirm"] = map[string]any{
+			"type":        "boolean",
+			"description": "Must be true to apply the preview.",
+		}
+	}
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []string{"preview_id", "thread_id"},
+		"properties":           properties,
 	}
 }
 
@@ -230,6 +373,9 @@ func authorityMiddleware(cfg Config, profileID string, version string) mcp.Middl
 			if strings.TrimSpace(toolName) == "" {
 				return next(ctx, method, req)
 			}
+			if mcpAgentSkillConfirmationTool(toolName) {
+				return next(ctx, method, req)
+			}
 			args = mcpAgentSkillBoundParameters(profileID, args)
 			review, err := reviewer.ReviewAgentAuthority(ctx, agentskills.PreviewRequest{
 				SkillID:        toolName,
@@ -253,6 +399,15 @@ func authorityMiddleware(cfg Config, profileID string, version string) mcp.Middl
 			}
 			return next(ctx, method, req)
 		}
+	}
+}
+
+func mcpAgentSkillConfirmationTool(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case "cabinet.agent_skill.apply_preview", "cabinet.agent_skill.cancel_preview":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -292,6 +447,15 @@ func firstNonEmptyMCPReceipt(values ...string) string {
 	for _, value := range values {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			return trimmed
+		}
+	}
+	return ""
+}
+
+func firstString(values []string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
 		}
 	}
 	return ""

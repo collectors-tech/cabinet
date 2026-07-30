@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/collectors-tech/cabinet/internal/agentskills"
+	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -341,6 +342,208 @@ func TestLocalWriteToolsCallReturnsPreviewWithoutDispatchingMutation(t *testing.
 		if strings.Contains(string(body), forbidden) {
 			t.Fatalf("local-write MCP receipt leaked tool argument %q: %s", forbidden, body)
 		}
+	}
+}
+
+func TestMCPAgentSkillPreviewApplyCancelTokensUseChatConfirmationBoundary(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", nil, nil)
+	var previewInput chat.PreviewActionInput
+	var applyInputs []chat.ApplyActionInput
+	var cancelInput chat.ApplyActionInput
+	applyCount := 0
+	appliedTokens := map[string]chat.ApplyActionResult{}
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:mcp-confirmation",
+		SessionIDSeed: "mcp-confirmation-test-session",
+		SkillRegistry: registry,
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			return registry.ReviewAuthority(req, agentskills.AgentAuthorityPolicy{
+				ProfileID:  "profile-main",
+				Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+				EntryPoint: "mcp",
+			})
+		}),
+		ActionPreviewer: ActionPreviewerFunc(func(_ context.Context, in chat.PreviewActionInput) (chat.ActionPreview, error) {
+			previewInput = in
+			return chat.ActionPreview{
+				ID:           "preview-mcp-1",
+				ProfileID:    in.ProfileID,
+				ThreadID:     in.ThreadID,
+				CapabilityID: in.CapabilityID,
+				Action:       "create_inventory_item",
+				Status:       "previewed",
+				Payload:      in.Payload,
+			}, nil
+		}),
+		ActionConfirmer: ActionConfirmerFunc{
+			Apply: func(_ context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+				applyInputs = append(applyInputs, in)
+				if !in.Confirm {
+					return chat.ApplyActionResult{}, errors.New("confirm_required")
+				}
+				if result, ok := appliedTokens[in.PreviewID]; ok {
+					return result, nil
+				}
+				applyCount++
+				result := chat.ApplyActionResult{
+					Applied:   true,
+					Action:    "create_inventory_item",
+					ItemID:    "item-mcp-1",
+					PreviewID: in.PreviewID,
+					Title:     "Confirmed MCP Item",
+				}
+				appliedTokens[in.PreviewID] = result
+				return result, nil
+			},
+			Cancel: func(_ context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+				cancelInput = in
+				return chat.ApplyActionResult{
+					Applied:   false,
+					Action:    "create_inventory_item",
+					PreviewID: in.PreviewID,
+				}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-confirmation-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	previewResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.inventory.create_item",
+		Arguments: map[string]any{
+			"title":       "Confirmed MCP Item",
+			"part_number": "MCP-CONFIRM-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("preview CallTool() error = %v", err)
+	}
+	previewPayload, ok := previewResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("preview StructuredContent = %T, want map[string]any", previewResult.StructuredContent)
+	}
+	if previewPayload["preview_id"] != "preview-mcp-1" ||
+		previewPayload["confirmation_state"] != "pending" ||
+		previewPayload["apply_tool"] != "cabinet.agent_skill.apply_preview" ||
+		previewPayload["cancel_tool"] != "cabinet.agent_skill.cancel_preview" ||
+		previewPayload["mutation_applied"] != false {
+		t.Fatalf("preview should expose durable apply/cancel token guidance, got %#v", previewPayload)
+	}
+	if previewInput.ProfileID != "profile-main" ||
+		previewInput.ThreadID != "mcp-confirmation-test-session" ||
+		previewInput.CapabilityID != "inventory.item.create" ||
+		previewInput.Payload["workspace_id"] != "profile:profile-main" {
+		t.Fatalf("preview input should be profile/thread bound to Chat action boundary, got %+v", previewInput)
+	}
+
+	confirmMissingResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.apply_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-1",
+			"thread_id":  "mcp-confirmation-test-session",
+			"confirm":    false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("apply without confirm=true should return a tool error result, got transport error %v", err)
+	}
+	if confirmMissingResult == nil || !confirmMissingResult.IsError {
+		t.Fatalf("apply without confirm=true should be rejected as a tool error result, got %#v", confirmMissingResult)
+	}
+	if len(applyInputs) != 0 {
+		t.Fatalf("apply without confirm=true must not reach Chat confirmation boundary, got %+v", applyInputs)
+	}
+
+	applyResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.apply_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-1",
+			"thread_id":  "mcp-confirmation-test-session",
+			"confirm":    true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("apply CallTool() error = %v", err)
+	}
+	applyPayload, ok := applyResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("apply StructuredContent = %T, want map[string]any", applyResult.StructuredContent)
+	}
+	if applyPayload["preview_id"] != "preview-mcp-1" ||
+		applyPayload["confirmation_state"] != "confirmed" ||
+		applyPayload["mutation_applied"] != true ||
+		applyPayload["item_id"] != "item-mcp-1" {
+		t.Fatalf("apply result should expose confirmed mutation evidence, got %#v", applyPayload)
+	}
+	if len(applyInputs) != 1 ||
+		applyInputs[0].ProfileID != "profile-main" ||
+		applyInputs[0].ThreadID != "mcp-confirmation-test-session" ||
+		applyInputs[0].PreviewID != "preview-mcp-1" ||
+		!applyInputs[0].Confirm {
+		t.Fatalf("apply input should be bound to configured profile with explicit confirmation, got %+v", applyInputs)
+	}
+
+	replayResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.apply_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-1",
+			"thread_id":  "mcp-confirmation-test-session",
+			"confirm":    true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("replay CallTool() error = %v", err)
+	}
+	replayPayload, _ := replayResult.StructuredContent.(map[string]any)
+	if replayPayload["item_id"] != "item-mcp-1" || applyCount != 1 {
+		t.Fatalf("replay should return the idempotent applied result without a second mutation, payload=%#v applyCount=%d", replayPayload, applyCount)
+	}
+
+	cancelResult, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.agent_skill.cancel_preview",
+		Arguments: map[string]any{
+			"preview_id": "preview-mcp-2",
+			"thread_id":  "mcp-confirmation-test-session",
+		},
+	})
+	if err != nil {
+		t.Fatalf("cancel CallTool() error = %v", err)
+	}
+	cancelPayload, ok := cancelResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("cancel StructuredContent = %T, want map[string]any", cancelResult.StructuredContent)
+	}
+	if cancelPayload["preview_id"] != "preview-mcp-2" ||
+		cancelPayload["confirmation_state"] != "cancelled" ||
+		cancelPayload["mutation_applied"] != false {
+		t.Fatalf("cancel result should expose non-mutating cancellation evidence, got %#v", cancelPayload)
+	}
+	if cancelInput.ProfileID != "profile-main" ||
+		cancelInput.ThreadID != "mcp-confirmation-test-session" ||
+		cancelInput.PreviewID != "preview-mcp-2" ||
+		cancelInput.Confirm {
+		t.Fatalf("cancel input should be bound to configured profile without confirmation apply, got %+v", cancelInput)
 	}
 }
 
