@@ -363,7 +363,7 @@ func TestAgentSkillPreviewNormalizesAgentContextEnvelope(t *testing.T) {
 	}
 }
 
-func TestAgentSkillPreviewClarifiesMissingAgentContext(t *testing.T) {
+func TestAgentSkillPreviewAndApplyClarifyMissingAgentContext(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -378,18 +378,20 @@ func TestAgentSkillPreviewClarifiesMissingAgentContext(t *testing.T) {
 		t.Fatalf("decode profile: %v", err)
 	}
 
-	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"`+p.ID+`",
+	requestBody := `{
+		"profile_id":"` + p.ID + `",
 		"skill_id":"cabinet.inventory.update_item",
 		"agent_context":{
-			"profile_id":"`+p.ID+`",
+			"profile_id":"` + p.ID + `",
 			"workspace_id":"workspace-agent-skill",
 			"thread_id":"thread-agent-skill",
 			"source_channel":"in-app",
 			"setup_state":"setup_needed"
 		},
 		"parameters":{"title":"Updated title"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(requestBody), map[string]string{"Content-Type": "application/json"})
 	if resp.Code != http.StatusConflict {
 		t.Fatalf("preview status=%d body=%s", resp.Code, resp.Body.String())
 	}
@@ -411,6 +413,30 @@ func TestAgentSkillPreviewClarifiesMissingAgentContext(t *testing.T) {
 	}
 	if strings.Contains(resp.Body.String(), "direct-api") || strings.Contains(resp.Body.String(), "audit") {
 		t.Fatalf("clarification must not invent direct-api targets or leak audit context: %s", resp.Body.String())
+	}
+
+	applyResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(requestBody), map[string]string{"Content-Type": "application/json"})
+	if applyResp.Code != http.StatusConflict {
+		t.Fatalf("apply status=%d body=%s", applyResp.Code, applyResp.Body.String())
+	}
+	var applyPayload struct {
+		Error          string            `json:"error"`
+		MissingContext []string          `json:"missing_context"`
+		NextAction     string            `json:"next_action"`
+		Clarification  map[string]string `json:"clarification"`
+	}
+	if err := json.NewDecoder(applyResp.Body).Decode(&applyPayload); err != nil {
+		t.Fatalf("decode apply clarification: %v", err)
+	}
+	if applyPayload.Error != "missing_context" || !slices.Contains(applyPayload.MissingContext, "selected_item") ||
+		!slices.Contains(applyPayload.MissingContext, "route") || !slices.Contains(applyPayload.MissingContext, "setup_state") {
+		t.Fatalf("expected apply selected item, route, and setup clarification, got %+v", applyPayload)
+	}
+	if applyPayload.Clarification["selected_item"] == "" || applyPayload.Clarification["route"] == "" || applyPayload.Clarification["setup_state"] == "" || applyPayload.NextAction == "" {
+		t.Fatalf("expected actionable apply clarification guidance, got %+v", applyPayload)
+	}
+	if strings.Contains(applyResp.Body.String(), "direct-api") || strings.Contains(applyResp.Body.String(), "audit") {
+		t.Fatalf("apply clarification must not invent direct-api targets or leak audit context: %s", applyResp.Body.String())
 	}
 }
 

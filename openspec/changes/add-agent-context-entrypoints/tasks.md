@@ -67,9 +67,9 @@
   - `TestAgentSkillPreviewNormalizesAgentContextEnvelope` covers selected item,
     media, attachment, source channel, permission/setup, workflow, and audit
     context propagation into Agent Skill preview/apply dispatch.
-  - `TestAgentSkillPreviewClarifiesMissingAgentContext` covers deterministic
-    missing-route, selection, provider, and setup guidance before authority or
-    mutation preview.
+  - `TestAgentSkillPreviewAndApplyClarifyMissingAgentContext` covers
+    deterministic missing-route, selection, provider, and setup guidance before
+    authority, preview, or apply execution.
   - `AGENT-CONTEXT-004/#1714` covers route-change continuity for side-panel
     Chat at the UI workflow level.
 - [x] 4.2 Add Cypress coverage for side-panel Agent context from at least one

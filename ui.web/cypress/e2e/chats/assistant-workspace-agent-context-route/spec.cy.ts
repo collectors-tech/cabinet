@@ -125,6 +125,10 @@ describe('chats/assistant-workspace-agent-context-route', () => {
       expect(request.body.agent_context.route_id).to.match(/^\/media\/?$/)
       expect(request.body.agent_context.surface_id).to.eq('chats.side-panel')
       expect(request.body.agent_context.source_channel).to.eq('in-app')
+      expect(request.body.agent_context.selected_record).to.eq(undefined)
+      expect(JSON.stringify(request.body.agent_context)).not.to.include(
+        'inventory_item'
+      )
       expect(request.body.agent_context.permission_state).to.eq(
         'ask_before_local_changes'
       )

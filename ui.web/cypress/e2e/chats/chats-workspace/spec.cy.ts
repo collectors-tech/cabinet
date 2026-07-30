@@ -173,7 +173,7 @@ describe('chats/chats-workspace', () => {
     })
   })
 
-  it('CHATS-WORKSPACE-008/#1503 dispatches normal main Chat text to app-control route planning without Inbox noise', () => {
+  it('AGENT-UNIVERSAL-CHANNELS-001/#1979 preserves main Chat Agent context during route planning', () => {
     openChats()
     createThread('E2E Main Chat Route Planner')
 
@@ -186,6 +186,19 @@ describe('chats/chats-workspace', () => {
       expect(request.body.profile_id).to.eq('e2e-profile-001')
       expect(String(request.body.thread_id).trim()).not.to.eq('')
       expect(request.body.content).to.eq('open media')
+      expect(request.body.agent_context.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.agent_context.thread_id).to.eq(
+        request.body.thread_id
+      )
+      expect(request.body.agent_context.route_id).to.eq('/chats/')
+      expect(request.body.agent_context.surface_id).to.eq('chats.main')
+      expect(request.body.agent_context.source_channel).to.eq('in-app')
+      expect(request.body.agent_context.intent_text).to.eq('open media')
+      expect(request.body.agent_context.permission_state).to.eq(
+        'ask_before_local_changes'
+      )
+      expect(request.body.agent_context.setup_state).to.eq('ready')
+      expect(request.body.agent_context.selected_record).to.eq(undefined)
       expect(request.body.context.route.pathname).to.eq('/chats/')
       expect(request.body.context.profile.id).to.eq('e2e-profile-001')
       expect(request.body.context.assistant.provider).to.eq('openai')
@@ -240,6 +253,8 @@ describe('chats/chats-workspace', () => {
           const serialized = JSON.stringify(payload)
           expect(serialized).to.include('chat.app_control.dispatch')
           expect(serialized).to.include('navigate.open_surface')
+          expect(serialized).to.include('chats.main')
+          expect(serialized).to.include('ask_before_local_changes')
           expect(serialized).to.include('/media')
         })
       cy.request('/api/chat/inbox?profile_id=e2e-profile-001')

@@ -464,6 +464,16 @@ export function Chats() {
           role: 'user',
           content,
           attachment_ids: attachments.map((attachment) => attachment.id),
+          agent_context: {
+            profile_id: activeProfileId,
+            thread_id: selectedThreadId,
+            route_id: '/chats/',
+            surface_id: 'chats.main',
+            source_channel: 'in-app',
+            permission_state: 'ask_before_local_changes',
+            setup_state: 'ready',
+            intent_text: content,
+          },
           context: {
             route: { pathname: '/chats/' },
             profile: { id: activeProfileId },
