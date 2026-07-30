@@ -33,7 +33,7 @@
 - [x] 4.1 Record provider, entry point, selected skill, context, preview/apply
   token state, decision, and final outcome in workflow/action evidence without
   secrets or raw provider payloads.
-- [ ] 4.2 Add Go/API tests for tool selection, clarification, read-only
+- [x] 4.2 Add Go/API tests for tool selection, clarification, read-only
   execution, preview/confirm/apply, denial, and replay/idempotency.
 - [ ] 4.3 Add side-panel/main Chat coverage for the shared planner contract.
 - [ ] 4.4 Add packaged Windows smoke evidence for a provider-backed

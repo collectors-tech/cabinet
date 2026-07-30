@@ -364,6 +364,19 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 				result["authority"] = authority
 				result["confirmation_state"] = confirmationState
 			}
+		} else if denialResult, authority := denyPlannerSelectionWithoutSupportedDispatch(registry, profileID, threadID, selection, envelope, sourceMessageID); denialResult != nil {
+			status = "failed"
+			result["decision"] = denialResult["decision"]
+			result["message"] = denialResult["message"]
+			result["error"] = denialResult["error"]
+			result["next_action"] = denialResult["next_action"]
+			result["recoverable"] = true
+			if authority.SkillID != "" {
+				result["authority"] = authority
+			}
+			if errPayload, _ := denialResult["error"].(map[string]any); errPayload != nil {
+				runError = errPayload
+			}
 		}
 	}
 	evidence := plannerWorkflowEvidence(providerID, selection, agentCtx, confirmationState, status, result, runError)
@@ -534,6 +547,57 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 		"mutation_applied":      false,
 		"next_action":           "Review the preview and confirm through the existing Chat confirmation endpoint before Cabinet applies this local change.",
 	}, review, nil
+}
+
+func denyPlannerSelectionWithoutSupportedDispatch(registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview) {
+	if selection.Decision != "select_skill" || selection.ErrorCode != "" {
+		return nil, agentskills.AgentAuthorityReview{}
+	}
+	skill, ok := registry.Resolve(selection.SkillID)
+	if !ok || skill.SafetyLevel == agentskills.SafetyReadOnly {
+		return nil, agentskills.AgentAuthorityReview{}
+	}
+	if skill.Permissions.LocalWrite && !skill.Permissions.ExternalWrite && !skill.Permissions.Destructive && plannerChatActionForSkill(selection.SkillID) != "" {
+		return nil, agentskills.AgentAuthorityReview{}
+	}
+	agentCtx := agentContextEvidence(envelope)
+	req := agentskills.PreviewRequest{
+		SkillID:         selection.SkillID,
+		ProfileID:       profileID,
+		Confirm:         false,
+		SourceSurface:   strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+		SourceChannel:   strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+		SourceThreadID:  threadID,
+		SourceMessageID: sourceMessageID,
+		AgentContext:    agentCtx,
+		Parameters:      selection.Parameters,
+	}
+	req = normalizeAgentSkillContextRequest(req)
+	hydratePlannerSelectedRecordParams(req.Parameters, agentCtx)
+	review, err := registry.ReviewAuthority(agentSkillAuthorityRequest(req), agentskills.AgentAuthorityPolicy{
+		ProfileID:  profileID,
+		Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+		EntryPoint: "chat.agent_planner",
+	})
+	blocker := "planner_skill_dispatch_not_supported"
+	nextAction := "Choose a supported Cabinet read or previewable local action before retrying this planner request."
+	if err != nil {
+		blocker = "planner_authority_review_failed"
+		nextAction = "Retry after checking Agent Skill configuration and active profile context."
+	} else {
+		if strings.TrimSpace(review.Blocker) != "" {
+			blocker = strings.TrimSpace(review.Blocker)
+		}
+		if strings.TrimSpace(review.NextAction) != "" {
+			nextAction = strings.TrimSpace(review.NextAction)
+		}
+	}
+	return map[string]any{
+		"decision":    "reject",
+		"message":     "Cabinet blocked this planner selection before any unsupported, external, or destructive action was previewed.",
+		"error":       map[string]any{"code": blocker, "message": "The selected Agent Skill is not approved for this Chat planner dispatch path."},
+		"next_action": nextAction,
+	}, review
 }
 
 func plannerWorkflowEvidence(providerID string, selection chatAgentSkillSelection, agentCtx map[string]any, confirmationState, status string, result map[string]any, runError map[string]any) map[string]any {

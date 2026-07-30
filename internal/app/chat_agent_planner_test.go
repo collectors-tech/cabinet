@@ -448,6 +448,70 @@ func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) 
 	}
 }
 
+func TestChatAgentPlannerDeniesExternalWriteSelectionWithoutApproval(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner External Denial"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner External Denial"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.market_watch.run_watch","parameters":{"provider_id":"ebay","watch_id":"watch-external-1"},"message":"I will run the external watch now."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Update inventory item candidates from market watch provider",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/integrations/market-watch",
+				"surface_id":     "market-watch.detail",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Update inventory item candidates from market watch provider",
+			},
+		},
+		"message-external-denial",
+	)
+	if !handled {
+		t.Fatal("expected planner dispatch to handle external-write selection")
+	}
+	if result["decision"] != "reject" || result["recoverable"] != true || result["preview_result"] != nil || result["execution_result"] != nil {
+		t.Fatalf("external-write planner selection must be denied without preview/apply, got %+v", result)
+	}
+	errPayload, _ := result["error"].(map[string]any)
+	if errPayload["code"] != "agent_authority_external_write_not_approved" {
+		t.Fatalf("expected external-write authority denial, got %+v", result)
+	}
+	workflowRun, _ := result["workflow_run"].(chat.WorkflowRun)
+	if workflowRun.Status != "failed" || workflowRun.Error["code"] != "agent_authority_external_write_not_approved" {
+		t.Fatalf("expected failed workflow evidence for denied external write, run=%+v result=%+v", workflowRun, result)
+	}
+}
+
 func TestChatAgentPlannerUsesSelectedRecordForRenameOrClarifiesMissingTarget(t *testing.T) {
 	t.Parallel()
 
