@@ -350,6 +350,7 @@ func TestMCPAgentSkillPreviewApplyCancelTokensUseChatConfirmationBoundary(t *tes
 	var previewInput chat.PreviewActionInput
 	var applyInputs []chat.ApplyActionInput
 	var cancelInput chat.ApplyActionInput
+	var receipts []OperationReceipt
 	applyCount := 0
 	appliedTokens := map[string]chat.ApplyActionResult{}
 	server, err := NewServer(Config{
@@ -359,6 +360,9 @@ func TestMCPAgentSkillPreviewApplyCancelTokensUseChatConfirmationBoundary(t *tes
 		VersionDigest: "git:mcp-confirmation",
 		SessionIDSeed: "mcp-confirmation-test-session",
 		SkillRegistry: registry,
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
 		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
 			return registry.ReviewAuthority(req, agentskills.AgentAuthorityPolicy{
 				ProfileID:  "profile-main",
@@ -544,6 +548,24 @@ func TestMCPAgentSkillPreviewApplyCancelTokensUseChatConfirmationBoundary(t *tes
 		cancelInput.PreviewID != "preview-mcp-2" ||
 		cancelInput.Confirm {
 		t.Fatalf("cancel input should be bound to configured profile without confirmation apply, got %+v", cancelInput)
+	}
+	if got := countConfirmationReceipts(receipts, "tool:cabinet.agent_skill.apply_preview", "confirm_required"); got != 1 {
+		t.Fatalf("expected one confirm-required confirmation receipt, got %d receipts=%+v", got, receipts)
+	}
+	if got := countConfirmationReceipts(receipts, "tool:cabinet.agent_skill.apply_preview", "confirmed"); got != 2 {
+		t.Fatalf("expected confirmed apply and idempotent replay receipts, got %d receipts=%+v", got, receipts)
+	}
+	if got := countConfirmationReceipts(receipts, "tool:cabinet.agent_skill.cancel_preview", "cancelled"); got != 1 {
+		t.Fatalf("expected one cancelled confirmation receipt, got %d receipts=%+v", got, receipts)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal confirmation receipts: %v", err)
+	}
+	for _, forbidden := range []string{"Confirmed MCP Item", "MCP-CONFIRM-1", "preview-mcp-1", "preview-mcp-2"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("MCP confirmation receipt leaked token or payload value %q: %s", forbidden, body)
+		}
 	}
 }
 
@@ -1081,6 +1103,19 @@ func assertStructuredProtocolErrorDoesNotLeakProfile(t *testing.T, resp *jsonrpc
 	if strings.Contains(strings.ToLower(rpcErr.Message), "profile-main") {
 		t.Fatalf("%s leaked profile details: %q", label, rpcErr.Message)
 	}
+}
+
+func countConfirmationReceipts(receipts []OperationReceipt, capability string, outcome string) int {
+	count := 0
+	for _, receipt := range receipts {
+		if receipt.Method == "tools/call" &&
+			receipt.Capability == capability &&
+			receipt.InputClass == "confirmation_token" &&
+			receipt.Outcome == outcome {
+			count++
+		}
+	}
+	return count
 }
 
 func writeRawLine(t *testing.T, writer *io.PipeWriter, raw string) {

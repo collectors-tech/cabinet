@@ -124,12 +124,12 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 	if cfg.ReceiptSink != nil {
 		server.AddReceivingMiddleware(receiptMiddleware(cfg, profileID, version))
 	}
-	registerAgentSkillConfirmationTools(server, cfg, profileID)
+	registerAgentSkillConfirmationTools(server, cfg, profileID, version)
 	registerAgentSkillTools(server, cfg, profileID)
 	return server, nil
 }
 
-func registerAgentSkillConfirmationTools(server *mcp.Server, cfg Config, profileID string) {
+func registerAgentSkillConfirmationTools(server *mcp.Server, cfg Config, profileID string, version string) {
 	if cfg.ActionConfirmer == nil {
 		return
 	}
@@ -137,20 +137,23 @@ func registerAgentSkillConfirmationTools(server *mcp.Server, cfg Config, profile
 		Name:        "cabinet.agent_skill.apply_preview",
 		Description: "Apply a Cabinet Agent Skill preview after explicit confirmation.",
 		InputSchema: mcpConfirmationInputSchema("confirm"),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, map[string]any, error) {
 		confirm, _ := args["confirm"].(bool)
 		if !confirm {
+			recordMCPConfirmationReceipt(ctx, cfg, req, "cabinet.agent_skill.apply_preview", profileID, version, "confirm_required", "confirm_required")
 			return nil, nil, errors.New("confirm_required")
 		}
 		result, err := cfg.ActionConfirmer.ApplyAction(ctx, mcpApplyActionInput(profileID, args))
+		recordMCPConfirmationReceipt(ctx, cfg, req, "cabinet.agent_skill.apply_preview", profileID, version, mcpConfirmationOutcome("confirmed", err), mcpConfirmationErrorClass(err))
 		return nil, mcpActionConfirmationResult("confirmed", result), err
 	})
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "cabinet.agent_skill.cancel_preview",
 		Description: "Cancel a pending Cabinet Agent Skill preview without applying a mutation.",
 		InputSchema: mcpConfirmationInputSchema("cancel"),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, map[string]any, error) {
 		result, err := cfg.ActionConfirmer.CancelAction(ctx, mcpCancelActionInput(profileID, args))
+		recordMCPConfirmationReceipt(ctx, cfg, req, "cabinet.agent_skill.cancel_preview", profileID, version, mcpConfirmationOutcome("cancelled", err), mcpConfirmationErrorClass(err))
 		return nil, mcpActionConfirmationResult("cancelled", result), err
 	})
 }
@@ -409,6 +412,41 @@ func mcpAgentSkillConfirmationTool(toolName string) bool {
 	default:
 		return false
 	}
+}
+
+func recordMCPConfirmationReceipt(ctx context.Context, cfg Config, req *mcp.CallToolRequest, toolName string, profileID string, version string, outcome string, errorClass string) {
+	if cfg.ReceiptSink == nil || req == nil {
+		return
+	}
+	sessionID := sessionIDForReceipt(req.GetSession(), strings.TrimSpace(cfg.SessionIDSeed))
+	receipt := OperationReceipt{
+		OperationID:   fmt.Sprintf("%s:confirmation:%s", operationIDSeed(sessionID, cfg.SessionIDSeed), strings.TrimSpace(toolName)),
+		SessionID:     sessionID,
+		ProfileID:     strings.TrimSpace(profileID),
+		ProfileLabel:  strings.TrimSpace(cfg.ProfileLabel),
+		Capability:    "tool:" + firstNonEmptyMCPReceipt(strings.TrimSpace(toolName), "unknown"),
+		Method:        "tools/call",
+		Version:       strings.TrimSpace(version),
+		VersionDigest: strings.TrimSpace(cfg.VersionDigest),
+		InputClass:    "confirmation_token",
+		Outcome:       firstNonEmptyMCPReceipt(strings.TrimSpace(outcome), "ok"),
+		ErrorClass:    strings.TrimSpace(errorClass),
+	}
+	cfg.ReceiptSink.RecordMCPReceipt(ctx, receipt)
+}
+
+func mcpConfirmationOutcome(success string, err error) string {
+	if err != nil {
+		return "error"
+	}
+	return strings.TrimSpace(success)
+}
+
+func mcpConfirmationErrorClass(err error) string {
+	if err == nil {
+		return ""
+	}
+	return errorClassForReceipt(err)
 }
 
 func recordMCPAuthorityReceipt(ctx context.Context, cfg Config, req mcp.Request, toolName string, profileID string, version string, review agentskills.AgentAuthorityReview) {
