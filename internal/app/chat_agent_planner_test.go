@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,6 +18,7 @@ import (
 type captureAssistantProvider struct {
 	req          ai.AssistantTurnRequest
 	responseText string
+	err          error
 }
 
 func (p *captureAssistantProvider) Name() string {
@@ -24,6 +27,17 @@ func (p *captureAssistantProvider) Name() string {
 
 func (p *captureAssistantProvider) RunAssistantTurn(_ context.Context, req ai.AssistantTurnRequest) (ai.AssistantTurnResponse, error) {
 	p.req = req
+	if p.err != nil {
+		return ai.AssistantTurnResponse{
+			Provider: "fake",
+			Model:    "fake-planner-model",
+			Metadata: map[string]string{
+				"network":       "disabled",
+				"test_provider": "true",
+				"error_class":   "provider_runtime_error",
+			},
+		}, p.err
+	}
 	text := strings.TrimSpace(p.responseText)
 	if text == "" {
 		text = `{"decision":"select_skill","skill_id":"cabinet.inventory.search_items","parameters":{"part_number":"AFX-123"},"message":"Searching inventory for AFX-123."}`
@@ -514,6 +528,113 @@ func TestChatAgentPlannerUsesSelectedRecordForRenameOrClarifiesMissingTarget(t *
 	errPayload, _ := missingResult["error"].(map[string]any)
 	if errPayload["code"] != "missing_context" || missingResult["preview_result"] != nil {
 		t.Fatalf("missing selected target must not create preview or fabricate apply, got %+v", missingResult)
+	}
+}
+
+func TestChatAgentPlannerFailuresReturnRecoverableRedactedGuidance(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Failures"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Failures"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	chatSvc := chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments"))
+
+	providerFailure, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chatSvc,
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{err: errors.New("upstream rejected sk-secret-planner-token")}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Find the item with part number FAIL-PROVIDER",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/inventory",
+				"surface_id":     "chats.side-panel",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Find the item with part number FAIL-PROVIDER",
+			},
+		},
+		"message-provider-failure",
+	)
+	if !handled {
+		t.Fatal("expected provider failure to be handled")
+	}
+	assertRecoverablePlannerFailure(t, providerFailure, "assistant_planner_failed", "chats.side-panel")
+
+	toolFailure, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		nil,
+		chatSvc,
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.search_items","parameters":{"query":"FAIL-TOOL"},"message":"Searching inventory."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Find the item with part number FAIL-TOOL",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Find the item with part number FAIL-TOOL",
+			},
+		},
+		"message-tool-failure",
+	)
+	if !handled {
+		t.Fatal("expected tool failure to be handled")
+	}
+	assertRecoverablePlannerFailure(t, toolFailure, "planner_read_only_execution_failed", "chats.main")
+}
+
+func assertRecoverablePlannerFailure(t *testing.T, result map[string]any, wantCode, wantSurface string) {
+	t.Helper()
+	errPayload, _ := result["error"].(map[string]any)
+	if errPayload["code"] != wantCode {
+		t.Fatalf("expected error code %s, got %+v", wantCode, result)
+	}
+	if result["recoverable"] != true || strings.TrimSpace(fmt.Sprint(result["next_action"])) == "" {
+		t.Fatalf("expected recoverable next-action guidance, got %+v", result)
+	}
+	if result["source_surface"] != wantSurface {
+		t.Fatalf("expected source surface %s, got %+v", wantSurface, result)
+	}
+	if result["workflow_run"] == nil || result["thread_message"] == nil {
+		t.Fatalf("expected persisted workflow and assistant message evidence, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal failure result: %v", err)
+	}
+	if strings.Contains(string(body), "sk-secret") {
+		t.Fatalf("recoverable planner failure leaked secret-like provider detail: %s", string(body))
 	}
 }
 

@@ -25,7 +25,7 @@
   once through the existing confirmation endpoint.
 - [x] 3.3 Preserve selected-record context for update/rename requests and ask for
   clarification when the selected target is absent or ambiguous.
-- [ ] 3.4 Keep provider/tool failures recoverable with redacted next-action
+- [x] 3.4 Keep provider/tool failures recoverable with redacted next-action
   guidance in both main Chat and side-panel Chat.
 
 ## 4. Evidence

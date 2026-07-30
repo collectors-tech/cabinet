@@ -270,11 +270,18 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	if providerID == "" || providerID == "<nil>" {
 		providerID = "openai"
 	}
+	agentCtx := agentContextEvidence(envelope)
 	provider, ok := providers.Provider(providerID)
 	if !ok {
 		return map[string]any{
-			"error":       map[string]any{"code": "assistant_provider_unavailable", "message": "The selected assistant provider is not available for Chat planning."},
-			"next_action": "Choose a configured assistant provider before retrying this natural-language request.",
+			"mode":           "provider_planner",
+			"provider":       providerID,
+			"source_msg_id":  sourceMessageID,
+			"source_surface": strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+			"source_channel": strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+			"recoverable":    true,
+			"error":          map[string]any{"code": "assistant_provider_unavailable", "message": "The selected assistant provider is not available for Chat planning."},
+			"next_action":    "Choose a configured assistant provider before retrying this natural-language request.",
 		}, true
 	}
 	model := strings.TrimSpace(fmt.Sprint(assistantContext["model"]))
@@ -287,13 +294,15 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		Intent:       content,
 		Provider:     providerID,
 		Model:        model,
-		AgentContext: agentContextEvidence(envelope),
+		AgentContext: agentCtx,
 		Skills:       registry.List(),
 	})
 	result := map[string]any{
 		"mode":           "provider_planner",
 		"provider":       providerID,
 		"source_msg_id":  sourceMessageID,
+		"source_surface": strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+		"source_channel": strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
 		"provider_trace": selection.ProviderTrace,
 	}
 	status := "completed"
@@ -302,6 +311,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	if err != nil {
 		status = "failed"
 		runError = map[string]any{"code": "assistant_planner_failed", "message": "Assistant planning did not return a usable governed skill selection."}
+		result["recoverable"] = true
 		result["error"] = runError
 		result["next_action"] = "Review assistant provider setup and retry the request."
 	} else {
@@ -318,6 +328,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		if executionResult, authority, execErr := executeReadOnlyPlannerSelection(ctx, conn, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); execErr != nil {
 			status = "failed"
 			runError = map[string]any{"code": "planner_read_only_execution_failed", "message": "Cabinet could not execute the selected read-only skill."}
+			result["recoverable"] = true
 			result["error"] = runError
 			result["next_action"] = "Retry after checking the selected skill requirements and active profile context."
 			if authority.SkillID != "" {
@@ -329,6 +340,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		} else if previewResult, authority, previewErr := previewLocalWritePlannerSelection(ctx, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); previewErr != nil {
 			status = "failed"
 			runError = map[string]any{"code": "planner_preview_failed", "message": "Cabinet could not create a confirmation preview for the selected skill."}
+			result["recoverable"] = true
 			if detail := strings.TrimSpace(previewErr.Error()); detail != "" {
 				runError["detail"] = detail
 			}
@@ -361,7 +373,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 			SourceChannel:     "in_app_chat",
 			SourceThreadID:    threadID,
 			SourceMessageID:   sourceMessageID,
-			Input:             map[string]any{"content": content, "agent_context": agentContextEvidence(envelope)},
+			Input:             map[string]any{"content": content, "agent_context": agentCtx},
 			ProviderTrace:     stringMapToAny(selection.ProviderTrace),
 			ConfirmationState: confirmationState,
 		})
