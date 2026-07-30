@@ -6085,6 +6085,14 @@ func New(cfg config.Config) (*App, error) {
 								response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
 							}
 						}
+					} else if chatMessageRequestsAgentCapabilityExplanation(req.Content) {
+						policy, policyErr := profiles.GetAgentAuthorityPolicy(r.Context(), req.ProfileID)
+						if policyErr == nil {
+							explanation := buildAgentCapabilityExplanation(req.ProfileID, agentSkillRegistry(req.ProfileID), policy)
+							if agentCapabilities, handled := dispatchChatAgentCapabilityExplanation(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID, explanation); handled {
+								response["agent_capabilities"] = agentCapabilities
+							}
+						}
 					} else if agentPlanner, handled := dispatchChatAgentProviderPlanner(r.Context(), conn, chatSvc, assistantProviders, agentSkillRegistry(req.ProfileID), req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
 						response["agent_planner"] = agentPlanner
 					} else {

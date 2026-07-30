@@ -424,6 +424,79 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	return result, true
 }
 
+func dispatchChatAgentCapabilityExplanation(ctx context.Context, chatSvc *chat.Service, profileID, threadID, content string, envelope map[string]any, sourceMessageID string, explanation agentCapabilityExplanationResponse) (map[string]any, bool) {
+	if !chatMessageRequestsAgentCapabilityExplanation(content) {
+		return nil, false
+	}
+	agentCtx := agentContextEvidence(envelope)
+	summary := summarizeAgentCapabilityExplanation(explanation.Capabilities)
+	result := map[string]any{
+		"mode":           "capability_explanation",
+		"profile_id":     profileID,
+		"source_msg_id":  sourceMessageID,
+		"source_surface": strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+		"source_channel": strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+		"capability_id":  "assistant.agent_capability_explanation",
+		"summary":        summary,
+		"explanation":    explanation,
+		"evidence": map[string]any{
+			"entry_point":              "chat.agent_capability_explanation",
+			"capability_id":            "assistant.agent_capability_explanation",
+			"source_surface":           strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+			"source_channel":           strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+			"agent_context":            agentCtx,
+			"governed_dispatch_owner":  "cabinet",
+			"cabinet_tool_authority":   "none",
+			"raw_provider_tools_given": "false",
+		},
+	}
+	if chatSvc != nil {
+		run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+			ProfileID:         profileID,
+			WorkflowID:        "chat.agent_capability_explanation",
+			CapabilityID:      "assistant.agent_capability_explanation",
+			SourceChannel:     "in_app_chat",
+			SourceThreadID:    threadID,
+			SourceMessageID:   sourceMessageID,
+			Input:             map[string]any{"content": content, "agent_context": agentCtx},
+			ConfirmationState: "not_required",
+		})
+		if runErr == nil {
+			updated, updateErr := chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+				ProfileID:         profileID,
+				RunID:             run.ID,
+				Status:            "completed",
+				Result:            result,
+				ConfirmationState: "not_required",
+			})
+			if updateErr == nil {
+				result["workflow_run"] = updated
+			}
+		}
+		messageText := "Cabinet Agent can explain available skills, setup needs, and confirmation boundaries from the active profile."
+		if assistantMessage, messageErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", messageText, map[string]any{"agent_capabilities": result}); messageErr == nil {
+			result["thread_message"] = assistantMessage
+		}
+	}
+	return result, true
+}
+
+func summarizeAgentCapabilityExplanation(capabilities []agentCapabilityExplanation) map[string]any {
+	counts := map[string]int{}
+	for _, capability := range capabilities {
+		counts[capability.CapabilityState]++
+	}
+	return map[string]any{
+		"total":             len(capabilities),
+		"available":         counts["available"],
+		"confirm_required":  counts["confirm_required"],
+		"blocked_by_policy": counts["blocked_by_policy"],
+		"setup_required":    counts["setup_required"],
+		"disabled":          counts["disabled"],
+		"unavailable":       counts["unavailable"],
+	}
+}
+
 func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview, error) {
 	if selection.Decision != "select_skill" || selection.ErrorCode != "" {
 		return nil, agentskills.AgentAuthorityReview{}, nil
@@ -865,6 +938,18 @@ func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
 			strings.Contains(normalized, "inventory") ||
 			strings.Contains(normalized, "part number"))
 	return readIntent || writeIntent
+}
+
+func chatMessageRequestsAgentCapabilityExplanation(content string) bool {
+	normalized := normalizePlannerText(content)
+	if normalized == "" {
+		return false
+	}
+	return (strings.Contains(normalized, "what can") && (strings.Contains(normalized, "agent") || strings.Contains(normalized, "you do"))) ||
+		strings.Contains(normalized, "available skill") ||
+		strings.Contains(normalized, "available capabilities") ||
+		strings.Contains(normalized, "setup state") ||
+		strings.Contains(normalized, "setup required")
 }
 
 func stringMapToAny(values map[string]string) map[string]any {
