@@ -121,6 +121,122 @@ func TestToolsListDerivesFromEnabledExecutableAgentSkillRegistry(t *testing.T) {
 	}
 }
 
+func TestReadOnlyToolsCallDispatchesThroughGovernedAgentSkillPath(t *testing.T) {
+	registry := agentskills.NewProfileRegistry("profile-main", nil, nil)
+	var reviewed agentskills.PreviewRequest
+	var dispatched agentskills.PreviewRequest
+	var receipts []OperationReceipt
+	server, err := NewServer(Config{
+		ProfileID:     "profile-main",
+		ProfileLabel:  "Main collection",
+		Version:       "0.1.0-test",
+		VersionDigest: "git:read-only-call",
+		SessionIDSeed: "mcp-read-only-call-test-session",
+		SkillRegistry: registry,
+		ReceiptSink: ReceiptSinkFunc(func(_ context.Context, receipt OperationReceipt) {
+			receipts = append(receipts, receipt)
+		}),
+		AuthorityReviewer: AuthorityReviewerFunc(func(_ context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+			reviewed = req
+			return registry.ReviewAuthority(req, agentskills.AgentAuthorityPolicy{
+				ProfileID:  "profile-main",
+				Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+				EntryPoint: "mcp",
+			})
+		}),
+		SkillDispatcher: AgentSkillDispatcherFunc(func(_ context.Context, req agentskills.PreviewRequest) (map[string]any, string, error) {
+			dispatched = req
+			return map[string]any{
+				"operation":  "inventory.item.search",
+				"profile_id": req.ProfileID,
+				"read_only":  true,
+				"query":      req.Parameters["query"],
+				"items": []map[string]any{{
+					"item_id": "item-main-1",
+					"title":   "Main profile Charizard",
+				}},
+				"total": 1,
+			}, "", nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-read-only-client", Version: "0.1.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	defer clientSession.Close()
+
+	result, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cabinet.inventory.search_items",
+		Arguments: map[string]any{
+			"query":      "Charizard",
+			"profile_id": "profile-other",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	payload, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("StructuredContent = %T, want map[string]any: %#v", result.StructuredContent, result.StructuredContent)
+	}
+	if payload["profile_id"] != "profile-main" || payload["operation"] != "inventory.item.search" || payload["read_only"] != true {
+		t.Fatalf("tool result should be grounded to the bound profile and read-only operation, got %#v", payload)
+	}
+	if reviewed.SkillID != "cabinet.inventory.search_items" ||
+		reviewed.ProfileID != "profile-main" ||
+		reviewed.SourceChannel != "mcp" ||
+		reviewed.SourceSurface != "mcp.tools.call" ||
+		reviewed.Parameters["query"] != "Charizard" {
+		t.Fatalf("unexpected authority request: %+v", reviewed)
+	}
+	if dispatched.SkillID != "cabinet.inventory.search_items" ||
+		dispatched.ProfileID != "profile-main" ||
+		dispatched.SourceChannel != "mcp" ||
+		dispatched.SourceSurface != "mcp.tools.call" ||
+		dispatched.Parameters["query"] != "Charizard" {
+		t.Fatalf("unexpected governed dispatch request: %+v", dispatched)
+	}
+	if dispatched.Parameters["profile_id"] != "profile-other" {
+		t.Fatalf("dispatcher should receive original arguments while binding execution to cfg profile, got %+v", dispatched.Parameters)
+	}
+	var applyReceipt *OperationReceipt
+	for i := range receipts {
+		if receipts[i].Method == "tools/call" &&
+			receipts[i].Capability == "tool:cabinet.inventory.search_items" &&
+			receipts[i].Outcome == "apply_allowed" {
+			applyReceipt = &receipts[i]
+			break
+		}
+	}
+	if applyReceipt == nil || applyReceipt.ProfileID != "profile-main" || applyReceipt.VersionDigest != "git:read-only-call" {
+		t.Fatalf("expected redacted allowed authority receipt for read-only call, got %+v", receipts)
+	}
+	body, err := json.Marshal(receipts)
+	if err != nil {
+		t.Fatalf("marshal receipts: %v", err)
+	}
+	for _, forbidden := range []string{"Charizard", "profile-other"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("read-only MCP receipt leaked tool argument %q: %s", forbidden, body)
+		}
+	}
+}
+
 func TestInitializeAdvertisesCabinetIdentityAndProfileBinding(t *testing.T) {
 	server, err := NewServer(Config{
 		ProfileID:     "profile-main",

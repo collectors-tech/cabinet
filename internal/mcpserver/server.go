@@ -29,6 +29,7 @@ type Config struct {
 
 	SkillRegistry     AgentSkillRegistry
 	AuthorityReviewer AuthorityReviewer
+	SkillDispatcher   AgentSkillDispatcher
 }
 
 type AgentSkillRegistry interface {
@@ -42,6 +43,16 @@ type AuthorityReviewer interface {
 type AuthorityReviewerFunc func(ctx context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error)
 
 func (f AuthorityReviewerFunc) ReviewAgentAuthority(ctx context.Context, req agentskills.PreviewRequest) (agentskills.AgentAuthorityReview, error) {
+	return f(ctx, req)
+}
+
+type AgentSkillDispatcher interface {
+	ApplyAgentSkill(ctx context.Context, req agentskills.PreviewRequest) (map[string]any, string, error)
+}
+
+type AgentSkillDispatcherFunc func(ctx context.Context, req agentskills.PreviewRequest) (map[string]any, string, error)
+
+func (f AgentSkillDispatcherFunc) ApplyAgentSkill(ctx context.Context, req agentskills.PreviewRequest) (map[string]any, string, error) {
 	return f(ctx, req)
 }
 
@@ -60,9 +71,13 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 		"profile_label":  strings.TrimSpace(cfg.ProfileLabel),
 		"version_digest": strings.TrimSpace(cfg.VersionDigest),
 	})
+	instructions := fmt.Sprintf("Cabinet MCP session bound to profile %s. No tools or resources are exposed by this foundation server.", profileID)
+	if cfg.SkillRegistry != nil {
+		instructions = fmt.Sprintf("Cabinet MCP session bound to profile %s. Agent Skill tools are governed by Cabinet authority, confirmation, and audit policy.", profileID)
+	}
 	options := &mcp.ServerOptions{
 		Capabilities: capabilities,
-		Instructions: fmt.Sprintf("Cabinet MCP session bound to profile %s. No tools or resources are exposed by this foundation server.", profileID),
+		Instructions: instructions,
 	}
 	if seed := strings.TrimSpace(cfg.SessionIDSeed); seed != "" {
 		options.GetSessionID = func() string { return seed }
@@ -78,11 +93,12 @@ func NewServer(cfg Config) (*mcp.Server, error) {
 	if cfg.ReceiptSink != nil {
 		server.AddReceivingMiddleware(receiptMiddleware(cfg, profileID, version))
 	}
-	registerAgentSkillTools(server, cfg.SkillRegistry)
+	registerAgentSkillTools(server, cfg, profileID)
 	return server, nil
 }
 
-func registerAgentSkillTools(server *mcp.Server, registry AgentSkillRegistry) {
+func registerAgentSkillTools(server *mcp.Server, cfg Config, profileID string) {
+	registry := cfg.SkillRegistry
 	if registry == nil {
 		return
 	}
@@ -91,14 +107,62 @@ func registerAgentSkillTools(server *mcp.Server, registry AgentSkillRegistry) {
 			continue
 		}
 		skill := skill
-		server.AddTool(&mcp.Tool{
+		mcp.AddTool(server, &mcp.Tool{
 			Name:        strings.TrimSpace(skill.ID),
 			Description: strings.TrimSpace(skill.Description),
 			InputSchema: mcpInputSchemaForAgentSkill(skill),
-		}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return nil, fmt.Errorf("mcp agent skill dispatch is not implemented yet: %s", skill.ID)
+		}, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+			result, err := dispatchAgentSkillToolCall(ctx, cfg, profileID, skill, req, args)
+			return nil, result, err
 		})
 	}
+}
+
+func dispatchAgentSkillToolCall(ctx context.Context, cfg Config, profileID string, skill agentskills.Skill, req *mcp.CallToolRequest, args map[string]any) (map[string]any, error) {
+	if cfg.SkillDispatcher == nil {
+		return nil, fmt.Errorf("mcp agent skill dispatch is not configured: %s", skill.ID)
+	}
+	if skill.SafetyLevel != agentskills.SafetyReadOnly || skill.Permissions.RequiresConfirm || skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive {
+		return nil, fmt.Errorf("mcp agent skill dispatch currently supports read-only skills only: %s", skill.ID)
+	}
+	if args == nil {
+		args = map[string]any{}
+	}
+	params := make(map[string]any, len(args))
+	for key, value := range args {
+		params[key] = value
+	}
+	params = mcpAgentSkillBoundParameters(profileID, params)
+	result, blocker, err := cfg.SkillDispatcher.ApplyAgentSkill(ctx, agentskills.PreviewRequest{
+		SkillID:        strings.TrimSpace(skill.ID),
+		ProfileID:      strings.TrimSpace(profileID),
+		Confirm:        false,
+		SourceSurface:  "mcp.tools.call",
+		SourceChannel:  "mcp",
+		SourceThreadID: sessionIDForReceipt(req.GetSession(), strings.TrimSpace(cfg.SessionIDSeed)),
+		Parameters:     params,
+	})
+	if err != nil {
+		if strings.TrimSpace(blocker) != "" {
+			return nil, fmt.Errorf("mcp agent skill dispatch failed: %s", blocker)
+		}
+		return nil, err
+	}
+	if result == nil {
+		result = map[string]any{}
+	}
+	return result, nil
+}
+
+func mcpAgentSkillBoundParameters(profileID string, args map[string]any) map[string]any {
+	out := make(map[string]any, len(args)+1)
+	for key, value := range args {
+		out[key] = value
+	}
+	if _, ok := out["workspace_id"]; !ok {
+		out["workspace_id"] = "profile:" + strings.TrimSpace(profileID)
+	}
+	return out
 }
 
 func mcpInputSchemaForAgentSkill(skill agentskills.Skill) map[string]any {
@@ -138,6 +202,7 @@ func authorityMiddleware(cfg Config, profileID string, version string) mcp.Middl
 			if strings.TrimSpace(toolName) == "" {
 				return next(ctx, method, req)
 			}
+			args = mcpAgentSkillBoundParameters(profileID, args)
 			review, err := reviewer.ReviewAgentAuthority(ctx, agentskills.PreviewRequest{
 				SkillID:        toolName,
 				ProfileID:      profileID,
