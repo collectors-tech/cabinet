@@ -21,7 +21,7 @@
 
 - [x] 3.1 Execute policy-approved read-only selections directly with grounded
   Cabinet results and profile isolation.
-- [ ] 3.2 Convert local-write selections into previews only, then apply exactly
+- [x] 3.2 Convert local-write selections into previews only, then apply exactly
   once through the existing confirmation endpoint.
 - [ ] 3.3 Preserve selected-record context for update/rename requests and ask for
   clarification when the selected target is absent or ambiguous.

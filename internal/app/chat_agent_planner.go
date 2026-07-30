@@ -326,6 +326,19 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		} else if executionResult != nil {
 			result["execution_result"] = executionResult
 			result["authority"] = authority
+		} else if previewResult, authority, previewErr := previewLocalWritePlannerSelection(ctx, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); previewErr != nil {
+			status = "failed"
+			runError = map[string]any{"code": "planner_preview_failed", "message": "Cabinet could not create a confirmation preview for the selected skill."}
+			result["error"] = runError
+			result["next_action"] = "Review the selected skill requirements and retry before confirming any local change."
+			if authority.SkillID != "" {
+				result["authority"] = authority
+			}
+		} else if previewResult != nil {
+			confirmationState = "preview_required"
+			result["preview_result"] = previewResult
+			result["authority"] = authority
+			result["confirmation_state"] = confirmationState
 		}
 	}
 	if chatSvc != nil {
@@ -410,12 +423,79 @@ func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc 
 	return result, review, nil
 }
 
+func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Service, registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview, error) {
+	if chatSvc == nil || selection.Decision != "select_skill" || selection.ErrorCode != "" {
+		return nil, agentskills.AgentAuthorityReview{}, nil
+	}
+	skill, ok := registry.Resolve(selection.SkillID)
+	if !ok || !skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive {
+		return nil, agentskills.AgentAuthorityReview{}, nil
+	}
+	action := plannerChatActionForSkill(selection.SkillID)
+	if action == "" {
+		return nil, agentskills.AgentAuthorityReview{}, nil
+	}
+	agentCtx := agentContextEvidence(envelope)
+	req := agentskills.PreviewRequest{
+		SkillID:         selection.SkillID,
+		ProfileID:       profileID,
+		Confirm:         false,
+		SourceSurface:   strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+		SourceChannel:   strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+		SourceThreadID:  threadID,
+		SourceMessageID: sourceMessageID,
+		AgentContext:    agentCtx,
+		Parameters:      selection.Parameters,
+	}
+	review, err := registry.ReviewAuthority(agentSkillAuthorityRequest(req), agentskills.AgentAuthorityPolicy{
+		ProfileID:  profileID,
+		Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+		EntryPoint: "chat.agent_planner",
+	})
+	if err != nil {
+		return nil, review, err
+	}
+	if !review.PreviewAllowed {
+		return nil, review, fmt.Errorf("planner preview not allowed: %s", review.Blocker)
+	}
+	preview, err := chatSvc.PreviewAction(ctx, chat.PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  threadID,
+		Action:    action,
+		Payload:   copyActionPayload(selection.Parameters),
+	})
+	if err != nil {
+		return nil, review, err
+	}
+	return map[string]any{
+		"preview_id":            preview.ID,
+		"action":                preview.Action,
+		"capability_id":         preview.CapabilityID,
+		"status":                preview.Status,
+		"payload":               preview.Payload,
+		"confirmation_required": true,
+		"mutation_applied":      false,
+		"next_action":           "Review the preview and confirm through the existing Chat confirmation endpoint before Cabinet applies this local change.",
+	}, review, nil
+}
+
+func plannerChatActionForSkill(skillID string) string {
+	switch strings.TrimSpace(skillID) {
+	case "cabinet.inventory.create_item":
+		return "create_inventory_item"
+	case "cabinet.inventory.update_item":
+		return "update_inventory_item"
+	default:
+		return ""
+	}
+}
+
 func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
 	normalized := normalizePlannerText(content)
 	if normalized == "" {
 		return false
 	}
-	return (strings.Contains(normalized, "find") ||
+	readIntent := (strings.Contains(normalized, "find") ||
 		strings.Contains(normalized, "search") ||
 		strings.Contains(normalized, "look up") ||
 		strings.Contains(normalized, "lookup")) &&
@@ -423,6 +503,14 @@ func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
 			strings.Contains(normalized, "inventory") ||
 			strings.Contains(normalized, "wishlist") ||
 			strings.Contains(normalized, "part number"))
+	writeIntent := (strings.Contains(normalized, "create") ||
+		strings.Contains(normalized, "add") ||
+		strings.Contains(normalized, "rename") ||
+		strings.Contains(normalized, "update")) &&
+		(strings.Contains(normalized, "item") ||
+			strings.Contains(normalized, "inventory") ||
+			strings.Contains(normalized, "part number"))
+	return readIntent || writeIntent
 }
 
 func stringMapToAny(values map[string]string) map[string]any {

@@ -324,6 +324,91 @@ func TestChatAgentPlannerExecutesReadOnlySelectionWithProfileIsolation(t *testin
 	}
 }
 
+func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Preview"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Preview"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.create_item","parameters":{"part_number":"PLAN-WRITE-1","title":"Planner Preview Item","brand":"AFX","category":"Slot"},"message":"I prepared a preview for the new item."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Create an inventory item for part number PLAN-WRITE-1 titled Planner Preview Item",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"intent_text":    "Create an inventory item for part number PLAN-WRITE-1 titled Planner Preview Item",
+			},
+		},
+		"message-preview-write",
+	)
+	if !handled {
+		t.Fatal("expected planner dispatch to handle local-write create request")
+	}
+	previewResult, ok := result["preview_result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected preview result for local write, got %+v", result)
+	}
+	if previewResult["mutation_applied"] != false || previewResult["confirmation_required"] != true {
+		t.Fatalf("local-write planner selection must stay preview-only, got %+v", previewResult)
+	}
+	previewID, _ := previewResult["preview_id"].(string)
+	if strings.TrimSpace(previewID) == "" {
+		t.Fatalf("expected durable preview id, got %+v", previewResult)
+	}
+	if result["confirmation_state"] != "preview_required" {
+		t.Fatalf("expected planner workflow to require preview confirmation, got %+v", result)
+	}
+
+	itemsAfterPreview := doRequest(t, a, "GET", "/api/items?profile_id="+profile.ID, nil, nil)
+	if itemsAfterPreview.Code != 200 {
+		t.Fatalf("items after preview status=%d body=%s", itemsAfterPreview.Code, itemsAfterPreview.Body.String())
+	}
+	if strings.Contains(itemsAfterPreview.Body.String(), "Planner Preview Item") {
+		t.Fatalf("planner preview must not create inventory before confirmation, body=%s", itemsAfterPreview.Body.String())
+	}
+
+	apply := doRequest(t, a, "POST", "/api/chat/actions/apply", strings.NewReader(`{"profile_id":"`+profile.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+previewID+`","confirm":true}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != 200 {
+		t.Fatalf("apply preview status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	if !strings.Contains(apply.Body.String(), `"applied":true`) || !strings.Contains(apply.Body.String(), `"preview_id":"`+previewID+`"`) {
+		t.Fatalf("expected existing confirmation endpoint to apply preview exactly once, body=%s", apply.Body.String())
+	}
+	replay := doRequest(t, a, "POST", "/api/chat/actions/apply", strings.NewReader(`{"profile_id":"`+profile.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+previewID+`","confirm":true}`), map[string]string{"Content-Type": "application/json"})
+	if replay.Code == 200 {
+		t.Fatalf("preview replay must not apply twice, body=%s", replay.Body.String())
+	}
+}
+
 func mustResolveSkill(t *testing.T, registry agentskills.Registry, id string) agentskills.Skill {
 	t.Helper()
 	skill, ok := registry.Resolve(id)
