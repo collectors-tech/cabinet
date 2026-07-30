@@ -6066,7 +6066,7 @@ func New(cfg config.Config) (*App, error) {
 								response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
 							}
 						}
-					} else if agentPlanner, handled := dispatchChatAgentProviderPlanner(r.Context(), chatSvc, assistantProviders, agentSkillRegistry(req.ProfileID), req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
+					} else if agentPlanner, handled := dispatchChatAgentProviderPlanner(r.Context(), conn, chatSvc, assistantProviders, agentSkillRegistry(req.ProfileID), req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
 						response["agent_planner"] = agentPlanner
 					} else {
 						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", directAssistantChatResponse(req.Content), map[string]any{

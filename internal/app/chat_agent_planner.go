@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -260,7 +261,7 @@ func plannerProviderTrace(resp ai.AssistantTurnResponse) map[string]string {
 	return trace
 }
 
-func dispatchChatAgentProviderPlanner(ctx context.Context, chatSvc *chat.Service, providers *ai.AssistantProviderRegistry, registry agentskills.Registry, profileID, threadID, content string, envelope map[string]any, sourceMessageID string) (map[string]any, bool) {
+func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, providers *ai.AssistantProviderRegistry, registry agentskills.Registry, profileID, threadID, content string, envelope map[string]any, sourceMessageID string) (map[string]any, bool) {
 	if !chatMessageNeedsNaturalLanguageAgentPlanning(content) {
 		return nil, false
 	}
@@ -314,6 +315,18 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, chatSvc *chat.Service
 		if selection.NextAction != "" {
 			result["next_action"] = selection.NextAction
 		}
+		if executionResult, authority, execErr := executeReadOnlyPlannerSelection(ctx, conn, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); execErr != nil {
+			status = "failed"
+			runError = map[string]any{"code": "planner_read_only_execution_failed", "message": "Cabinet could not execute the selected read-only skill."}
+			result["error"] = runError
+			result["next_action"] = "Retry after checking the selected skill requirements and active profile context."
+			if authority.SkillID != "" {
+				result["authority"] = authority
+			}
+		} else if executionResult != nil {
+			result["execution_result"] = executionResult
+			result["authority"] = authority
+		}
 	}
 	if chatSvc != nil {
 		run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
@@ -354,6 +367,47 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, chatSvc *chat.Service
 		}
 	}
 	return result, true
+}
+
+func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview, error) {
+	if selection.Decision != "select_skill" || selection.ErrorCode != "" {
+		return nil, agentskills.AgentAuthorityReview{}, nil
+	}
+	skill, ok := registry.Resolve(selection.SkillID)
+	if !ok || skill.SafetyLevel != agentskills.SafetyReadOnly {
+		return nil, agentskills.AgentAuthorityReview{}, nil
+	}
+	agentCtx := agentContextEvidence(envelope)
+	req := agentskills.PreviewRequest{
+		SkillID:         selection.SkillID,
+		ProfileID:       profileID,
+		Confirm:         false,
+		SourceSurface:   strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+		SourceChannel:   strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+		SourceThreadID:  threadID,
+		SourceMessageID: sourceMessageID,
+		AgentContext:    agentCtx,
+		Parameters:      selection.Parameters,
+	}
+	review, err := registry.ReviewAuthority(agentSkillAuthorityRequest(req), agentskills.AgentAuthorityPolicy{
+		ProfileID:  profileID,
+		Mode:       agentskills.AgentAuthorityAskBeforeLocalChanges,
+		EntryPoint: "chat.agent_planner",
+	})
+	if err != nil {
+		return nil, review, err
+	}
+	if !review.ApplyAllowed {
+		return nil, review, fmt.Errorf("read-only planner selection not allowed: %s", review.Blocker)
+	}
+	result, blocker, err := applyAgentSkill(ctx, conn, chatSvc, selection.SkillID, profileID, selection.Parameters)
+	if err != nil {
+		if blocker != "" {
+			review.Blocker = blocker
+		}
+		return nil, review, err
+	}
+	return result, review, nil
 }
 
 func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {

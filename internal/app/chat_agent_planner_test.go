@@ -218,6 +218,7 @@ func TestChatAgentPlannerDispatchInvokesProviderNeutralRuntime(t *testing.T) {
 
 	provider := &captureAssistantProvider{}
 	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
 		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
 		ai.NewAssistantProviderRegistry(provider),
 		agentskills.NewRegistry(nil),
@@ -248,6 +249,78 @@ func TestChatAgentPlannerDispatchInvokesProviderNeutralRuntime(t *testing.T) {
 	}
 	if provider.req.Metadata["entry_point"] != "chat.agent_planner" || provider.req.Metadata["governed_dispatch_owner"] != "cabinet" {
 		t.Fatalf("provider-neutral request missing governed metadata: %+v", provider.req.Metadata)
+	}
+}
+
+func TestChatAgentPlannerExecutesReadOnlySelectionWithProfileIsolation(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Read A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Read B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != 201 || createB.Code != 201 {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority) VALUES (?, ?, 'AFX', 'Slot', 'PLAN-READ-1', 'Visible Planner Item', 'active', 'medium')`, "planner-read-visible", profileA.ID); err != nil {
+		t.Fatalf("seed profile A item: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority) VALUES (?, ?, 'AFX', 'Slot', 'PLAN-READ-HIDDEN', 'Hidden Planner Item', 'active', 'medium')`, "planner-read-hidden", profileB.ID); err != nil {
+		t.Fatalf("seed profile B item: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Read"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.search_items","parameters":{"query":"PLAN-READ-1"},"message":"Searching inventory for PLAN-READ-1."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Find the item with part number PLAN-READ-1",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"intent_text":    "Find the item with part number PLAN-READ-1",
+			},
+		},
+		"message-read-only",
+	)
+	if !handled {
+		t.Fatal("expected planner dispatch to handle read-only selection")
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["profile_id"] != profileA.ID {
+		t.Fatalf("expected read-only execution result for profile A, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+	if !strings.Contains(string(body), "Visible Planner Item") || strings.Contains(string(body), "Hidden Planner Item") {
+		t.Fatalf("read-only planner result must be grounded and profile-isolated, body=%s", string(body))
 	}
 }
 

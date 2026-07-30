@@ -19,7 +19,7 @@
 
 ## 3. Governed execution
 
-- [ ] 3.1 Execute policy-approved read-only selections directly with grounded
+- [x] 3.1 Execute policy-approved read-only selections directly with grounded
   Cabinet results and profile isolation.
 - [ ] 3.2 Convert local-write selections into previews only, then apply exactly
   once through the existing confirmation endpoint.
