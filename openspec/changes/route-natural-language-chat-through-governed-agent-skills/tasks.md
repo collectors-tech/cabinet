@@ -3,7 +3,7 @@
 - [x] 1.1 Define the governed natural-language Chat planner contract, provider
   input boundary, skill exposure rules, confirmation boundary, and evidence
   requirements for #1933.
-- [ ] 1.2 Add OpenSpec traceability rows for the #1933 planner requirements and
+- [x] 1.2 Add OpenSpec traceability rows for the #1933 planner requirements and
   the #1701 Agent coverage matrix.
 
 ## 2. Planner and provider boundary
