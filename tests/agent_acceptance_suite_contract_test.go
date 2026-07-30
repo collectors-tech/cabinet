@@ -30,7 +30,7 @@ func TestAgentAcceptanceSuiteEvidenceMapCoversIssue1716Scope(t *testing.T) {
 		"Telegram proof-packet versus live-channel distinction",
 		"implemented-fixture",
 		"partial",
-		"CHATS-WORKSPACE-008/#1503 dispatches normal main Chat text to app-control route planning without Inbox noise",
+		"AGENT-UNIVERSAL-CHANNELS-001/#1979 preserves main Chat Agent context during route planning",
 		"ASSISTANT-WORKSPACE-009/#1503 dispatches normal side-panel text to app-control route planning without Inbox noise",
 		"ASSISTANT-EXECUTION-001/002/003/004 renders preview-before-apply with confirm and explicit permission guidance",
 		"TestServiceThreadMessagePreviewApplyLifecycle",
