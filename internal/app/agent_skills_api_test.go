@@ -38,6 +38,23 @@ type apiSkillPayload struct {
 	} `json:"permissions"`
 }
 
+type apiCapabilityExplanationPayload struct {
+	SkillID           string   `json:"skill_id"`
+	DisplayName       string   `json:"display_name"`
+	Status            string   `json:"status"`
+	SafetyLevel       string   `json:"safety_level"`
+	CapabilityState   string   `json:"capability_state"`
+	ExecutionBoundary string   `json:"execution_boundary"`
+	RequiredContext   []string `json:"required_context"`
+	RequiredSetup     []string `json:"required_setup"`
+	Authority         struct {
+		Decision   string `json:"decision"`
+		Blocker    string `json:"blocker"`
+		NextAction string `json:"next_action"`
+	} `json:"authority"`
+	NextAction string `json:"next_action"`
+}
+
 func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -180,6 +197,108 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	}
 	if collectionDelete.SafetyLevel != "confirm-required" || !collectionDelete.Permissions.RequiresConfirm || !slices.Contains(collectionDelete.RequiredContext, "collection") {
 		t.Fatalf("expected confirmation-gated Collections delete metadata, got %+v", collectionDelete)
+	}
+}
+
+func TestAgentCapabilityExplanationDerivesFromRegistryAndProfileAuthority(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Capability Explanation"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	root := writeAgentSkillImportFixture(t, validAgentSkillImportManifest(""))
+	importResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importResp.Code != http.StatusOK {
+		t.Fatalf("import skill status=%d body=%s", importResp.Code, importResp.Body.String())
+	}
+	disableResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/state", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.example.api_imported_reader",
+		"enabled":false
+	}`), map[string]string{"Content-Type": "application/json"})
+	if disableResp.Code != http.StatusOK {
+		t.Fatalf("disable imported skill status=%d body=%s", disableResp.Code, disableResp.Body.String())
+	}
+
+	repo := profile.NewRepository(a.db)
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeReadOnly,
+		ExternalWriteApproved: false,
+	}); err != nil {
+		t.Fatalf("set read-only authority policy: %v", err)
+	}
+
+	readonly := doRequest(t, a, http.MethodGet, "/api/agent/capabilities?profile_id="+p.ID, nil, nil)
+	if readonly.Code != http.StatusOK {
+		t.Fatalf("capabilities status=%d body=%s", readonly.Code, readonly.Body.String())
+	}
+	var locked struct {
+		ProfileID      string                            `json:"profile_id"`
+		AuthorityMode  string                            `json:"authority_mode"`
+		CapabilityHelp []apiCapabilityExplanationPayload `json:"capabilities"`
+	}
+	if err := json.NewDecoder(readonly.Body).Decode(&locked); err != nil {
+		t.Fatalf("decode capabilities: %v", err)
+	}
+	if locked.ProfileID != p.ID || locked.AuthorityMode != string(profile.AgentAuthorityModeReadOnly) {
+		t.Fatalf("expected profile and read-only authority echo, got %+v", locked)
+	}
+	inventorySearch := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.inventory.search_items")
+	if inventorySearch == nil || inventorySearch.CapabilityState != "available" || inventorySearch.ExecutionBoundary != "read_only" || inventorySearch.Authority.Decision != "allowed" {
+		t.Fatalf("expected read-only inventory skill to be available and allowed, got %+v", inventorySearch)
+	}
+	inventoryCreate := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.inventory.create_item")
+	if inventoryCreate == nil || inventoryCreate.CapabilityState != "blocked_by_policy" || inventoryCreate.Authority.Blocker != "agent_authority_read_only" || inventoryCreate.ExecutionBoundary != "preview_then_confirm" {
+		t.Fatalf("expected local-write inventory skill to be policy-blocked in read-only mode, got %+v", inventoryCreate)
+	}
+	externalWrite := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.integrations.configure_provider")
+	if externalWrite == nil || externalWrite.ExecutionBoundary != "external_write_confirmation" || externalWrite.CapabilityState != "blocked_by_policy" || len(externalWrite.RequiredSetup) == 0 {
+		t.Fatalf("expected external-write setup skill to show setup and policy blocker, got %+v", externalWrite)
+	}
+	unimplemented := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.guided.inventory.update_item")
+	if unimplemented == nil || unimplemented.CapabilityState != "unavailable" || unimplemented.Status != "requires-implementation" {
+		t.Fatalf("expected unimplemented guided skill to remain visible as unavailable, got %+v", unimplemented)
+	}
+	disabled := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.example.api_imported_reader")
+	if disabled == nil || disabled.CapabilityState != "disabled" || disabled.NextAction == "" {
+		t.Fatalf("expected disabled imported skill explanation, got %+v", disabled)
+	}
+	if strings.Contains(readonly.Body.String(), root) || strings.Contains(readonly.Body.String(), "api_key") || strings.Contains(readonly.Body.String(), "preview_id") {
+		t.Fatalf("capability explanation leaked local path or hidden values: %s", readonly.Body.String())
+	}
+
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeAskBeforeLocalChanges,
+		ExternalWriteApproved: false,
+	}); err != nil {
+		t.Fatalf("set ask-before authority policy: %v", err)
+	}
+	unlocked := doRequest(t, a, http.MethodGet, "/api/agent/capabilities?profile_id="+p.ID, nil, nil)
+	if unlocked.Code != http.StatusOK {
+		t.Fatalf("capabilities after policy update status=%d body=%s", unlocked.Code, unlocked.Body.String())
+	}
+	var changed struct {
+		CapabilityHelp []apiCapabilityExplanationPayload `json:"capabilities"`
+	}
+	if err := json.NewDecoder(unlocked.Body).Decode(&changed); err != nil {
+		t.Fatalf("decode changed capabilities: %v", err)
+	}
+	changedCreate := findCapabilityExplanation(changed.CapabilityHelp, "cabinet.inventory.create_item")
+	if changedCreate == nil || changedCreate.CapabilityState != "confirm_required" || changedCreate.Authority.Blocker != "confirmation_required" {
+		t.Fatalf("expected authority mode change to make local write previewable with confirmation, got %+v", changedCreate)
 	}
 }
 
@@ -3034,6 +3153,15 @@ func findAPISkill(skills []apiSkillPayload, id string) *apiSkillPayload {
 	for i := range skills {
 		if skills[i].ID == id {
 			return &skills[i]
+		}
+	}
+	return nil
+}
+
+func findCapabilityExplanation(capabilities []apiCapabilityExplanationPayload, id string) *apiCapabilityExplanationPayload {
+	for i := range capabilities {
+		if capabilities[i].SkillID == id {
+			return &capabilities[i]
 		}
 	}
 	return nil

@@ -5658,6 +5658,25 @@ func New(cfg config.Config) (*App, error) {
 		agentSkillMu.RUnlock()
 		return agentskills.NewProfileRegistry(profileID, imported, agentSkillStore.List(profileID))
 	}
+	mux.HandleFunc("/api/agent/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		policy, err := profiles.GetAgentAuthorityPolicy(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentSkillRegistry(profileID)
+		_ = json.NewEncoder(w).Encode(buildAgentCapabilityExplanation(profileID, registry, policy))
+	})
 	mux.HandleFunc("/api/agent/skills", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -9368,6 +9387,214 @@ func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository
 		return agentskills.AgentAuthorityReview{}, err
 	}
 	return review, nil
+}
+
+type agentCapabilityExplanationResponse struct {
+	ProfileID      string                       `json:"profile_id"`
+	AuthorityMode  string                       `json:"authority_mode"`
+	Capabilities   []agentCapabilityExplanation `json:"capabilities"`
+	Source         string                       `json:"source"`
+	NoSecretValues bool                         `json:"no_secret_values"`
+}
+
+type agentCapabilityExplanation struct {
+	SkillID           string                        `json:"skill_id"`
+	DisplayName       string                        `json:"display_name"`
+	Description       string                        `json:"description"`
+	Category          string                        `json:"category"`
+	Status            agentskills.Status            `json:"status"`
+	SafetyLevel       agentskills.SafetyLevel       `json:"safety_level"`
+	CapabilityState   string                        `json:"capability_state"`
+	ExecutionBoundary string                        `json:"execution_boundary"`
+	RequiredContext   []string                      `json:"required_context"`
+	RequiredSetup     []string                      `json:"required_setup,omitempty"`
+	Capabilities      []string                      `json:"capabilities,omitempty"`
+	GuidedWorkflows   []string                      `json:"guided_workflows,omitempty"`
+	UITargets         []string                      `json:"ui_targets,omitempty"`
+	Authority         agentCapabilityAuthorityState `json:"authority"`
+	NextAction        string                        `json:"next_action,omitempty"`
+}
+
+type agentCapabilityAuthorityState struct {
+	Decision   string `json:"decision"`
+	Blocker    string `json:"blocker,omitempty"`
+	NextAction string `json:"next_action,omitempty"`
+}
+
+func buildAgentCapabilityExplanation(profileID string, registry agentskills.Registry, policy profile.AgentAuthorityPolicy) agentCapabilityExplanationResponse {
+	mode := policy.Mode
+	if mode == "" {
+		mode = profile.AgentAuthorityModeAskBeforeLocalChanges
+	}
+	skills := registry.List()
+	out := make([]agentCapabilityExplanation, 0, len(skills))
+	for _, skill := range skills {
+		out = append(out, explainAgentCapabilitySkill(profileID, skill, mode, policy.ExternalWriteApproved))
+	}
+	return agentCapabilityExplanationResponse{
+		ProfileID:      profileID,
+		AuthorityMode:  mode,
+		Capabilities:   out,
+		Source:         "agent_skill_registry_and_profile_authority_policy",
+		NoSecretValues: true,
+	}
+}
+
+func explainAgentCapabilitySkill(profileID string, skill agentskills.Skill, mode string, externalWriteApproved bool) agentCapabilityExplanation {
+	_ = profileID
+	authority := explainAgentCapabilityAuthority(skill, mode, externalWriteApproved)
+	state := agentCapabilityState(skill, authority)
+	nextAction := skill.NextAction
+	if nextAction == "" {
+		nextAction = agentCapabilityNextAction(state, skill, authority)
+	}
+	return agentCapabilityExplanation{
+		SkillID:           skill.ID,
+		DisplayName:       skill.DisplayName,
+		Description:       skill.Description,
+		Category:          skill.Category,
+		Status:            skill.Status,
+		SafetyLevel:       skill.SafetyLevel,
+		CapabilityState:   state,
+		ExecutionBoundary: agentCapabilityExecutionBoundary(skill),
+		RequiredContext:   append([]string(nil), skill.RequiredContext...),
+		RequiredSetup:     agentCapabilityRequiredSetup(skill),
+		Capabilities:      append([]string(nil), skill.Capabilities...),
+		GuidedWorkflows:   append([]string(nil), skill.GuidedWorkflows...),
+		UITargets:         append([]string(nil), skill.UITargets...),
+		Authority:         authority,
+		NextAction:        nextAction,
+	}
+}
+
+func explainAgentCapabilityAuthority(skill agentskills.Skill, mode string, externalWriteApproved bool) agentCapabilityAuthorityState {
+	if !skill.Enabled {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "skill_disabled",
+			NextAction: firstNonEmptyString(skill.NextAction, "Enable this skill for the active profile before using it."),
+		}
+	}
+	if !skill.Executable {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "skill_not_executable",
+			NextAction: firstNonEmptyString(skill.NextAction, "Complete the linked implementation or setup before using this skill."),
+		}
+	}
+	isMutation := skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive
+	if mode == profile.AgentAuthorityModeReadOnly && isMutation {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "agent_authority_read_only",
+			NextAction: "Switch the profile Agent authority mode before previewing or applying mutating skills.",
+		}
+	}
+	if skill.Permissions.ExternalWrite && (mode != profile.AgentAuthorityModeApprovedExternalActions || !externalWriteApproved) {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "agent_authority_external_write_not_approved",
+			NextAction: "Approve external Agent actions for this profile before running external-write skills.",
+		}
+	}
+	if skill.Permissions.Destructive {
+		return agentCapabilityAuthorityState{
+			Decision:   "confirm_required",
+			Blocker:    "strong_confirmation_required",
+			NextAction: "Review the destructive target and impact summary, then provide action-specific confirmation.",
+		}
+	}
+	if skill.Permissions.RequiresConfirm {
+		return agentCapabilityAuthorityState{
+			Decision:   "confirm_required",
+			Blocker:    "confirmation_required",
+			NextAction: "Review the preview and confirm before Cabinet applies this skill.",
+		}
+	}
+	return agentCapabilityAuthorityState{Decision: "allowed"}
+}
+
+func agentCapabilityState(skill agentskills.Skill, authority agentCapabilityAuthorityState) string {
+	if !skill.Enabled || skill.Status == agentskills.StatusDisabled {
+		return "disabled"
+	}
+	if !skill.Executable || skill.Status == agentskills.StatusInvalid || skill.Status == agentskills.StatusRequiresImplementation {
+		return "unavailable"
+	}
+	if authority.Blocker == "agent_authority_read_only" || authority.Blocker == "agent_authority_external_write_not_approved" {
+		return "blocked_by_policy"
+	}
+	if authority.Decision == "confirm_required" {
+		return "confirm_required"
+	}
+	if len(agentCapabilityRequiredSetup(skill)) > 0 {
+		return "setup_required"
+	}
+	return "available"
+}
+
+func agentCapabilityExecutionBoundary(skill agentskills.Skill) string {
+	switch {
+	case skill.Permissions.Destructive:
+		return "destructive_confirmation"
+	case skill.Permissions.ExternalWrite:
+		return "external_write_confirmation"
+	case skill.Permissions.RequiresConfirm:
+		return "preview_then_confirm"
+	case skill.SafetyLevel == agentskills.SafetyPreviewOnly:
+		return "preview_only"
+	default:
+		return "read_only"
+	}
+}
+
+func agentCapabilityRequiredSetup(skill agentskills.Skill) []string {
+	setup := append([]string(nil), skill.RequiredProviders...)
+	for _, ctx := range skill.RequiredContext {
+		switch ctx {
+		case "provider", "setup_payload", "provider_secret", "storage", "backup_target", "selected_file", "selected_backup", "export_scope", "admin_session":
+			setup = append(setup, ctx)
+		}
+	}
+	return uniqueNonEmptyStrings(setup)
+}
+
+func agentCapabilityNextAction(state string, skill agentskills.Skill, authority agentCapabilityAuthorityState) string {
+	if authority.NextAction != "" {
+		return authority.NextAction
+	}
+	switch state {
+	case "disabled":
+		return "Enable this skill for the active profile before using it."
+	case "unavailable":
+		return "Complete the linked implementation or setup before using this skill."
+	case "setup_required":
+		return "Complete the required setup or provide the required context before using this skill."
+	case "confirm_required":
+		return "Review the preview and confirm before Cabinet applies this skill."
+	default:
+		if skill.SafetyLevel == agentskills.SafetyReadOnly {
+			return "Ask Agent to run this read-only skill from the current profile."
+		}
+		return "Ask Agent to prepare a governed preview from the current profile."
+	}
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func appendAgentAuthorityDecisionAudit(ctx context.Context, profiles *profile.Repository, review agentskills.AgentAuthorityReview, req agentskills.PreviewRequest, outcome string) error {
