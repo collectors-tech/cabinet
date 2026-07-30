@@ -14,7 +14,7 @@
   provider-neutral runtime boundary when Chat needs natural-language planning.
 - [x] 2.3 Supply only enabled/available skill metadata, JSON schemas, safety
   declarations, and the canonical Agent context envelope to the planner.
-- [ ] 2.4 Reject or clarify ambiguous, unsupported, disabled, or unavailable
+- [x] 2.4 Reject or clarify ambiguous, unsupported, disabled, or unavailable
   selections without fabricating completed work.
 
 ## 3. Governed execution

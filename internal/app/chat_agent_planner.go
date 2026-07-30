@@ -28,6 +28,8 @@ type chatAgentSkillSelection struct {
 	SkillID       string         `json:"skill_id"`
 	Parameters    map[string]any `json:"parameters"`
 	Message       string         `json:"message"`
+	ErrorCode     string         `json:"error_code"`
+	NextAction    string         `json:"next_action"`
 	ProviderTrace map[string]string
 }
 
@@ -85,10 +87,55 @@ func planChatAgentSkill(ctx context.Context, provider ai.AssistantTurnProvider, 
 	if selection.Decision == "" {
 		selection.Decision = "clarify"
 	}
-	if selection.Decision == "select_skill" && !plannerSkillExposed(selection.SkillID, exposedSkills) {
-		return chatAgentSkillSelection{ProviderTrace: trace}, fmt.Errorf("assistant planner selected unavailable skill %q", selection.SkillID)
+	return normalizeChatAgentSkillSelection(selection, exposedSkills), nil
+}
+
+func normalizeChatAgentSkillSelection(selection chatAgentSkillSelection, exposedSkills []map[string]any) chatAgentSkillSelection {
+	switch selection.Decision {
+	case "select_skill":
+		if selection.SkillID == "" {
+			return plannerClarification("skill_required", "I need a supported Cabinet skill target before planning that request.", "Choose a supported Cabinet skill or ask a more specific Cabinet question.", selection)
+		}
+		if !plannerSkillExposed(selection.SkillID, exposedSkills) {
+			return plannerRejection("skill_unavailable", "That Cabinet skill is disabled, unavailable, or not exposed for this request.", "Choose an enabled Cabinet skill or adjust Agent Skill settings before retrying.", selection)
+		}
+		if strings.TrimSpace(selection.Message) == "" {
+			selection.Message = "I selected a governed Cabinet skill for this request. Cabinet still controls dispatch and confirmation."
+		}
+		return selection
+	case "clarify":
+		if selection.ErrorCode == "" {
+			selection.ErrorCode = "clarification_required"
+		}
+		if strings.TrimSpace(selection.Message) == "" {
+			selection.Message = "I need one more detail before selecting a Cabinet skill."
+		}
+		if strings.TrimSpace(selection.NextAction) == "" {
+			selection.NextAction = "Provide the missing identifier, target, or intent and retry the request."
+		}
+		return selection
+	case "reject", "unsupported":
+		return plannerRejection("unsupported_request", "Cabinet cannot safely plan that request as a supported skill selection.", "Ask for a supported Cabinet read or previewable local action.", selection)
+	default:
+		return plannerRejection("unsupported_planner_decision", "Cabinet rejected an unsupported planner decision before any work was applied.", "Retry with a supported Cabinet request; no action was completed.", selection)
 	}
-	return selection, nil
+}
+
+func plannerClarification(code, message, nextAction string, selection chatAgentSkillSelection) chatAgentSkillSelection {
+	selection.Decision = "clarify"
+	selection.ErrorCode = code
+	selection.Message = message
+	selection.NextAction = nextAction
+	return selection
+}
+
+func plannerRejection(code, message, nextAction string, selection chatAgentSkillSelection) chatAgentSkillSelection {
+	selection.Decision = "reject"
+	selection.ErrorCode = code
+	selection.Message = message
+	selection.NextAction = nextAction
+	selection.Parameters = map[string]any{}
+	return selection
 }
 
 func plannerSkillMetadata(skills []agentskills.Skill) []map[string]any {
@@ -261,6 +308,12 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, chatSvc *chat.Service
 		result["skill_id"] = selection.SkillID
 		result["parameters"] = selection.Parameters
 		result["message"] = selection.Message
+		if selection.ErrorCode != "" {
+			result["error"] = map[string]any{"code": selection.ErrorCode, "message": selection.Message}
+		}
+		if selection.NextAction != "" {
+			result["next_action"] = selection.NextAction
+		}
 	}
 	if chatSvc != nil {
 		run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{

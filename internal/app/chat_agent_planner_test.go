@@ -14,7 +14,8 @@ import (
 )
 
 type captureAssistantProvider struct {
-	req ai.AssistantTurnRequest
+	req          ai.AssistantTurnRequest
+	responseText string
 }
 
 func (p *captureAssistantProvider) Name() string {
@@ -23,10 +24,14 @@ func (p *captureAssistantProvider) Name() string {
 
 func (p *captureAssistantProvider) RunAssistantTurn(_ context.Context, req ai.AssistantTurnRequest) (ai.AssistantTurnResponse, error) {
 	p.req = req
+	text := strings.TrimSpace(p.responseText)
+	if text == "" {
+		text = `{"decision":"select_skill","skill_id":"cabinet.inventory.search_items","parameters":{"part_number":"AFX-123"},"message":"Searching inventory for AFX-123."}`
+	}
 	return ai.AssistantTurnResponse{
 		Provider: "fake",
 		Model:    "fake-planner-model",
-		Text:     `{"decision":"select_skill","skill_id":"cabinet.inventory.search_items","parameters":{"part_number":"AFX-123"},"message":"Searching inventory for AFX-123."}`,
+		Text:     text,
 		Metadata: map[string]string{
 			"network":       "disabled",
 			"test_provider": "true",
@@ -128,6 +133,61 @@ func TestChatAgentPlannerUsesDeterministicFakeProviderSkillSelection(t *testing.
 	}
 	if provider.req.Context["agent_context"] == nil {
 		t.Fatalf("provider request missing canonical agent context: %+v", provider.req.Context)
+	}
+}
+
+func TestChatAgentPlannerRejectsOrClarifiesUnsafeSelections(t *testing.T) {
+	t.Parallel()
+
+	registry := agentskills.NewRegistry(nil)
+	tests := []struct {
+		name         string
+		responseText string
+		wantDecision string
+		wantCode     string
+	}{
+		{
+			name:         "disabled unavailable skill",
+			responseText: `{"decision":"select_skill","skill_id":"cabinet.inventory.create_item","parameters":{"title":"Bad mutation"},"message":"Creating it now."}`,
+			wantDecision: "reject",
+			wantCode:     "skill_unavailable",
+		},
+		{
+			name:         "missing selected skill",
+			responseText: `{"decision":"select_skill","parameters":{"query":"AFX"},"message":"I will search."}`,
+			wantDecision: "clarify",
+			wantCode:     "skill_required",
+		},
+		{
+			name:         "unsupported decision",
+			responseText: `{"decision":"apply_now","skill_id":"cabinet.inventory.search_items","parameters":{"query":"AFX"},"message":"Done."}`,
+			wantDecision: "reject",
+			wantCode:     "unsupported_planner_decision",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			provider := &captureAssistantProvider{responseText: tt.responseText}
+			selection, err := planChatAgentSkill(context.Background(), provider, chatAgentPlannerInput{
+				ProfileID: "profile-planner",
+				ThreadID:  "thread-planner",
+				Intent:    "Find the item with part number AFX-123",
+				Skills: []agentskills.Skill{
+					mustResolveSkill(t, registry, "cabinet.inventory.search_items"),
+				},
+			})
+			if err != nil {
+				t.Fatalf("planChatAgentSkill() error = %v", err)
+			}
+			if selection.Decision != tt.wantDecision || selection.ErrorCode != tt.wantCode {
+				t.Fatalf("expected decision/code %s/%s, got %+v", tt.wantDecision, tt.wantCode, selection)
+			}
+			if selection.Message == "" || strings.Contains(strings.ToLower(selection.Message), "done") {
+				t.Fatalf("expected truthful non-completion guidance, got %+v", selection)
+			}
+		})
 	}
 }
 
