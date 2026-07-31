@@ -22,7 +22,7 @@ Safety levels are `read-only`, `preview-only`, `confirm-required`, `external-wri
 | Side-panel Chat | Profile, route, active thread, selected surface context, attachments | partial | #1703, #1714, #1716, #1977, #1979 | `internal/app/chat_api_test.go` (`TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel`, `TestChatMessagesExplainAgentCapabilitiesForMainAndSidePanel`); `ui.web/cypress/e2e/chats/assistant-workspace-agent-context-route/spec.cy.ts` (`AGENT-CONTEXT-004/#1714`); `ui.web/cypress/e2e/chats/assistant-workspace-agent-authority/spec.cy.ts` (`AGENT-CONTEXT-003/#1714`) |
 | Inbox review | Notification/review item, source surface/channel/thread/message context, preview handoff | partial | #1715 | `internal/agentskills/registry_test.go` and `internal/app/agent_skills_api_test.go` cover Inbox skill registry metadata, confirmed Inbox apply, and source context propagation |
 | Telegram/external channel | Authorized sender/chat, source message/media, profile mapping, review link | partial | #1704, #1705, #1706, #1773 | #1705 adds direct authorized Telegram Agent text routing through skill preview/apply boundaries for read-only Inventory search and preview-required Inventory create, plus fixture-level media context propagation through Agent thread/message/workflow/Inbox evidence; fixture/proof-packet evidence in #1716; live-channel checklist remains #1773 |
-| Skills page detail/actions | Skill id, source, status, safety, enable/disable/import context | planned | #1670 | Planned Cypress: `ui.web/cypress/e2e/settings/agent-skills/spec.cy.ts` |
+| Skills page detail/actions | Skill id, source, status, safety, enable/disable/import context | implemented | #1670 | `internal/app/agent_skills_api_test.go` (`TestAgentSkillStateAPIEnablesAndDisablesImportedSkill`, `TestAgentSkillStateAPIBlocksBuiltInAndHighRiskWithoutConfirmation`) covers profile-scoped imported skill enable/disable, built-in state lock protection, and high-risk confirmation requirements; `ui.web/cypress/e2e/settings/agent-skills/spec.cy.ts` (`AGENT-SKILLS-REGISTRY-008 lists skills opens details and imports a local archive disabled by default`) covers registry-backed Skills page listing, summary counters, detail panel metadata, local import success/failure surfaces, imported enable/disable controls, and no-marketplace copy |
 
 ## Surface Matrix
 
@@ -134,6 +134,7 @@ The #1979 launch-context slice binds `AGENT-UNIVERSAL-CHANNELS-001` to existing 
 ## Explicit Gaps
 
 - Dashboard summary skill is implemented for direct API, side-panel Agent Skill dispatch, and main Chat natural-language planner routing under #1942/#1983.
+- Skills page detail/actions are implemented for local registry management under #1670, but that evidence does not cover conversational routing, Inbox review, live Telegram, or external-channel skill execution.
 - Main Chat, side-panel Chat, Inbox review, and Telegram/external channel entry points have different context and proof requirements; validation must not collapse them into one generic Agent path.
 - Live Telegram production-channel validation is tracked by #1773 and remains separate from fixture/proof-packet evidence.
 - Marketplace discovery/publishing/payments/reviews remain deferred and must not be implied by local skill import or the Skills page.
