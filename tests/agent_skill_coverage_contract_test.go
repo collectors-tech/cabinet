@@ -90,6 +90,8 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		"openspec/traceability/agent-skill-coverage.md",
 		"TestAgentSkillCoverageMatrixCoversRequiredSurfacesAndFields",
 		"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
+		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
+		"#1985 reconciles the Skills page detail/actions entry point",
 		"main Chat, side-panel Chat, Inbox review, and Telegram/external channels",
 		"| partial |",
 	} {
@@ -113,6 +115,50 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 	} {
 		if !strings.Contains(spec, fragment) {
 			t.Fatalf("expected agent skill registry spec to include %q", fragment)
+		}
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var skillsPageRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Skills page detail/actions |") {
+			skillsPageRow = line
+			break
+		}
+	}
+	if skillsPageRow == "" {
+		t.Fatalf("expected Skills page detail/actions channel coverage row")
+	}
+
+	for _, stale := range []string{
+		"| planned |",
+		"Planned Cypress",
+	} {
+		if strings.Contains(skillsPageRow, stale) {
+			t.Fatalf("expected Skills page coverage row to avoid stale planned #1670 wording %q: %s", stale, skillsPageRow)
+		}
+	}
+
+	for _, fragment := range []string{
+		"| implemented |",
+		"#1670",
+		"TestAgentSkillStateAPIEnablesAndDisablesImportedSkill",
+		"TestAgentSkillStateAPIBlocksBuiltInAndHighRiskWithoutConfirmation",
+		"AGENT-SKILLS-REGISTRY-008",
+		"lists skills opens details and imports a local archive disabled by default",
+	} {
+		if !strings.Contains(skillsPageRow, fragment) {
+			t.Fatalf("expected Skills page coverage row to include merged #1670 evidence %q: %s", fragment, skillsPageRow)
 		}
 	}
 }
