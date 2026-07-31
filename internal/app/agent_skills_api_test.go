@@ -1893,6 +1893,122 @@ func TestAgentSkillAPIPropagatesInvocationSourceContext(t *testing.T) {
 	}
 }
 
+func TestAgentSkillInboxReviewContextClarifiesMissingOrStaleNotification(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Inbox Context Clarification"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	record := doRequest(t, a, http.MethodPost, "/api/chat/inbox", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"records":[{
+			"local_history_id":"agent-skill-inbox-context-1987",
+			"title":"Agent skill Inbox context",
+			"summary":"Needs sourced review"
+		}]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if record.Code != http.StatusCreated {
+		t.Fatalf("create inbox record status=%d body=%s", record.Code, record.Body.String())
+	}
+	var recordPayload struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(record.Body).Decode(&recordPayload); err != nil {
+		t.Fatalf("decode inbox record: %v", err)
+	}
+	if len(recordPayload.Items) != 1 {
+		t.Fatalf("expected one inbox item, got %+v", recordPayload.Items)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"source_surface":"inbox.notification.card",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-inbox-context-1987",
+		"source_message_id":"message-inbox-context-1987",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"`+p.ID+`",
+			"route_id":"/inbox",
+			"surface_id":"inbox.notification.card",
+			"source_channel":"in-app",
+			"thread_id":"thread-inbox-context-1987",
+			"source_thread_id":"source-thread-1987",
+			"source_message_id":"source-message-1987",
+			"selected_notification":{"id":"`+recordPayload.Items[0].ID+`","source":"assistant_handoff"},
+			"setup_state":"ready"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview from Inbox agent_context status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"source_surface":"inbox.notification.card"`) ||
+		!strings.Contains(preview.Body.String(), `"source_thread_id":"thread-inbox-context-1987"`) ||
+		!strings.Contains(preview.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected preview to use canonical Inbox agent context without mutation, body=%s", preview.Body.String())
+	}
+
+	missing := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"confirm":true,
+		"source_surface":"inbox.notification.card",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-inbox-context-1987",
+		"source_message_id":"message-inbox-context-1987",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"`+p.ID+`",
+			"route_id":"/inbox",
+			"surface_id":"inbox.notification.card",
+			"source_channel":"in-app",
+			"thread_id":"thread-inbox-context-1987",
+			"setup_state":"ready"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if missing.Code != http.StatusConflict ||
+		!strings.Contains(missing.Body.String(), `"error":"missing_context"`) ||
+		!strings.Contains(missing.Body.String(), `"selected_notification"`) {
+		t.Fatalf("expected missing Inbox notification context clarification, status=%d body=%s", missing.Code, missing.Body.String())
+	}
+
+	stale := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"source_surface":"inbox.notification.card",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-inbox-context-1987",
+		"source_message_id":"message-inbox-context-1987",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"`+p.ID+`",
+			"route_id":"/inbox",
+			"surface_id":"inbox.notification.card",
+			"source_channel":"in-app",
+			"thread_id":"thread-inbox-context-1987",
+			"selected_notification":{"id":"stale-notification-1987","source":"assistant_handoff"},
+			"setup_state":"ready"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if stale.Code != http.StatusConflict ||
+		!strings.Contains(stale.Body.String(), `"error":"missing_context"`) ||
+		!strings.Contains(stale.Body.String(), `"stale_selected_notification"`) ||
+		!strings.Contains(stale.Body.String(), `"stale-notification-1987"`) {
+		t.Fatalf("expected stale Inbox notification context clarification, status=%d body=%s", stale.Code, stale.Body.String())
+	}
+}
+
 func TestAgentSkillAPIPropagatesExternalChannelContextForMarketWatchAndPurchases(t *testing.T) {
 	t.Parallel()
 

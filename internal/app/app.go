@@ -5852,6 +5852,11 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(clarification)
 			return
 		}
+		if clarification, ok := agentSkillInboxNotificationContextClarification(r.Context(), conn, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
 		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
 		if err != nil {
 			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
@@ -5898,6 +5903,11 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		if clarification, ok := agentSkillInboxNotificationContextClarification(r.Context(), conn, req); ok {
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(clarification)
 			return
@@ -9925,6 +9935,11 @@ func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskil
 	case "collection":
 		putAgentContextParamIfMissing(req.Parameters, "collection_name", selectedID)
 	}
+	selectedNotification := mapValue(ctx["selected_notification"])
+	selectedNotificationID := agentContextString(selectedNotification, "id")
+	putAgentContextParamIfMissing(req.Parameters, "selected_notification", selectedNotificationID)
+	putAgentContextParamIfMissing(req.Parameters, "notification_id", selectedNotificationID)
+	putAgentContextParamIfMissing(req.Parameters, "target_notification", selectedNotificationID)
 
 	for _, raw := range anySlice(ctx["media_ids"]) {
 		if mediaID := strings.TrimSpace(fmt.Sprintf("%v", raw)); mediaID != "" {
@@ -9939,6 +9954,43 @@ func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskil
 		}
 	}
 	return req
+}
+
+func agentSkillInboxNotificationContextClarification(ctx context.Context, conn *sql.DB, req agentskills.PreviewRequest) (map[string]any, bool) {
+	if conn == nil || !strings.HasPrefix(strings.TrimSpace(req.SkillID), "cabinet.inbox.") {
+		return nil, false
+	}
+	notificationID := firstNonEmptyString(
+		stringMapParam(req.Parameters, "notification_id"),
+		stringMapParam(req.Parameters, "target_notification"),
+		stringMapParam(req.Parameters, "selected_notification"),
+	)
+	if strings.TrimSpace(notificationID) == "" {
+		return nil, false
+	}
+	var existing string
+	err := conn.QueryRowContext(ctx, `
+		SELECT id
+		FROM chat_inbox_items
+		WHERE profile_id = ? AND id = ?
+	`, strings.TrimSpace(req.ProfileID), strings.TrimSpace(notificationID)).Scan(&existing)
+	if err == nil {
+		return nil, false
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return map[string]any{
+			"error":           "missing_context",
+			"blocker":         "missing_context",
+			"skill_id":        strings.TrimSpace(req.SkillID),
+			"missing_context": []string{"stale_selected_notification"},
+			"clarification": map[string]string{
+				"stale_selected_notification": agentSkillContextGuidance("stale_selected_notification"),
+			},
+			"stale_notification_id": strings.TrimSpace(notificationID),
+			"next_action":           "Select a current Inbox notification before previewing or applying this skill.",
+		}, true
+	}
+	return nil, false
 }
 
 func agentSkillContextClarification(registry agentskills.Registry, req agentskills.PreviewRequest) (map[string]any, bool) {
@@ -10021,6 +10073,8 @@ func agentSkillContextGuidance(contextName string) string {
 		return "Choose the integration or marketplace provider before invoking this skill."
 	case "setup_state":
 		return "Complete the required setup so the Agent context reports setup_state=ready."
+	case "stale_selected_notification":
+		return "Reopen the current Inbox notification before invoking this Agent skill; stale notification context cannot be used."
 	default:
 		return "Provide this required Cabinet context before invoking the Agent skill."
 	}
