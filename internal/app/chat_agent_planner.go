@@ -930,6 +930,11 @@ func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
 			strings.Contains(normalized, "inventory") ||
 			strings.Contains(normalized, "wishlist") ||
 			strings.Contains(normalized, "part number"))
+	dashboardSummaryIntent := (strings.Contains(normalized, "summarise") ||
+		strings.Contains(normalized, "summarize") ||
+		strings.Contains(normalized, "summary") ||
+		strings.Contains(normalized, "what changed")) &&
+		strings.Contains(normalized, "dashboard")
 	writeIntent := (strings.Contains(normalized, "create") ||
 		strings.Contains(normalized, "add") ||
 		strings.Contains(normalized, "rename") ||
@@ -937,7 +942,7 @@ func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
 		(strings.Contains(normalized, "item") ||
 			strings.Contains(normalized, "inventory") ||
 			strings.Contains(normalized, "part number"))
-	return readIntent || writeIntent
+	return readIntent || dashboardSummaryIntent || writeIntent
 }
 
 func chatMessageRequestsAgentCapabilityExplanation(content string) bool {

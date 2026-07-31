@@ -338,6 +338,142 @@ func TestChatAgentPlannerExecutesReadOnlySelectionWithProfileIsolation(t *testin
 	}
 }
 
+func TestChatAgentPlannerRoutesDashboardActivitySummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Dashboard A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Dashboard B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != 201 || createB.Code != 201 {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, created_at)
+		VALUES
+			('planner-dash-item-a', ?, 'AFX', 'Slot', 'PDA-1', 'Planner Dashboard A Camaro', '2026-06-01T10:00:00Z'),
+			('planner-dash-item-b', ?, 'AFX', 'Slot', 'PDB-1', 'Planner Dashboard B Porsche', '2026-06-02T10:00:00Z');
+		INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes)
+		VALUES
+			('planner-dash-inst-a','planner-dash-item-a','used','loose',2,'shelf',15,'',''),
+			('planner-dash-inst-b','planner-dash-item-b','used','loose',7,'case',25,'','');
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json)
+		VALUES ('planner-dash-query-a', ?, 'A', '["pda"]', '[]'),('planner-dash-query-b', ?, 'B', '["pdb"]', '[]');
+		INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count)
+		VALUES
+			('planner-dash-cand-a', ?, 'planner-dash-query-a', 'PDA-L1', 'Planner Dashboard A PDA-1', 20, 0, 'http://a.example', '', 'seller-a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'low_stock', 2),
+			('planner-dash-cand-b', ?, 'planner-dash-query-b', 'PDB-L1', 'Planner Dashboard B PDB-1', 20, 0, 'http://b.example', '', 'seller-b', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'low_stock', 2);
+		INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+		VALUES
+			('planner-dash-cand-a', '', 'not_in_collection', 0, 1, 'PDA-1', CURRENT_TIMESTAMP),
+			('planner-dash-cand-b', '', 'not_in_collection', 0, 1, 'PDB-1', CURRENT_TIMESTAMP);
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
+		VALUES
+			('planner-dash-wish-a', ?, 'planner-dash-item-a', 30, 'high', '', 1),
+			('planner-dash-wish-b', ?, 'planner-dash-item-b', 30, 'high', '', 1);
+		INSERT INTO price_snapshots(id, item_id, snapshot_date, source, min_price, median_price, latest_price, stock_count)
+		VALUES
+			('planner-dash-price-a1','planner-dash-item-a','2026-02-20','ebay',15,15,15,0),
+			('planner-dash-price-a2','planner-dash-item-a','2026-02-21','ebay',12,12,12,4),
+			('planner-dash-price-b1','planner-dash-item-b','2026-02-20','ebay',25,25,25,0),
+			('planner-dash-price-b2','planner-dash-item-b','2026-02-21','ebay',22,22,22,6)
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed dashboard planner data: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Dashboard"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.dashboard.summarise_activity","parameters":{"window":"today","provider_secret":"sk-planner-dashboard-secret"},"message":"Summarising the current Dashboard snapshot."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Summarise what changed on my Dashboard today",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Summarise what changed on my Dashboard today",
+			},
+		},
+		"message-dashboard-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Dashboard summary request")
+	}
+	if result["skill_id"] != "cabinet.dashboard.summarise_activity" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Dashboard skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["profile_id"] != profileA.ID || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only profile-scoped Dashboard execution result, got %+v", result)
+	}
+	window, _ := execution["time_window"].(map[string]any)
+	if window["requested_window"] != "today" || window["snapshot_only"] != true || window["evidence_backed"] != false {
+		t.Fatalf("expected truthful snapshot-only window caveat, got %+v", execution)
+	}
+	evidence, _ := result["evidence"].(map[string]any)
+	tokenState, _ := evidence["preview_apply_token_state"].(map[string]any)
+	contextSummary, _ := evidence["context"].(map[string]any)
+	if evidence["entry_point"] != "chat.agent_planner" ||
+		evidence["selected_skill"] != "cabinet.dashboard.summarise_activity" ||
+		evidence["raw_provider_payload_kept"] != false ||
+		tokenState["confirmation_state"] != "not_required" ||
+		tokenState["apply_state"] != "not_applicable" ||
+		tokenState["mutation_applied"] != false ||
+		contextSummary["surface_id"] != "chats.main" ||
+		contextSummary["route_id"] != "/chats" ||
+		contextSummary["thread_id"] != thread.ID {
+		t.Fatalf("expected governed main Chat planner evidence without apply token, evidence=%+v", evidence)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal dashboard planner result: %v", err)
+	}
+	bodyText := string(body)
+	for _, want := range []string{
+		"Planner Dashboard A Camaro",
+		`"operation":"dashboard.activity.summary"`,
+		`"snapshot_only":true`,
+		`"new_discoveries"`,
+		`"price_drops"`,
+		`"restocks"`,
+	} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("dashboard planner response missing %s: body=%s", want, bodyText)
+		}
+	}
+	if strings.Contains(bodyText, "Planner Dashboard B Porsche") ||
+		strings.Contains(bodyText, "sk-planner-dashboard-secret") ||
+		strings.Contains(bodyText, "preview_id") {
+		t.Fatalf("dashboard planner response leaked wrong profile, secret, or preview token: body=%s", bodyText)
+	}
+}
+
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
 	t.Parallel()
 
