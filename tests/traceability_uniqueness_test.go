@@ -58,9 +58,10 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 	allowed := map[string][]string{
 		"AGENT-SKILLS-REGISTRY-009": {
 			"| partial |",
-			"#1667/#1668/#1672/#1715",
+			"#1667/#1668/#1672/#1715/#1981",
 			"TestAgentSkillAPIPropagatesInvocationSourceContext",
-			"broader skill execution timeline coverage remains planned",
+			"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
+			"preview-required non-mutation",
 		},
 		"AGENT-SKILLS-REGISTRY-012": {
 			"| partial |",

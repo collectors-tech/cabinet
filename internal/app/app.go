@@ -5870,6 +5870,10 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
 			return
 		}
+		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-preview", req, authority, preview, nil); err != nil {
+			http.Error(w, `{"error":"agent_skill_workflow_timeline_failed"}`, http.StatusInternalServerError)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(preview)
 	})
 	mux.HandleFunc("/api/agent/skills/apply", func(w http.ResponseWriter, r *http.Request) {
@@ -5940,6 +5944,10 @@ func New(cfg config.Config) (*App, error) {
 		preview.Blocker = ""
 		preview.NextAction = ""
 		preview.Target = result
+		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-apply", req, authority, preview, result); err != nil {
+			http.Error(w, `{"error":"agent_skill_workflow_timeline_failed"}`, http.StatusInternalServerError)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(preview)
 	})
 	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
@@ -9395,6 +9403,151 @@ func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository
 		return agentskills.AgentAuthorityReview{}, err
 	}
 	return review, nil
+}
+
+func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Service, workflowID string, req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, target map[string]any) (chat.WorkflowRun, error) {
+	if chatSvc == nil {
+		return chat.WorkflowRun{}, fmt.Errorf("chat service required")
+	}
+	sourceChannel := strings.TrimSpace(req.SourceChannel)
+	if sourceChannel == "" {
+		sourceChannel = "direct-api"
+	}
+	confirmationState := directAgentSkillConfirmationState(preview, req.Confirm)
+	input := map[string]any{
+		"skill_id":        req.SkillID,
+		"source_surface":  strings.TrimSpace(req.SourceSurface),
+		"parameter_count": len(req.Parameters),
+		"authority": map[string]any{
+			"decision":              authority.Decision,
+			"allowed":               authority.Allowed,
+			"preview_allowed":       authority.PreviewAllowed,
+			"apply_allowed":         authority.ApplyAllowed,
+			"confirmation_required": authority.ConfirmationRequired,
+			"blocker":               authority.Blocker,
+		},
+	}
+	run, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         req.ProfileID,
+		WorkflowID:        workflowID,
+		CapabilityID:      req.SkillID,
+		SourceChannel:     sourceChannel,
+		SourceThreadID:    strings.TrimSpace(req.SourceThreadID),
+		SourceMessageID:   strings.TrimSpace(req.SourceMessageID),
+		Input:             input,
+		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
+		ConfirmationState: confirmationState,
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState),
+	})
+	if err != nil {
+		return chat.WorkflowRun{}, err
+	}
+	result := map[string]any{
+		"skill_id":               req.SkillID,
+		"allowed":                preview.Allowed,
+		"authority_outcome":      agentAuthorityAuditOutcome(authority),
+		"confirmation_required":  preview.ConfirmationRequired,
+		"confirmation_state":     confirmationState,
+		"mutation_applied":       preview.MutationApplied,
+		"preview_only":           preview.PreviewOnly,
+		"source_surface":         strings.TrimSpace(req.SourceSurface),
+		"source_channel":         sourceChannel,
+		"source_thread_id":       strings.TrimSpace(req.SourceThreadID),
+		"source_message_id":      strings.TrimSpace(req.SourceMessageID),
+		"target_summary_present": len(target) > 0,
+	}
+	if operation := stringMapParam(target, "operation"); operation != "" {
+		result["operation"] = operation
+	}
+	return chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         req.ProfileID,
+		RunID:             run.ID,
+		Status:            "completed",
+		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
+		Result:            result,
+		ConfirmationState: confirmationState,
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState),
+	})
+}
+
+func directAgentSkillConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
+	if preview.ConfirmationRequired {
+		if confirmed && preview.MutationApplied {
+			return "confirmed"
+		}
+		return "preview_required"
+	}
+	return "not_required"
+}
+
+func directAgentSkillWorkflowProviderTrace(sourceChannel string, authority agentskills.AgentAuthorityReview) map[string]any {
+	return map[string]any{
+		"provider":           "cabinet-agent-skill-registry",
+		"mode":               "governed_skill_preview_apply_timeline",
+		"source_channel":     sourceChannel,
+		"authority_decision": authority.Decision,
+		"authority_outcome":  agentAuthorityAuditOutcome(authority),
+		"live_provider":      false,
+	}
+}
+
+func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string) []map[string]any {
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	previewStatus := "completed"
+	if preview.ConfirmationRequired && confirmationState == "preview_required" {
+		previewStatus = "needs_input"
+	}
+	steps := []map[string]any{
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "resolve-skill",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"source_surface": strings.TrimSpace(req.SourceSurface),
+				"source_channel": strings.TrimSpace(req.SourceChannel),
+			},
+		},
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "authority-review",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"decision":        authority.Decision,
+				"outcome":         agentAuthorityAuditOutcome(authority),
+				"preview_allowed": authority.PreviewAllowed,
+				"apply_allowed":   authority.ApplyAllowed,
+			},
+		},
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "preview",
+			"skill_id":    req.SkillID,
+			"status":      previewStatus,
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"confirmation_required": preview.ConfirmationRequired,
+				"mutation_applied":      false,
+			},
+		},
+	}
+	if confirmationState == "confirmed" || confirmationState == "not_required" {
+		steps = append(steps, map[string]any{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "apply",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"confirmation_state": confirmationState,
+				"mutation_applied":   preview.MutationApplied,
+			},
+		})
+	}
+	return steps
 }
 
 type agentCapabilityExplanationResponse struct {
