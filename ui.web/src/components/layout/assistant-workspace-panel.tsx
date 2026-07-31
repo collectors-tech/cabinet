@@ -190,6 +190,20 @@ type AgentSelectedRecord = {
   route_id?: string
 }
 
+type InboxAgentContext = {
+  profile_id?: string
+  thread_id?: string
+  route_id?: string
+  surface_id?: string
+  source_channel?: string
+  selected_notification?: {
+    id?: string
+    source?: string
+  }
+  source_thread_id?: string
+  source_message_id?: string
+}
+
 type AgentSkillOption = {
   id: string
   label: string
@@ -519,6 +533,29 @@ function surfaceIDForAgentSelectedRecord(record: AgentSelectedRecord | null) {
   return `${record.type}.detail`
 }
 
+function loadInboxAgentContext(
+  profileId: string,
+  threadId: string
+): InboxAgentContext | null {
+  if (typeof window === 'undefined' || !profileId || !threadId) return null
+  try {
+    const raw = window.localStorage.getItem(
+      'cabinet.agent.inbox_notification_context'
+    )
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as InboxAgentContext
+    if (parsed.profile_id !== profileId || parsed.thread_id !== threadId) {
+      return null
+    }
+    if (!parsed.selected_notification?.id?.trim()) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 function defaultModelForProvider(provider: string) {
   return (
     assistantProviderOptions.find((option) => option.provider === provider)
@@ -674,12 +711,18 @@ export function AssistantWorkspacePanel() {
     () => loadAgentSelectedRecord(activeProfileId, routeContext.pathname),
     [activeProfileId, messages.length, routeContext.pathname, location.search]
   )
+  const inboxAgentContext = useMemo(
+    () => loadInboxAgentContext(activeProfileId, threadId),
+    [activeProfileId, threadId, messages.length]
+  )
   const agentContextEnvelope = useMemo(
     () => ({
       profile_id: activeProfileId,
       workspace_id: profileScope,
-      route_id: routeContext.pathname,
-      surface_id: surfaceIDForAgentSelectedRecord(selectedAgentRecordContext),
+      route_id: inboxAgentContext?.route_id || routeContext.pathname,
+      surface_id:
+        inboxAgentContext?.surface_id ||
+        surfaceIDForAgentSelectedRecord(selectedAgentRecordContext),
       selected_record: selectedAgentRecordContext
         ? {
             type: selectedAgentRecordContext.type,
@@ -687,12 +730,21 @@ export function AssistantWorkspacePanel() {
           }
         : undefined,
       thread_id: threadId,
-      source_channel: 'in-app',
+      source_channel: inboxAgentContext?.source_channel || 'in-app',
+      selected_notification: inboxAgentContext?.selected_notification
+        ? {
+            id: inboxAgentContext.selected_notification.id,
+            source: inboxAgentContext.selected_notification.source,
+          }
+        : undefined,
+      source_thread_id: inboxAgentContext?.source_thread_id,
+      source_message_id: inboxAgentContext?.source_message_id,
       permission_state: 'ask_before_local_changes',
       setup_state: 'ready',
     }),
     [
       activeProfileId,
+      inboxAgentContext,
       profileScope,
       routeContext.pathname,
       selectedAgentRecordContext,
