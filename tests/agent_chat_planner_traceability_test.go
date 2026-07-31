@@ -60,3 +60,49 @@ func TestAgentCoverageTraceabilityNamesIssue1933PlannerSlice(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardSummaryPlannerTraceabilityNamesIssue1983Evidence(t *testing.T) {
+	t.Parallel()
+
+	tracePath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+	trace := string(raw)
+
+	for _, fragment := range []string{
+		"AGENT-SKILLS-REGISTRY-012",
+		"#1942/#1983/#1701",
+		"TestChatAgentPlannerRoutesDashboardActivitySummaryFromMainChat",
+		"main Chat natural-language routing can select and execute the skill",
+		"without mutation previews, confirmation tokens, external writes, or fabricated historical deltas",
+		"| implemented |",
+	} {
+		if !strings.Contains(trace, fragment) {
+			t.Fatalf("expected #1983 Dashboard summary traceability to include %q", fragment)
+		}
+	}
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	matrixRaw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read coverage matrix: %v", err)
+	}
+	matrix := string(matrixRaw)
+	for _, fragment := range []string{
+		"| Dashboard |",
+		"#1714, #1942, #1983",
+		"TestChatAgentPlannerRoutesDashboardActivitySummaryFromMainChat",
+		"main Chat natural-language Dashboard summary planner selection/execution",
+		"None |",
+	} {
+		if !strings.Contains(matrix, fragment) {
+			t.Fatalf("expected #1983 Dashboard summary coverage matrix to include %q", fragment)
+		}
+	}
+	if strings.Contains(matrix, "Dashboard summary skill has no focused child issue yet") ||
+		strings.Contains(matrix, "main Chat natural-language routing remains #1933") {
+		t.Fatalf("Dashboard coverage matrix still contains stale #1983 gap language")
+	}
+}
