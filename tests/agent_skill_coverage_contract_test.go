@@ -92,8 +92,10 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
 		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
+		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
+		"#1989 reconciles Inbox missing/stale context evidence",
 		"main Chat, side-panel Chat, Inbox review, and Telegram/external channels",
 		"| partial |",
 	} {
@@ -163,6 +165,57 @@ func TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence(t *testing.
 	}
 	if strings.Contains(inboxReviewRow, "Inbox review and live Telegram/external-channel launch proof remain partial follow-up evidence") {
 		t.Fatalf("Inbox review row still contains stale future-only #1987 wording: %s", inboxReviewRow)
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var inboxReviewRow string
+	var inboxSurfaceRow string
+	for _, line := range strings.Split(content, "\n") {
+		switch {
+		case strings.HasPrefix(line, "| Inbox review |"):
+			inboxReviewRow = line
+		case strings.HasPrefix(line, "| Inbox |"):
+			inboxSurfaceRow = line
+		}
+	}
+	if inboxReviewRow == "" {
+		t.Fatalf("expected Inbox review channel coverage row")
+	}
+	if inboxSurfaceRow == "" {
+		t.Fatalf("expected Inbox surface coverage row")
+	}
+
+	for _, row := range []string{inboxReviewRow, inboxSurfaceRow} {
+		for _, fragment := range []string{
+			"#1987",
+			"TestAgentSkillInboxReviewContextClarifiesMissingOrStaleNotification",
+			"agent_context.selected_notification",
+			"missing_context",
+			"stale_selected_notification",
+		} {
+			if !strings.Contains(row, fragment) {
+				t.Fatalf("expected Inbox coverage row to include #1987 missing/stale evidence %q: %s", fragment, row)
+			}
+		}
+	}
+
+	for _, stale := range []string{
+		"missing/stale Inbox notification clarification remain partial follow-up evidence",
+		"Missing/stale Inbox notification context clarification",
+	} {
+		if strings.Contains(content, stale) {
+			t.Fatalf("agent skill coverage matrix still contains stale #1987 missing/stale wording %q", stale)
+		}
 	}
 }
 
