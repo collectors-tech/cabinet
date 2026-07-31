@@ -387,6 +387,14 @@ export function AppSidebar() {
     items: group.items.map(translateItem),
   }))
   const markNotificationInboxOpening = () => {
+    try {
+      window.localStorage.setItem(
+        'cabinet.notification_inbox.origin_route',
+        window.location.pathname || '/'
+      )
+    } catch {
+      // Keep navigation working when browser storage is unavailable.
+    }
     setActiveWorkspace('navigation')
   }
   const openSettingsDisplay = () => {
