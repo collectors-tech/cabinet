@@ -962,6 +962,109 @@ func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *te
 	}
 }
 
+func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Timeline"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	const threadID = "thread-agent-skill-timeline-1981"
+	const messageID = "message-agent-skill-timeline-1981"
+	previewMutation := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"`+messageID+`",
+		"parameters":{"part_number":"TIMELINE-1981","title":"Timeline Preview Item","brand":"AFX","category":"Slot Cars"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if previewMutation.Code != http.StatusOK {
+		t.Fatalf("preview mutation status=%d body=%s", previewMutation.Code, previewMutation.Body.String())
+	}
+	if !strings.Contains(previewMutation.Body.String(), `"confirmation_required":true`) ||
+		!strings.Contains(previewMutation.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(previewMutation.Body.String(), `"source_thread_id":"`+threadID+`"`) {
+		t.Fatalf("expected preview-required non-mutating source evidence, body=%s", previewMutation.Body.String())
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number = 'TIMELINE-1981'`, p.ID).Scan(&itemCount); err != nil {
+		t.Fatalf("count items after preview: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("preview must not mutate inventory before confirmation, got %d items", itemCount)
+	}
+
+	applyMutation := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"`+messageID+`",
+		"parameters":{"part_number":"TIMELINE-1981","title":"Timeline Preview Item","brand":"AFX","category":"Slot Cars"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if applyMutation.Code != http.StatusOK {
+		t.Fatalf("apply mutation status=%d body=%s", applyMutation.Code, applyMutation.Body.String())
+	}
+	if !strings.Contains(applyMutation.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(applyMutation.Body.String(), `"source_channel":"in-app"`) {
+		t.Fatalf("expected confirmed apply evidence with source context, body=%s", applyMutation.Body.String())
+	}
+
+	readOnly := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.search_items",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"message-agent-skill-readonly-1981",
+		"parameters":{"query":"TIMELINE-1981"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if readOnly.Code != http.StatusOK {
+		t.Fatalf("read-only apply status=%d body=%s", readOnly.Code, readOnly.Body.String())
+	}
+	if !strings.Contains(readOnly.Body.String(), `"read_only":true`) ||
+		!strings.Contains(readOnly.Body.String(), `"mutation_applied":false`) ||
+		strings.Contains(readOnly.Body.String(), `"confirmation_required":true`) {
+		t.Fatalf("expected read-only non-mutating execution without confirmation token, body=%s", readOnly.Body.String())
+	}
+
+	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+threadID, nil, nil)
+	if runs.Code != http.StatusOK {
+		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
+	}
+	for _, want := range []string{
+		`"workflow_id":"agent-skill-direct-preview"`,
+		`"workflow_id":"agent-skill-direct-apply"`,
+		`"capability_id":"cabinet.inventory.create_item"`,
+		`"capability_id":"cabinet.inventory.search_items"`,
+		`"source_channel":"in-app"`,
+		`"source_thread_id":"` + threadID + `"`,
+		`"source_message_id":"` + messageID + `"`,
+		`"confirmation_state":"preview_required"`,
+		`"confirmation_state":"confirmed"`,
+		`"confirmation_state":"not_required"`,
+		`"authority_outcome":"apply_allowed"`,
+		`"mutation_applied":true`,
+		`"mutation_applied":false`,
+	} {
+		if !strings.Contains(runs.Body.String(), want) {
+			t.Fatalf("workflow timeline evidence missing %s: body=%s", want, runs.Body.String())
+		}
+	}
+}
+
 func TestAgentSkillApplyAPIHandlesDashboardActivitySummary(t *testing.T) {
 	t.Parallel()
 
