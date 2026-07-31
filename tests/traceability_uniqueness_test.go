@@ -111,12 +111,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow",
 			"provider-authoring workflow",
 		},
-		"ASSISTANT-EXECUTION-010": {
-			"| planned |",
-			"#1509/#1514",
-			"TestGuidedWalkthroughModesGovernCommandPermissions",
-			"ASSISTANT-EXECUTION-010 preserves confirm-before-apply across walkthrough modes",
-		},
 		"UI-SCREEN-CHAT-COPILOT-018": {
 			"| planned |",
 			"#1205",
@@ -217,4 +211,50 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 		sort.Strings(missing)
 		t.Fatalf("expected allowed non-implemented traceability rows to remain explicit: %s", strings.Join(missing, ", "))
 	}
+}
+
+func TestAssistantExecution010TraceabilityNamesMergedGuidedWalkthroughEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "ASSISTANT-EXECUTION-010")
+	for _, stale := range []string{
+		"| planned |",
+		"planned:",
+		"guided-inventory-update/spec.cy.ts",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("ASSISTANT-EXECUTION-010 must not keep stale planned guided-walkthrough wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1509/#1514/#1991",
+		"TestGuidedWorkflowRegistryMatchesInventoryItemUpdateRecipe",
+		"TestChatMessageAppControlPlannerStartsGuidedInventoryWalkthrough",
+		"ASSISTANT-WORKSPACE-008/#1509 starts a show-mode guided item-update walkthrough without mutation",
+		"TestGuidedInventoryUpdatePersistsTimelineAndConfirmedMutation",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("ASSISTANT-EXECUTION-010 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func traceabilityRow(t *testing.T, raw, id string) string {
+	t.Helper()
+	prefixWithTicks := "| `" + id + "` |"
+	prefixWithoutTicks := "| " + id + " |"
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.HasPrefix(line, prefixWithTicks) || strings.HasPrefix(line, prefixWithoutTicks) {
+			return line
+		}
+	}
+	t.Fatalf("missing traceability row for %s", id)
+	return ""
 }
