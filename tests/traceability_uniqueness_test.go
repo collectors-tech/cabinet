@@ -278,6 +278,39 @@ func TestAssistantExecution012TraceabilityNamesMergedTargetHighlightEvidence(t *
 	}
 }
 
+func TestDiscovery003TraceabilityNamesMergedCandidateProvenanceEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "DISCOVERY-003")
+	for _, stale := range []string{
+		"planned Cypress",
+		"planned:",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("DISCOVERY-003 must not keep stale planned UI evidence wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1111/#1124/#1125/#1995",
+		"TestDiscoveriesPurposeAndHandoffSpecContracts",
+		"TestDiscoveryCandidateContractIncludesStatusAndSourceResultAuditLink",
+		"UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions",
+		"source/provider",
+		"triage status",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("DISCOVERY-003 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
 func traceabilityRow(t *testing.T, raw, id string) string {
 	t.Helper()
 	prefixWithTicks := "| `" + id + "` |"
