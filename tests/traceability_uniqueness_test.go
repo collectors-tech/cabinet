@@ -58,10 +58,11 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 	allowed := map[string][]string{
 		"AGENT-SKILLS-REGISTRY-009": {
 			"| partial |",
-			"#1667/#1668/#1672/#1715/#1981",
+			"#1667/#1668/#1672/#1715/#1981/#1999",
 			"TestAgentSkillAPIPropagatesInvocationSourceContext",
 			"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
 			"preview-required non-mutation",
+			"remaining in-app UI target, shell command, and provider-readiness execution dispatch proof",
 		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
@@ -334,6 +335,41 @@ func TestAgentUniversalChannels002TraceabilityNamesCapabilityExplanationEvidence
 	} {
 		if !strings.Contains(row, required) {
 			t.Fatalf("AGENT-UNIVERSAL-CHANNELS-002 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestAgentSkillsRegistry009TraceabilityNamesRemainingExecutionBoundary(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "AGENT-SKILLS-REGISTRY-009")
+	for _, stale := range []string{
+		"#1667/#1668/#1672/#1715/#1981;",
+		"routes through governed capability/workflow/UI target/command/provider readiness/preview-apply/Action Timeline boundaries",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("AGENT-SKILLS-REGISTRY-009 must not keep stale broad execution wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| partial |",
+		"#1667/#1668/#1672/#1715/#1981/#1999",
+		"TestAgentSkillAPIPropagatesInvocationSourceContext",
+		"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
+		"preview-required non-mutation",
+		"confirmed mutation",
+		"read-only non-mutating execution",
+		"remaining in-app UI target, shell command, and provider-readiness execution dispatch proof",
+		"without duplicating #1981 direct timeline evidence",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("AGENT-SKILLS-REGISTRY-009 traceability row must include %q; row: %s", required, row)
 		}
 	}
 }
