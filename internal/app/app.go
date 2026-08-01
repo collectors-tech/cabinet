@@ -9426,6 +9426,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 	confirmationState := directAgentSkillConfirmationState(preview, req.Confirm)
 	uiTargets := directAgentSkillUITargets(req)
 	shellCommands := directAgentSkillShellCommands(req)
+	providerReadinessIDs, providerIDs := directAgentSkillProviderReadiness(req)
 	input := map[string]any{
 		"skill_id":        req.SkillID,
 		"source_surface":  strings.TrimSpace(req.SourceSurface),
@@ -9445,6 +9446,12 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 	if len(shellCommands) > 0 {
 		input["shell_commands"] = shellCommands
 	}
+	if len(providerReadinessIDs) > 0 {
+		input["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		input["provider_ids"] = providerIDs
+	}
 	run, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 		ProfileID:         req.ProfileID,
 		WorkflowID:        workflowID,
@@ -9455,7 +9462,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		Input:             input,
 		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
 		ConfirmationState: confirmationState,
-		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands),
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands, providerReadinessIDs, providerIDs),
 	})
 	if err != nil {
 		return chat.WorkflowRun{}, err
@@ -9480,6 +9487,12 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 	if len(shellCommands) > 0 {
 		result["shell_commands"] = shellCommands
 	}
+	if len(providerReadinessIDs) > 0 {
+		result["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		result["provider_ids"] = providerIDs
+	}
 	if operation := stringMapParam(target, "operation"); operation != "" {
 		result["operation"] = operation
 	}
@@ -9490,7 +9503,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
 		Result:            result,
 		ConfirmationState: confirmationState,
-		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands),
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands, providerReadinessIDs, providerIDs),
 	})
 }
 
@@ -9526,6 +9539,26 @@ func directAgentSkillShellCommands(req agentskills.PreviewRequest) []string {
 	return commands
 }
 
+func directAgentSkillProviderReadiness(req agentskills.PreviewRequest) ([]string, []string) {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.RequiredProviders) == 0 {
+		return nil, nil
+	}
+	readiness := make([]string, 0, len(skill.RequiredProviders))
+	for _, provider := range skill.RequiredProviders {
+		provider = strings.TrimSpace(provider)
+		if provider != "" {
+			readiness = append(readiness, provider)
+		}
+	}
+	providers := make([]string, 0, 1)
+	if provider := strings.TrimSpace(stringMapParam(req.Parameters, "provider")); provider != "" {
+		providers = append(providers, provider)
+	}
+	return readiness, providers
+}
+
 func directAgentSkillConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
 	if preview.ConfirmationRequired {
 		if confirmed && preview.MutationApplied {
@@ -9547,7 +9580,7 @@ func directAgentSkillWorkflowProviderTrace(sourceChannel string, authority agent
 	}
 }
 
-func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string, uiTargets, shellCommands []string) []map[string]any {
+func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string, uiTargets, shellCommands, providerReadinessIDs, providerIDs []string) []map[string]any {
 	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
 	previewStatus := "completed"
 	if preview.ConfirmationRequired && confirmationState == "preview_required" {
@@ -9562,6 +9595,12 @@ func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority age
 	}
 	if len(shellCommands) > 0 {
 		resolveResult["shell_command_ids"] = shellCommands
+	}
+	if len(providerReadinessIDs) > 0 {
+		resolveResult["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		resolveResult["provider_ids"] = providerIDs
 	}
 	steps := []map[string]any{
 		{
@@ -9606,6 +9645,14 @@ func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority age
 			applyResult["shell_command_ids"] = shellCommands
 			applyResult["dispatch_boundary"] = "shell_command_bus"
 			applyResult["dispatch_outcome"] = "preview_only_no_mutation"
+		}
+		if len(providerReadinessIDs) > 0 {
+			applyResult["provider_readiness_ids"] = providerReadinessIDs
+			applyResult["dispatch_boundary"] = "provider_readiness_registry"
+			applyResult["dispatch_outcome"] = "preview_only_no_mutation"
+		}
+		if len(providerIDs) > 0 {
+			applyResult["provider_ids"] = providerIDs
 		}
 		steps = append(steps, map[string]any{
 			"kind":        "agent_skill_execution_step",
