@@ -1058,6 +1058,7 @@ func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
 		`"authority_outcome":"apply_allowed"`,
 		`"mutation_applied":true`,
 		`"mutation_applied":false`,
+		`"ui_targets":["inventory.table","inventory.item.detail","inventory.item.editor"]`,
 	} {
 		if !strings.Contains(runs.Body.String(), want) {
 			t.Fatalf("workflow timeline evidence missing %s: body=%s", want, runs.Body.String())

@@ -9424,6 +9424,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		sourceChannel = "direct-api"
 	}
 	confirmationState := directAgentSkillConfirmationState(preview, req.Confirm)
+	uiTargets := directAgentSkillUITargets(req)
 	input := map[string]any{
 		"skill_id":        req.SkillID,
 		"source_surface":  strings.TrimSpace(req.SourceSurface),
@@ -9437,6 +9438,9 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 			"blocker":               authority.Blocker,
 		},
 	}
+	if len(uiTargets) > 0 {
+		input["ui_targets"] = uiTargets
+	}
 	run, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 		ProfileID:         req.ProfileID,
 		WorkflowID:        workflowID,
@@ -9447,7 +9451,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		Input:             input,
 		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
 		ConfirmationState: confirmationState,
-		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState),
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets),
 	})
 	if err != nil {
 		return chat.WorkflowRun{}, err
@@ -9466,6 +9470,9 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		"source_message_id":      strings.TrimSpace(req.SourceMessageID),
 		"target_summary_present": len(target) > 0,
 	}
+	if len(uiTargets) > 0 {
+		result["ui_targets"] = uiTargets
+	}
 	if operation := stringMapParam(target, "operation"); operation != "" {
 		result["operation"] = operation
 	}
@@ -9476,8 +9483,24 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
 		Result:            result,
 		ConfirmationState: confirmationState,
-		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState),
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets),
 	})
+}
+
+func directAgentSkillUITargets(req agentskills.PreviewRequest) []string {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.UITargets) == 0 {
+		return nil
+	}
+	targets := make([]string, 0, len(skill.UITargets))
+	for _, target := range skill.UITargets {
+		target = strings.TrimSpace(target)
+		if target != "" {
+			targets = append(targets, target)
+		}
+	}
+	return targets
 }
 
 func directAgentSkillConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
@@ -9501,11 +9524,18 @@ func directAgentSkillWorkflowProviderTrace(sourceChannel string, authority agent
 	}
 }
 
-func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string) []map[string]any {
+func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string, uiTargets []string) []map[string]any {
 	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
 	previewStatus := "completed"
 	if preview.ConfirmationRequired && confirmationState == "preview_required" {
 		previewStatus = "needs_input"
+	}
+	resolveResult := map[string]any{
+		"source_surface": strings.TrimSpace(req.SourceSurface),
+		"source_channel": strings.TrimSpace(req.SourceChannel),
+	}
+	if len(uiTargets) > 0 {
+		resolveResult["ui_targets"] = uiTargets
 	}
 	steps := []map[string]any{
 		{
@@ -9514,10 +9544,7 @@ func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority age
 			"skill_id":    req.SkillID,
 			"status":      "completed",
 			"occurred_at": occurredAt,
-			"result": map[string]any{
-				"source_surface": strings.TrimSpace(req.SourceSurface),
-				"source_channel": strings.TrimSpace(req.SourceChannel),
-			},
+			"result":      resolveResult,
 		},
 		{
 			"kind":        "agent_skill_execution_step",

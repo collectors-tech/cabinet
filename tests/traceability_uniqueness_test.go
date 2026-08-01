@@ -58,11 +58,12 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 	allowed := map[string][]string{
 		"AGENT-SKILLS-REGISTRY-009": {
 			"| partial |",
-			"#1667/#1668/#1672/#1715/#1981/#1999",
+			"#1667/#1668/#1672/#1715/#1981/#1999/#2003",
 			"TestAgentSkillAPIPropagatesInvocationSourceContext",
 			"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
 			"preview-required non-mutation",
-			"remaining in-app UI target, shell command, and provider-readiness execution dispatch proof",
+			"UI target ids",
+			"remaining shell command and provider-readiness execution dispatch proof",
 		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
@@ -356,6 +357,7 @@ func TestAgentSkillsRegistry009TraceabilityNamesRemainingExecutionBoundary(t *te
 	for _, stale := range []string{
 		"#1667/#1668/#1672/#1715/#1981;",
 		"routes through governed capability/workflow/UI target/command/provider readiness/preview-apply/Action Timeline boundaries",
+		"remaining in-app UI target, shell command, and provider-readiness execution dispatch proof",
 	} {
 		if strings.Contains(row, stale) {
 			t.Fatalf("AGENT-SKILLS-REGISTRY-009 must not keep stale broad execution wording %q; row: %s", stale, row)
@@ -363,13 +365,14 @@ func TestAgentSkillsRegistry009TraceabilityNamesRemainingExecutionBoundary(t *te
 	}
 	for _, required := range []string{
 		"| partial |",
-		"#1667/#1668/#1672/#1715/#1981/#1999",
+		"#1667/#1668/#1672/#1715/#1981/#1999/#2003",
 		"TestAgentSkillAPIPropagatesInvocationSourceContext",
 		"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
 		"preview-required non-mutation",
 		"confirmed mutation",
 		"read-only non-mutating execution",
-		"remaining in-app UI target, shell command, and provider-readiness execution dispatch proof",
+		"UI target ids",
+		"remaining shell command and provider-readiness execution dispatch proof",
 		"without duplicating #1981 direct timeline evidence",
 	} {
 		if !strings.Contains(row, required) {
