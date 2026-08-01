@@ -246,6 +246,38 @@ func TestAssistantExecution010TraceabilityNamesMergedGuidedWalkthroughEvidence(t
 	}
 }
 
+func TestAssistantExecution012TraceabilityNamesMergedTargetHighlightEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "ASSISTANT-EXECUTION-012")
+	for _, stale := range []string{
+		"planned follow-on Cypress",
+		"guided-inventory-update/spec.cy.ts",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("ASSISTANT-EXECUTION-012 must not keep stale planned target-highlight wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1511/#1514/#1993",
+		"TestAssistantUITargetRegistryBindsInventoryWalkthroughTargets",
+		"TestAssistantUITargetTraceabilityIsImplemented",
+		"ASSISTANT-WORKSPACE-008/#1503 renders app-control route and preview cards from assistant thread context",
+		"ui-guidance-highlight",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("ASSISTANT-EXECUTION-012 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
 func traceabilityRow(t *testing.T, raw, id string) string {
 	t.Helper()
 	prefixWithTicks := "| `" + id + "` |"
