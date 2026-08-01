@@ -662,7 +662,7 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 
 func builtInSkills() []Skill {
 	return []Skill{
-		builtIn("cabinet.navigate.open_surface", "Open Cabinet surface", "Navigate to a known Cabinet surface without mutating records.", "navigation", SafetyPreviewOnly, []string{"profile", "workspace", "thread", "known_surface"}, []string{"navigate.open_surface"}, nil, nil),
+		navigationSkill("cabinet.navigate.open_surface", "Open Cabinet surface", "Navigate to a known Cabinet surface without mutating records.", []string{"profile", "workspace", "thread", "known_surface"}, []string{"navigate.open_surface"}),
 		inventorySkill("cabinet.inventory.search_items", "Search inventory items", "Search profile inventory items and instance details without mutating records.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"inventory.item.search"}, nil),
 		inventorySkill("cabinet.inventory.create_item", "Create inventory item", "Draft an inventory item and require explicit confirmation before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "item_details"}, []string{"inventory.item.create"}, []string{"part_number", "title"}),
 		inventorySkill("cabinet.inventory.update_item", "Update inventory item", "Preview edits to an existing inventory item before applying confirmed changes.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item"}, []string{"inventory.item.update", "update_open_item_title"}, []string{"item_id"}),
@@ -738,6 +738,12 @@ func builtInSkills() []Skill {
 		discoveriesSkill("cabinet.discoveries.create_purchase", "Create purchase from discovery", "Preview creating purchase state from a discovery while preserving provider provenance.", SafetyConfirmRequired, []string{"profile", "workspace", "discovery_result"}, []string{"discoveries.create_purchase"}, []string{"result_id"}),
 		discoveriesSkill("cabinet.discoveries.create_or_update_inventory_candidate", "Create or update inventory candidate", "Preview creating or updating an inventory candidate from a discovery before confirmed persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "discovery_result"}, []string{"discoveries.create_or_update_inventory_candidate"}, []string{"result_id"}),
 	}
+}
+
+func navigationSkill(id, displayName, description string, context, shellCommands []string) Skill {
+	skill := builtIn(id, displayName, description, "navigation", SafetyPreviewOnly, context, []string{"navigate.open_surface"}, nil, nil)
+	skill.ShellCommands = append([]string{}, shellCommands...)
+	return deriveExecutionState(skill)
 }
 
 func builtIn(id, displayName, description, category string, safety SafetyLevel, context, capabilities, guidedWorkflows, uiTargets []string) Skill {

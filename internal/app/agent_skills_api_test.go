@@ -1040,6 +1040,23 @@ func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
 		t.Fatalf("expected read-only non-mutating execution without confirmation token, body=%s", readOnly.Body.String())
 	}
 
+	navigationPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.navigate.open_surface",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"message-agent-skill-shell-command-2005",
+		"parameters":{"workspace":"default","known_surface":"inventory","route":"/inventory"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if navigationPreview.Code != http.StatusOK {
+		t.Fatalf("navigation preview status=%d body=%s", navigationPreview.Code, navigationPreview.Body.String())
+	}
+	if !strings.Contains(navigationPreview.Body.String(), `"preview_only":true`) ||
+		strings.Contains(navigationPreview.Body.String(), `"mutation_applied":true`) {
+		t.Fatalf("expected preview-only shell command dispatch without mutation, body=%s", navigationPreview.Body.String())
+	}
+
 	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+threadID, nil, nil)
 	if runs.Code != http.StatusOK {
 		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
@@ -1059,6 +1076,10 @@ func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
 		`"mutation_applied":true`,
 		`"mutation_applied":false`,
 		`"ui_targets":["inventory.table","inventory.item.detail","inventory.item.editor"]`,
+		`"capability_id":"cabinet.navigate.open_surface"`,
+		`"source_message_id":"message-agent-skill-shell-command-2005"`,
+		`"shell_commands":["navigate.open_surface"]`,
+		`"shell_command_ids":["navigate.open_surface"]`,
 	} {
 		if !strings.Contains(runs.Body.String(), want) {
 			t.Fatalf("workflow timeline evidence missing %s: body=%s", want, runs.Body.String())

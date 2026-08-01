@@ -9425,6 +9425,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 	}
 	confirmationState := directAgentSkillConfirmationState(preview, req.Confirm)
 	uiTargets := directAgentSkillUITargets(req)
+	shellCommands := directAgentSkillShellCommands(req)
 	input := map[string]any{
 		"skill_id":        req.SkillID,
 		"source_surface":  strings.TrimSpace(req.SourceSurface),
@@ -9441,6 +9442,9 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 	if len(uiTargets) > 0 {
 		input["ui_targets"] = uiTargets
 	}
+	if len(shellCommands) > 0 {
+		input["shell_commands"] = shellCommands
+	}
 	run, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 		ProfileID:         req.ProfileID,
 		WorkflowID:        workflowID,
@@ -9451,7 +9455,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		Input:             input,
 		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
 		ConfirmationState: confirmationState,
-		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets),
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands),
 	})
 	if err != nil {
 		return chat.WorkflowRun{}, err
@@ -9473,6 +9477,9 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 	if len(uiTargets) > 0 {
 		result["ui_targets"] = uiTargets
 	}
+	if len(shellCommands) > 0 {
+		result["shell_commands"] = shellCommands
+	}
 	if operation := stringMapParam(target, "operation"); operation != "" {
 		result["operation"] = operation
 	}
@@ -9483,7 +9490,7 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
 		Result:            result,
 		ConfirmationState: confirmationState,
-		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets),
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands),
 	})
 }
 
@@ -9501,6 +9508,22 @@ func directAgentSkillUITargets(req agentskills.PreviewRequest) []string {
 		}
 	}
 	return targets
+}
+
+func directAgentSkillShellCommands(req agentskills.PreviewRequest) []string {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.ShellCommands) == 0 {
+		return nil
+	}
+	commands := make([]string, 0, len(skill.ShellCommands))
+	for _, command := range skill.ShellCommands {
+		command = strings.TrimSpace(command)
+		if command != "" {
+			commands = append(commands, command)
+		}
+	}
+	return commands
 }
 
 func directAgentSkillConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
@@ -9524,7 +9547,7 @@ func directAgentSkillWorkflowProviderTrace(sourceChannel string, authority agent
 	}
 }
 
-func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string, uiTargets []string) []map[string]any {
+func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string, uiTargets, shellCommands []string) []map[string]any {
 	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
 	previewStatus := "completed"
 	if preview.ConfirmationRequired && confirmationState == "preview_required" {
@@ -9536,6 +9559,9 @@ func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority age
 	}
 	if len(uiTargets) > 0 {
 		resolveResult["ui_targets"] = uiTargets
+	}
+	if len(shellCommands) > 0 {
+		resolveResult["shell_command_ids"] = shellCommands
 	}
 	steps := []map[string]any{
 		{
@@ -9572,16 +9598,22 @@ func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority age
 		},
 	}
 	if confirmationState == "confirmed" || confirmationState == "not_required" {
+		applyResult := map[string]any{
+			"confirmation_state": confirmationState,
+			"mutation_applied":   preview.MutationApplied,
+		}
+		if len(shellCommands) > 0 {
+			applyResult["shell_command_ids"] = shellCommands
+			applyResult["dispatch_boundary"] = "shell_command_bus"
+			applyResult["dispatch_outcome"] = "preview_only_no_mutation"
+		}
 		steps = append(steps, map[string]any{
 			"kind":        "agent_skill_execution_step",
 			"step_id":     "apply",
 			"skill_id":    req.SkillID,
 			"status":      "completed",
 			"occurred_at": occurredAt,
-			"result": map[string]any{
-				"confirmation_state": confirmationState,
-				"mutation_applied":   preview.MutationApplied,
-			},
+			"result":      applyResult,
 		})
 	}
 	return steps
