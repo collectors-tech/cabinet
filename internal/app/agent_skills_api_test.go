@@ -1057,6 +1057,24 @@ func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
 		t.Fatalf("expected preview-only shell command dispatch without mutation, body=%s", navigationPreview.Body.String())
 	}
 
+	providerReadinessPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.test_connection",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"message-agent-skill-provider-readiness-2007",
+		"parameters":{"provider":"openai","readiness_check":"setup_status"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if providerReadinessPreview.Code != http.StatusOK {
+		t.Fatalf("provider-readiness preview status=%d body=%s", providerReadinessPreview.Code, providerReadinessPreview.Body.String())
+	}
+	if !strings.Contains(providerReadinessPreview.Body.String(), `"preview_only":true`) ||
+		strings.Contains(providerReadinessPreview.Body.String(), `"mutation_applied":true`) ||
+		strings.Contains(providerReadinessPreview.Body.String(), "test-secret") {
+		t.Fatalf("expected preview-only provider-readiness dispatch without mutation or secret leakage, body=%s", providerReadinessPreview.Body.String())
+	}
+
 	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+threadID, nil, nil)
 	if runs.Code != http.StatusOK {
 		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
@@ -1080,6 +1098,12 @@ func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
 		`"source_message_id":"message-agent-skill-shell-command-2005"`,
 		`"shell_commands":["navigate.open_surface"]`,
 		`"shell_command_ids":["navigate.open_surface"]`,
+		`"capability_id":"cabinet.integrations.test_connection"`,
+		`"source_message_id":"message-agent-skill-provider-readiness-2007"`,
+		`"provider_readiness_ids":["provider-registry"]`,
+		`"provider_ids":["openai"]`,
+		`"dispatch_boundary":"provider_readiness_registry"`,
+		`"dispatch_outcome":"preview_only_no_mutation"`,
 	} {
 		if !strings.Contains(runs.Body.String(), want) {
 			t.Fatalf("workflow timeline evidence missing %s: body=%s", want, runs.Body.String())
