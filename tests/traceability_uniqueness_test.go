@@ -66,10 +66,14 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
-			"#1701/#1702/#1666/#1987",
+			"#1701/#1702/#1666/#1985/#1987/#1989/#2001",
 			"openspec/traceability/agent-skill-coverage.md",
 			"TestAgentSkillCoverageMatrixCoversRequiredSurfacesAndFields",
 			"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
+			"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
+			"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
+			"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
+			"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-001": {
 			"| partial |",
@@ -370,6 +374,42 @@ func TestAgentSkillsRegistry009TraceabilityNamesRemainingExecutionBoundary(t *te
 	} {
 		if !strings.Contains(row, required) {
 			t.Fatalf("AGENT-SKILLS-REGISTRY-009 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "AGENT-SKILL-COVERAGE-001")
+	for _, stale := range []string{
+		"#1701/#1702/#1666/#1987/#1989;",
+		"per-surface Agent skill coverage matrix lists required Cabinet surfaces",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("AGENT-SKILL-COVERAGE-001 must not keep stale broad coverage wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| partial |",
+		"#1701/#1702/#1666/#1985/#1987/#1989/#2001",
+		"#1985 reconciles the Skills page detail/actions entry point",
+		"#1987 binds Inbox review Agent launch context",
+		"#1989 reconciles Inbox missing/stale context evidence",
+		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
+		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
+		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
+		"without duplicating closed #1985/#1989 scope",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("AGENT-SKILL-COVERAGE-001 traceability row must include %q; row: %s", required, row)
 		}
 	}
 }
