@@ -78,13 +78,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"AGENT-CONTEXT-003/#1714 sends selected inventory row context",
 			"AGENT-CONTEXT-004/#1714 preserves side-panel Agent context",
 		},
-		"AGENT-UNIVERSAL-CHANNELS-002": {
-			"| partial |",
-			"#1701/#1977/#1712/#1708/#1709/#1710/#1711/#1715",
-			"TestAgentCapabilityExplanationDerivesFromRegistryAndProfileAuthority",
-			"TestChatMessagesExplainAgentCapabilitiesForMainAndSidePanel",
-			"read-only, preview-only, confirm-required, external-write/setup-required",
-		},
 		"AGENT-UNIVERSAL-CHANNELS-004": {
 			"| planned |",
 			"#1701/#1712/#1704/#1705/#1706",
@@ -307,6 +300,40 @@ func TestDiscovery003TraceabilityNamesMergedCandidateProvenanceEvidence(t *testi
 	} {
 		if !strings.Contains(row, required) {
 			t.Fatalf("DISCOVERY-003 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestAgentUniversalChannels002TraceabilityNamesCapabilityExplanationEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "AGENT-UNIVERSAL-CHANNELS-002")
+	for _, stale := range []string{
+		"| partial |",
+		"| planned |",
+		"planned:",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("AGENT-UNIVERSAL-CHANNELS-002 must not keep stale capability-explanation wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1701/#1977/#1997",
+		"registry-derived capability/setup-state explanation",
+		"TestAgentCapabilityExplanationDerivesFromRegistryAndProfileAuthority",
+		"TestChatMessagesExplainAgentCapabilitiesForMainAndSidePanel",
+		"direct API, main Chat, and side-panel Chat",
+		"without claiming live Telegram/external-channel completion",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("AGENT-UNIVERSAL-CHANNELS-002 traceability row must include %q; row: %s", required, row)
 		}
 	}
 }
