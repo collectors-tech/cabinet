@@ -359,14 +359,16 @@ func TestAgentSkillsRegistry009TraceabilityNamesRemainingExecutionBoundary(t *te
 		"routes through governed capability/workflow/UI target/command/provider readiness/preview-apply/Action Timeline boundaries",
 		"remaining in-app UI target, shell command, and provider-readiness execution dispatch proof",
 		"remaining shell command and provider-readiness execution dispatch proof",
+		"remaining provider-readiness execution dispatch proof",
+		"| partial |",
 	} {
 		if strings.Contains(row, stale) {
 			t.Fatalf("AGENT-SKILLS-REGISTRY-009 must not keep stale broad execution wording %q; row: %s", stale, row)
 		}
 	}
 	for _, required := range []string{
-		"| partial |",
-		"#1667/#1668/#1672/#1715/#1981/#1999/#2003/#2005",
+		"| implemented |",
+		"#1667/#1668/#1672/#1715/#1981/#1999/#2003/#2005/#2007",
 		"TestAgentSkillAPIPropagatesInvocationSourceContext",
 		"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
 		"preview-required non-mutation",
@@ -374,8 +376,12 @@ func TestAgentSkillsRegistry009TraceabilityNamesRemainingExecutionBoundary(t *te
 		"read-only non-mutating execution",
 		"UI target ids",
 		"shell command ids",
-		"remaining provider-readiness execution dispatch proof",
+		"provider readiness ids",
+		"provider ids",
+		"dispatch boundary",
+		"dispatch outcome",
 		"without duplicating #1981 direct timeline evidence",
+		"or claiming live Telegram/external-channel completion or live provider credentials",
 	} {
 		if !strings.Contains(row, required) {
 			t.Fatalf("AGENT-SKILLS-REGISTRY-009 traceability row must include %q; row: %s", required, row)
