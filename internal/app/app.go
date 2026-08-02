@@ -10236,6 +10236,7 @@ func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.Prev
 		"selected_backup",
 		"selected_file",
 		"selected_notification",
+		"settings_account",
 		"settings_profile",
 		"storage",
 		"setup_payload",
