@@ -93,9 +93,11 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
+		"#2009 reconciles Settings/Profile",
 		"main Chat, side-panel Chat, Inbox review, and Telegram/external channels",
 		"| partial |",
 	} {
@@ -119,6 +121,63 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 	} {
 		if !strings.Contains(spec, fragment) {
 			t.Fatalf("expected agent skill registry spec to include %q", fragment)
+		}
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var settingsProfileRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Settings / Profile |") {
+			settingsProfileRow = line
+			break
+		}
+	}
+	if settingsProfileRow == "" {
+		t.Fatalf("expected Settings / Profile surface coverage row")
+	}
+	for _, required := range []string{
+		"#1711, #2009",
+		"`cabinet.settings.update_profile`",
+		"structured `settings_profile` payload",
+		"source surface/channel/thread/message context",
+		"TestAgentSkillApplyAPIHandlesSettingsProfilePersistenceEvidence",
+		"no preview-time profile settings mutation",
+		"confirmed structured `settings_profile` persistence into `profile_settings`",
+		"key-only `settings_persisted` evidence",
+		"raw setting value redaction",
+		"UI/channel dispatch for Settings/Profile remains planned",
+		"broader Settings Account/Storage/Data and live Telegram/external-channel validation remain separate",
+	} {
+		if !strings.Contains(settingsProfileRow, required) {
+			t.Fatalf("Settings/Profile row must include %q; row: %s", required, settingsProfileRow)
+		}
+	}
+	for _, stale := range []string{
+		"persisted profile settings integration remain planned",
+		"persisted profile settings integration remains planned",
+	} {
+		if strings.Contains(settingsProfileRow, stale) {
+			t.Fatalf("Settings/Profile row must not keep stale planned wording %q; row: %s", stale, settingsProfileRow)
+		}
+	}
+
+	for _, required := range []string{
+		"The #2009 Settings/Profile slice adds focused direct API proof",
+		"without claiming Settings/Profile UI/channel dispatch, broader Settings Account/Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
+		"Settings/Profile direct API persistence is implemented under #2009",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2009 narrative %q", required)
 		}
 	}
 }

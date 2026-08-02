@@ -409,14 +409,19 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 	}
 	for _, required := range []string{
 		"| partial |",
-		"#1701/#1702/#1666/#1985/#1987/#1989/#2001",
+		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
+		"#2009 reconciles Settings/Profile",
+		"structured `settings_profile` payloads",
+		"key-only persisted-setting evidence",
+		"without claiming Settings/Profile UI/channel dispatch or broader Settings/Storage/Data completion",
 		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
-		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
+		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, Settings/Profile UI/channel dispatch, and #1701 parent closure",
 		"without duplicating closed #1985/#1989 scope",
 	} {
 		if !strings.Contains(row, required) {
