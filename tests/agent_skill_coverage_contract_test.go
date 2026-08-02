@@ -238,6 +238,61 @@ func TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue201
 	}
 }
 
+func TestAgentSkillCoverageMatrixBindsSettingsAccountPersistenceToIssue2015Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var settingsAccountRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Settings / Account |") {
+			settingsAccountRow = line
+			break
+		}
+	}
+	if settingsAccountRow == "" {
+		t.Fatalf("expected Settings / Account surface coverage row")
+	}
+	for _, required := range []string{
+		"#1711, #2015",
+		"`cabinet.settings.update_account`",
+		"structured `settings_account` payload",
+		"source surface/channel/thread/message context",
+		"TestAgentSkillApplyAPIHandlesSettingsAccountPersistenceEvidence",
+		"no preview-time account settings mutation",
+		"confirmed structured `settings_account` persistence into `profile_settings`",
+		"key-only `settings_persisted` evidence",
+		"raw setting value redaction",
+		"Settings Account UI/channel dispatch, Settings Storage/Data, and live Telegram/external-channel validation remain separate",
+	} {
+		if !strings.Contains(settingsAccountRow, required) {
+			t.Fatalf("Settings/Account row must include %q; row: %s", required, settingsAccountRow)
+		}
+	}
+	for _, stale := range []string{
+		"persisted account settings integration remain planned",
+		"persisted account settings integration remains planned",
+	} {
+		if strings.Contains(settingsAccountRow, stale) {
+			t.Fatalf("Settings/Account row must not keep stale planned wording %q; row: %s", stale, settingsAccountRow)
+		}
+	}
+
+	for _, required := range []string{
+		"The #2015 Settings/Account slice adds focused direct API proof",
+		"without claiming Settings Account UI/channel dispatch, broader Settings Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2015 narrative %q", required)
+		}
+	}
+}
+
 func TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue2013Evidence(t *testing.T) {
 	t.Parallel()
 
