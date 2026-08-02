@@ -404,7 +404,7 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 	}
 	for _, required := range []string{
 		"| partial |",
-		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011",
+		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
@@ -415,12 +415,16 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 		"side-panel Agent Skill preview/apply dispatch",
 		"`source_channel=in-app`",
 		"private-note redaction",
+		"#2013 reconciles Settings/Appearance UI/channel dispatch",
+		"`setting_key`/`setting_scope`/`setting_value` parameters",
+		"setting-value redaction",
 		"without claiming broader Settings/Storage/Data completion",
 		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue2013Evidence",
 		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
 		"without duplicating closed #1985/#1989 scope",
 	} {
