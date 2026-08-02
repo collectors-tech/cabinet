@@ -238,6 +238,62 @@ func TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue201
 	}
 }
 
+func TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue2013Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var settingsAppearanceRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Settings / Appearance |") {
+			settingsAppearanceRow = line
+			break
+		}
+	}
+	if settingsAppearanceRow == "" {
+		t.Fatalf("expected Settings / Appearance surface coverage row")
+	}
+	for _, required := range []string{
+		"#1711, #2013",
+		"`cabinet.settings.update_appearance`",
+		"source surface/channel/thread/message context",
+		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
+		"ASSISTANT-WORKSPACE-016/#2013 dispatches Settings Appearance Agent Skills with in-app source context",
+		"side-panel Agent Skill preview/apply dispatch",
+		"`source_channel=in-app`",
+		"`setting_key`/`setting_scope`/`setting_value` parameters",
+		"setting-value redaction",
+		"broader Settings Account/Storage/Data and live Telegram/external-channel validation remain separate",
+	} {
+		if !strings.Contains(settingsAppearanceRow, required) {
+			t.Fatalf("Settings/Appearance row must include #2013 UI/channel evidence %q; row: %s", required, settingsAppearanceRow)
+		}
+	}
+	for _, stale := range []string{
+		"UI/channel dispatch and broader settings surface coverage remain planned",
+		"Settings/Appearance UI/channel dispatch remains planned separately",
+	} {
+		if strings.Contains(content, stale) {
+			t.Fatalf("coverage matrix must not keep stale Settings/Appearance UI/channel planned wording %q", stale)
+		}
+	}
+
+	for _, required := range []string{
+		"The #2013 Settings/Appearance UI/channel dispatch slice adds focused side-panel proof",
+		"without claiming broader Settings Account/Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
+		"Settings/Appearance side-panel UI/channel dispatch is implemented under #2013",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2013 narrative %q", required)
+		}
+	}
+}
+
 func TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence(t *testing.T) {
 	t.Parallel()
 

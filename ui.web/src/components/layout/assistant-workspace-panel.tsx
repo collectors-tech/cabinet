@@ -247,6 +247,14 @@ const agentSkillOptions = [
     secretLabel: 'Private note',
   },
   {
+    id: 'cabinet.settings.update_appearance',
+    label: 'Update appearance settings',
+    surface: 'settings.appearance.form',
+    primaryLabel: 'Setting key',
+    contextLabel: 'Setting scope',
+    secretLabel: 'Setting value',
+  },
+  {
     id: 'cabinet.market_watch.run_watch',
     label: 'Run saved watch',
     surface: 'market_watch.saved_watch.row',
@@ -1663,6 +1671,12 @@ export function AssistantWorkspacePanel() {
         timezone: context,
         profile_private_note: secretOrTarget,
       }
+      return params
+    }
+    if (agentSkillID === 'cabinet.settings.update_appearance') {
+      params.setting_key = primary
+      params.setting_scope = context || 'appearance'
+      params.setting_value = secretOrTarget
       return params
     }
     if (agentSkillID === 'cabinet.media.search') {

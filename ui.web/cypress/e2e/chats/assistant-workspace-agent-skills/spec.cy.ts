@@ -225,6 +225,110 @@ describe('chats/assistant-workspace-agent-skills', () => {
       .and('not.contain', 'keep this private')
   })
 
+  it('ASSISTANT-WORKSPACE-016/#2013 dispatches Settings Appearance Agent Skills with in-app source context', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/agent/skills/preview', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.settings.update_appearance')
+      expect(req.body.source_surface).to.eq('settings.appearance.form')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.source_thread_id).to.be.a('string').and.not.eq('')
+      expect(req.body.source_message_id).to.eq(
+        'assistant-workspace-agent-skill'
+      )
+      expect(req.body.parameters).to.deep.eq({
+        setting_key: 'appearance.theme',
+        setting_scope: 'appearance',
+        setting_value: 'dark',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.settings.update_appearance',
+          status: 'available',
+          safety_level: 'confirm-required',
+          allowed: false,
+          preview_only: true,
+          mutation_applied: false,
+          confirmation_required: true,
+          blocker: 'confirmation_required',
+          source_surface: 'settings.appearance.form',
+          source_channel: 'in-app',
+        },
+      })
+    }).as('settingsAppearanceSkillPreview')
+    cy.intercept('POST', '/api/agent/skills/apply', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.settings.update_appearance')
+      expect(req.body.confirm).to.eq(true)
+      expect(req.body.source_surface).to.eq('settings.appearance.form')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.parameters).to.deep.eq({
+        setting_key: 'appearance.theme',
+        setting_scope: 'appearance',
+        setting_value: 'dark',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.settings.update_appearance',
+          mutation_applied: true,
+          source_surface: 'settings.appearance.form',
+          source_channel: 'in-app',
+          target: {
+            operation: 'settings.appearance.update',
+            setting_key: 'appearance.theme',
+            settings_persisted: ['appearance.theme'],
+            external_write_claimed: false,
+          },
+        },
+      })
+    }).as('settingsAppearanceSkillApply')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.settings.update_appearance',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('appearance.theme', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('appearance', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-secret"]')
+      .clear()
+      .type('dark', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@settingsAppearanceSkillPreview')
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.settings.update_appearance')
+      .and('contain', 'confirm-required')
+      .and('contain', 'confirmation_required')
+      .and('not.contain', 'dark')
+
+    cy.get('[data-testid="shell-assistant-agent-skill-apply"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]')
+      .should('contain', 'cabinet.settings.update_appearance')
+      .and('contain', 'settings.appearance.form')
+      .and('not.contain', 'dark')
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+    cy.wait('@settingsAppearanceSkillApply')
+    cy.get('[data-testid="shell-assistant-agent-skill-result"]')
+      .should('contain', 'settings.appearance.update')
+      .and('contain', 'mutation: true')
+      .and('not.contain', 'dark')
+  })
+
   it('ASSISTANT-WORKSPACE-012/#1710 dispatches Market Watch Agent Skills with in-app source context', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/agent/skills/preview', (req) => {
