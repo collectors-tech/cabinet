@@ -263,6 +263,14 @@ const agentSkillOptions = [
     secretLabel: 'Setting value',
   },
   {
+    id: 'cabinet.storage.configure_backup',
+    label: 'Configure backup storage',
+    surface: 'settings.storage.backup',
+    primaryLabel: 'Backup target',
+    contextLabel: 'Backup schedule',
+    secretLabel: 'Private storage note',
+  },
+  {
     id: 'cabinet.market_watch.run_watch',
     label: 'Run saved watch',
     surface: 'market_watch.saved_watch.row',
@@ -1693,6 +1701,18 @@ export function AssistantWorkspacePanel() {
       params.setting_key = primary
       params.setting_scope = context || 'appearance'
       params.setting_value = secretOrTarget
+      return params
+    }
+    if (agentSkillID === 'cabinet.storage.configure_backup') {
+      if (primary) {
+        params.backup_target = primary
+      }
+      if (context) {
+        params.backup_schedule = context
+      }
+      if (secretOrTarget) {
+        params.storage_note = secretOrTarget
+      }
       return params
     }
     if (agentSkillID === 'cabinet.media.search') {
