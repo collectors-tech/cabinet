@@ -94,10 +94,12 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
 		"#2009 reconciles Settings/Profile",
+		"#2011 reconciles Settings/Profile UI/channel dispatch",
 		"main Chat, side-panel Chat, Inbox review, and Telegram/external channels",
 		"| partial |",
 	} {
@@ -155,7 +157,6 @@ func TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evide
 		"confirmed structured `settings_profile` persistence into `profile_settings`",
 		"key-only `settings_persisted` evidence",
 		"raw setting value redaction",
-		"UI/channel dispatch for Settings/Profile remains planned",
 		"broader Settings Account/Storage/Data and live Telegram/external-channel validation remain separate",
 	} {
 		if !strings.Contains(settingsProfileRow, required) {
@@ -173,11 +174,66 @@ func TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evide
 
 	for _, required := range []string{
 		"The #2009 Settings/Profile slice adds focused direct API proof",
-		"without claiming Settings/Profile UI/channel dispatch, broader Settings Account/Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
-		"Settings/Profile direct API persistence is implemented under #2009",
+		"without claiming broader Settings Account/Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2009 narrative %q", required)
+		}
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var settingsProfileRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Settings / Profile |") {
+			settingsProfileRow = line
+			break
+		}
+	}
+	if settingsProfileRow == "" {
+		t.Fatalf("expected Settings / Profile surface coverage row")
+	}
+	for _, required := range []string{
+		"#1711, #2009, #2011",
+		"`cabinet.settings.update_profile`",
+		"source surface/channel/thread/message context",
+		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
+		"ASSISTANT-WORKSPACE-016/#2011 dispatches Settings Profile Agent Skills with in-app source context",
+		"side-panel Agent Skill preview/apply dispatch",
+		"`source_channel=in-app`",
+		"structured `settings_profile`",
+		"private-note redaction",
+		"broader Settings Account/Storage/Data and live Telegram/external-channel validation remain separate",
+	} {
+		if !strings.Contains(settingsProfileRow, required) {
+			t.Fatalf("Settings/Profile row must include #2011 UI/channel evidence %q; row: %s", required, settingsProfileRow)
+		}
+	}
+	for _, stale := range []string{
+		"UI/channel dispatch for Settings/Profile remains planned",
+		"Settings/Profile UI/channel dispatch remains planned separately",
+	} {
+		if strings.Contains(content, stale) {
+			t.Fatalf("coverage matrix must not keep stale Settings/Profile UI/channel planned wording %q", stale)
+		}
+	}
+
+	for _, required := range []string{
+		"The #2011 Settings/Profile UI/channel dispatch slice adds focused side-panel proof",
+		"without claiming broader Settings Account/Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
+		"Settings/Profile direct API persistence is implemented under #2009 and side-panel UI/channel dispatch is implemented under #2011",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2011 narrative %q", required)
 		}
 	}
 }

@@ -239,6 +239,14 @@ const agentSkillOptions = [
     secretLabel: 'Secret input is redacted',
   },
   {
+    id: 'cabinet.settings.update_profile',
+    label: 'Update profile settings',
+    surface: 'settings.profile.form',
+    primaryLabel: 'Display currency',
+    contextLabel: 'Timezone',
+    secretLabel: 'Private note',
+  },
+  {
     id: 'cabinet.market_watch.run_watch',
     label: 'Run saved watch',
     surface: 'market_watch.saved_watch.row',
@@ -1465,7 +1473,7 @@ export function AssistantWorkspacePanel() {
     const primary = agentSkillProvider.trim()
     const context = agentSkillSetupStep.trim()
     const secretOrTarget = agentSkillSecret.trim()
-    const params: Record<string, string> = {}
+    const params: Record<string, string | Record<string, string>> = {}
     if (agentSkillID === 'cabinet.dashboard.summarise_activity') {
       if (primary) {
         params.window = primary
@@ -1646,6 +1654,14 @@ export function AssistantWorkspacePanel() {
       }
       if (secretOrTarget) {
         params.notes = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.settings.update_profile') {
+      params.settings_profile = {
+        display_currency: primary,
+        timezone: context,
+        profile_private_note: secretOrTarget,
       }
       return params
     }
