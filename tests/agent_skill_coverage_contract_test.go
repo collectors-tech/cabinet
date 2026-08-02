@@ -259,7 +259,7 @@ func TestAgentSkillCoverageMatrixBindsSettingsAccountPersistenceToIssue2015Evide
 		t.Fatalf("expected Settings / Account surface coverage row")
 	}
 	for _, required := range []string{
-		"#1711, #2015",
+		"#1711, #2015, #2017",
 		"`cabinet.settings.update_account`",
 		"structured `settings_account` payload",
 		"source surface/channel/thread/message context",
@@ -268,7 +268,7 @@ func TestAgentSkillCoverageMatrixBindsSettingsAccountPersistenceToIssue2015Evide
 		"confirmed structured `settings_account` persistence into `profile_settings`",
 		"key-only `settings_persisted` evidence",
 		"raw setting value redaction",
-		"Settings Account UI/channel dispatch, Settings Storage/Data, and live Telegram/external-channel validation remain separate",
+		"Settings Storage/Data and live Telegram/external-channel validation remain separate",
 	} {
 		if !strings.Contains(settingsAccountRow, required) {
 			t.Fatalf("Settings/Account row must include %q; row: %s", required, settingsAccountRow)
@@ -285,10 +285,66 @@ func TestAgentSkillCoverageMatrixBindsSettingsAccountPersistenceToIssue2015Evide
 
 	for _, required := range []string{
 		"The #2015 Settings/Account slice adds focused direct API proof",
-		"without claiming Settings Account UI/channel dispatch, broader Settings Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
+		"without claiming broader Settings Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2015 narrative %q", required)
+		}
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsSettingsAccountUIChannelDispatchToIssue2017Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var settingsAccountRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Settings / Account |") {
+			settingsAccountRow = line
+			break
+		}
+	}
+	if settingsAccountRow == "" {
+		t.Fatalf("expected Settings / Account surface coverage row")
+	}
+	for _, required := range []string{
+		"#1711, #2015, #2017",
+		"`cabinet.settings.update_account`",
+		"source surface/channel/thread/message context",
+		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
+		"ASSISTANT-WORKSPACE-016/#2017 dispatches Settings Account Agent Skills with in-app source context",
+		"side-panel Agent Skill preview/apply dispatch",
+		"`source_channel=in-app`",
+		"structured `settings_account` parameters",
+		"private-note redaction",
+		"Settings Storage/Data and live Telegram/external-channel validation remain separate",
+	} {
+		if !strings.Contains(settingsAccountRow, required) {
+			t.Fatalf("Settings/Account row must include #2017 UI/channel evidence %q; row: %s", required, settingsAccountRow)
+		}
+	}
+	for _, stale := range []string{
+		"Settings Account UI/channel dispatch, Settings Storage/Data, and live Telegram/external-channel validation remain separate",
+		"Settings Account UI/channel dispatch remains planned separately",
+	} {
+		if strings.Contains(content, stale) {
+			t.Fatalf("coverage matrix must not keep stale Settings/Account UI/channel planned wording %q", stale)
+		}
+	}
+
+	for _, required := range []string{
+		"The #2017 Settings/Account UI/channel dispatch slice adds focused side-panel proof",
+		"without claiming broader Settings Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
+		"Settings/Account side-panel UI/channel dispatch is implemented under #2017",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2017 narrative %q", required)
 		}
 	}
 }
