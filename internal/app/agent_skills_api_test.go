@@ -2849,6 +2849,96 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesSettingsProfilePersistenceEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Settings Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_profile",
+		"source_surface":"settings.profile.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-profile-thread",
+		"source_message_id":"settings-profile-message",
+		"parameters":{
+			"settings_profile":{
+				"display_currency":"AUD",
+				"telegram.catalog_capture.sender_id":"987654321",
+				"profile_private_note":"Sydney secure vault - private"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"confirmation_required":true`) ||
+		!strings.Contains(preview.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(preview.Body.String(), `"source_surface":"settings.profile.form"`) ||
+		!strings.Contains(preview.Body.String(), `"source_channel":"in-app"`) {
+		t.Fatalf("expected profile settings preview boundary with source context, body=%s", preview.Body.String())
+	}
+	var previewPersistedCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM profile_settings WHERE profile_id = ? AND key IN ('display_currency', 'telegram.catalog_capture.sender_id', 'profile_private_note')`, p.ID).Scan(&previewPersistedCount); err != nil {
+		t.Fatalf("count preview profile settings: %v", err)
+	}
+	if previewPersistedCount != 0 {
+		t.Fatalf("preview must not persist profile settings, count=%d", previewPersistedCount)
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_profile",
+		"confirm":true,
+		"source_surface":"settings.profile.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-profile-thread",
+		"source_message_id":"settings-profile-message",
+		"parameters":{
+			"settings_profile":{
+				"display_currency":"AUD",
+				"telegram.catalog_capture.sender_id":"987654321",
+				"profile_private_note":"Sydney secure vault - private"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"settings.profile.update"`,
+		`"source_surface":"settings.profile.form"`,
+		`"source_channel":"in-app"`,
+		`"source_thread_id":"settings-profile-thread"`,
+		`"source_message_id":"settings-profile-message"`,
+		`"settings_persisted":["`,
+		`"display_currency"`,
+		`"telegram.catalog_capture.sender_id"`,
+		`"profile_private_note"`,
+	} {
+		if !strings.Contains(apply.Body.String(), want) {
+			t.Fatalf("profile setting apply response missing %s: body=%s", want, apply.Body.String())
+		}
+	}
+	if strings.Contains(apply.Body.String(), "Sydney secure vault - private") {
+		t.Fatalf("profile setting apply response must not expose raw setting values: body=%s", apply.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "display_currency", "AUD")
+	assertProfileSetting(t, a, p.ID, "telegram.catalog_capture.sender_id", "987654321")
+	assertProfileSetting(t, a, p.ID, "profile_private_note", "Sydney secure vault - private")
+}
+
 func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T) {
 	t.Parallel()
 
