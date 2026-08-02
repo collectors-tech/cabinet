@@ -56,24 +56,17 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 
 	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
 	allowed := map[string][]string{
-		"AGENT-SKILLS-REGISTRY-009": {
-			"| partial |",
-			"#1667/#1668/#1672/#1715/#1981/#1999/#2003",
-			"TestAgentSkillAPIPropagatesInvocationSourceContext",
-			"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
-			"preview-required non-mutation",
-			"UI target ids",
-			"remaining shell command and provider-readiness execution dispatch proof",
-		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
-			"#1701/#1702/#1666/#1985/#1987/#1989/#2001",
+			"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011",
 			"openspec/traceability/agent-skill-coverage.md",
 			"TestAgentSkillCoverageMatrixCoversRequiredSurfacesAndFields",
 			"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
 			"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 			"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 			"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
+			"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
+			"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
 			"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-001": {
@@ -402,6 +395,8 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 	for _, stale := range []string{
 		"#1701/#1702/#1666/#1987/#1989;",
 		"per-surface Agent skill coverage matrix lists required Cabinet surfaces",
+		"without claiming Settings/Profile UI/channel dispatch",
+		"Settings/Profile UI/channel dispatch, and #1701 parent closure",
 	} {
 		if strings.Contains(row, stale) {
 			t.Fatalf("AGENT-SKILL-COVERAGE-001 must not keep stale broad coverage wording %q; row: %s", stale, row)
@@ -409,19 +404,24 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 	}
 	for _, required := range []string{
 		"| partial |",
-		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009",
+		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
 		"#2009 reconciles Settings/Profile",
 		"structured `settings_profile` payloads",
 		"key-only persisted-setting evidence",
-		"without claiming Settings/Profile UI/channel dispatch or broader Settings/Storage/Data completion",
+		"#2011 reconciles Settings/Profile UI/channel dispatch",
+		"side-panel Agent Skill preview/apply dispatch",
+		"`source_channel=in-app`",
+		"private-note redaction",
+		"without claiming broader Settings/Storage/Data completion",
 		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
-		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, Settings/Profile UI/channel dispatch, and #1701 parent closure",
+		"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
 		"without duplicating closed #1985/#1989 scope",
 	} {
 		if !strings.Contains(row, required) {
