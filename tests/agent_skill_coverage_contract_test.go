@@ -95,11 +95,13 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
 		"#2009 reconciles Settings/Profile",
 		"#2011 reconciles Settings/Profile UI/channel dispatch",
+		"#2019 reconciles Settings Storage UI/channel dispatch",
 		"main Chat, side-panel Chat, Inbox review, and Telegram/external channels",
 		"| partial |",
 	} {
@@ -401,6 +403,63 @@ func TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2013 narrative %q", required)
+		}
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var settingsStorageRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Settings / Storage |") {
+			settingsStorageRow = line
+			break
+		}
+	}
+	if settingsStorageRow == "" {
+		t.Fatalf("expected Settings / Storage surface coverage row")
+	}
+	for _, required := range []string{
+		"#1711, #2019",
+		"`cabinet.storage.configure_backup`",
+		"source surface/channel/thread/message context",
+		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
+		"ASSISTANT-WORKSPACE-016/#2019 dispatches Settings Storage Agent Skills with in-app source context",
+		"side-panel Agent Skill preview/apply dispatch",
+		"`source_channel=in-app`",
+		"`backup_target`/`backup_schedule`/`storage_note` parameters",
+		"private-note redaction",
+		"local filesystem path redaction",
+		"restore drill, Settings Data/Maintenance, and live Telegram/external-channel validation remain separate",
+	} {
+		if !strings.Contains(settingsStorageRow, required) {
+			t.Fatalf("Settings/Storage row must include #2019 UI/channel evidence %q; row: %s", required, settingsStorageRow)
+		}
+	}
+	for _, stale := range []string{
+		"UI/channel dispatch and restore drill evidence remain planned",
+		"Settings Storage UI/channel dispatch remains planned separately",
+	} {
+		if strings.Contains(content, stale) {
+			t.Fatalf("coverage matrix must not keep stale Settings/Storage UI/channel planned wording %q", stale)
+		}
+	}
+
+	for _, required := range []string{
+		"The #2019 Settings/Storage UI/channel dispatch slice adds focused side-panel proof",
+		"without claiming restore drill, Settings Data/Maintenance coverage, live Telegram/external-channel validation, or #1701 parent closure",
+		"Settings/Storage side-panel UI/channel dispatch is implemented under #2019",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2019 narrative %q", required)
 		}
 	}
 }

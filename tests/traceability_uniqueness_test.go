@@ -58,7 +58,7 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 	allowed := map[string][]string{
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
-			"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011",
+			"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019",
 			"openspec/traceability/agent-skill-coverage.md",
 			"TestAgentSkillCoverageMatrixCoversRequiredSurfacesAndFields",
 			"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
@@ -67,7 +67,8 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
 			"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
 			"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
-			"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
+			"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
+			"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, restore drill, Settings Data/Maintenance, and #1701 parent closure",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-001": {
 			"| partial |",
@@ -404,7 +405,7 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 	}
 	for _, required := range []string{
 		"| partial |",
-		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017",
+		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
@@ -422,7 +423,11 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 		"structured `settings_account` payloads",
 		"#2017 reconciles Settings/Account UI/channel dispatch",
 		"structured `settings_account` parameters",
-		"without claiming broader Settings Storage/Data completion",
+		"#2019 reconciles Settings Storage UI/channel dispatch",
+		"`backup_target`/`backup_schedule`/`storage_note` parameters",
+		"local filesystem path redaction",
+		"no external-write claim",
+		"without claiming restore drill, Settings Data/Maintenance completion, live Telegram/external-channel validation, or #1701 parent closure",
 		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
@@ -431,7 +436,8 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 		"TestAgentSkillCoverageMatrixBindsSettingsAccountPersistenceToIssue2015Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsAccountUIChannelDispatchToIssue2017Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue2013Evidence",
-		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
+		"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, restore drill, Settings Data/Maintenance, and #1701 parent closure",
 		"without duplicating closed #1985/#1989 scope",
 	} {
 		if !strings.Contains(row, required) {
