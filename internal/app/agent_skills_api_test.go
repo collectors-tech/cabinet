@@ -2939,6 +2939,98 @@ func TestAgentSkillApplyAPIHandlesSettingsProfilePersistenceEvidence(t *testing.
 	assertProfileSetting(t, a, p.ID, "profile_private_note", "Sydney secure vault - private")
 }
 
+func TestAgentSkillApplyAPIHandlesSettingsAccountPersistenceEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Settings Account"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_account",
+		"source_surface":"settings.account.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-account-thread",
+		"source_message_id":"settings-account-message",
+		"parameters":{
+			"settings_account":{
+				"account.display_name":"Cabinet Account",
+				"account.default_language":"en-AU",
+				"account_private_note":"Do not echo account secret"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"confirmation_required":true`) ||
+		!strings.Contains(preview.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(preview.Body.String(), `"source_surface":"settings.account.form"`) ||
+		!strings.Contains(preview.Body.String(), `"source_channel":"in-app"`) {
+		t.Fatalf("expected account settings preview boundary with source context, body=%s", preview.Body.String())
+	}
+	var previewPersistedCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM profile_settings WHERE profile_id = ? AND key IN ('account.display_name', 'account.default_language', 'account_private_note')`, p.ID).Scan(&previewPersistedCount); err != nil {
+		t.Fatalf("count preview account settings: %v", err)
+	}
+	if previewPersistedCount != 0 {
+		t.Fatalf("preview must not persist account settings, count=%d", previewPersistedCount)
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_account",
+		"confirm":true,
+		"source_surface":"settings.account.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-account-thread",
+		"source_message_id":"settings-account-message",
+		"parameters":{
+			"settings_account":{
+				"account.display_name":"Cabinet Account",
+				"account.default_language":"en-AU",
+				"account_private_note":"Do not echo account secret"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"settings.account.update"`,
+		`"source_surface":"settings.account.form"`,
+		`"source_channel":"in-app"`,
+		`"source_thread_id":"settings-account-thread"`,
+		`"source_message_id":"settings-account-message"`,
+		`"settings_persisted":["`,
+		`"account.display_name"`,
+		`"account.default_language"`,
+		`"account_private_note"`,
+	} {
+		if !strings.Contains(apply.Body.String(), want) {
+			t.Fatalf("account setting apply response missing %s: body=%s", want, apply.Body.String())
+		}
+	}
+	if strings.Contains(apply.Body.String(), "Do not echo account secret") ||
+		strings.Contains(apply.Body.String(), "Cabinet Account") ||
+		strings.Contains(apply.Body.String(), "en-AU") {
+		t.Fatalf("account setting apply response must not expose raw setting values: body=%s", apply.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "account.display_name", "Cabinet Account")
+	assertProfileSetting(t, a, p.ID, "account.default_language", "en-AU")
+	assertProfileSetting(t, a, p.ID, "account_private_note", "Do not echo account secret")
+}
+
 func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T) {
 	t.Parallel()
 

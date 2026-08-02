@@ -1226,7 +1226,7 @@ func contextProvided(context string, req PreviewRequest, params map[string]any) 
 	case "settings.appearance":
 		return hasAnyParam(params, "setting_key", "appearance")
 	case "account":
-		return hasAnyParam(params, "account_id", "account")
+		return hasAnyParam(params, "account_id", "account", "settings_account")
 	case "storage":
 		return hasAnyParam(params, "storage", "backup_path", "file_path")
 	case "admin_session":

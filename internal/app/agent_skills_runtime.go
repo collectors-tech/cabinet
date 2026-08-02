@@ -2435,6 +2435,27 @@ func applyAgentSettingUpdate(ctx context.Context, conn *sql.DB, profileID, opera
 			return result, "", nil
 		}
 	}
+	if operation == "settings.account.update" {
+		if values, ok := profileSettingsAccountParam(params); ok {
+			if len(values) == 0 {
+				return nil, "settings_target_required", fmt.Errorf("settings target required")
+			}
+			if err := persistAgentProfileSettings(ctx, conn, profileID, values); err != nil {
+				return nil, "settings_persist_failed", err
+			}
+			persisted := make([]string, 0, len(values))
+			for key := range values {
+				persisted = append(persisted, key)
+			}
+			sort.Strings(persisted)
+			result["operation"] = operation
+			result["setting_scope"] = "account"
+			result["settings_persisted"] = persisted
+			result["setting_count"] = len(persisted)
+			result["status"] = "confirmed"
+			return result, "", nil
+		}
+	}
 	settingKey := stringMapParam(params, "setting_key")
 	if settingKey == "" {
 		settingKey = stringMapParam(params, "setting_scope")
@@ -2455,6 +2476,30 @@ func applyAgentSettingUpdate(ctx context.Context, conn *sql.DB, profileID, opera
 	result["settings_persisted"] = []string{settingKey}
 	result["status"] = "confirmed"
 	return result, "", nil
+}
+
+func profileSettingsAccountParam(params map[string]any) (map[string]string, bool) {
+	raw, ok := params["settings_account"]
+	if !ok || raw == nil {
+		return nil, false
+	}
+	rawMap, ok := raw.(map[string]any)
+	if !ok {
+		return map[string]string{}, true
+	}
+	values := make(map[string]string, len(rawMap))
+	for key, rawValue := range rawMap {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value := strings.TrimSpace(fmt.Sprint(rawValue))
+		if value == "" {
+			continue
+		}
+		values[key] = value
+	}
+	return values, true
 }
 
 func profileSettingsProfileParam(params map[string]any) (map[string]string, bool) {
