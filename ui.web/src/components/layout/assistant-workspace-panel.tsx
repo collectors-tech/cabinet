@@ -247,6 +247,14 @@ const agentSkillOptions = [
     secretLabel: 'Private note',
   },
   {
+    id: 'cabinet.settings.update_account',
+    label: 'Update account settings',
+    surface: 'settings.account.form',
+    primaryLabel: 'Account email',
+    contextLabel: 'Locale',
+    secretLabel: 'Private account note',
+  },
+  {
     id: 'cabinet.settings.update_appearance',
     label: 'Update appearance settings',
     surface: 'settings.appearance.form',
@@ -1670,6 +1678,14 @@ export function AssistantWorkspacePanel() {
         display_currency: primary,
         timezone: context,
         profile_private_note: secretOrTarget,
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.settings.update_account') {
+      params.settings_account = {
+        account_email: primary,
+        locale: context,
+        account_private_note: secretOrTarget,
       }
       return params
     }
