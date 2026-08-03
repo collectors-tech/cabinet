@@ -131,6 +131,51 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 	}
 }
 
+func TestAgentSkillCoverageMatrixBindsInventoryGuidedUpdateToIssue1513Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var inventoryRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Inventory |") {
+			inventoryRow = line
+			break
+		}
+	}
+	if inventoryRow == "" {
+		t.Fatalf("expected Inventory surface coverage row")
+	}
+	for _, required := range []string{
+		"#1513",
+		"`cabinet.guided.inventory.update_item`",
+		"`guided.inventory.update_item`",
+		"TestGuidedWorkflowRegistryMatchesInventoryItemUpdateRecipe",
+		"TestChatMessageAppControlPlannerStartsGuidedInventoryWalkthrough",
+		"TestGuidedInventoryUpdatePersistsTimelineAndConfirmedMutation",
+		"guided inventory update proof",
+		"live Telegram production-channel validation remains #1773",
+		"broader external intake adapter routing remains planned",
+	} {
+		if !strings.Contains(inventoryRow, required) {
+			t.Fatalf("Inventory row must include #1513 guided update evidence %q; row: %s", required, inventoryRow)
+		}
+	}
+	for _, stale := range []string{
+		"Guided update remains blocked until #1513",
+		"guided update remains blocked until #1513",
+	} {
+		if strings.Contains(inventoryRow, stale) {
+			t.Fatalf("Inventory row must not keep stale guided update blocker %q; row: %s", stale, inventoryRow)
+		}
+	}
+}
+
 func TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence(t *testing.T) {
 	t.Parallel()
 
