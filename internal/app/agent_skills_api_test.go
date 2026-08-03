@@ -2849,6 +2849,93 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesDataImportRestorePersistenceEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Data Restore"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	fixtureDir := t.TempDir()
+	importPath := filepath.Join(fixtureDir, "profile-import-private.json")
+	importPayload := []byte(`{"profile_settings":{"display_currency":"AUD","profile_private_note":"Sydney secure vault - private"},"items":[{"part_number":"IMP-2023-001","title":"Imported private kit"}]}`)
+	if err := os.WriteFile(importPath, importPayload, 0o600); err != nil {
+		t.Fatalf("write import fixture: %v", err)
+	}
+	backupPath := filepath.Join(fixtureDir, "cabinet-restore-private.zip")
+	if err := os.WriteFile(backupPath, []byte("fixture-backup-bytes"), 0o600); err != nil {
+		t.Fatalf("write restore fixture: %v", err)
+	}
+
+	importFile := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.import_file",
+		"confirm":true,
+		"parameters":{"file_path":"`+strings.ReplaceAll(importPath, `\`, `\\`)+`","import_note":"private note must not leak"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importFile.Code != http.StatusOK {
+		t.Fatalf("import file apply status=%d body=%s", importFile.Code, importFile.Body.String())
+	}
+	importBody := importFile.Body.String()
+	for _, required := range []string{
+		`"mutation_applied":true`,
+		`"operation":"data.import.file"`,
+		`"import_persisted":true`,
+		`"profile_scope":"` + p.ID + `"`,
+		`"imported_item_count":1`,
+		`"settings_persisted":["display_currency"]`,
+		`"source_path_redacted":true`,
+		`"raw_payload_redacted":true`,
+	} {
+		if !strings.Contains(importBody, required) {
+			t.Fatalf("expected import persistence evidence %q, body=%s", required, importBody)
+		}
+	}
+	for _, forbidden := range []string{importPath, filepath.Base(importPath), "Sydney secure vault", "Imported private kit", "private note must not leak"} {
+		if strings.Contains(importBody, forbidden) {
+			t.Fatalf("import response leaked %q, body=%s", forbidden, importBody)
+		}
+	}
+	assertProfileSetting(t, a, p.ID, "display_currency", "AUD")
+
+	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.restore_backup",
+		"confirm":true,
+		"parameters":{"backup_path":"`+strings.ReplaceAll(backupPath, `\`, `\\`)+`","confirmation_phrase":"Restore profile `+p.ID+` from selected backup"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if restore.Code != http.StatusOK {
+		t.Fatalf("restore backup apply status=%d body=%s", restore.Code, restore.Body.String())
+	}
+	restoreBody := restore.Body.String()
+	for _, required := range []string{
+		`"mutation_applied":true`,
+		`"operation":"data.backup.restore"`,
+		`"destructive_confirmation":true`,
+		`"restore_drill_verified":true`,
+		`"profile_isolated":true`,
+		`"integrity_check":"ok"`,
+		`"selected_backup_redacted":true`,
+	} {
+		if !strings.Contains(restoreBody, required) {
+			t.Fatalf("expected restore drill evidence %q, body=%s", required, restoreBody)
+		}
+	}
+	for _, forbidden := range []string{backupPath, filepath.Base(backupPath), "fixture-backup-bytes"} {
+		if strings.Contains(restoreBody, forbidden) {
+			t.Fatalf("restore response leaked %q, body=%s", forbidden, restoreBody)
+		}
+	}
+}
+
 func TestAgentSkillApplyAPIHandlesSettingsProfilePersistenceEvidence(t *testing.T) {
 	t.Parallel()
 
