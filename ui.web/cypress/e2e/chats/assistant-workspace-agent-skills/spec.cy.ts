@@ -536,6 +536,109 @@ describe('chats/assistant-workspace-agent-skills', () => {
       .and('not.contain', 'C:\\')
   })
 
+  it('ASSISTANT-WORKSPACE-016/#2021 dispatches Settings Data/Maintenance Agent Skills with in-app source context', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/agent/skills/preview', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.maintenance.run_safe_check')
+      expect(req.body.source_surface).to.eq('settings.data.maintenance')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.source_thread_id).to.be.a('string').and.not.eq('')
+      expect(req.body.source_message_id).to.eq(
+        'assistant-workspace-agent-skill'
+      )
+      expect(req.body.parameters.maintenance_scope).to.eq('profile-data')
+      expect(req.body.parameters.check_level).to.eq('safe')
+      expect(req.body.parameters.maintenance_note).to.eq(
+        'maintenance private note'
+      )
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.maintenance.run_safe_check',
+          status: 'available',
+          safety_level: 'read-only',
+          allowed: true,
+          preview_only: false,
+          mutation_applied: false,
+          confirmation_required: false,
+          source_surface: 'settings.data.maintenance',
+          source_channel: 'in-app',
+        },
+      })
+    }).as('settingsDataMaintenanceSkillPreview')
+    cy.intercept('POST', '/api/agent/skills/apply', (req) => {
+      expect(req.body.profile_id).to.eq('e2e-profile-001')
+      expect(req.body.skill_id).to.eq('cabinet.maintenance.run_safe_check')
+      expect(req.body.confirm).to.eq(true)
+      expect(req.body.source_surface).to.eq('settings.data.maintenance')
+      expect(req.body.source_channel).to.eq('in-app')
+      expect(req.body.parameters.maintenance_scope).to.eq('profile-data')
+      expect(req.body.parameters.check_level).to.eq('safe')
+      expect(req.body.parameters.maintenance_note).to.eq(
+        'maintenance private note'
+      )
+      req.reply({
+        statusCode: 200,
+        body: {
+          skill_id: 'cabinet.maintenance.run_safe_check',
+          mutation_applied: false,
+          source_surface: 'settings.data.maintenance',
+          source_channel: 'in-app',
+          target: {
+            operation: 'maintenance.safe_check',
+            external_write_claimed: false,
+            local_path_redacted: true,
+          },
+        },
+      })
+    }).as('settingsDataMaintenanceSkillApply')
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-agent-skill-panel"]')
+      .scrollIntoView()
+      .should('exist')
+    cy.get('[data-testid="shell-assistant-agent-skill-select"]').select(
+      'cabinet.maintenance.run_safe_check',
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-agent-skill-provider"]')
+      .clear()
+      .type('profile-data', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-setup-step"]')
+      .clear()
+      .type('safe', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-secret"]')
+      .clear()
+      .type('maintenance private note', { force: true })
+    cy.get('[data-testid="shell-assistant-agent-skill-preview"]').click({
+      force: true,
+    })
+
+    cy.wait('@settingsDataMaintenanceSkillPreview')
+    cy.get('[data-testid="shell-assistant-agent-skill-preview-card"]')
+      .should('contain', 'cabinet.maintenance.run_safe_check')
+      .and('contain', 'read-only')
+      .and('contain', 'ready')
+      .and('not.contain', 'maintenance private note')
+
+    cy.get('[data-testid="shell-assistant-agent-skill-apply"]').click({
+      force: true,
+    })
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]')
+      .should('contain', 'cabinet.maintenance.run_safe_check')
+      .and('contain', 'settings.data.maintenance')
+      .and('not.contain', 'maintenance private note')
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+    cy.wait('@settingsDataMaintenanceSkillApply')
+    cy.get('[data-testid="shell-assistant-agent-skill-result"]')
+      .should('contain', 'maintenance.safe_check')
+      .and('contain', 'mutation: false')
+      .and('not.contain', 'maintenance private note')
+      .and('not.contain', 'C:\\')
+  })
+
   it('ASSISTANT-WORKSPACE-012/#1710 dispatches Market Watch Agent Skills with in-app source context', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/agent/skills/preview', (req) => {
