@@ -271,6 +271,14 @@ const agentSkillOptions = [
     secretLabel: 'Private storage note',
   },
   {
+    id: 'cabinet.maintenance.run_safe_check',
+    label: 'Run data maintenance check',
+    surface: 'settings.data.maintenance',
+    primaryLabel: 'Maintenance scope',
+    contextLabel: 'Check level',
+    secretLabel: 'Private maintenance note',
+  },
+  {
     id: 'cabinet.market_watch.run_watch',
     label: 'Run saved watch',
     surface: 'market_watch.saved_watch.row',
@@ -1712,6 +1720,18 @@ export function AssistantWorkspacePanel() {
       }
       if (secretOrTarget) {
         params.storage_note = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.maintenance.run_safe_check') {
+      if (primary) {
+        params.maintenance_scope = primary
+      }
+      if (context) {
+        params.check_level = context
+      }
+      if (secretOrTarget) {
+        params.maintenance_note = secretOrTarget
       }
       return params
     }

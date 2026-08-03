@@ -96,12 +96,14 @@ func TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchToIssue2021Evidence",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
 		"#2009 reconciles Settings/Profile",
 		"#2011 reconciles Settings/Profile UI/channel dispatch",
 		"#2019 reconciles Settings Storage UI/channel dispatch",
+		"#2021 reconciles Settings Data/Maintenance UI/channel dispatch",
 		"main Chat, side-panel Chat, Inbox review, and Telegram/external channels",
 		"| partial |",
 	} {
@@ -460,6 +462,64 @@ func TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue201
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2019 narrative %q", required)
+		}
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchToIssue2021Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var dataMaintenanceRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Import / Export / Backup / Restore / Maintenance |") {
+			dataMaintenanceRow = line
+			break
+		}
+	}
+	if dataMaintenanceRow == "" {
+		t.Fatalf("expected Import / Export / Backup / Restore / Maintenance surface coverage row")
+	}
+	for _, required := range []string{
+		"#1711, #2021",
+		"`cabinet.maintenance.run_safe_check`",
+		"source surface/channel/thread/message context",
+		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
+		"ASSISTANT-WORKSPACE-016/#2021 dispatches Settings Data/Maintenance Agent Skills with in-app source context",
+		"side-panel Agent Skill preview/apply dispatch",
+		"`source_channel=in-app`",
+		"`maintenance_scope`/`check_level`/`maintenance_note` parameters",
+		"private-note redaction",
+		"local filesystem path redaction",
+		"no external-write claim",
+		"Real import/restore persistence, destructive restore drill, and live Telegram/external-channel validation remain separate",
+	} {
+		if !strings.Contains(dataMaintenanceRow, required) {
+			t.Fatalf("Settings Data/Maintenance row must include #2021 UI/channel evidence %q; row: %s", required, dataMaintenanceRow)
+		}
+	}
+	for _, stale := range []string{
+		"stronger confirmation copy in UI/channel surfaces, and restore drill evidence remain planned",
+		"broader Settings Data/Maintenance, and live Telegram/external-channel validation remain separate",
+	} {
+		if strings.Contains(content, stale) {
+			t.Fatalf("coverage matrix must not keep stale Settings Data/Maintenance UI/channel wording %q", stale)
+		}
+	}
+
+	for _, required := range []string{
+		"The #2021 Settings Data/Maintenance UI/channel dispatch slice adds focused side-panel proof",
+		"without claiming real import/restore persistence, destructive restore drill, live Telegram/external-channel validation, packaged/release acceptance, or #1701 parent closure",
+		"Settings Data/Maintenance side-panel UI/channel dispatch is implemented under #2021",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2021 narrative %q", required)
 		}
 	}
 }

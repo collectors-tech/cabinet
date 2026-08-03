@@ -405,7 +405,7 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 	}
 	for _, required := range []string{
 		"| partial |",
-		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019",
+		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019/#2021",
 		"#1985 reconciles the Skills page detail/actions entry point",
 		"#1987 binds Inbox review Agent launch context",
 		"#1989 reconciles Inbox missing/stale context evidence",
@@ -427,7 +427,9 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 		"`backup_target`/`backup_schedule`/`storage_note` parameters",
 		"local filesystem path redaction",
 		"no external-write claim",
-		"without claiming restore drill, Settings Data/Maintenance completion, live Telegram/external-channel validation, or #1701 parent closure",
+		"#2021 reconciles Settings Data/Maintenance UI/channel dispatch",
+		"`maintenance_scope`/`check_level`/`maintenance_note` parameters",
+		"without claiming real import/restore persistence, destructive restore drill, live Telegram/external-channel validation, packaged/release acceptance, or #1701 parent closure",
 		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
 		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
@@ -437,7 +439,8 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 		"TestAgentSkillCoverageMatrixBindsSettingsAccountUIChannelDispatchToIssue2017Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue2013Evidence",
 		"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
-		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, restore drill, Settings Data/Maintenance, and #1701 parent closure",
+		"TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchToIssue2021Evidence",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, real import/restore persistence, destructive restore drill, and #1701 parent closure",
 		"without duplicating closed #1985/#1989 scope",
 	} {
 		if !strings.Contains(row, required) {
