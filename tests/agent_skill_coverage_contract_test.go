@@ -625,6 +625,49 @@ func TestAgentSkillCoverageMatrixBindsDataImportRestorePersistenceToIssue2023Evi
 	}
 }
 
+func TestAgentSkillCoverageMatrixBindsChatActionTimelineToIssue2029Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var chatAgentRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Chats / Agent itself |") {
+			chatAgentRow = line
+			break
+		}
+	}
+	if chatAgentRow == "" {
+		t.Fatalf("expected Chats / Agent itself surface coverage row")
+	}
+	for _, required := range []string{
+		"#2029",
+		"`cabinet.chat.action_timeline.view`",
+		"TestAgentSkillApplyAPIHandlesChatActionTimelineSkill",
+		"scoped action-timeline evidence",
+		"read-only",
+		"without mutation previews or confirmation tokens",
+		"live Telegram/external-channel validation remains separate",
+	} {
+		if !strings.Contains(chatAgentRow, required) {
+			t.Fatalf("Chats / Agent itself row must include #2029 action-timeline evidence %q; row: %s", required, chatAgentRow)
+		}
+	}
+	for _, stale := range []string{
+		"chat-action-timeline planned",
+		"action timeline and broader acceptance remain tracked by #1703/#1716",
+	} {
+		if strings.Contains(chatAgentRow, stale) {
+			t.Fatalf("Chats / Agent itself row must not keep stale action-timeline wording %q; row: %s", stale, chatAgentRow)
+		}
+	}
+}
+
 func TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence(t *testing.T) {
 	t.Parallel()
 
