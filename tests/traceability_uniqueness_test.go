@@ -58,7 +58,7 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 	allowed := map[string][]string{
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
-			"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019",
+			"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019/#2021/#2023",
 			"openspec/traceability/agent-skill-coverage.md",
 			"TestAgentSkillCoverageMatrixCoversRequiredSurfacesAndFields",
 			"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
@@ -68,7 +68,9 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
 			"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
 			"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
-			"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, restore drill, Settings Data/Maintenance, and #1701 parent closure",
+			"TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchToIssue2021Evidence",
+			"TestAgentSkillCoverageMatrixBindsDataImportRestorePersistenceToIssue2023Evidence",
+			"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-001": {
 			"| partial |",
@@ -398,6 +400,7 @@ func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *t
 		"per-surface Agent skill coverage matrix lists required Cabinet surfaces",
 		"without claiming Settings/Profile UI/channel dispatch",
 		"Settings/Profile UI/channel dispatch, and #1701 parent closure",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, restore drill, Settings Data/Maintenance, and #1701 parent closure",
 	} {
 		if strings.Contains(row, stale) {
 			t.Fatalf("AGENT-SKILL-COVERAGE-001 must not keep stale broad coverage wording %q; row: %s", stale, row)
