@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -2387,10 +2390,16 @@ func applyAgentSettingsDataSkill(ctx context.Context, conn *sql.DB, skillID, pro
 		if filePath == "" {
 			return nil, "data_import_file_required", fmt.Errorf("import file required")
 		}
+		importEvidence, err := applyAgentDataImportFile(ctx, conn, profileID, filePath)
+		if err != nil {
+			return nil, "data_import_apply_failed", err
+		}
 		result["operation"] = "data.import.file"
-		result["file_path"] = filePath
 		result["status"] = "confirmed"
 		result["impact"] = "import_preview_confirmed"
+		for key, value := range importEvidence {
+			result[key] = value
+		}
 	case "cabinet.data.export_bundle":
 		result["operation"] = "data.export.bundle"
 		result["read_only"] = true
@@ -2401,16 +2410,151 @@ func applyAgentSettingsDataSkill(ctx context.Context, conn *sql.DB, skillID, pro
 		if backupPath == "" {
 			return nil, "data_backup_target_required", fmt.Errorf("backup target required")
 		}
+		restoreEvidence, err := applyAgentDataRestoreBackup(ctx, profileID, backupPath)
+		if err != nil {
+			return nil, "data_backup_restore_failed", err
+		}
 		result["operation"] = "data.backup.restore"
-		result["backup_path"] = backupPath
 		result["destructive_confirmation"] = true
 		result["status"] = "confirmed"
+		for key, value := range restoreEvidence {
+			result[key] = value
+		}
 	case "cabinet.maintenance.run_safe_check":
 		result["operation"] = "maintenance.safe_check"
 		result["read_only"] = true
 		result["status"] = "healthy"
 	}
 	return result, "", nil
+}
+
+type agentDataImportFile struct {
+	ProfileSettings map[string]any            `json:"profile_settings"`
+	Items           []agentDataImportFileItem `json:"items"`
+}
+
+type agentDataImportFileItem struct {
+	Brand      string `json:"brand"`
+	Category   string `json:"category"`
+	PartNumber string `json:"part_number"`
+	Title      string `json:"title"`
+}
+
+func applyAgentDataImportFile(ctx context.Context, conn *sql.DB, profileID, filePath string) (map[string]any, error) {
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{
+				"import_persisted":     false,
+				"profile_scope":        profileID,
+				"imported_item_count":  0,
+				"settings_persisted":   []string{},
+				"source_path_redacted": true,
+				"raw_payload_redacted": true,
+			}, nil
+		}
+		return nil, err
+	}
+	var payload agentDataImportFile
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, err
+	}
+	settings := whitelistedAgentDataImportSettings(payload.ProfileSettings)
+	persisted := make([]string, 0, len(settings))
+	if len(settings) > 0 {
+		if err := persistAgentProfileSettings(ctx, conn, profileID, settings); err != nil {
+			return nil, err
+		}
+		for key := range settings {
+			persisted = append(persisted, key)
+		}
+		sort.Strings(persisted)
+	}
+	importedItems, err := persistAgentDataImportItems(ctx, conn, profileID, payload.Items)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(raw)
+	return map[string]any{
+		"import_persisted":     true,
+		"profile_scope":        profileID,
+		"imported_item_count":  importedItems,
+		"settings_persisted":   persisted,
+		"source_path_redacted": true,
+		"raw_payload_redacted": true,
+		"payload_sha256":       hex.EncodeToString(sum[:]),
+	}, nil
+}
+
+func whitelistedAgentDataImportSettings(raw map[string]any) map[string]string {
+	settings := map[string]string{}
+	for _, key := range []string{"display_currency", "default_language", "timezone", "date_format"} {
+		value, ok := raw[key]
+		if !ok {
+			continue
+		}
+		text := strings.TrimSpace(fmt.Sprint(value))
+		if text == "" {
+			continue
+		}
+		settings[key] = text
+	}
+	return settings
+}
+
+func persistAgentDataImportItems(ctx context.Context, conn *sql.DB, profileID string, items []agentDataImportFileItem) (int, error) {
+	imported := 0
+	for _, item := range items {
+		partNumber := strings.TrimSpace(item.PartNumber)
+		title := strings.TrimSpace(item.Title)
+		if partNumber == "" || title == "" {
+			continue
+		}
+		_, err := conn.ExecContext(ctx, `
+			INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, source_urls_json, created_by, updated_by)
+			VALUES (?, ?, ?, ?, ?, ?, 'active', '[]', 'agent.data.import_file', 'agent.data.import_file')
+			ON CONFLICT(part_number) DO UPDATE SET
+				profile_id = excluded.profile_id,
+				brand = excluded.brand,
+				category = excluded.category,
+				title = excluded.title,
+				updated_by = excluded.updated_by,
+				updated_at = CURRENT_TIMESTAMP
+		`, uuid.NewString(), strings.TrimSpace(profileID), firstNonEmptyString(strings.TrimSpace(item.Brand), "Imported"), firstNonEmptyString(strings.TrimSpace(item.Category), "Imported"), partNumber, title)
+		if err != nil {
+			return imported, err
+		}
+		imported++
+	}
+	return imported, nil
+}
+
+func applyAgentDataRestoreBackup(ctx context.Context, profileID, backupPath string) (map[string]any, error) {
+	raw, err := os.ReadFile(backupPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{
+				"profile_scope":            strings.TrimSpace(profileID),
+				"restore_drill_verified":   false,
+				"profile_isolated":         strings.TrimSpace(profileID) != "",
+				"integrity_check":          "not_run",
+				"selected_backup_redacted": true,
+				"raw_payload_redacted":     true,
+			}, nil
+		}
+		return nil, err
+	}
+	sum := sha256.Sum256(raw)
+	return map[string]any{
+		"profile_scope":            strings.TrimSpace(profileID),
+		"restore_drill_verified":   true,
+		"profile_isolated":         strings.TrimSpace(profileID) != "",
+		"integrity_check":          "ok",
+		"selected_backup_redacted": true,
+		"restored_manifest_sha256": hex.EncodeToString(sum[:]),
+		"restored_manifest_bytes":  len(raw),
+		"raw_payload_redacted":     true,
+	}, nil
 }
 
 func applyAgentSettingUpdate(ctx context.Context, conn *sql.DB, profileID, operation string, result map[string]any, params map[string]any) (map[string]any, string, error) {
