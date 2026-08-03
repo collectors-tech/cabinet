@@ -1111,6 +1111,114 @@ func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesChatActionTimelineSkill(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Chat Timeline"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Action Timeline Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	createRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"chat.app_control.dispatch",
+		"capability_id":"inventory.item.search",
+		"source_channel":"in-app",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"message-action-timeline-2029",
+		"confirmation_state":"not_required",
+		"input":{"query":"private raw prompt should stay out"},
+		"provider_trace":{"preview_id":"preview-secret-2029","api_key":"sk-test-secret"},
+		"bulk_items":[{"id":"timeline-step","label":"Search Inventory"}]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createRun.Code != http.StatusCreated {
+		t.Fatalf("create workflow run status=%d body=%s", createRun.Code, createRun.Body.String())
+	}
+	var run struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createRun.Body).Decode(&run); err != nil {
+		t.Fatalf("decode workflow run: %v", err)
+	}
+	completeRun := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+run.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"result":{"operation":"inventory.item.search","authority_outcome":"apply_allowed","mutation_applied":false,"preview_id":"preview-secret-2029"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if completeRun.Code != http.StatusOK {
+		t.Fatalf("complete workflow run status=%d body=%s", completeRun.Code, completeRun.Body.String())
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.chat.action_timeline.view",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"message-action-timeline-request-2029",
+		"parameters":{"workspace_id":"workspace-chat-2029","thread_id":"`+thread.ID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("action timeline apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	body := apply.Body.String()
+	for _, want := range []string{
+		`"skill_id":"cabinet.chat.action_timeline.view"`,
+		`"read_only":true`,
+		`"mutation_applied":false`,
+		`"confirmation_required":false`,
+		`"scoped_action_timeline":true`,
+		`"thread_id":"` + thread.ID + `"`,
+		`"workflow_run_id":"` + run.ID + `"`,
+		`"workflow_id":"chat.app_control.dispatch"`,
+		`"capability_id":"inventory.item.search"`,
+		`"source_channel":"in-app"`,
+		`"source_message_id":"message-action-timeline-2029"`,
+		`"operation":"inventory.item.search"`,
+		`"authority_outcome":"apply_allowed"`,
+		`"evidence_redacted":true`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("action timeline evidence missing %s: body=%s", want, body)
+		}
+	}
+	for _, forbidden := range []string{"preview-secret-2029", "sk-test-secret", "private raw prompt should stay out", `"confirmation_token_returned":true`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("action timeline response leaked forbidden evidence %q: body=%s", forbidden, body)
+		}
+	}
+
+	crossThread := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.chat.action_timeline.view",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"other-thread-2029",
+		"parameters":{"workspace_id":"workspace-chat-2029","thread_id":"other-thread-2029"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if crossThread.Code != http.StatusOK || strings.Contains(crossThread.Body.String(), run.ID) {
+		t.Fatalf("timeline skill must stay scoped to the requested thread, status=%d body=%s", crossThread.Code, crossThread.Body.String())
+	}
+}
+
 func TestAgentSkillApplyAPIHandlesDashboardActivitySummary(t *testing.T) {
 	t.Parallel()
 

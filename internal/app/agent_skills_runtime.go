@@ -32,6 +32,8 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		params = map[string]any{}
 	}
 	switch skillID {
+	case "cabinet.chat.action_timeline.view":
+		return applyAgentChatActionTimelineSkill(ctx, chatSvc, profileID, params)
 	case "cabinet.inbox.mark_handled":
 		return applyAgentInboxSkill(ctx, chatSvc, profileID, params, "read")
 	case "cabinet.inbox.archive_or_hide":
@@ -156,6 +158,59 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 	default:
 		return nil, "skill_apply_not_supported", fmt.Errorf("skill apply not supported")
 	}
+}
+
+func applyAgentChatActionTimelineSkill(ctx context.Context, chatSvc *chat.Service, profileID string, params map[string]any) (map[string]any, string, error) {
+	if chatSvc == nil {
+		return nil, "chat_timeline_store_required", fmt.Errorf("chat service required")
+	}
+	threadID := firstNonEmptyString(stringMapParam(params, "thread_id"), stringMapParam(params, "source_thread_id"))
+	if threadID == "" {
+		return nil, "chat_timeline_thread_required", fmt.Errorf("thread required")
+	}
+	runs, err := chatSvc.ListWorkflowRuns(ctx, profileID, threadID)
+	if err != nil {
+		return nil, "chat_timeline_unavailable", err
+	}
+	entries := make([]map[string]any, 0, len(runs))
+	for _, run := range runs {
+		entry := map[string]any{
+			"workflow_run_id":    run.ID,
+			"workflow_id":        run.WorkflowID,
+			"capability_id":      run.CapabilityID,
+			"source_channel":     run.SourceChannel,
+			"source_thread_id":   run.SourceThreadID,
+			"source_message_id":  run.SourceMessageID,
+			"status":             run.Status,
+			"confirmation_state": run.ConfirmationState,
+			"created_at":         run.CreatedAt,
+			"updated_at":         run.UpdatedAt,
+		}
+		if operation := stringMapParam(run.Result, "operation"); operation != "" {
+			entry["operation"] = operation
+		}
+		if outcome := stringMapParam(run.Result, "authority_outcome"); outcome != "" {
+			entry["authority_outcome"] = outcome
+		}
+		if _, ok := run.Result["mutation_applied"]; ok {
+			entry["mutation_applied"] = boolMapParam(run.Result, "mutation_applied")
+		}
+		entries = append(entries, entry)
+	}
+	return map[string]any{
+		"profile_id":                  strings.TrimSpace(profileID),
+		"thread_id":                   threadID,
+		"operation":                   "chat.action_timeline.view",
+		"read_only":                   true,
+		"mutation_applied":            false,
+		"confirmation_required":       false,
+		"confirmation_token_returned": false,
+		"scoped_action_timeline":      true,
+		"timeline_entries":            entries,
+		"timeline_entry_count":        len(entries),
+		"evidence_redacted":           true,
+		"next_action":                 "Open the Action Timeline in the active Chat thread to inspect these governed workflow summaries.",
+	}, "", nil
 }
 
 func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (map[string]any, string, error) {
