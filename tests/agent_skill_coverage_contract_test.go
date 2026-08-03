@@ -487,7 +487,7 @@ func TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchTo
 		t.Fatalf("expected Import / Export / Backup / Restore / Maintenance surface coverage row")
 	}
 	for _, required := range []string{
-		"#1711, #2021",
+		"#1711, #2021, #2023",
 		"`cabinet.maintenance.run_safe_check`",
 		"source surface/channel/thread/message context",
 		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
@@ -498,7 +498,7 @@ func TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchTo
 		"private-note redaction",
 		"local filesystem path redaction",
 		"no external-write claim",
-		"Real import/restore persistence, destructive restore drill, and live Telegram/external-channel validation remain separate",
+		"Live Telegram/external-channel validation remains separate",
 	} {
 		if !strings.Contains(dataMaintenanceRow, required) {
 			t.Fatalf("Settings Data/Maintenance row must include #2021 UI/channel evidence %q; row: %s", required, dataMaintenanceRow)
@@ -520,6 +520,62 @@ func TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchTo
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2021 narrative %q", required)
+		}
+	}
+}
+
+func TestAgentSkillCoverageMatrixBindsDataImportRestorePersistenceToIssue2023Evidence(t *testing.T) {
+	t.Parallel()
+
+	matrixPath := filepath.Join("..", "openspec", "traceability", "agent-skill-coverage.md")
+	raw, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatalf("read agent skill coverage matrix: %v", err)
+	}
+	content := string(raw)
+
+	var dataMaintenanceRow string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "| Import / Export / Backup / Restore / Maintenance |") {
+			dataMaintenanceRow = line
+			break
+		}
+	}
+	if dataMaintenanceRow == "" {
+		t.Fatalf("expected Import / Export / Backup / Restore / Maintenance surface coverage row")
+	}
+	for _, required := range []string{
+		"#2023",
+		"`cabinet.data.import_file`",
+		"`cabinet.data.restore_backup`",
+		"TestAgentSkillApplyAPIHandlesDataImportRestorePersistenceEvidence",
+		"confirmed import persistence for selected JSON fixtures",
+		"profile-scoped setting/item changes",
+		"key-only persisted-setting evidence",
+		"selected path/raw payload redaction",
+		"restore-drill SHA-256/byte-count integrity evidence",
+		"profile isolation without touching live user data",
+	} {
+		if !strings.Contains(dataMaintenanceRow, required) {
+			t.Fatalf("Settings Data/Maintenance row must include #2023 persistence evidence %q; row: %s", required, dataMaintenanceRow)
+		}
+	}
+	for _, stale := range []string{
+		"Real import/restore persistence, destructive restore drill, and live Telegram/external-channel validation remain separate",
+	} {
+		if strings.Contains(content, stale) {
+			t.Fatalf("coverage matrix must not keep stale #2023 gap wording %q", stale)
+		}
+	}
+	for _, required := range []string{
+		"The #2023 Settings Data import/restore drill slice adds focused direct API proof",
+		"confirmed import from an explicit selected JSON fixture persists whitelisted profile settings and canonical item rows",
+		"confirmed restore drill verifies selected backup bytes with SHA-256/byte-count integrity evidence",
+		"without claiming live Telegram/external-channel validation, packaged/release acceptance, or #1701 parent closure",
+		"Settings Data import/restore drill proof is implemented under #2023",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("coverage matrix must include #2023 narrative %q", required)
 		}
 	}
 }
