@@ -1,5 +1,7 @@
 param(
   [string]$Version = "",
+  [string]$ExpectedCommit = "",
+  [string]$OutputDirectory = "dist",
   [switch]$InstallUIDeps
 )
 
@@ -21,12 +23,42 @@ if ($resolvedVersion -notmatch '^\d+\.\d+\.\d+-beta\.\d+$') {
   throw "Version must be a semantic private-beta version such as 0.1.0-beta.1; got '$Version'"
 }
 
-$out = Join-Path $root "dist"
+$buildRevision = (& git -C $root rev-parse HEAD 2>$null).Trim().ToLowerInvariant()
+if ($LASTEXITCODE -ne 0 -or $buildRevision -notmatch '^[0-9a-f]{40}$') {
+  throw "Unable to resolve a full source commit for Cabinet packaging."
+}
+if (-not [string]::IsNullOrWhiteSpace($ExpectedCommit)) {
+  $resolvedExpectedCommit = $ExpectedCommit.Trim().ToLowerInvariant()
+  if ($resolvedExpectedCommit -notmatch '^[0-9a-f]{40}$') {
+    throw "ExpectedCommit must be a full 40-character commit SHA."
+  }
+  if ($buildRevision -ne $resolvedExpectedCommit) {
+    throw "Expected commit $resolvedExpectedCommit but checked out $buildRevision."
+  }
+}
+$worktreeState = @(& git -C $root status --porcelain --untracked-files=all 2>$null)
+if ($LASTEXITCODE -ne 0) {
+  throw "Unable to verify the Cabinet packaging worktree."
+}
+if ($worktreeState.Count -gt 0) {
+  throw "Cabinet packaging requires a clean source worktree."
+}
+$buildDate = (& git -C $root show -s --format=%cI HEAD 2>$null).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($buildDate)) {
+  throw "Unable to resolve the source commit build date."
+}
+
+$out = if ([System.IO.Path]::IsPathRooted($OutputDirectory)) {
+  [System.IO.Path]::GetFullPath($OutputDirectory)
+} else {
+  [System.IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
+}
 $stage = Join-Path $out "stage-windows-amd64"
 $packageName = "cabinet-$resolvedVersion-windows-amd64-portable.zip"
 $packagePath = Join-Path $out $packageName
 $checksumPath = "$packagePath.sha256"
 $notesPath = Join-Path $out "cabinet-$resolvedVersion-release-notes.md"
+$manifestPath = Join-Path $out "cabinet-release-manifest.json"
 
 Write-CabinetBanner -Command "package-installers" -Summary "Build the Windows portable beta package."
 Write-CabinetKeyValue -Key "Version" -Value $resolvedVersion
@@ -36,6 +68,11 @@ Write-CabinetHint "This script creates a truthful Windows portable package, not 
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stage
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
+foreach ($artifactPath in @($packagePath, $checksumPath, $notesPath, $manifestPath)) {
+  if (Test-Path -LiteralPath $artifactPath) {
+    throw "Refusing to overwrite existing release output: $artifactPath"
+  }
+}
 
 Write-CabinetSection "Static UI"
 Write-CabinetStatus -State "run" -Message "Building ui.web static bundle first."
@@ -44,8 +81,6 @@ if ($LASTEXITCODE -ne 0) {
   throw "ui.web build failed with exit code $LASTEXITCODE"
 }
 
-$buildRevision = (& git -C $root rev-parse HEAD 2>$null).Trim()
-$buildDate = (& git -C $root show -s --format=%cI HEAD 2>$null).Trim()
 $ldflags = @(
   "-X", "github.com/collectors-tech/cabinet/internal/app.buildVersion=$resolvedVersion",
   "-X", "github.com/collectors-tech/cabinet/internal/app.buildRevision=$buildRevision",
@@ -85,17 +120,52 @@ Commit: ``$buildRevision``
 Build date: ``$buildDate``
 Channel: private beta
 
-This artefact is a Windows portable package. Code signing and installer claims are intentionally out of scope until signed installer evidence exists.
+This artefact is a Windows portable package. It is not an installer. Code signing and installer claims are intentionally out of scope until signed installer evidence exists.
 
 Release remains gated on #1864 approval and must not be promoted to ``main`` without explicit approval.
 "@ | Set-Content -LiteralPath $notesPath -Encoding utf8
 
-Remove-Item -Force -ErrorAction SilentlyContinue $packagePath, $checksumPath
-Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $packagePath -Force
+Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $packagePath
 $hash = Get-FileHash -LiteralPath $packagePath -Algorithm SHA256
-"$($hash.Hash.ToLowerInvariant())  $packageName" | Set-Content -LiteralPath $checksumPath -Encoding ascii
+$checksumLine = "$($hash.Hash.ToLowerInvariant())  $packageName`n"
+[System.IO.File]::WriteAllText($checksumPath, $checksumLine, [System.Text.UTF8Encoding]::new($false))
+
+$stagePrefixLength = $stage.TrimEnd('\', '/').Length + 1
+$packageFiles = @(
+  Get-ChildItem -LiteralPath $stage -Recurse -File |
+    Sort-Object FullName |
+    ForEach-Object {
+      $fileHash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256
+      [ordered]@{
+        path = $_.FullName.Substring($stagePrefixLength).Replace('\', '/')
+        size_bytes = [int64]$_.Length
+        sha256 = $fileHash.Hash.ToLowerInvariant()
+      }
+    }
+)
+$releaseManifest = [ordered]@{
+  schema_version = 1
+  product = "Cabinet"
+  channel = "private-beta"
+  version = $resolvedVersion
+  source_commit = $buildRevision
+  build_date = $buildDate
+  publication_state = "private_candidate_not_published"
+  artifact = [ordered]@{
+    target = "windows-amd64"
+    kind = "portable_zip"
+    filename = $packageName
+    sha256_filename = "$packageName.sha256"
+    sha256 = $hash.Hash.ToLowerInvariant()
+    size_bytes = [int64](Get-Item -LiteralPath $packagePath).Length
+  }
+  release_notes_filename = [System.IO.Path]::GetFileName($notesPath)
+  package_files = $packageFiles
+}
+$releaseManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding utf8
 
 Write-CabinetStatus -State "ok" -Message "Windows portable package created."
 Write-CabinetKeyValue -Key "Package path" -Value $packagePath
 Write-CabinetKeyValue -Key "SHA256 path" -Value $checksumPath
 Write-CabinetKeyValue -Key "Release notes" -Value $notesPath
+Write-CabinetKeyValue -Key "Release manifest" -Value $manifestPath

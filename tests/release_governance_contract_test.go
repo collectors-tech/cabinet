@@ -14,7 +14,7 @@ func TestBetaReleaseTrackersUseOneAcyclicGateModel(t *testing.T) {
 	for relativePath, required := range map[string][]string{
 		"TASK_LIST.md": {
 			"#2037 [DONE]",
-			"#2036 [IN REVIEW]",
+			"#2036 [DONE]",
 			"#2033",
 			"#2035",
 			"#2032",

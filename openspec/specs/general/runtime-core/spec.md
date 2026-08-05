@@ -38,6 +38,8 @@ Cabinet beta packaging SHALL use one canonical private-beta version source and S
 - **THEN** the package filename SHALL include the beta version and `windows-amd64-portable`
 - **AND** the runtime binary SHALL embed the same semantic version, commit revision, and build date for `/api/runtime`
 - **AND** packaging SHALL create a SHA-256 checksum file and release notes
+- **AND** packaging MUST reject a dirty or unexpected source commit and emit a machine-readable manifest containing exact source, target, archive checksum/size and every packaged file checksum/size
+- **AND** a cross-platform verifier MUST inspect the ZIP contents and reject missing, unexpected or hash-mismatched files
 - **AND** macOS artefacts SHALL NOT be claimed by the Windows beta package lane until separately signed and validated
 - **AND** OpenSpec release guidance SHALL describe install/start, data location, backup/upgrade, rollback/removal, signing limits, and release approval gates
 - **AND** release validation SHALL preserve non-publishing checklists for clean Windows portable start and existing data-directory upgrade proof before #1868 completion
@@ -64,6 +66,20 @@ Cabinet SHALL separate source/live readiness, internal candidate creation, packa
 - **AND** final #1864 approval SHALL occur only after packaged evidence exists
 - **AND** external prerelease publication and `develop` to `main` promotion SHALL remain prohibited until that explicit approval
 - **AND** any accepted release-blocking fix SHALL create a new exact candidate commit and invalidate earlier candidate acceptance
+
+### Requirement RUNTIME-CORE-022: Beta publication MUST reuse one approved exact candidate
+Cabinet SHALL publish an external beta prerelease only through an explicit approval-evidenced workflow that reuses and reverifies the successful internal candidate artefacts.
+
+#### Scenario: Publish an approved immutable prerelease
+- **GIVEN** #1869 and #1867 accepted one exact successful Beta Release Candidate Gate run
+- **AND** a trusted repository owner/member/collaborator posts `APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>` on #1864
+- **WHEN** the manual prerelease workflow receives that exact commit, candidate run ID and approval comment ID
+- **THEN** it MUST verify the comment issue, author association and exact marker
+- **AND** it MUST verify the workflow name, dispatch event, head commit, successful conclusion and unexpired exact candidate artifact
+- **AND** it MUST download and reverify the Cabinet archive/content manifest, Browser Companion packages and combined candidate manifest before publication
+- **AND** it MUST reject an existing immutable version tag and publish one prerelease targeting the accepted commit with separate checksums and release notes
+- **AND** a successful `main` workflow MUST NOT create or update a release automatically
+- **AND** the publication workflow MUST NOT merge `develop` into `main`.
 
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
