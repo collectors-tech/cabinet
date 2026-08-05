@@ -12,7 +12,7 @@
     "ct": "cypress run --component --browser electron --config-file cypress.config.component.mjs",
     "e2e": "node ../scripts/run-cypress.mjs run --browser electron",
     "e2e:journeys": "node ../scripts/run-cypress.mjs run --browser electron --config-file cypress.config.runtime.cjs --spec \"cypress/e2e/**/*.cy.ts\"",
-    "e2e:ci-smoke": "node ../scripts/run-cypress.mjs run --browser electron --config-file cypress.config.runtime.cjs --spec \"cypress/e2e/general/ui-login-session/spec.cy.ts\"",
+    "e2e:ci-smoke": "node ../scripts/run-cypress.mjs run --browser electron --config-file cypress.config.runtime.cjs --spec \"cypress/e2e/general/ui-login-session/spec.cy.ts,cypress/e2e/integrations/browser-companion-pairing/spec.cy.ts\"",
     "e2e:matrix": "pwsh -NoLogo -NoProfile -File ../scripts/run-cypress-matrix.ps1",
     "e2e:foundation": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/general/ui-login-session/spec.cy.ts -Browser chrome",
     "e2e:api-smoke": "pwsh -NoLogo -NoProfile -File ../scripts/run-api-contract-smoke.ps1",

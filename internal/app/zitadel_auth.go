@@ -202,6 +202,9 @@ func requiresZitadelSession(boundary *zitadelAuthBoundary, r *http.Request) bool
 	if r.URL.Path == "/api/runtime" || r.URL.Path == "/api/runtime/setup-status" || r.URL.Path == "/api/openapi.yaml" || r.URL.Path == "/api/auth/provider-options" {
 		return false
 	}
+	if companionSelfAuthenticatedPath(r.URL.Path) {
+		return false
+	}
 	return !strings.HasPrefix(r.URL.Path, "/api/auth/zitadel/")
 }
 

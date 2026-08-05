@@ -11,6 +11,22 @@
 - Validate token
 - Run provider sync
 
+## Browser Companion pairing and recovery
+
+The optional Browser Companion connects only to Cabinet on your own computer. Start pairing in the extension, then open Integrations in an unlocked Cabinet window. Compare the extension name and six-digit pairing code before selecting **Approve**. Reject any device, origin or code you do not recognise. Approval is required before the extension receives a usable session.
+
+Cabinet lists paired extensions under **Browser Companion access** without displaying their credentials. Use **Revoke** for a lost, replaced or suspicious extension, or **Revoke all** if the computer or browser profile may be compromised. Reinstalling the extension or clearing browser storage removes its credential; revoke the old session in Cabinet and pair again. Credential rotation revokes the previous value automatically.
+
+Chrome and Edge development builds, unpacked builds and store releases can have different extension origins. Cabinet treats each origin as a separate device boundary, so pair them separately. Never put a Browser Companion credential in a URL, log, screenshot, support request or chat.
+
+### Security and privacy boundary
+
+Cabinet accepts companion traffic only over loopback and binds a random credential to one Cabinet instance, active profile, extension origin, device identity, protocol version, expiry and capability set. Pairing requests expire, exchanges work once, credentials are stored as verifiers in Cabinet, and origin, Host, remote-address, rate, concurrency and body-size checks fail closed. Module discovery includes only enabled integration instances for the paired profile and removes secret, token, password, cookie and API-key configuration.
+
+The companion captures only supported page data that the collector is legitimately viewing. It must not export browser cookies, solve access challenges, crawl invisibly or perform provider writes. Item and media submissions remain passive transport envelopes until Cabinet's review and persistence workflow explicitly accepts them.
+
+This boundary cannot protect a credential from malware or another person who already controls the unlocked operating-system account, Cabinet process or browser profile. If local compromise is suspected, close Cabinet, secure the operating-system account, revoke all companion sessions after recovery, remove unknown extensions, reinstall the trusted extension and pair again. Restore Cabinet from a known-good backup if its local database may have been altered.
+
 ## eBay setup
 Use the eBay integration setup when you want Cabinet to run authenticated eBay listing searches from Market Watch.
 

@@ -195,8 +195,8 @@ func TestOpenAPIOperationsDeclareClientErrorResponses(t *testing.T) {
 
 	specPath, raw := readOpenAPISpec(t)
 	lines := regexp.MustCompile(`\r?\n`).Split(string(raw), -1)
-	operationPattern := regexp.MustCompile(`^    (get|post|put|patch|delete):\s*$`)
-	responsePattern := regexp.MustCompile(`^        ["']?([0-9]{3}|default)["']?:\s*$`)
+	operationPattern := regexp.MustCompile(`^    (get|post|put|patch|delete|options):\s*$`)
+	responsePattern := regexp.MustCompile(`^        ["']?([0-9]{3}|default)["']?:`)
 
 	var missing []string
 	for idx := 0; idx < len(lines); idx++ {

@@ -23,6 +23,9 @@ func TestOpenAndMigrateCreatesCoreTables(t *testing.T) {
 
 	assertTableExists(t, conn, "schema_migrations")
 	assertTableExists(t, conn, "profiles")
+	assertTableExists(t, conn, "companion_pairing_requests")
+	assertTableExists(t, conn, "companion_sessions")
+	assertTableExists(t, conn, "companion_audit_events")
 }
 
 func TestOpenAndMigrateParallelFreshDBsCompletesWithinContext(t *testing.T) {

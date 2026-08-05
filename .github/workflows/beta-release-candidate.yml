@@ -74,6 +74,10 @@ jobs:
         shell: pwsh
         run: npm --prefix ui.web run build *>&1 | Tee-Object .logs/release-candidate/ui-build.log
 
+      - name: Browser Companion protocol lifecycle
+        shell: pwsh
+        run: node --test browser-extension/tests/companion-protocol-contract.test.mjs *>&1 | Tee-Object .logs/release-candidate/browser-companion-contract.log
+
       - name: Full Go test suite
         shell: pwsh
         run: go test ./... *>&1 | Tee-Object .logs/release-candidate/go-test.log

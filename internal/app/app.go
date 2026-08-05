@@ -169,7 +169,11 @@ func New(cfg config.Config) (*App, error) {
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
-	companionSvc := companion.DefaultService()
+	companionSvc, err := companion.NewPersistentService(ctx, conn, profiles, companion.DefaultModules(), companion.Options{})
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("init browser companion: %w", err)
+	}
 	aiSvc := ai.NewService(ai.Config{})
 	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles)))
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
@@ -2546,38 +2550,7 @@ func New(cfg config.Config) (*App, error) {
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
 		})
 	})
-	mux.HandleFunc("/api/companion/modules", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodGet {
-			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(companionSvc.Registry())
-	})
-	mux.HandleFunc("/api/companion/payloads", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodPost {
-			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
-			return
-		}
-		var req companion.PayloadSubmission
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
-			return
-		}
-		accepted, err := companionSvc.AcceptPayload(req, r.Header.Get("Authorization"))
-		if err != nil {
-			status := http.StatusBadRequest
-			if err.Error() == "companion_auth_required" {
-				status = http.StatusUnauthorized
-			}
-			w.WriteHeader(status)
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
-			return
-		}
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(accepted)
-	})
+	registerCompanionRoutes(mux, companionSvc, profiles, authService)
 	mux.HandleFunc("/api/providers/ebay/buyer-interest/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -8291,7 +8264,25 @@ func requiresUnlockedSession(r *http.Request) bool {
 	if r.URL.Path == "/api/profiles" || r.URL.Path == "/api/profiles/active" {
 		return false
 	}
+	if companionSelfAuthenticatedPath(r.URL.Path) {
+		return false
+	}
 	return true
+}
+
+func companionSelfAuthenticatedPath(path string) bool {
+	switch path {
+	case "/api/companion/pairing/requests",
+		"/api/companion/pairing/exchanges",
+		"/api/companion/session",
+		"/api/companion/session/rotate",
+		"/api/companion/modules",
+		"/api/companion/payloads",
+		"/api/companion/media-submissions":
+		return true
+	default:
+		return false
+	}
 }
 
 func sessionTokenFromRequest(r *http.Request) string {
