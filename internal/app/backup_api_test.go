@@ -3,6 +3,9 @@ package app
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -191,6 +194,97 @@ func TestBackupRunAndRestorePreservesCanonicalMediaAssets(t *testing.T) {
 	}
 	if !bytes.Equal(restoredManifest, manifestBefore) || !bytes.Equal(restoredOriginal, originalBefore) {
 		t.Fatalf("restore did not round-trip canonical media manifest/original bytes")
+	}
+}
+
+func TestBackupRestoreRelocatesCompanionCapturesAndCanonicalMedia(t *testing.T) {
+	t.Setenv("CABINET_SEED_SAMPLE_DATA", "0")
+	sourceApp := newTestApp(t)
+	profileID := prepareCompanionAPIProfile(t, sourceApp)
+	if _, err := sourceApp.db.ExecContext(context.Background(), `
+		INSERT INTO companion_captures(id, profile_id, session_id, module_id, module_version, schema_version, provider_id,
+			integration_instance_id, payload_type, source_url, captured_at, page_complete, payload_hash, idempotency_key,
+			redaction_summary_json, raw_payload_json, state, checkpoint_json, created_at, updated_at)
+		VALUES ('companion-backup-capture',?,'session','ebay-purchase-capture','1.0.0','1','ebay','instance','purchase_order',
+			'https://www.ebay.com/mye/myebay/purchase','2026-08-06T00:00:00Z',1,'sha256:capture','companion-backup-capture',
+			'["no_cookies","no_raw_page","no_tokens"]','{"redacted":true}','review','{"records_committed":1}',
+			'2026-08-06T00:00:00Z','2026-08-06T00:00:00Z');
+		INSERT INTO companion_purchase_inbox(id, capture_id, profile_id, provider_id, order_key, item_key, card_json, state,
+			first_seen, last_seen, created_at, updated_at)
+		VALUES ('companion-backup-purchase','companion-backup-capture',?,'ebay','ORDER-BACKUP','TX-BACKUP',
+			'{"transaction_id":"TX-BACKUP","listing_title":"Backup purchase","quantity":1,"item_price":"AU $5.00"}',
+			'review','2026-08-06T00:00:00Z','2026-08-06T00:00:00Z','2026-08-06T00:00:00Z','2026-08-06T00:00:00Z')
+	`, profileID, profileID); err != nil {
+		t.Fatalf("seed companion backup records: %v", err)
+	}
+	imageBytes := sampleJPEG(t)
+	digest := sha256.Sum256(imageBytes)
+	asset, err := media.NewService(sourceApp.db, filepath.Join(sourceApp.cfg.DataDir, "media")).SaveCompanionAsset(context.Background(), media.CompanionAssetInput{
+		ProfileID: profileID, CaptureID: "companion-backup-capture", FieldName: "cards[0].image_url", Filename: "backup.jpg",
+		IdempotencyKey: "companion-backup-media",
+		MIMEType:       "image/jpeg", ContentHash: hex.EncodeToString(digest[:]), SourceURL: "https://www.ebay.com/itm/backup",
+		Provenance: map[string]string{"module_id": "ebay-purchase-capture", "provider_id": "ebay"},
+	}, bytes.NewReader(imageBytes))
+	if err != nil {
+		t.Fatalf("save companion backup asset: %v", err)
+	}
+	profileExport := doRequest(t, sourceApp, http.MethodGet, "/api/data/export/json", nil, nil)
+	if profileExport.Code != http.StatusOK {
+		t.Fatalf("companion-safe profile export status=%d body=%s", profileExport.Code, profileExport.Body.String())
+	}
+	if strings.Contains(profileExport.Body.String(), "companion-backup-capture") || strings.Contains(profileExport.Body.String(), `"redacted":true`) || strings.Contains(profileExport.Body.String(), "credential_verifier") {
+		t.Fatalf("profile export leaked companion queue, raw payload or credential metadata: %s", profileExport.Body.String())
+	}
+
+	runResp := doRequest(t, sourceApp, http.MethodPost, "/api/backup/run", nil, nil)
+	if runResp.Code != http.StatusOK {
+		t.Fatalf("companion backup run status=%d body=%s", runResp.Code, runResp.Body.String())
+	}
+	var runPayload struct {
+		Backup struct {
+			Path string `json:"path"`
+		} `json:"backup"`
+	}
+	if err := json.NewDecoder(runResp.Body).Decode(&runPayload); err != nil {
+		t.Fatalf("decode companion backup: %v", err)
+	}
+	archiveEntryBytes(t, runPayload.Backup.Path, filepath.ToSlash(filepath.Join("media", "assets", asset.ID, "manifest.json")))
+	archiveEntryBytes(t, runPayload.Backup.Path, filepath.ToSlash(filepath.Join("media", "assets", asset.ID, "original", "backup.jpg")))
+
+	targetApp := newTestApp(t)
+	targetBackupPath := filepath.Join(targetApp.cfg.DataDir, "backups", filepath.Base(runPayload.Backup.Path))
+	if err := os.MkdirAll(filepath.Dir(targetBackupPath), 0o755); err != nil {
+		t.Fatalf("create companion relocated backup dir: %v", err)
+	}
+	copyFileForTest(t, runPayload.Backup.Path, targetBackupPath)
+	restoreBody := bytes.NewBufferString(`{"backup_path":"` + strings.ReplaceAll(targetBackupPath, `\`, `\\`) + `","confirm_restore":true}`)
+	restoreResp := doRequest(t, targetApp, http.MethodPost, "/api/backup/restore", restoreBody, map[string]string{"Content-Type": "application/json"})
+	if restoreResp.Code != http.StatusOK {
+		t.Fatalf("companion relocated restore status=%d body=%s", restoreResp.Code, restoreResp.Body.String())
+	}
+	var captures, purchases, assets, links int
+	for _, check := range []struct {
+		query string
+		dest  *int
+	}{
+		{`SELECT COUNT(*) FROM companion_captures WHERE id = 'companion-backup-capture'`, &captures},
+		{`SELECT COUNT(*) FROM companion_purchase_inbox WHERE id = 'companion-backup-purchase'`, &purchases},
+		{`SELECT COUNT(*) FROM companion_media_assets WHERE id = '` + asset.ID + `'`, &assets},
+		{`SELECT COUNT(*) FROM companion_media_links WHERE asset_id = '` + asset.ID + `'`, &links},
+	} {
+		if err := targetApp.db.QueryRow(check.query).Scan(check.dest); err != nil {
+			t.Fatalf("verify restored companion record: %v", err)
+		}
+	}
+	if captures != 1 || purchases != 1 || assets != 1 || links != 1 {
+		t.Fatalf("restored companion counts captures=%d purchases=%d assets=%d links=%d", captures, purchases, assets, links)
+	}
+	restoredOriginal, err := os.ReadFile(filepath.Join(targetApp.cfg.DataDir, "media", "assets", asset.ID, "original", "backup.jpg"))
+	if err != nil || !bytes.Equal(restoredOriginal, imageBytes) {
+		t.Fatalf("relocated companion original mismatch: %v", err)
+	}
+	if strings.Contains(filepath.Join("media", "assets", asset.ID, "original", "backup.jpg"), sourceApp.cfg.DataDir) {
+		t.Fatal("companion media record retained the source data path")
 	}
 }
 

@@ -1,18 +1,25 @@
 package app
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/auth"
 	"github.com/collectors-tech/cabinet/internal/companion"
+	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
@@ -22,7 +29,7 @@ const (
 	companionMediaBodyLimit = 8 << 20
 )
 
-func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profiles *profile.Repository, authService *auth.Service) {
+func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profiles *profile.Repository, authService *auth.Service, mediaService *media.Service) {
 	mux.HandleFunc("/api/companion/pairing/requests", func(w http.ResponseWriter, r *http.Request) {
 		metadata, ok := prepareCompanionRequest(w, r, r.Method == http.MethodPost || r.Method == http.MethodOptions)
 		if !ok {
@@ -233,21 +240,40 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 		if handleCompanionPreflight(w, r) {
 			return
 		}
-		if r.Method != http.MethodPost {
+		switch r.Method {
+		case http.MethodPost:
+			var input companion.PayloadSubmission
+			if !decodeBoundedJSON(w, r, companionJSONBodyLimit, &input) {
+				return
+			}
+			accepted, err := svc.AcceptPayload(r.Context(), input, r.Header.Get("Authorization"), metadata)
+			if err != nil {
+				writeCompanionError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(accepted)
+		case http.MethodGet:
+			limit := 50
+			if parsed, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil {
+				limit = parsed
+			}
+			inbox, err := svc.ListCaptures(r.Context(), r.Header.Get("Authorization"), metadata, r.URL.Query().Get("state"), limit)
+			if err != nil {
+				writeCompanionError(w, err)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(inbox)
+		case http.MethodDelete:
+			cancelled, err := svc.CancelCapture(r.Context(), r.Header.Get("Authorization"), metadata, r.URL.Query().Get("id"))
+			if err != nil {
+				writeCompanionError(w, err)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(cancelled)
+		default:
 			writeCompanionMethodNotAllowed(w)
-			return
 		}
-		var input companion.PayloadSubmission
-		if !decodeBoundedJSON(w, r, companionJSONBodyLimit, &input) {
-			return
-		}
-		accepted, err := svc.AcceptPayload(r.Context(), input, r.Header.Get("Authorization"), metadata)
-		if err != nil {
-			writeCompanionError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(accepted)
 	})
 
 	mux.HandleFunc("/api/companion/media-submissions", func(w http.ResponseWriter, r *http.Request) {
@@ -272,18 +298,28 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 			writeCompanionCode(w, http.StatusForbidden, "companion_profile_mismatch")
 			return
 		}
-		if !validSHA256Header(r.Header.Get("X-Cabinet-Media-SHA256")) || boundedHeader(r.Header.Get("X-Cabinet-Idempotency-Key"), 128) == "" {
+		captureID := boundedHeader(r.Header.Get("X-Cabinet-Capture-ID"), 128)
+		fieldName := boundedHeader(r.Header.Get("X-Cabinet-Media-Field"), 128)
+		filename := boundedHeader(r.Header.Get("X-Cabinet-Media-Filename"), 255)
+		contentHash := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Cabinet-Media-SHA256")))
+		if !validSHA256Header(contentHash) || boundedHeader(r.Header.Get("X-Cabinet-Idempotency-Key"), 128) == "" || captureID == "" || fieldName == "" || filename == "" {
 			writeCompanionCode(w, http.StatusBadRequest, "companion_media_metadata_invalid")
 			return
 		}
 		contentType := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
-		if !strings.HasPrefix(contentType, "image/") && contentType != "application/octet-stream" {
+		if separator := strings.IndexByte(contentType, ';'); separator >= 0 {
+			contentType = strings.TrimSpace(contentType[:separator])
+		}
+		if contentType != "image/jpeg" && contentType != "image/png" {
 			writeCompanionCode(w, http.StatusUnsupportedMediaType, "companion_media_content_type_rejected")
 			return
 		}
+		if !validCompanionImageFilename(filename, contentType) {
+			writeCompanionCode(w, http.StatusUnsupportedMediaType, "companion_media_extension_rejected")
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, companionMediaBodyLimit)
-		digest := sha256.New()
-		written, err := io.Copy(digest, r.Body)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
@@ -293,16 +329,54 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 			writeCompanionCode(w, http.StatusBadRequest, "companion_media_read_failed")
 			return
 		}
-		if written == 0 {
+		if len(body) == 0 {
 			writeCompanionCode(w, http.StatusBadRequest, "companion_media_empty")
 			return
 		}
-		if !strings.EqualFold(hex.EncodeToString(digest.Sum(nil)), r.Header.Get("X-Cabinet-Media-SHA256")) {
+		digest := sha256.Sum256(body)
+		if !strings.EqualFold(hex.EncodeToString(digest[:]), contentHash) {
 			writeCompanionCode(w, http.StatusBadRequest, "companion_media_checksum_mismatch")
 			return
 		}
-		svc.RecordMediaTransport(r.Context(), session, metadata)
-		writeCompanionCode(w, http.StatusNotImplemented, "companion_media_persistence_not_implemented")
+		detectedType := http.DetectContentType(body)
+		if separator := strings.IndexByte(detectedType, ';'); separator >= 0 {
+			detectedType = strings.TrimSpace(detectedType[:separator])
+		}
+		if detectedType != contentType {
+			writeCompanionCode(w, http.StatusUnsupportedMediaType, "companion_media_content_type_rejected")
+			return
+		}
+		config, decodedType, err := image.DecodeConfig(bytes.NewReader(body))
+		if err != nil || "image/"+decodedType != contentType || config.Width < 1 || config.Height < 1 || config.Width > 16384 || config.Height > 16384 {
+			writeCompanionCode(w, http.StatusUnsupportedMediaType, "companion_media_image_invalid")
+			return
+		}
+		capture, err := svc.CaptureMediaContext(r.Context(), session, captureID, fieldName)
+		if err != nil {
+			writeCompanionError(w, err)
+			return
+		}
+		asset, err := mediaService.SaveCompanionAsset(r.Context(), media.CompanionAssetInput{
+			ProfileID: session.ProfileID, CaptureID: capture.ID, FieldName: fieldName, Filename: filepath.Base(filename),
+			IdempotencyKey: boundedHeader(r.Header.Get("X-Cabinet-Idempotency-Key"), 128),
+			MIMEType:       contentType, SourceURL: capture.SourceURL, ContentHash: contentHash, Width: config.Width, Height: config.Height,
+			Provenance: map[string]string{"source": "companion.media.submit", "module_id": capture.ModuleID, "provider_id": capture.ProviderID},
+		}, bytes.NewReader(body))
+		if err != nil {
+			if errors.Is(err, media.ErrCompanionMediaIdempotencyConflict) {
+				writeCompanionCode(w, http.StatusConflict, "companion_media_idempotency_conflict")
+				return
+			}
+			writeCompanionCode(w, http.StatusInternalServerError, "companion_media_persistence_failed")
+			return
+		}
+		svc.RecordMediaTransport(r.Context(), session, metadata, "committed")
+		status := http.StatusCreated
+		if asset.Deduplicated {
+			status = http.StatusOK
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(asset)
 	})
 }
 
@@ -354,6 +428,7 @@ func prepareCompanionRequest(w http.ResponseWriter, r *http.Request, requireExte
 	}
 	return companion.RequestMetadata{
 		Origin: origin, DeviceID: r.Header.Get("X-Cabinet-Companion-Device"), RemoteAddress: r.RemoteAddr,
+		IdempotencyKey: r.Header.Get("X-Cabinet-Idempotency-Key"),
 	}, true
 }
 
@@ -362,7 +437,7 @@ func handleCompanionPreflight(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Cabinet-Companion-Device, X-Cabinet-Idempotency-Key, X-Cabinet-Media-SHA256, X-Cabinet-Profile")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Cabinet-Companion-Device, X-Cabinet-Idempotency-Key, X-Cabinet-Capture-ID, X-Cabinet-Media-Field, X-Cabinet-Media-Filename, X-Cabinet-Media-SHA256, X-Cabinet-Profile")
 	w.Header().Set("Access-Control-Max-Age", "600")
 	w.WriteHeader(http.StatusNoContent)
 	return true
@@ -403,13 +478,17 @@ func writeCompanionError(w http.ResponseWriter, err error) {
 		status = http.StatusForbidden
 	case "companion_pairing_not_found":
 		status = http.StatusNotFound
-	case "companion_pairing_not_pending", "companion_pairing_exchange_replayed":
+	case "companion_pairing_not_pending", "companion_pairing_exchange_replayed", "companion_idempotency_conflict", "companion_capture_not_cancellable":
 		status = http.StatusConflict
 	case "companion_rate_limited", "companion_concurrency_limited":
 		status = http.StatusTooManyRequests
 		w.Header().Set("Retry-After", "60")
 	case "companion_payload_too_large", "companion_media_too_large":
 		status = http.StatusRequestEntityTooLarge
+	case "companion_capture_not_found":
+		status = http.StatusNotFound
+	case "companion_capture_quota_exceeded":
+		status = http.StatusInsufficientStorage
 	case "companion_unavailable":
 		status = http.StatusServiceUnavailable
 	}
@@ -471,4 +550,12 @@ func boundedHeader(value string, maxLength int) string {
 		return ""
 	}
 	return value
+}
+
+func validCompanionImageFilename(filename, mimeType string) bool {
+	extension := strings.ToLower(filepath.Ext(filepath.Base(strings.TrimSpace(filename))))
+	if mimeType == "image/png" {
+		return extension == ".png"
+	}
+	return mimeType == "image/jpeg" && (extension == ".jpg" || extension == ".jpeg")
 }

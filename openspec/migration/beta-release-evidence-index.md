@@ -40,7 +40,7 @@ This is the single repository-side release sequence and evidence hand-off for
 | Hobbytech (#1943) | Direct live proof merged; source/live ready | Keep #1943 open only for exact packaged evidence |
 | #2033 secure companion pairing | Pending | Pair/reconnect/rotate/revoke in #1869 |
 | #2035 shared MV3 host/config/readiness | Pending | Install and verify browser/Cabinet/provider states in #1869 |
-| #2032 item/image observation persistence | Pending | Replay/idempotency/media/restart/restore proof in #1869/#1867 |
+| #2032 item/image observation persistence | Source implementation complete | Commit-before-ack, fixtures, replay, media, restart, safe export and relocated restore are automated; exact packaged proof remains in #1869/#1867 |
 | Frontline (#1944) | Pending real browser-assisted source proof | Exact packaged journey in #1869 |
 | Bonza (#1945) | Pending fail-closed decoder removal and real browser-assisted proof | Exact packaged journey in #1869 |
 | #2034 Chrome/Edge packaging | Pending exact files, release manifest and checksums | Nominate the same files/checksums in #1868/#1869 |

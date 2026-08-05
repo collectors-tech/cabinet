@@ -1,0 +1,35 @@
+{
+  "query": "AFX slot car",
+  "page": 1,
+  "page_size": 2,
+  "range_start": 0,
+  "range_end": 1,
+  "total_pages": 1,
+  "complete": true,
+  "items": [
+    {
+      "listing_id": "FL-AFX-001",
+      "title": "AFX Ford GT40 Mark II",
+      "price": 89.99,
+      "currency": "AUD",
+      "url": "https://www.frontlinehobbies.com.au/afx-ford-gt40-mark-ii",
+      "image_url": "https://www.frontlinehobbies.com.au/media/catalog/afx-gt40.jpg",
+      "seller": "Frontline Hobbies",
+      "stock_state": "available",
+      "stock_count": 3,
+      "field_confidence": {"title": 1, "price": 0.99, "stock_state": 0.95}
+    },
+    {
+      "listing_id": "FL-AFX-002",
+      "title": "AFX Mega-G+ Mustang",
+      "price": 74.95,
+      "currency": "AUD",
+      "url": "https://www.frontlinehobbies.com.au/afx-mega-g-mustang",
+      "image_url": "https://www.frontlinehobbies.com.au/media/catalog/afx-mustang.jpg",
+      "seller": "Frontline Hobbies",
+      "stock_state": "out_of_stock",
+      "stock_count": 0,
+      "field_confidence": {"title": 1, "price": 0.99, "stock_state": 0.95}
+    }
+  ]
+}

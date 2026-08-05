@@ -82,16 +82,41 @@ export class CompanionClient {
     })
   }
 
+  async captureInbox() {
+    return this.#request('/api/companion/payloads?limit=200', {
+      method: 'GET',
+      authenticated: true,
+    })
+  }
+
   async submitCapture(payload) {
     return this.#request('/api/companion/payloads', {
       method: 'POST',
       authenticated: true,
       body: payload,
+	  headers: { 'X-Cabinet-Idempotency-Key': payload.idempotency_key },
     })
   }
 
-  async #request(path, { method, body, authenticated = false }) {
-    const headers = { 'X-Cabinet-Companion-Device': this.deviceID }
+  async submitMedia({ bytes, profileID, captureID, fieldName, filename, mimeType, sha256, idempotencyKey }) {
+    return this.#request('/api/companion/media-submissions', {
+      method: 'POST',
+      authenticated: true,
+      rawBody: bytes,
+      headers: {
+        'Content-Type': mimeType,
+        'X-Cabinet-Profile': profileID,
+        'X-Cabinet-Idempotency-Key': idempotencyKey,
+        'X-Cabinet-Capture-ID': captureID,
+        'X-Cabinet-Media-Field': fieldName,
+        'X-Cabinet-Media-Filename': filename,
+        'X-Cabinet-Media-SHA256': sha256,
+      },
+    })
+  }
+
+  async #request(path, { method, body, rawBody, authenticated = false, headers: additionalHeaders = {} }) {
+    const headers = { 'X-Cabinet-Companion-Device': this.deviceID, ...additionalHeaders }
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json'
     }
@@ -105,7 +130,7 @@ export class CompanionClient {
     const response = await this.fetchImpl(new URL(path, this.baseURL), {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
     })
     const payload = await response.json()
     if (!response.ok) {

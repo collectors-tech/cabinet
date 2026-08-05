@@ -6,11 +6,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/collectors-tech/cabinet/internal/companion"
 	"github.com/collectors-tech/cabinet/internal/profile"
@@ -62,9 +66,9 @@ func TestCompanionPairingAPIRequiresApprovalAndSupportsSessionLifecycle(t *testi
 		t.Fatalf("modules status=%d body=%s", modules.Code, modules.Body.String())
 	}
 
-	payloadBody := `{"profile_id":"` + profileID + `","module_id":"ebay-purchase-capture","url":"https://www.ebay.com/itm/123","payload_type":"purchase_order","passive":true,"confidence_score":0.82}`
+	payloadBody := companionPurchasePayloadJSON(t, a, profileID, "payload-lifecycle", "123")
 	payload := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/payloads", strings.NewReader(payloadBody), map[string]string{
-		"Authorization": authorization, "Content-Type": "application/json",
+		"Authorization": authorization, "Content-Type": "application/json", "X-Cabinet-Idempotency-Key": "payload-lifecycle",
 	})
 	if payload.Code != http.StatusAccepted || !strings.Contains(payload.Body.String(), `"remote_write":false`) {
 		t.Fatalf("payload status=%d body=%s", payload.Code, payload.Body.String())
@@ -165,7 +169,7 @@ func TestCompanionAPILoopbackOriginBodyAndMediaBoundaries(t *testing.T) {
 		t.Fatalf("hostile loopback origin status=%d body=%s", hostileLoopbackOrigin.Code, hostileLoopbackOrigin.Body.String())
 	}
 
-	receipt := requestCompanionPairing(t, a, []string{companion.CapabilityMediaSubmit})
+	receipt := requestCompanionPairing(t, a, []string{companion.CapabilityCapturesSubmit, companion.CapabilityMediaSubmit})
 	approvalBody := `{"request_id":"` + receipt.RequestID + `","profile_id":"` + profileID + `"}`
 	approved := doCompanionManagementRequest(t, a, http.MethodPost, "/api/companion/pairing/approvals", strings.NewReader(approvalBody), nil)
 	if approved.Code != http.StatusOK {
@@ -176,21 +180,52 @@ func TestCompanionAPILoopbackOriginBodyAndMediaBoundaries(t *testing.T) {
 	if err := json.NewDecoder(exchanged.Body).Decode(&credential); err != nil {
 		t.Fatalf("decode media credential: %v", err)
 	}
-	mediaDigest := sha256.Sum256([]byte("png-data"))
+	authorization := "Bearer " + credential.Credential
+	payloadBody := companionPurchasePayloadJSON(t, a, profileID, "media-parent", "media-123")
+	payload := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/payloads", strings.NewReader(payloadBody), map[string]string{
+		"Authorization": authorization, "Content-Type": "application/json", "X-Cabinet-Idempotency-Key": "media-parent",
+	})
+	if payload.Code != http.StatusAccepted {
+		t.Fatalf("media parent capture status=%d body=%s", payload.Code, payload.Body.String())
+	}
+	var accepted companion.AcceptedPayload
+	if err := json.NewDecoder(payload.Body).Decode(&accepted); err != nil {
+		t.Fatalf("decode media parent capture: %v", err)
+	}
+	mediaBytes := testPNG(t)
+	mediaDigest := sha256.Sum256(mediaBytes)
 	mediaHeaders := map[string]string{
-		"Authorization":             "Bearer " + credential.Credential,
+		"Authorization":             authorization,
 		"Content-Type":              "image/png",
 		"X-Cabinet-Profile":         profileID,
 		"X-Cabinet-Idempotency-Key": "media-1",
+		"X-Cabinet-Capture-ID":      accepted.CaptureID,
+		"X-Cabinet-Media-Field":     "cards[0].image_url",
+		"X-Cabinet-Media-Filename":  "captured.png",
 		"X-Cabinet-Media-SHA256":    hex.EncodeToString(mediaDigest[:]),
 	}
-	validMedia := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", strings.NewReader("png-data"), mediaHeaders)
-	if validMedia.Code != http.StatusNotImplemented || !strings.Contains(validMedia.Body.String(), "companion_media_persistence_not_implemented") {
+	validMedia := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", bytes.NewReader(mediaBytes), mediaHeaders)
+	if validMedia.Code != http.StatusCreated || !strings.Contains(validMedia.Body.String(), `"committed":true`) || strings.Contains(validMedia.Body.String(), "original_path") {
 		t.Fatalf("valid media transport status=%d body=%s", validMedia.Code, validMedia.Body.String())
 	}
 	var mediaAuditCount int
-	if err := a.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM companion_audit_events WHERE profile_id = ? AND action = 'media.transport.validated' AND result_code = 'persistence_pending'`, profileID).Scan(&mediaAuditCount); err != nil || mediaAuditCount != 1 {
+	if err := a.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM companion_audit_events WHERE profile_id = ? AND action = 'media.transport.validated' AND result_code = 'committed'`, profileID).Scan(&mediaAuditCount); err != nil || mediaAuditCount != 1 {
 		t.Fatalf("media transport audit count=%d err=%v", mediaAuditCount, err)
+	}
+	replayedMedia := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", bytes.NewReader(mediaBytes), mediaHeaders)
+	if replayedMedia.Code != http.StatusOK || !strings.Contains(replayedMedia.Body.String(), `"deduplicated":true`) {
+		t.Fatalf("replayed media status=%d body=%s", replayedMedia.Code, replayedMedia.Body.String())
+	}
+	differentMedia := testPNGColour(t, color.RGBA{R: 200, G: 10, B: 20, A: 255})
+	differentDigest := sha256.Sum256(differentMedia)
+	conflictHeaders := make(map[string]string, len(mediaHeaders))
+	for key, value := range mediaHeaders {
+		conflictHeaders[key] = value
+	}
+	conflictHeaders["X-Cabinet-Media-SHA256"] = hex.EncodeToString(differentDigest[:])
+	conflictingMedia := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", bytes.NewReader(differentMedia), conflictHeaders)
+	if conflictingMedia.Code != http.StatusConflict || !strings.Contains(conflictingMedia.Body.String(), "companion_media_idempotency_conflict") {
+		t.Fatalf("conflicting media replay status=%d body=%s", conflictingMedia.Code, conflictingMedia.Body.String())
 	}
 
 	invalidMediaHeaders := make(map[string]string, len(mediaHeaders))
@@ -198,7 +233,7 @@ func TestCompanionAPILoopbackOriginBodyAndMediaBoundaries(t *testing.T) {
 		invalidMediaHeaders[key] = value
 	}
 	invalidMediaHeaders["X-Cabinet-Media-SHA256"] = "not-a-sha256"
-	invalidMedia := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", strings.NewReader("png-data"), invalidMediaHeaders)
+	invalidMedia := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", bytes.NewReader(mediaBytes), invalidMediaHeaders)
 	if invalidMedia.Code != http.StatusBadRequest || !strings.Contains(invalidMedia.Body.String(), "companion_media_metadata_invalid") {
 		t.Fatalf("invalid media metadata status=%d body=%s", invalidMedia.Code, invalidMedia.Body.String())
 	}
@@ -207,7 +242,7 @@ func TestCompanionAPILoopbackOriginBodyAndMediaBoundaries(t *testing.T) {
 		checksumMismatchHeaders[key] = value
 	}
 	checksumMismatchHeaders["X-Cabinet-Media-SHA256"] = strings.Repeat("a", 64)
-	checksumMismatch := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", strings.NewReader("png-data"), checksumMismatchHeaders)
+	checksumMismatch := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", bytes.NewReader(mediaBytes), checksumMismatchHeaders)
 	if checksumMismatch.Code != http.StatusBadRequest || !strings.Contains(checksumMismatch.Body.String(), "companion_media_checksum_mismatch") {
 		t.Fatalf("media checksum mismatch status=%d body=%s", checksumMismatch.Code, checksumMismatch.Body.String())
 	}
@@ -221,6 +256,24 @@ func TestCompanionAPILoopbackOriginBodyAndMediaBoundaries(t *testing.T) {
 	if unsupportedMedia.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("unsupported media status=%d body=%s", unsupportedMedia.Code, unsupportedMedia.Body.String())
 	}
+	extensionHeaders := make(map[string]string, len(mediaHeaders))
+	for key, value := range mediaHeaders {
+		extensionHeaders[key] = value
+	}
+	extensionHeaders["X-Cabinet-Media-Filename"] = "captured.jpg"
+	extensionMismatch := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", bytes.NewReader(mediaBytes), extensionHeaders)
+	if extensionMismatch.Code != http.StatusUnsupportedMediaType || !strings.Contains(extensionMismatch.Body.String(), "companion_media_extension_rejected") {
+		t.Fatalf("media extension mismatch status=%d body=%s", extensionMismatch.Code, extensionMismatch.Body.String())
+	}
+	fieldHeaders := make(map[string]string, len(mediaHeaders))
+	for key, value := range mediaHeaders {
+		fieldHeaders[key] = value
+	}
+	fieldHeaders["X-Cabinet-Media-Field"] = "unregistered.image_url"
+	fieldMismatch := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", bytes.NewReader(mediaBytes), fieldHeaders)
+	if fieldMismatch.Code != http.StatusBadRequest || !strings.Contains(fieldMismatch.Body.String(), "companion_capture_media_field_rejected") {
+		t.Fatalf("media field mismatch status=%d body=%s", fieldMismatch.Code, fieldMismatch.Body.String())
+	}
 
 	oversizedMedia := doCompanionExtensionRequest(t, a, http.MethodPost, "/api/companion/media-submissions", strings.NewReader(strings.Repeat("a", companionMediaBodyLimit+1)), mediaHeaders)
 	if oversizedMedia.Code != http.StatusRequestEntityTooLarge || !strings.Contains(oversizedMedia.Body.String(), "companion_media_too_large") {
@@ -231,6 +284,46 @@ func TestCompanionAPILoopbackOriginBodyAndMediaBoundaries(t *testing.T) {
 	if missingManagedSessionID.Code != http.StatusBadRequest || !strings.Contains(missingManagedSessionID.Body.String(), "companion_session_id_required") {
 		t.Fatalf("missing managed session id status=%d body=%s", missingManagedSessionID.Code, missingManagedSessionID.Body.String())
 	}
+}
+
+func companionPurchasePayloadJSON(t *testing.T, a *App, profileID, idempotencyKey, listingID string) string {
+	t.Helper()
+	instances, err := profile.NewRepository(a.db).ListIntegrationInstances(context.Background(), profileID)
+	if err != nil || len(instances) == 0 {
+		t.Fatalf("find eBay integration instance: %v", err)
+	}
+	instanceID := instances[0].ID
+	data := map[string]any{"cards": []map[string]any{{
+		"order_id": "ORDER-" + listingID, "listing_id": listingID, "title": "Captured item " + listingID,
+		"quantity": 1, "item_price": "AU $2.40", "currency": "AUD", "item_url": "https://www.ebay.com/itm/" + listingID,
+	}}}
+	payload := companion.PayloadSubmission{
+		ProtocolVersion: companion.ProtocolVersionV1, ProfileID: profileID, ModuleID: "ebay-purchase-capture",
+		ModuleVersion: "1.0.0", SchemaVersion: "1", IntegrationInstanceID: instanceID, ProviderID: "ebay",
+		URL: "https://www.ebay.com/mye/myebay/purchase", PayloadType: "purchase_order", CapturedAt: time.Now().UTC().Format(time.RFC3339),
+		PageComplete: true, Passive: true, ConfidenceScore: 0.9, RedactionSummary: []string{"no_cookies", "no_raw_page", "no_tokens"},
+		PayloadHash: companion.PayloadDigest(data), IdempotencyKey: idempotencyKey, Data: data,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal companion payload: %v", err)
+	}
+	return string(raw)
+}
+
+func testPNG(t *testing.T) []byte {
+	return testPNGColour(t, color.RGBA{R: 12, G: 34, B: 56, A: 255})
+}
+
+func testPNGColour(t *testing.T, pixel color.RGBA) []byte {
+	t.Helper()
+	canvas := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	canvas.Set(0, 0, pixel)
+	var output bytes.Buffer
+	if err := png.Encode(&output, canvas); err != nil {
+		t.Fatalf("encode test PNG: %v", err)
+	}
+	return output.Bytes()
 }
 
 type companionPairingReceipt struct {

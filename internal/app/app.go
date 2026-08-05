@@ -2550,7 +2550,7 @@ func New(cfg config.Config) (*App, error) {
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
 		})
 	})
-	registerCompanionRoutes(mux, companionSvc, profiles, authService)
+	registerCompanionRoutes(mux, companionSvc, profiles, authService, mediaService)
 	mux.HandleFunc("/api/providers/ebay/buyer-interest/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4627,6 +4627,13 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		if len(req.Cards) == 0 {
+			req.Cards, err = companionSvc.PurchaseCards(r.Context(), strings.TrimSpace(active.ID))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_load_purchase_inbox"}`, http.StatusInternalServerError)
+				return
+			}
+		}
 		reviews := ebaypurchasecapture.BuildPurchaseInboxReviews(req.Cards)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"profile_id": strings.TrimSpace(active.ID),
@@ -4708,6 +4715,10 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_link_purchase_inbox_item"}`, http.StatusBadRequest)
 				return
 			}
+			if err := companionSvc.MarkPurchaseHandOff(r.Context(), profileID, targetKey, "linked", existingItemID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+				http.Error(w, `{"error":"failed_to_commit_purchase_inbox_handoff"}`, http.StatusInternalServerError)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"ok":          true,
 				"action_id":   actionID,
@@ -4720,6 +4731,10 @@ func New(cfg config.Config) (*App, error) {
 			created, err := collectionRepo.CreateItemForProfile(r.Context(), profileID, purchaseInboxCardToItem(req.Card))
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_convert_purchase_inbox_item"}`, http.StatusBadRequest)
+				return
+			}
+			if err := companionSvc.MarkPurchaseHandOff(r.Context(), profileID, targetKey, "converted", created.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+				http.Error(w, `{"error":"failed_to_commit_purchase_inbox_handoff"}`, http.StatusInternalServerError)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{

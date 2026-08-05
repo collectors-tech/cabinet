@@ -67,15 +67,15 @@ func TestCompanionRegistryPublishesDataDrivenBrowserHostContract(t *testing.T) {
 	}
 }
 
-func TestCompanionRegistryDoesNotAdvertiseSyncBeforeDurablePersistence(t *testing.T) {
+func TestCompanionRegistryAdvertisesSyncOnlyForPackagedCaptureModules(t *testing.T) {
 	t.Parallel()
 
 	modules := DefaultModules()
 	modules[0].Browser.CaptureScript = "modules/fixture.js"
 	modules[0].Configuration.SyncAvailable = true
 	registry := NewService(modules).Registry()
-	if len(registry.Modules) != 1 || registry.Modules[0].Configuration.SyncAvailable {
-		t.Fatalf("module advertised item/media sync before #2032 durable persistence: %+v", registry.Modules)
+	if len(registry.Modules) != 1 || !registry.Modules[0].Configuration.SyncAvailable {
+		t.Fatalf("durable persistence did not enable the packaged capture module: %+v", registry.Modules)
 	}
 }
 
@@ -93,6 +93,28 @@ func TestCompanionPredictableBearerCannotImpersonateProfile(t *testing.T) {
 	}, "Bearer companion:"+profileID, metadata)
 	if ErrorCode(err) != "companion_auth_required" {
 		t.Fatalf("predictable companion:<profile_id> bearer was not rejected: %v", err)
+	}
+}
+
+func TestCompanionAcceptedPayloadIsPersistedBeforeAcknowledgement(t *testing.T) {
+	t.Parallel()
+
+	svc, _, profileID, metadata := newPersistentCompanionTestService(t, Options{})
+	authorization := pairCompanionTestSession(t, svc, profileID, metadata, []string{CapabilityCapturesSubmit})
+	accepted, err := svc.AcceptPayload(context.Background(), validPurchasePayload(t, svc, profileID, "capture-persisted", "123"), authorization, metadata)
+	if err != nil || !accepted.Accepted {
+		t.Fatalf("AcceptPayload() = %+v, %v", accepted, err)
+	}
+
+	var count int
+	if err := svc.db.QueryRowContext(context.Background(), `
+		SELECT COUNT(*) FROM companion_captures
+		WHERE profile_id = ? AND module_id = ? AND payload_type = ?
+	`, profileID, "ebay-purchase-capture", "purchase_order").Scan(&count); err != nil {
+		t.Fatalf("accepted companion payload disappeared instead of being persisted: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("persisted companion capture count = %d, want 1", count)
 	}
 }
 
@@ -247,18 +269,12 @@ func TestCompanionSessionBindingProfileModulesAndPayloadSafety(t *testing.T) {
 		t.Fatalf("origin binding error = %v", err)
 	}
 
-	accepted, err := svc.AcceptPayload(context.Background(), PayloadSubmission{
-		ProfileID: profileID, ModuleID: "ebay-purchase-capture", URL: "https://www.ebay.com/itm/123",
-		PayloadType: "purchase_order", Passive: true, ConfidenceScore: 0.9,
-	}, authorization, metadata)
+	accepted, err := svc.AcceptPayload(context.Background(), validPurchasePayload(t, svc, profileID, "capture-authorised", "123"), authorization, metadata)
 	if err != nil || !accepted.Accepted || accepted.RemoteWrite {
 		t.Fatalf("AcceptPayload() = %+v, %v", accepted, err)
 	}
 	captureOnlyAuthorization := pairCompanionTestSession(t, svc, profileID, metadata, []string{CapabilityCapturesSubmit})
-	if _, err := svc.AcceptPayload(context.Background(), PayloadSubmission{
-		ProfileID: profileID, ModuleID: "ebay-purchase-capture", URL: "https://www.ebay.com/itm/456",
-		PayloadType: "purchase_order", Passive: true, ConfidenceScore: 0.8,
-	}, captureOnlyAuthorization, metadata); err != nil {
+	if _, err := svc.AcceptPayload(context.Background(), validPurchasePayload(t, svc, profileID, "capture-only", "456"), captureOnlyAuthorization, metadata); err != nil {
 		t.Fatalf("capture-only capability was incorrectly coupled to module discovery: %v", err)
 	}
 	if _, err := svc.db.ExecContext(context.Background(), `UPDATE companion_sessions SET cabinet_instance_id = 'another-instance'`); err != nil {
@@ -373,4 +389,27 @@ func pairCompanionTestSession(t *testing.T, svc *Service, profileID string, meta
 		t.Fatalf("ExchangePairing() error = %v", err)
 	}
 	return "Bearer " + exchanged.Credential
+}
+
+func validPurchasePayload(t *testing.T, svc *Service, profileID, idempotencyKey, listingID string) PayloadSubmission {
+	t.Helper()
+	registry, err := svc.registryForProfile(context.Background(), profileID)
+	if err != nil || len(registry.Modules) == 0 {
+		t.Fatalf("load companion module for payload: %+v, %v", registry, err)
+	}
+	module := registry.Modules[0]
+	data := map[string]any{"cards": []map[string]any{{
+		"order_id": "ORDER-" + listingID, "listing_id": listingID, "title": "Captured item " + listingID,
+		"quantity": 1, "item_price": "AU $2.40", "currency": "AUD",
+		"item_url": "https://www.ebay.com/itm/" + listingID,
+	}}}
+	return PayloadSubmission{
+		ProtocolVersion: ProtocolVersionV1, ProfileID: profileID, ModuleID: module.ID,
+		ModuleVersion: module.ModuleVersion, SchemaVersion: module.FixtureVersion,
+		IntegrationInstanceID: module.IntegrationInstanceID, ProviderID: module.ProviderID,
+		URL: "https://www.ebay.com/mye/myebay/purchase", PayloadType: "purchase_order",
+		CapturedAt: svc.options.Now().UTC().Format(time.RFC3339), PageComplete: true, Passive: true,
+		ConfidenceScore: 0.9, RedactionSummary: append([]string(nil), module.RedactionRules...),
+		PayloadHash: PayloadDigest(data), IdempotencyKey: idempotencyKey, Data: data,
+	}
 }

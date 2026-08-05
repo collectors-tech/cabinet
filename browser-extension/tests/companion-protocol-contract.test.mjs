@@ -170,3 +170,33 @@ test('client pairs, reconnects after restart, rotates and revokes without URL se
     )
   }
 })
+
+test('capture and media writes carry idempotent typed metadata and require committed acknowledgements', async () => {
+  const stored = new Map([[companionStorageKeys.credential, 'cabcmp_test']])
+  const storage = {
+    get: async (key) => stored.get(key),
+    set: async (key, value) => stored.set(key, value),
+    delete: async (key) => stored.delete(key),
+  }
+  const requests = []
+  const fetchImpl = async (url, init) => {
+    requests.push({ url, init })
+    if (url.pathname.endsWith('/payloads')) {
+      return Response.json({ committed: true, state: 'completed', capture_id: 'capture-1' }, { status: 202 })
+    }
+    return Response.json({ committed: true, asset_id: 'asset-1', deduplicated: false }, { status: 201 })
+  }
+  const client = new CompanionClient({ baseURL: contract.base_url, deviceID: 'device-1', fetchImpl, storage })
+  await client.submitCapture({ idempotency_key: 'capture-key', data: { cards: [] } })
+  await client.submitMedia({
+    bytes: new Uint8Array([1, 2, 3]), profileID: 'profile-1', captureID: 'capture-1', fieldName: 'image_url',
+    filename: 'item.png', mimeType: 'image/png', sha256: 'a'.repeat(64), idempotencyKey: 'media-key',
+  })
+
+  assert.equal(requests[0].init.headers['X-Cabinet-Idempotency-Key'], 'capture-key')
+  assert.equal(requests[1].init.headers['X-Cabinet-Capture-ID'], 'capture-1')
+  assert.equal(requests[1].init.headers['X-Cabinet-Media-Field'], 'image_url')
+  assert.equal(requests[1].init.headers['X-Cabinet-Media-Filename'], 'item.png')
+  assert.equal(requests[1].init.headers['X-Cabinet-Media-SHA256'], 'a'.repeat(64))
+  assert.equal(requests[1].init.body instanceof Uint8Array, true)
+})
