@@ -26,7 +26,7 @@ const cdpCommand = (browserProcess, method, params) => new Promise((resolveComma
   const timeout = setTimeout(() => {
     output.removeListener('data', onData)
     rejectCommand(new Error(`cdp_timeout:${method}`))
-  }, 10_000)
+  }, 30_000)
   const onData = (chunk) => {
     buffered += chunk.toString()
     const messages = buffered.split('\0')
