@@ -15,6 +15,8 @@ The final approval follows packaged acceptance and #1867 data-safety evidence.
 - [ ] Cabinet package filename is recorded.
 - [ ] Cabinet package SHA-256 is recorded and matches its `.sha256` file.
 - [ ] Cabinet source commit SHA is recorded.
+- [ ] Successful Beta Release Candidate Gate run ID and exact artifact name are recorded.
+- [ ] Cabinet, Browser Companion and combined candidate manifest paths all name the same source commit.
 - [ ] Browser name/version and Browser Companion package filename are recorded.
 - [ ] Browser Companion package SHA-256, source commit, extension version and release-manifest path are recorded.
 - [ ] Browser Companion production identity, target, protocol compatibility and immutable candidate version match the release manifest; the Development source build is not used.
@@ -65,6 +67,7 @@ The final approval follows packaged acceptance and #1867 data-safety evidence.
 - [ ] Release-blocking failures are linked back to #1864 and #1869 before rerun.
 - [ ] The acceptance pack is rerun after release-blocking fixes against a new exact candidate commit.
 - [ ] Final evidence explicitly states pass, fail with blockers, or not run, without using visual toasts or redirects as persistence proof.
+- [ ] If all gates pass, the proposed #1864 approval comment records `APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>`; publication is not invoked by this checklist.
 
 ## Prohibited Shortcuts
 

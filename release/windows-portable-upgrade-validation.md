@@ -11,8 +11,9 @@ This checklist records the non-publishing Windows validation required before #18
 
 ## Candidate Identity
 
-- Build or nominate `dist/cabinet-0.1.0-beta.1-windows-amd64-portable.zip` from a clean commit.
+- Build or nominate `dist/cabinet/cabinet-0.1.0-beta.1-windows-amd64-portable.zip` from a clean commit.
 - Record the matching `.sha256` value, release notes path, commit SHA, build date, and package extraction path.
+- Record the Cabinet release manifest, Browser Companion release manifest, combined candidate manifest and successful exact candidate workflow run ID.
 - Record the paired #2034 Browser Companion filename, SHA-256, source commit, manifest and browser version.
 - Confirm the extracted package contains `cabinet.exe`, `README.md`, and `WINDOWS-PORTABLE-BETA.md`.
 
@@ -39,4 +40,5 @@ This checklist records the non-publishing Windows validation required before #18
 - Confirm rollback instructions identify closing Cabinet, restoring the backup or prior data directory, and re-running the prior package if needed.
 - Store command output, runtime JSON, checksum proof, screenshots or notes, and pass/fail summary under `.work-agent/logs/issue-1868-portable-upgrade-validation/`.
 - Link the private/internal proof to #1869 and #1867 before the #1864 decision.
+- After those gates pass, record the trusted #1864 comment ID containing `APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>`; only the explicit prerelease workflow may consume it.
 - Do not publish a GitHub prerelease, attach artefacts to an external release, or promote `develop` to `main` until final #1864 approval exists after packaged acceptance.

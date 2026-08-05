@@ -62,7 +62,7 @@ for #1868; completion of every source-ready checklist row is.
 | #1943 Hobbytech | PR #1955 plus live provider-run proof | Source/live ready; packaged rerun pending |
 | #2037 truthful OpenAPI gate | PR #2038; Develop Quality Gate `31018831485` green | Done |
 | #2033/#2035/#2032/#1944/#1945/#2034 | Browser Companion release programme | Packaging source implemented; external Frontline/Bonza and exact-candidate evidence pending |
-| #1868 exact internal candidate | Packaging source from PRs #1910/#1913 exists | Rebuild only after source/live gate and freeze |
+| #1868 exact internal candidate | Exact-clean Cabinet manifest/verifier, combined Cabinet/companion manifest, validate-before-package workflow and approval-evidenced prerelease source implemented | Run only after Frontline/Bonza source/live gate and freeze; retain exact candidate run/artifacts |
 | #1869 packaged acceptance | Stable checklist exists | Execute after #1868 internal candidate |
 
 ## Evidence commands and artefacts
@@ -77,8 +77,9 @@ go run ./cmd/openapi-parity-gate
 ```
 
 Each focused issue also runs its named Go/Cypress/extension tests and records the
-exact command in its pull request. #2034 must add the final extension package and
-verification commands before its checklist can be marked source-ready.
+exact command in its pull request. #1868 produces the final Cabinet and extension
+files only after the exact validation job passes and records them in
+`beta-candidate-bundle-manifest.json`.
 
 ### Freeze and candidate
 
@@ -93,8 +94,14 @@ pwsh -NoLogo -NoProfile -File .\scripts\package-installers.ps1
 
 The private/internal candidate is the only candidate accepted by the later gates.
 Record the exact commit, workflow run, Cabinet filename/version/checksum, companion
-filename/version/checksum, release manifest and release notes. Store these as
+filename/version/checksum, both release manifests, combined candidate manifest and release notes. Store these as
 private/internal acceptance artefacts; do not create or update an external release.
+
+After #1869 and #1867 pass, final #1864 approval must be a trusted comment containing
+`APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>`. The explicit publication workflow
+accepts that comment ID and successful candidate run ID, downloads and reverifies the
+same artefacts, rejects version reuse and creates the prerelease. Main CI does not
+publish automatically.
 
 ### Packaged acceptance and decision
 

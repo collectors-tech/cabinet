@@ -3,41 +3,75 @@ name: Release Portable Packages
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Version tag value (e.g. v0.1.0)
+      commit_sha:
+        description: Exact full Cabinet commit to package privately
         required: true
-  push:
-    tags:
-      - "v*"
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   build-windows-portable-package:
     runs-on: windows-latest
     steps:
+      - name: Validate exact SHA input
+        shell: pwsh
+        run: |
+          if ("${{ inputs.commit_sha }}" -notmatch "^[0-9a-fA-F]{40}$") {
+            throw "commit_sha must be a full 40-character Git commit SHA."
+          }
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Confirm exact clean checkout
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -ne "${{ inputs.commit_sha }}") {
+            throw "Exact package checkout mismatch."
+          }
+          if ((git status --porcelain).Length -gt 0) {
+            throw "Portable package checkout is not clean."
+          }
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: ui.web/package-lock.json
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Run tests
-        run: go test ./...
-      - name: Build Windows portable package
+
+      - name: Install ui.web dependencies
+        run: npm --prefix ui.web ci
+
+      - name: Run tests before packaging
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}"
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ github.event.inputs.version }}"
-          }
-          ./scripts/package-installers.ps1 -Version $version -InstallUIDeps
+          npm run test:release-package
+          if ($LASTEXITCODE -ne 0) { throw "Release package contracts failed." }
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw "Go tests failed." }
+
+      - name: Build Windows portable package
+        shell: pwsh
+        run: ./scripts/package-installers.ps1 -ExpectedCommit "${{ inputs.commit_sha }}" -OutputDirectory "dist/cabinet" -InstallUIDeps
+
+      - name: Verify exact Windows portable package
+        run: node scripts/verify-cabinet-release-package.mjs --manifest dist/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-portable-package
+          name: windows-portable-package-${{ inputs.commit_sha }}
+          if-no-files-found: error
           path: |
-            dist/cabinet-*-windows-amd64-portable.zip
-            dist/cabinet-*-windows-amd64-portable.zip.sha256
-            dist/cabinet-*-release-notes.md
+            dist/cabinet/cabinet-*-windows-amd64-portable.zip
+            dist/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
+            dist/cabinet/cabinet-*-release-notes.md
+            dist/cabinet/cabinet-release-manifest.json

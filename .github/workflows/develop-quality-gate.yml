@@ -181,3 +181,29 @@ jobs:
             ui.web/cypress/artifacts
             ui.web/cypress/screenshots
             ui.web/cypress/videos
+
+  windows-package:
+    name: Windows portable package verification
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm --prefix ui.web ci
+      - name: Verify Cabinet release package controls
+        run: npm run test:release-package
+      - name: Build and verify exact Windows portable package
+        shell: pwsh
+        run: |
+          $sourceCommit = git rev-parse HEAD
+          ./scripts/package-installers.ps1 -ExpectedCommit $sourceCommit -OutputDirectory "$env:RUNNER_TEMP/cabinet-package"
+          node scripts/verify-cabinet-release-package.mjs --manifest "$env:RUNNER_TEMP/cabinet-package/cabinet-release-manifest.json" --expected-source-commit $sourceCommit

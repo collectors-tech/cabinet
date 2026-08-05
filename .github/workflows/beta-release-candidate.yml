@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  release-candidate:
-    name: Exact commit release candidate
+  validate-candidate:
+    name: Validate exact candidate source
     runs-on: windows-latest
     steps:
       - name: Validate exact SHA input
@@ -78,33 +78,13 @@ jobs:
         shell: pwsh
         run: node --test browser-extension/tests/*.test.mjs *>&1 | Tee-Object .logs/release-candidate/browser-companion-contract.log
 
-      - name: Browser Companion package controls
-        shell: pwsh
-        run: npm run test:companion-package *>&1 | Tee-Object .logs/release-candidate/browser-companion-package-test.log
-
-      - name: Enforce immutable Browser Companion version tag
+      - name: Package control tests
         shell: pwsh
         run: |
-          $releaseConfig = Get-Content browser-extension/release.json -Raw | ConvertFrom-Json
-          $sourcePrefix = "${{ steps.commit.outputs.sha }}".Substring(0, 12).ToLowerInvariant()
-          $candidateVersion = "$($releaseConfig.version_name_prefix).g$sourcePrefix"
-          $tag = "$($releaseConfig.immutable_tag_prefix)$candidateVersion"
-          $matchingTag = git tag --list $tag
-          if ($matchingTag) {
-            $tagCommit = git rev-list -n 1 $tag
-            if ($tagCommit -ne "${{ steps.commit.outputs.sha }}") {
-              throw "Immutable Browser Companion version $candidateVersion is already tagged at $tagCommit."
-            }
-          }
-
-      - name: Build and verify exact Browser Companion packages
-        shell: pwsh
-        run: |
-          $epoch = git show -s --format=%ct HEAD
-          node scripts/package-browser-companion.mjs --source-commit "${{ steps.commit.outputs.sha }}" --source-date-epoch $epoch --output dist/browser-companion --keep-staging *>&1 | Tee-Object .logs/release-candidate/browser-companion-package.log
-          if ($LASTEXITCODE -ne 0) { throw "Browser Companion packaging failed with exit code $LASTEXITCODE" }
-          node scripts/verify-browser-companion-package.mjs --manifest dist/browser-companion/browser-companion-release-manifest.json --expected-source-commit "${{ steps.commit.outputs.sha }}" *>&1 | Tee-Object .logs/release-candidate/browser-companion-verify.log
-          if ($LASTEXITCODE -ne 0) { throw "Browser Companion verification failed with exit code $LASTEXITCODE" }
+          npm run test:companion-package *>&1 | Tee-Object .logs/release-candidate/browser-companion-package-test.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion package controls failed." }
+          npm run test:release-package *>&1 | Tee-Object .logs/release-candidate/cabinet-package-test.log
+          if ($LASTEXITCODE -ne 0) { throw "Cabinet release package controls failed." }
 
       - name: Full Go test suite
         shell: pwsh
@@ -128,36 +108,135 @@ jobs:
         run: |
           pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec "${{ inputs.cypress_spec }}" -Browser chrome -RequireE2EHooks *>&1 | Tee-Object .logs/release-candidate/cypress.log
 
-      - name: Write release-candidate summary
+      - name: Write release-candidate validation summary
         if: always()
         shell: pwsh
         run: |
           $summary = @(
-            "# Cabinet beta release-candidate gate",
+            "# Cabinet beta release-candidate validation",
             "",
             "Commit SHA: ${{ steps.commit.outputs.sha }}",
             "Workflow run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
             "Cypress spec: ${{ inputs.cypress_spec }}",
             "",
+            "Packaging runs only in the dependent job after every validation step passes.",
             "This workflow validates the exact checkout only and does not merge develop into main."
           )
           $summary | Set-Content .logs/release-candidate/summary.md
-          if (Test-Path dist/browser-companion/browser-companion-candidate-summary.md) {
-            Get-Content dist/browser-companion/browser-companion-candidate-summary.md | Add-Content .logs/release-candidate/summary.md
-          }
-          Get-Content .logs/release-candidate/summary.md | Add-Content $env:GITHUB_STEP_SUMMARY
+          $summary | Add-Content $env:GITHUB_STEP_SUMMARY
 
       - name: Upload release-candidate logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: beta-release-candidate-${{ inputs.commit_sha }}
+          name: beta-release-validation-${{ inputs.commit_sha }}
           path: |
             .logs/release-candidate
             docs/api/index.html
             ui.web/cypress/artifacts
             ui.web/cypress/screenshots
             ui.web/cypress/videos
+
+  package-candidate:
+    name: Package exact private candidate
+    needs: validate-candidate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Confirm exact clean package source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -ne "${{ inputs.commit_sha }}") {
+            throw "Exact package checkout mismatch."
+          }
+          if ((git status --porcelain).Length -gt 0) {
+            throw "Exact package checkout is not clean."
+          }
+          New-Item -ItemType Directory -Force -Path .logs/release-candidate | Out-Null
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+
+      - name: Install ui.web dependencies
+        shell: pwsh
+        run: npm --prefix ui.web ci
+
+      - name: Enforce immutable Browser Companion version tag
+        shell: pwsh
+        run: |
+          $releaseConfig = Get-Content browser-extension/release.json -Raw | ConvertFrom-Json
+          $sourcePrefix = "${{ inputs.commit_sha }}".Substring(0, 12).ToLowerInvariant()
+          $candidateVersion = "$($releaseConfig.version_name_prefix).g$sourcePrefix"
+          $tag = "$($releaseConfig.immutable_tag_prefix)$candidateVersion"
+          $matchingTag = git tag --list $tag
+          if ($matchingTag) {
+            $tagCommit = git rev-list -n 1 $tag
+            if ($tagCommit -ne "${{ inputs.commit_sha }}") {
+              throw "Immutable Browser Companion version $candidateVersion is already tagged at $tagCommit."
+            }
+          }
+
+      - name: Build Windows portable package
+        shell: pwsh
+        run: ./scripts/package-installers.ps1 -ExpectedCommit "${{ inputs.commit_sha }}" -OutputDirectory "dist/cabinet" *>&1 | Tee-Object .logs/release-candidate/cabinet-package.log
+
+      - name: Verify exact Windows portable package
+        shell: pwsh
+        run: node scripts/verify-cabinet-release-package.mjs --manifest dist/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}" *>&1 | Tee-Object .logs/release-candidate/cabinet-package-verify.log
+
+      - name: Build and verify exact Browser Companion packages
+        shell: pwsh
+        run: |
+          $epoch = git show -s --format=%ct HEAD
+          node scripts/package-browser-companion.mjs --source-commit "${{ inputs.commit_sha }}" --source-date-epoch $epoch --output dist/browser-companion *>&1 | Tee-Object .logs/release-candidate/browser-companion-package.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion packaging failed with exit code $LASTEXITCODE" }
+          node scripts/verify-browser-companion-package.mjs --manifest dist/browser-companion/browser-companion-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}" *>&1 | Tee-Object .logs/release-candidate/browser-companion-verify.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion verification failed with exit code $LASTEXITCODE" }
+
+      - name: Create exact combined candidate manifest
+        shell: pwsh
+        run: node scripts/create-beta-candidate-bundle.mjs --cabinet-manifest dist/cabinet/cabinet-release-manifest.json --companion-manifest dist/browser-companion/browser-companion-release-manifest.json --output dist/beta-candidate-bundle-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
+
+      - name: Write exact candidate summary
+        shell: pwsh
+        run: |
+          @(
+            "# Cabinet exact private candidate",
+            "",
+            "Commit SHA: ${{ inputs.commit_sha }}",
+            "Workflow run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "",
+            "Cabinet manifest: dist/cabinet/cabinet-release-manifest.json",
+            "Browser Companion manifest: dist/browser-companion/browser-companion-release-manifest.json",
+            "Combined manifest: dist/beta-candidate-bundle-manifest.json",
+            "",
+            "This is a private/internal candidate. It does not publish a release or merge develop into main."
+          ) | Set-Content .logs/release-candidate/package-summary.md
+          Get-Content .logs/release-candidate/package-summary.md | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload exact release-candidate files
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-release-candidate-${{ inputs.commit_sha }}
+          if-no-files-found: error
+          path: |
+            .logs/release-candidate
+            dist/beta-candidate-bundle-manifest.json
+            dist/cabinet/cabinet-release-manifest.json
+            dist/cabinet/cabinet-*-windows-amd64-portable.zip
+            dist/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
+            dist/cabinet/cabinet-*-release-notes.md
             dist/browser-companion/browser-companion-release-manifest.json
             dist/browser-companion/browser-companion-candidate-summary.md
             dist/browser-companion/cabinet-browser-companion-*-release-notes.md

@@ -22,14 +22,15 @@ Completed foundations: #1865, #1866, #1870, #1871, #1872, #1936 and #1937.
 
 1. [x] #2037 [DONE] Enforce the complete runtime/OpenAPI route parity gate.
    - Evidence: PR #2038 and Develop Quality Gate run `31018831485` passed on the exact PR head.
-2. [ ] #2036 [IN REVIEW] Keep the release dependency graph, evidence and approval sequence acyclic.
-3. [ ] #2033 [OPEN] Replace predictable companion access with secure pairing/session transport.
-4. [ ] #2035 [OPEN] Build the shared Chromium MV3 host, configuration and readiness UI.
-5. [ ] #2032 [OPEN] Persist idempotent provider item/image observations through Cabinet.
+2. [x] #2036 [DONE] Keep the release dependency graph, evidence and approval sequence acyclic.
+3. [x] #2033 [DONE] Replace predictable companion access with secure pairing/session transport.
+4. [x] #2035 [DONE] Build the shared Chromium MV3 host, configuration and readiness UI.
+5. [x] #2032 [DONE] Persist idempotent provider item/image observations through Cabinet.
 6. [ ] #1944 and #1945 [OPEN] Prove Frontline and Bonza browser-assisted live source readiness; #1943 Hobbytech is already source/live ready.
-7. [ ] #2034 [OPEN] Produce verified Chrome/Edge packages, checksums and a release manifest.
-8. [ ] #1868 [IN REVIEW] Build the exact private/internal candidate for Cabinet + Browser Companion.
+7. [ ] #2034 [OPEN] Package source controls are merged; exact Chrome/Edge candidate files and #1869 pairing evidence remain.
+8. [ ] #1868 [IN PROGRESS] Build the exact private/internal candidate for Cabinet + Browser Companion.
    - Internal candidate creation is allowed before final approval; external prerelease publication is not.
+   - Cabinet/companion manifests and the combined candidate bundle are built only after the exact candidate validation job passes.
 9. [ ] #1869 [IN PROGRESS] Run packaged collector, four-provider, companion and media acceptance.
 10. [ ] #1867 [IN REVIEW] Attach exact-candidate upgrade, backup, export, restore and relocation evidence.
 11. [ ] #1864 [IN PROGRESS] Decide final approval after all exact-candidate evidence is linked.

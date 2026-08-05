@@ -8,57 +8,16 @@ on:
       - completed
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
-concurrency:
-  group: release-on-main-${{ github.event.workflow_run.head_sha }}
-  cancel-in-progress: true
-
 jobs:
-  evaluate:
+  record-main-gate:
     if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
-    outputs:
-      ready: ${{ steps.gate.outputs.ready }}
-      tag: ${{ steps.gate.outputs.tag }}
-      sha: ${{ steps.gate.outputs.sha }}
-      summary: ${{ steps.gate.outputs.summary }}
     steps:
-      - name: Evaluate main gate outcome for this SHA
-        id: gate
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const sha = context.payload.workflow_run.head_sha
-            const shortSha = sha.slice(0, 12)
-            const tag = `main-${shortSha}`
-            const run = context.payload.workflow_run
-            const ready = run.conclusion === 'success'
-            const summary = `- Main Gate: ${run.status}/${run.conclusion} (${run.html_url})`
-            core.info(`Release gate for ${sha}: ready=${ready}`)
-            core.info(summary)
-
-            core.setOutput('ready', ready ? 'true' : 'false')
-            core.setOutput('tag', tag)
-            core.setOutput('sha', sha)
-            core.setOutput('summary', summary)
-
-  release:
-    needs: evaluate
-    if: needs.evaluate.outputs.ready == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create or update release for successful main SHA
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.evaluate.outputs.tag }}
-          target_commitish: ${{ needs.evaluate.outputs.sha }}
-          name: main ${{ needs.evaluate.outputs.tag }}
-          body: |
-            Automatic release generated after successful main CI gates.
-
-            Commit: `${{ needs.evaluate.outputs.sha }}`
-            Main workflow:
-            ${{ needs.evaluate.outputs.summary }}
-          generate_release_notes: true
+      - name: Record main gate without publishing
+        run: |
+          echo "Main Gate: ${{ github.event.workflow_run.status }}/${{ github.event.workflow_run.conclusion }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: ${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "This workflow records main status only and does not publish a release. Cabinet beta publication uses the explicit #1864 approval workflow." >> "$GITHUB_STEP_SUMMARY"
