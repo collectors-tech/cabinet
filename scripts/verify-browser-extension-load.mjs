@@ -25,34 +25,29 @@ const targets = async (port) => {
   }
 }
 
-const browserEndpoint = async (port) => {
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/json/version`)
-    return response.ok ? (await response.json()).webSocketDebuggerUrl : undefined
-  } catch {
-    return undefined
-  }
-}
-
-const cdpCommand = (endpoint, method, params) => new Promise((resolveCommand, rejectCommand) => {
-  const socket = new WebSocket(endpoint)
+const cdpCommand = (browserProcess, method, params) => new Promise((resolveCommand, rejectCommand) => {
+  const input = browserProcess.stdio[3]
+  const output = browserProcess.stdio[4]
+  let buffered = ''
   const timeout = setTimeout(() => {
-    socket.close()
+    output.removeListener('data', onData)
     rejectCommand(new Error(`cdp_timeout:${method}`))
-  }, 5000)
-  socket.addEventListener('open', () => socket.send(JSON.stringify({ id: 1, method, params })))
-  socket.addEventListener('message', (event) => {
-    const response = JSON.parse(String(event.data))
-    if (response.id !== 1) return
-    clearTimeout(timeout)
-    socket.close()
-    if (response.error) rejectCommand(new Error(`cdp_${method}:${response.error.message}`))
-    else resolveCommand(response.result)
-  })
-  socket.addEventListener('error', () => {
-    clearTimeout(timeout)
-    rejectCommand(new Error(`cdp_connection_failed:${method}`))
-  })
+  }, 10_000)
+  const onData = (chunk) => {
+    buffered += chunk.toString()
+    const messages = buffered.split('\0')
+    buffered = messages.pop() ?? ''
+    for (const message of messages.filter(Boolean)) {
+      const response = JSON.parse(message)
+      if (response.id !== 1) continue
+      clearTimeout(timeout)
+      output.removeListener('data', onData)
+      if (response.error) rejectCommand(new Error(`cdp_${method}:${response.error.message}`))
+      else resolveCommand(response.result)
+    }
+  }
+  output.on('data', onData)
+  input.write(`${JSON.stringify({ id: 1, method, params })}\0`)
 })
 
 const verify = async (browser, port) => {
@@ -67,22 +62,14 @@ const verify = async (browser, port) => {
     '--disable-gpu',
     '--enable-unsafe-extension-debugging',
     `--remote-debugging-port=${port}`,
-    '--remote-allow-origins=*',
+    '--remote-debugging-pipe',
     `--user-data-dir=${profile}`,
     'about:blank',
-  ], { stdio: ['ignore', 'pipe', 'pipe'] })
+  ], { stdio: ['ignore', 'pipe', 'pipe', 'pipe', 'pipe'] })
   process.stdout.on('data', (chunk) => output.push(chunk.toString()))
   process.stderr.on('data', (chunk) => output.push(chunk.toString()))
 
-  let endpoint
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    endpoint = await browserEndpoint(port)
-    if (endpoint) break
-    if (process.exitCode !== null) break
-    await pause(200)
-  }
-  assert.ok(endpoint, `${browser.name} did not expose its DevTools endpoint:\n${output.join('').slice(-4000)}`)
-  const loaded = await cdpCommand(endpoint, 'Extensions.loadUnpacked', { path: extensionRoot })
+  const loaded = await cdpCommand(process, 'Extensions.loadUnpacked', { path: extensionRoot })
   assert.match(loaded?.id ?? '', /^[a-p]{32}$/, `${browser.name} did not return a valid extension ID`)
 
   let extensionTarget
