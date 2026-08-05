@@ -31,9 +31,17 @@ tags:
   - name: Data
   - name: Backup
   - name: Onboarding
+  - name: Agent
+  - name: Companion
+  - name: Diagnostics
+  - name: Integrations
+  - name: Media
+  - name: Providers
+  - name: Users
 paths:
   /healthz:
     get:
+      operationId: getHealthz
       tags: [Runtime]
       summary: Health check
       responses:
@@ -47,6 +55,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/runtime:
     get:
+      operationId: getApiRuntime
       tags: [Runtime]
       summary: Runtime configuration
       responses:
@@ -65,6 +74,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/runtime/recovery:
     get:
+      operationId: getApiRuntimeRecovery
       tags: [Runtime]
       summary: Crash recovery state
       responses:
@@ -81,6 +91,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/profiles:
     get:
+      operationId: getApiProfiles
       tags: [Profiles]
       summary: List profiles
       responses:
@@ -98,6 +109,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiProfiles
       tags: [Profiles]
       summary: Create profile
       requestBody:
@@ -121,6 +133,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/profiles/active:
     get:
+      operationId: getApiProfilesActive
       tags: [Profiles]
       summary: Get active profile
       responses:
@@ -133,6 +146,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     put:
+      operationId: putApiProfilesActive
       tags: [Profiles]
       summary: Set active profile
       requestBody:
@@ -158,6 +172,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
     get:
+      operationId: getApiProfilesByProfileIDSettings
       tags: [Profiles]
       summary: Get profile settings
       description: eBay setup clients use this settings surface to read provider credentials and marketplace routing for active-profile runs.
@@ -187,6 +202,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     put:
+      operationId: putApiProfilesByProfileIDSettings
       tags: [Profiles]
       summary: Update profile settings
       description: eBay setup clients use this settings surface to store provider credentials and marketplace routing for active-profile runs.
@@ -242,6 +258,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
     get:
+      operationId: getApiProfilesByProfileIDSecrets
       tags: [Profiles]
       summary: Get profile secret
       parameters:
@@ -265,6 +282,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     put:
+      operationId: putApiProfilesByProfileIDSecrets
       tags: [Profiles]
       summary: Upsert profile secret
       requestBody:
@@ -288,8 +306,26 @@ paths:
                 $ref: "#/components/schemas/OkResponse"
         "400":
           $ref: "#/components/responses/Error"
+    delete:
+      tags: [Profiles]
+      operationId: deleteApiProfilesByProfileIDSecrets
+      summary: Delete profiles profileID secrets
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items:
     get:
+      operationId: getApiItems
       tags: [Collection]
       summary: List canonical items
       responses:
@@ -307,6 +343,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiItems
       tags: [Collection]
       summary: Create canonical item
       requestBody:
@@ -328,6 +365,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/items/bulk-edit:
     post:
+      operationId: postApiItemsBulkEdit
       tags: [Collection]
       summary: Bulk edit canonical items
       requestBody:
@@ -356,6 +394,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ItemID"
     put:
+      operationId: putApiItemsByItemID
       tags: [Collection]
       summary: Update canonical item
       requestBody:
@@ -373,10 +412,28 @@ paths:
                 $ref: "#/components/schemas/Item"
         "400":
           $ref: "#/components/responses/Error"
+    delete:
+      tags: [Collection]
+      operationId: deleteApiItemsByItemID
+      summary: Delete items itemID
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: itemID
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/instances:
     parameters:
       - $ref: "#/components/parameters/ItemID"
     get:
+      operationId: getApiItemsByItemIDInstances
       tags: [Collection]
       summary: List instances for item
       responses:
@@ -394,6 +451,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiItemsByItemIDInstances
       tags: [Collection]
       summary: Create instance for item
       requestBody:
@@ -419,6 +477,7 @@ paths:
         required: true
         schema: { type: string }
     put:
+      operationId: putApiItemsByItemIDInstancesByInstanceID
       tags: [Collection]
       summary: Update instance for item
       requestBody:
@@ -438,6 +497,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/search/items:
     get:
+      operationId: getApiSearchItems
       tags: [Search]
       summary: Search items
       parameters:
@@ -484,6 +544,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/scanner/query-sets:
     get:
+      operationId: getApiScannerQuerySets
       tags: [Scanner]
       summary: List scanner query sets
       description: Lists active-profile query sets including provider scope, schedule controls, rate-limit settings, and hydrated latest-run metadata used by Market Watch.
@@ -502,6 +563,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiScannerQuerySets
       tags: [Scanner]
       summary: Create scanner query set
       description: Creates a provider-scoped saved search. eBay Market Watch query sets use `provider_scope=["ebay"]` with optional pagination, schedule, and rate-limit controls.
@@ -522,6 +584,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/scanner/query-sets/{querySetID}:
     put:
+      operationId: putApiScannerQuerySetsByQuerySetID
       tags: [Scanner]
       summary: Update scanner query set
       description: Updates saved-search filters, provider scope, pagination, schedule, enabled state, and rate-limit controls for an active-profile query set. When `provider_scope` is omitted from an update, the existing saved provider scope is preserved so eBay-only query edits do not widen to the default multi-provider scope.
@@ -547,6 +610,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     delete:
+      operationId: deleteApiScannerQuerySetsByQuerySetID
       tags: [Scanner]
       summary: Delete scanner query set
       parameters:
@@ -562,6 +626,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/scanner/run:
     post:
+      operationId: postApiScannerRun
       tags: [Scanner]
       summary: Run scanner now
       description: Runs the saved search and maps eBay provider auth and search failures to actionable provider error envelopes.
@@ -603,6 +668,7 @@ paths:
                 $ref: "#/components/schemas/ProviderSearchErrorResponse"
   /api/scanner/candidates:
     get:
+      operationId: getApiScannerCandidates
       tags: [Scanner]
       summary: List scanner candidates for query set
       description: Lists saved-search candidates for output inspection and handoff, including provider/query provenance, lifecycle status/provider filters, decision history, and pagination metadata used by Market Watch result inbox actions.
@@ -660,6 +726,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/scanner/candidates/{candidate_id}:
     patch:
+      operationId: patchApiScannerCandidatesByCandidateId
       tags: [Scanner]
       summary: Update scanner candidate lifecycle status
       description: Persists a profile-scoped Market Watch result inbox lifecycle decision for a saved-search candidate, records decision history, and returns the updated candidate.
@@ -693,6 +760,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/providers/ebay/run:
     post:
+      operationId: postApiProvidersEbayRun
       tags: [Integrations]
       summary: Run eBay saved-search provider
       description: Runs an eBay-scoped saved search with active-profile credentials, persists normalized candidates, and returns the hydrated run snapshot.
@@ -749,6 +817,7 @@ paths:
                 $ref: "#/components/schemas/EbayProviderRunMethodErrorResponse"
   /api/matching/run:
     post:
+      operationId: postApiMatchingRun
       tags: [Matching]
       summary: Run candidate matching
       responses:
@@ -762,6 +831,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/matching/results:
     get:
+      operationId: getApiMatchingResults
       tags: [Matching]
       summary: List matching results
       responses:
@@ -928,6 +998,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/discovery/not-in-collection:
     get:
+      operationId: getApiDiscoveryNotInCollection
       tags: [Discovery]
       summary: List not-in-collection candidates
       parameters:
@@ -956,6 +1027,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/discovery/action:
     post:
+      operationId: postApiDiscoveryAction
       tags: [Discovery]
       summary: Apply discovery action
       description: Applies saved-search output handoff actions for Discoveries, Wishlist, or Inventory while preserving eBay provider/query provenance in the durable discovery action audit.
@@ -995,6 +1067,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/wishlist:
     get:
+      operationId: getApiWishlist
       tags: [Wishlist]
       summary: List wishlist entries
       responses:
@@ -1012,6 +1085,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiWishlist
       tags: [Wishlist]
       summary: Create wishlist entry
       requestBody:
@@ -1030,6 +1104,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     put:
+      operationId: putApiWishlist
       tags: [Wishlist]
       summary: Update wishlist entry
       requestBody:
@@ -1048,6 +1123,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     delete:
+      operationId: deleteApiWishlist
       tags: [Wishlist]
       summary: Delete wishlist entry
       parameters:
@@ -1063,6 +1139,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/wishlist/convert-owned:
     post:
+      operationId: postApiWishlistConvertOwned
       tags: [Wishlist]
       summary: Convert wishlist entry to owned inventory
       requestBody:
@@ -1086,6 +1163,7 @@ paths:
           description: Invalid or cross-profile wishlist entry
   /api/pricing/track:
     post:
+      operationId: postApiPricingTrack
       tags: [Pricing]
       summary: Track item for price snapshots
       requestBody:
@@ -1109,6 +1187,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/pricing/history:
     get:
+      operationId: getApiPricingHistory
       tags: [Pricing]
       summary: Price history
       parameters:
@@ -1133,6 +1212,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/dashboard:
     get:
+      operationId: getApiDashboard
       tags: [Dashboard]
       summary: Dashboard summary
       responses:
@@ -1146,6 +1226,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/license/import:
     post:
+      operationId: postApiLicenseImport
       tags: [Licensing]
       summary: Import signed license
       requestBody:
@@ -1177,6 +1258,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/license/status:
     get:
+      operationId: getApiLicenseStatus
       tags: [Licensing]
       summary: License status
       parameters:
@@ -1206,6 +1288,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/ai/test:
     post:
+      operationId: postApiAiTest
       tags: [AI]
       summary: Test AI connectivity
       requestBody:
@@ -1229,6 +1312,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/ai/suggest/title:
     post:
+      operationId: postApiAiSuggestTitle
       tags: [AI]
       summary: AI suggestion from title
       requestBody:
@@ -1254,6 +1338,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/logs/activity:
     get:
+      operationId: getApiLogsActivity
       tags: [Logs]
       summary: Activity logs
       parameters:
@@ -1277,6 +1362,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/logs/export:
     get:
+      operationId: getApiLogsExport
       tags: [Logs]
       summary: Export logs bundle
       responses:
@@ -1290,6 +1376,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/onboarding/sample-data:
     post:
+      operationId: postApiOnboardingSampleData
       tags: [Onboarding]
       summary: Seed starter sample data for first-run onboarding
       responses:
@@ -1318,6 +1405,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/scanner/run/scheduled:
     post:
+      operationId: postApiScannerRunScheduled
       tags: [Scanner]
       summary: Run scheduled scanner cycle
       description: Runs enabled scheduled saved searches for the active profile, including eBay-scoped Market Watch query sets, and returns deterministic execution counters.
@@ -1332,6 +1420,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/scanner/runs:
     get:
+      operationId: getApiScannerRuns
       tags: [Scanner]
       summary: List persisted Market Watch run history
       description: Lists recent persisted scanner/Market Watch run records for the active profile, optionally filtered to one query set.
@@ -1359,6 +1448,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/scanner/failures:
     get:
+      operationId: getApiScannerFailures
       tags: [Scanner]
       summary: List scanner failures
       responses:
@@ -1378,6 +1468,7 @@ paths:
                 $ref: "#/components/schemas/ScannerFailuresMethodErrorResponse"
   /api/scanner/failures/retry:
     post:
+      operationId: postApiScannerFailuresRetry
       tags: [Scanner]
       summary: Retry scanner failures for a query set
       description: Accepts retry requests for failed saved searches, including eBay provider failures surfaced through provider health and Market Watch retry guidance.
@@ -1398,6 +1489,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/providers/registry:
     get:
+      operationId: getApiProvidersRegistry
       tags: [Integrations]
       summary: List provider registry
       description: Returns canonical provider metadata for the active profile. eBay entries expose non-secret setup readiness for token presence, marketplace routing, validation state, provider health state, and next action without returning bearer token values.
@@ -1412,6 +1504,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/provider/health:
     get:
+      operationId: getApiProviderHealth
       tags: [Scanner]
       summary: Provider health status
       description: Returns the latest provider health state. eBay responses preserve the existing scanner status/message fields and include readiness aliases for setup and retry routing.
@@ -1431,6 +1524,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/provider/test:
     post:
+      operationId: postApiProviderTest
       tags: [Integrations]
       summary: Run provider connectivity test
       description: Runs a profile-scoped provider test and returns non-secret readiness evidence. OpenAI API-key mode performs an OpenAI-compatible connectivity check; Browser Auth requires connected auth state, a verified auth artifact flag, and a passed non-secret provider-test proof artifact.
@@ -1461,6 +1555,7 @@ paths:
                 $ref: "#/components/schemas/ProviderTestResponse"
   /api/settings/reset-ignore-rules:
     post:
+      operationId: postApiSettingsResetIgnoreRules
       tags: [Discovery]
       summary: Reset discovery ignore rules
       responses:
@@ -1474,6 +1569,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/wishlist/hits:
     get:
+      operationId: getApiWishlistHits
       tags: [Wishlist]
       summary: List wishlist hits
       responses:
@@ -1487,6 +1583,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/commerce/purchase-orders:
     get:
+      operationId: getApiCommercePurchaseOrders
       tags: [Commerce]
       summary: List grouped purchase orders
       description: Returns active-profile persisted purchase lifecycle and expected-arrival records as paginated, order-centred purchase orders with grouped line items.
@@ -1518,6 +1615,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/pricing/snapshot/run:
     post:
+      operationId: postApiPricingSnapshotRun
       tags: [Pricing]
       summary: Trigger pricing snapshot run
       responses:
@@ -1531,6 +1629,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/pricing/graph:
     get:
+      operationId: getApiPricingGraph
       tags: [Pricing]
       summary: Pricing graph series
       responses:
@@ -1544,6 +1643,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/pricing/by-source:
     get:
+      operationId: getApiPricingBySource
       tags: [Pricing]
       summary: Pricing grouped by source
       responses:
@@ -1557,6 +1657,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/pricing/stats:
     get:
+      operationId: getApiPricingStats
       tags: [Pricing]
       summary: Pricing statistics
       responses:
@@ -1570,6 +1671,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/pricing/trend:
     get:
+      operationId: getApiPricingTrend
       tags: [Pricing]
       summary: Pricing trend analysis
       responses:
@@ -1583,6 +1685,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/pricing/history/export:
     get:
+      operationId: getApiPricingHistoryExport
       tags: [Pricing]
       summary: Export pricing history
       responses:
@@ -1596,6 +1699,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/logs/debug:
     post:
+      operationId: postApiLogsDebug
       tags: [Logs]
       summary: Toggle debug logging
       responses:
@@ -1609,6 +1713,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/ai/toggle:
     post:
+      operationId: postApiAiToggle
       tags: [AI]
       summary: Enable or disable AI assist
       responses:
@@ -1622,6 +1727,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/ai/suggest/photo:
     post:
+      operationId: postApiAiSuggestPhoto
       tags: [AI]
       summary: AI suggestion from photo
       responses:
@@ -1924,6 +2030,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/integrations/ebay/purchase-inbox/reviews:
     post:
+      operationId: postApiIntegrationsEbayPurchaseInboxReviews
       tags: [Integrations]
       summary: Prepare eBay Purchase Inbox review records
       requestBody:
@@ -1961,6 +2068,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/integrations/ebay/purchase-inbox/actions:
     post:
+      operationId: postApiIntegrationsEbayPurchaseInboxActions
       tags: [Integrations]
       summary: Apply a confirmed eBay Purchase Inbox link or convert action
       requestBody:
@@ -2010,6 +2118,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/telegram/catalog-captures:
     post:
+      operationId: postApiTelegramCatalogCaptures
       tags: [Telegram]
       summary: Ingest an authorized Telegram catalog capture
       requestBody:
@@ -2168,6 +2277,7 @@ paths:
                               type: string
   /api/telegram/catalog-capture-callbacks:
     post:
+      operationId: postApiTelegramCatalogCaptureCallbacks
       tags: [Telegram]
       summary: Handle an authorized Telegram catalog capture callback
       requestBody:
@@ -2228,6 +2338,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/telegram/external-intake-proofs:
     post:
+      operationId: postApiTelegramExternalIntakeProofs
       tags: [Telegram]
       summary: Record an authorized Telegram/OpenAI external intake proof packet
       requestBody:
@@ -2306,6 +2417,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/telegram/webhook/catalog-captures:
     post:
+      operationId: postApiTelegramWebhookCatalogCaptures
       tags: [Telegram]
       summary: Ingest a raw Telegram webhook update as an authorized catalog capture
       requestBody:
@@ -2471,6 +2583,7 @@ paths:
                               type: string
   /api/chat/threads:
     get:
+      operationId: getApiChatThreads
       tags: [Chat]
       summary: List chat threads for profile
       parameters:
@@ -2494,6 +2607,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiChatThreads
       tags: [Chat]
       summary: Create chat thread
       requestBody:
@@ -2519,6 +2633,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/chat/messages:
     get:
+      operationId: getApiChatMessages
       tags: [Chat]
       summary: List messages for a thread
       parameters:
@@ -2547,6 +2662,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiChatMessages
       tags: [Chat]
       summary: Create chat message
       requestBody:
@@ -2576,6 +2692,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/chat/attachments:
     post:
+      operationId: postApiChatAttachments
       tags: [Chat]
       summary: Attach user-selected file to chat thread
       requestBody:
@@ -2604,6 +2721,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/chat/actions/preview:
     post:
+      operationId: postApiChatActionsPreview
       tags: [Chat]
       summary: Preview chat action without mutation
       requestBody:
@@ -2631,8 +2749,26 @@ paths:
                 type: object
         "400":
           $ref: "#/components/responses/Error"
+    get:
+      tags: [Chat]
+      operationId: getApiChatActionsPreview
+      summary: Get chat actions preview
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
   /api/chat/actions/apply:
     post:
+      operationId: postApiChatActionsApply
       tags: [Chat]
       summary: Apply previously previewed chat action
       requestBody:
@@ -2662,6 +2798,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/chat/actions/cancel:
     post:
+      operationId: postApiChatActionsCancel
       tags: [Chat]
       summary: Cancel previously previewed chat action without mutation
       requestBody:
@@ -2689,6 +2826,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/export/json:
     get:
+      operationId: getApiDataExportJson
       tags: [Data]
       summary: Export full data JSON snapshot
       responses:
@@ -2707,6 +2845,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/export/csv/items:
     get:
+      operationId: getApiDataExportCsvItems
       tags: [Data]
       summary: Export items CSV
       responses:
@@ -2725,6 +2864,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/import/json/dry-run:
     post:
+      operationId: postApiDataImportJsonDryRun
       tags: [Data]
       summary: Validate JSON import without applying
       responses:
@@ -2738,6 +2878,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/import/json/apply:
     post:
+      operationId: postApiDataImportJsonApply
       tags: [Data]
       summary: Apply JSON import
       responses:
@@ -2751,6 +2892,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/import/csv/dry-run:
     post:
+      operationId: postApiDataImportCsvDryRun
       tags: [Data]
       summary: Validate CSV import without applying
       responses:
@@ -2764,6 +2906,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/import/csv/apply:
     post:
+      operationId: postApiDataImportCsvApply
       tags: [Data]
       summary: Apply CSV import
       responses:
@@ -2777,6 +2920,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/reindex:
     post:
+      operationId: postApiDataReindex
       tags: [Data]
       summary: Reindex data/search indexes
       responses:
@@ -2800,6 +2944,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/rebuild-thumbnails:
     post:
+      operationId: postApiDataRebuildThumbnails
       tags: [Data]
       summary: Rebuild all stored thumbnails
       responses:
@@ -2820,6 +2965,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/data/repair:
     post:
+      operationId: postApiDataRepair
       tags: [Data]
       summary: Run data repair routine
       responses:
@@ -2844,6 +2990,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/backup/run:
     post:
+      operationId: postApiBackupRun
       tags: [Backup]
       summary: Trigger backup run
       responses:
@@ -2871,6 +3018,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/backup/list:
     get:
+      operationId: getApiBackupList
       tags: [Backup]
       summary: List backups
       responses:
@@ -2898,6 +3046,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/backup/restore:
     post:
+      operationId: postApiBackupRestore
       tags: [Backup]
       summary: Restore from backup
       requestBody:
@@ -2933,6 +3082,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/zitadel/login:
     get:
+      operationId: getApiAuthZitadelLogin
       tags: [Auth]
       summary: Start Cabinet remote account sign-in
       description: Creates one-time state, nonce and PKCE verifier state on the server, then redirects to the environment's Cabinet-branded shared ZITADEL login.
@@ -2955,6 +3105,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/zitadel/callback:
     get:
+      operationId: getApiAuthZitadelCallback
       tags: [Auth]
       summary: Complete Cabinet remote account sign-in
       description: Consumes state once, exchanges the authorisation code and creates an opaque HTTP-only Cabinet application session after strict token and role validation.
@@ -2975,6 +3126,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/zitadel/session:
     get:
+      operationId: getApiAuthZitadelSession
       tags: [Auth]
       summary: Get the current Cabinet remote application session
       security:
@@ -3005,6 +3157,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/zitadel/refresh:
     post:
+      operationId: postApiAuthZitadelRefresh
       tags: [Auth]
       summary: Refresh the server-owned Cabinet remote session
       security:
@@ -3025,6 +3178,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/zitadel/logout:
     post:
+      operationId: postApiAuthZitadelLogout
       tags: [Auth]
       summary: Revoke the Cabinet remote session and begin provider logout
       security:
@@ -3043,6 +3197,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/webauthn/register/begin:
     post:
+      operationId: postApiAuthWebauthnRegisterBegin
       tags: [Auth]
       summary: Begin WebAuthn registration
       responses:
@@ -3056,6 +3211,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/webauthn/register/finish:
     post:
+      operationId: postApiAuthWebauthnRegisterFinish
       tags: [Auth]
       summary: Finish WebAuthn registration
       responses:
@@ -3069,6 +3225,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/requirements:
     get:
+      operationId: getApiAuthRequirements
       tags: [Auth]
       summary: Authentication requirements for profile
       responses:
@@ -3082,6 +3239,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/recovery/passphrase:
     post:
+      operationId: postApiAuthRecoveryPassphrase
       tags: [Auth]
       summary: Set recovery passphrase
       responses:
@@ -3095,6 +3253,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/recovery/reset/begin:
     post:
+      operationId: postApiAuthRecoveryResetBegin
       tags: [Auth]
       summary: Begin recovery reset
       responses:
@@ -3108,6 +3267,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/webauthn/login/begin:
     post:
+      operationId: postApiAuthWebauthnLoginBegin
       tags: [Auth]
       summary: Begin WebAuthn login
       responses:
@@ -3121,6 +3281,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/webauthn/login/finish:
     post:
+      operationId: postApiAuthWebauthnLoginFinish
       tags: [Auth]
       summary: Finish WebAuthn login
       responses:
@@ -3134,6 +3295,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/session/validate:
     post:
+      operationId: postApiAuthSessionValidate
       tags: [Auth]
       summary: Validate auth session
       responses:
@@ -3147,6 +3309,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/auth/session/lock:
     post:
+      operationId: postApiAuthSessionLock
       tags: [Auth]
       summary: Lock auth session
       responses:
@@ -3162,6 +3325,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
     get:
+      operationId: getApiProfilesByProfileIDSavedFilters
       tags: [Profiles]
       summary: List saved search filters
       responses:
@@ -3174,6 +3338,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiProfilesByProfileIDSavedFilters
       tags: [Profiles]
       summary: Create saved filter
       responses:
@@ -3186,6 +3351,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     put:
+      operationId: putApiProfilesByProfileIDSavedFilters
       tags: [Profiles]
       summary: Update saved filter
       responses:
@@ -3198,6 +3364,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     delete:
+      operationId: deleteApiProfilesByProfileIDSavedFilters
       tags: [Profiles]
       summary: Delete saved filter
       responses:
@@ -3209,6 +3376,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
     get:
+      operationId: getApiProfilesByProfileIDStorage
       tags: [Profiles]
       summary: Profile storage paths
       responses:
@@ -3224,6 +3392,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
     get:
+      operationId: getApiProfilesByProfileIDLicense
       tags: [Profiles]
       summary: Get profile license JSON
       responses:
@@ -3236,6 +3405,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     put:
+      operationId: putApiProfilesByProfileIDLicense
       tags: [Profiles]
       summary: Upsert profile license JSON
       responses:
@@ -3251,6 +3421,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ItemID"
     get:
+      operationId: getApiItemsByItemIDBarcodes
       tags: [Collection]
       summary: List item barcodes
       responses:
@@ -3263,6 +3434,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiItemsByItemIDBarcodes
       tags: [Collection]
       summary: Add item barcode
       responses:
@@ -3278,6 +3450,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ItemID"
     get:
+      operationId: getApiItemsByItemIDPhotos
       tags: [Collection]
       summary: List item photos
       responses:
@@ -3290,6 +3463,7 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
     post:
+      operationId: postApiItemsByItemIDPhotos
       tags: [Collection]
       summary: Upload item photo
       responses:
@@ -3305,6 +3479,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ItemID"
     post:
+      operationId: postApiItemsByItemIDPhotosReorder
       tags: [Collection]
       summary: Reorder photos for item
       requestBody:
@@ -3335,6 +3510,7 @@ paths:
         required: true
         schema: { type: string }
     delete:
+      operationId: deleteApiItemsByItemIDPhotosByPhotoID
       tags: [Collection]
       summary: Delete photo
       responses:
@@ -3350,6 +3526,7 @@ paths:
         required: true
         schema: { type: string }
     put:
+      operationId: putApiItemsByItemIDPhotosByPhotoIDPrimary
       tags: [Collection]
       summary: Set primary photo
       responses:
@@ -3365,6 +3542,7 @@ paths:
         required: true
         schema: { type: string }
     put:
+      operationId: putApiItemsByItemIDPhotosByPhotoIDRotate
       tags: [Collection]
       summary: Rotate photo orientation
       requestBody:
@@ -3395,6 +3573,7 @@ paths:
         required: true
         schema: { type: string }
     get:
+      operationId: getApiItemsByItemIDPhotosByPhotoIDFile
       tags: [Collection]
       summary: Retrieve photo file variant
       responses:
@@ -3411,6 +3590,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ItemID"
     post:
+      operationId: postApiItemsByItemIDPhotosRebuild
       tags: [Collection]
       summary: Rebuild item photo thumbnails
       responses:
@@ -3429,6 +3609,7 @@ paths:
         required: true
         schema: { type: string }
     get:
+      operationId: getApiBarcodesByBarcode
       tags: [Collection]
       summary: Lookup barcode in local catalog
       responses:
@@ -3447,6 +3628,7 @@ paths:
         required: true
         schema: { type: string }
     get:
+      operationId: getApiBarcodesByBarcodeExternalSearch
       tags: [Collection]
       summary: Build external barcode search URL
       parameters:
@@ -3465,13 +3647,2268 @@ paths:
                 type: object
         "400":
           $ref: "#/components/responses/Error"
+# Issue 2037 complete runtime route inventory
+  /api/agent/capabilities:
+    get:
+      tags: [Agent]
+      operationId: getApiAgentCapabilities
+      summary: Get agent capabilities
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/agent/skills:
+    get:
+      tags: [Agent]
+      operationId: getApiAgentSkills
+      summary: Get agent skills
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/agent/skills/apply:
+    post:
+      tags: [Agent]
+      operationId: postApiAgentSkillsApply
+      summary: Create or run agent skills apply
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/agent/skills/import:
+    post:
+      tags: [Agent]
+      operationId: postApiAgentSkillsImport
+      summary: Create or run agent skills import
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/agent/skills/preview:
+    post:
+      tags: [Agent]
+      operationId: postApiAgentSkillsPreview
+      summary: Create or run agent skills preview
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/agent/skills/state:
+    post:
+      tags: [Agent]
+      operationId: postApiAgentSkillsState
+      summary: Create or run agent skills state
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/ai/suggestions/apply:
+    post:
+      tags: [Runtime]
+      operationId: postApiAiSuggestionsApply
+      summary: Create or run ai suggestions apply
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/cloud/lease/issue:
+    post:
+      tags: [Auth]
+      operationId: postApiAuthCloudLeaseIssue
+      summary: Create or run auth cloud lease issue
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/cloud/lease/renew:
+    post:
+      tags: [Auth]
+      operationId: postApiAuthCloudLeaseRenew
+      summary: Create or run auth cloud lease renew
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/cloud/lease/validate:
+    get:
+      tags: [Auth]
+      operationId: getApiAuthCloudLeaseValidate
+      summary: Get auth cloud lease validate
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/cloud/offline/protected:
+    get:
+      tags: [Auth]
+      operationId: getApiAuthCloudOfflineProtected
+      summary: Get auth cloud offline protected
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/cloud/session/bootstrap:
+    post:
+      tags: [Auth]
+      operationId: postApiAuthCloudSessionBootstrap
+      summary: Create or run auth cloud session bootstrap
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/cloud/session/effective:
+    get:
+      tags: [Auth]
+      operationId: getApiAuthCloudSessionEffective
+      summary: Get auth cloud session effective
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/cloud/zitadel/webhook:
+    post:
+      tags: [Auth]
+      operationId: postApiAuthCloudZitadelWebhook
+      summary: Create or run auth cloud zitadel webhook
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/auth/provider-options:
+    get:
+      tags: [Auth]
+      operationId: getApiAuthProviderOptions
+      summary: Get auth provider-options
+      security: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/backup/download:
+    get:
+      tags: [Backup]
+      operationId: getApiBackupDownload
+      summary: Get backup download
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Backup archive
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/chat/capabilities:
+    get:
+      tags: [Chat]
+      operationId: getApiChatCapabilities
+      summary: Get chat capabilities
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/chat/inbox:
+    get:
+      tags: [Chat]
+      operationId: getApiChatInbox
+      summary: Get chat inbox
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Chat]
+      operationId: postApiChatInbox
+      summary: Create or run chat inbox
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/chat/inbox/{inboxID}:
+    patch:
+      tags: [Chat]
+      operationId: patchApiChatInboxByInboxID
+      summary: Update chat inbox inboxID
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: inboxID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/chat/workflow-runs:
+    get:
+      tags: [Chat]
+      operationId: getApiChatWorkflowRuns
+      summary: Get chat workflow-runs
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Chat]
+      operationId: postApiChatWorkflowRuns
+      summary: Create or run chat workflow-runs
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/chat/workflow-runs/{runID}:
+    get:
+      tags: [Chat]
+      operationId: getApiChatWorkflowRunsByRunID
+      summary: Get chat workflow-runs runID
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: runID
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [Chat]
+      operationId: patchApiChatWorkflowRunsByRunID
+      summary: Update chat workflow-runs runID
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: runID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/commerce/arrivals:
+    get:
+      tags: [Commerce]
+      operationId: getApiCommerceArrivals
+      summary: Get commerce arrivals
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Commerce]
+      operationId: postApiCommerceArrivals
+      summary: Create or run commerce arrivals
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Commerce]
+      operationId: putApiCommerceArrivals
+      summary: Update commerce arrivals
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/commerce/landed-cost/plan:
+    post:
+      tags: [Commerce]
+      operationId: postApiCommerceLandedCostPlan
+      summary: Create or run commerce landed-cost plan
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/commerce/lifecycle:
+    get:
+      tags: [Commerce]
+      operationId: getApiCommerceLifecycle
+      summary: Get commerce lifecycle
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Commerce]
+      operationId: postApiCommerceLifecycle
+      summary: Create or run commerce lifecycle
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/companion/modules:
+    get:
+      tags: [Companion]
+      operationId: getApiCompanionModules
+      summary: Get companion modules
+      description: Local loopback module registry used by the installed Cabinet Browser Companion.
+      security: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionModuleRegistry"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/companion/payloads:
+    post:
+      tags: [Companion]
+      operationId: postApiCompanionPayloads
+      summary: Create or run companion payloads
+      security:
+        - CompanionProfileBearer: []
+        - CompanionProfileBearer: []
+          CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanionPayloadSubmission"
+      responses:
+        "202":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionAcceptedPayload"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/diagnostics/config:
+    get:
+      tags: [Diagnostics]
+      operationId: getApiDiagnosticsConfig
+      summary: Get diagnostics config
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Diagnostics]
+      operationId: putApiDiagnosticsConfig
+      summary: Update diagnostics config
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/diagnostics/event:
+    post:
+      tags: [Diagnostics]
+      operationId: postApiDiagnosticsEvent
+      summary: Create or run diagnostics event
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/errors/classify:
+    post:
+      tags: [Diagnostics]
+      operationId: postApiErrorsClassify
+      summary: Create or run errors classify
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/future-hooks:
+    get:
+      tags: [Runtime]
+      operationId: getApiFutureHooks
+      summary: Get future-hooks
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/future-hooks/invoke:
+    post:
+      tags: [Runtime]
+      operationId: postApiFutureHooksInvoke
+      summary: Create or run future-hooks invoke
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/goal-bundles:
+    get:
+      tags: [Integrations]
+      operationId: getApiIntegrationsPokemonGoalBundles
+      summary: Get integrations pokemon goal-bundles
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/goal-bundles/apply:
+    post:
+      tags: [Integrations]
+      operationId: postApiIntegrationsPokemonGoalBundlesApply
+      summary: Create or run integrations pokemon goal-bundles apply
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/graded-overrides:
+    get:
+      tags: [Integrations]
+      operationId: getApiIntegrationsPokemonGradedOverrides
+      summary: Get integrations pokemon graded-overrides
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Integrations]
+      operationId: postApiIntegrationsPokemonGradedOverrides
+      summary: Create or run integrations pokemon graded-overrides
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/list-templates:
+    get:
+      tags: [Integrations]
+      operationId: getApiIntegrationsPokemonListTemplates
+      summary: Get integrations pokemon list-templates
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/list-templates/apply:
+    post:
+      tags: [Integrations]
+      operationId: postApiIntegrationsPokemonListTemplatesApply
+      summary: Create or run integrations pokemon list-templates apply
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/milestone-evaluate:
+    post:
+      tags: [Integrations]
+      operationId: postApiIntegrationsPokemonMilestoneEvaluate
+      summary: Create or run integrations pokemon milestone-evaluate
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/price-alerts:
+    get:
+      tags: [Integrations]
+      operationId: getApiIntegrationsPokemonPriceAlerts
+      summary: Get integrations pokemon price-alerts
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/progress-snapshot:
+    get:
+      tags: [Integrations]
+      operationId: getApiIntegrationsPokemonProgressSnapshot
+      summary: Get integrations pokemon progress-snapshot
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/set-progress:
+    get:
+      tags: [Integrations]
+      operationId: getApiIntegrationsPokemonSetProgress
+      summary: Get integrations pokemon set-progress
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/pokemon/visibility-access:
+    get:
+      tags: [Integrations]
+      operationId: getApiIntegrationsPokemonVisibilityAccess
+      summary: Get integrations pokemon visibility-access
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/inventory/grading/defaults:
+    get:
+      tags: [Collection]
+      operationId: getApiInventoryGradingDefaults
+      summary: Get inventory grading defaults
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Collection]
+      operationId: putApiInventoryGradingDefaults
+      summary: Update inventory grading defaults
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/inventory/grading/enums:
+    get:
+      tags: [Collection]
+      operationId: getApiInventoryGradingEnums
+      summary: Get inventory grading enums
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Collection]
+      operationId: putApiInventoryGradingEnums
+      summary: Update inventory grading enums
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/items/{itemID}/restore:
+    post:
+      tags: [Collection]
+      operationId: postApiItemsByItemIDRestore
+      summary: Create or run items itemID restore
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: itemID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/media/assets:
+    get:
+      tags: [Media]
+      operationId: getApiMediaAssets
+      summary: Get media assets
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Media]
+      operationId: postApiMediaAssets
+      summary: Create or run media assets
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+                source: { type: string }
+                notes: { type: string }
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/media/assets/{assetID}/metadata:
+    patch:
+      tags: [Media]
+      operationId: patchApiMediaAssetsByAssetIDMetadata
+      summary: Update media assets assetID metadata
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: assetID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/media/assignments:
+    post:
+      tags: [Media]
+      operationId: postApiMediaAssignments
+      summary: Create or run media assignments
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/media/assignments/preview:
+    post:
+      tags: [Media]
+      operationId: postApiMediaAssignmentsPreview
+      summary: Create or run media assignments preview
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/media/downloads:
+    post:
+      tags: [Media]
+      operationId: postApiMediaDownloads
+      summary: Create or run media downloads
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/media/downloads/preview:
+    post:
+      tags: [Media]
+      operationId: postApiMediaDownloadsPreview
+      summary: Create or run media downloads preview
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/openapi.yaml:
+    get:
+      tags: [Runtime]
+      operationId: getApiOpenapiYaml
+      summary: Get openapi.yaml
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 source document
+          content:
+            application/yaml:
+              schema: { type: string }
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/profiles/{profileID}/integration-instances:
+    delete:
+      tags: [Profiles]
+      operationId: deleteApiProfilesByProfileIDIntegrationInstances
+      summary: Delete profiles profileID integration-instances
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+        - in: query
+          name: id
+          required: false
+          description: Integration instance identifier required for DELETE.
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/Error"
+    get:
+      tags: [Profiles]
+      operationId: getApiProfilesByProfileIDIntegrationInstances
+      summary: Get profiles profileID integration-instances
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+        - in: query
+          name: id
+          required: false
+          description: Integration instance identifier required for DELETE.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationInstanceList"
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Profiles]
+      operationId: postApiProfilesByProfileIDIntegrationInstances
+      summary: Create or run profiles profileID integration-instances
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+        - in: query
+          name: id
+          required: false
+          description: Integration instance identifier required for DELETE.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationInstancePatch"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationInstanceResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Profiles]
+      operationId: putApiProfilesByProfileIDIntegrationInstances
+      summary: Update profiles profileID integration-instances
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+        - in: query
+          name: id
+          required: false
+          description: Integration instance identifier required for DELETE.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationInstancePatch"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationInstanceResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/profiles/{profileID}/mcp-http-config:
+    put:
+      tags: [Profiles]
+      operationId: putApiProfilesByProfileIDMcpHttpConfig
+      summary: Update profiles profileID mcp-http-config
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/profiles/{profileID}/mcp-http-credential:
+    post:
+      tags: [Profiles]
+      operationId: postApiProfilesByProfileIDMcpHttpCredential
+      summary: Create or run profiles profileID mcp-http-credential
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/profiles/{profileID}/mcp-http-status:
+    get:
+      tags: [Profiles]
+      operationId: getApiProfilesByProfileIDMcpHttpStatus
+      summary: Get profiles profileID mcp-http-status
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: profileID
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/amazon/run:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersAmazonRun
+      summary: Create or run providers amazon run
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/au-webshops/parse-stock:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersAuWebshopsParseStock
+      summary: Create or run providers au-webshops parse-stock
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/bigcommerce/run:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersBigcommerceRun
+      summary: Create or run providers bigcommerce run
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/bonza/run:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersBonzaRun
+      summary: Create or run providers bonza run
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderSearchRunRequest"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderRunResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/doofinder/discovery:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersDoofinderDiscovery
+      summary: Create or run providers doofinder discovery
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/doofinder/run:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersDoofinderRun
+      summary: Create or run providers doofinder run
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/family-detect:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersFamilyDetect
+      summary: Create or run providers family-detect
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/family-override:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersFamilyOverride
+      summary: Create or run providers family-override
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/frontline/discovery:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersFrontlineDiscovery
+      summary: Create or run providers frontline discovery
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FrontlineDiscoveryRequest"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrontlineDiscoveryResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/frontline/run:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersFrontlineRun
+      summary: Create or run providers frontline run
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BrowserAwareProviderRunRequest"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderRunResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/hobbytech/run:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersHobbytechRun
+      summary: Create or run providers hobbytech run
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BrowserAwareProviderRunRequest"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderRunResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/product-url/ingest:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersProductUrlIngest
+      summary: Create or run providers product-url ingest
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/shopify/run:
+    post:
+      tags: [Providers]
+      operationId: postApiProvidersShopifyRun
+      summary: Create or run providers shopify run
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/runtime/setup-complete:
+    post:
+      tags: [Runtime]
+      operationId: postApiRuntimeSetupComplete
+      summary: Create or run runtime setup-complete
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/runtime/setup-import:
+    post:
+      tags: [Runtime]
+      operationId: postApiRuntimeSetupImport
+      summary: Create or run runtime setup-import
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/runtime/setup-status:
+    get:
+      tags: [Runtime]
+      operationId: getApiRuntimeSetupStatus
+      summary: Get runtime setup-status
+      security: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/runtime/setup-storage-validate:
+    post:
+      tags: [Runtime]
+      operationId: postApiRuntimeSetupStorageValidate
+      summary: Create or run runtime setup-storage-validate
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/runtime/shutdown:
+    post:
+      tags: [Runtime]
+      operationId: postApiRuntimeShutdown
+      summary: Create or run runtime shutdown
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/runtime/update/install:
+    post:
+      tags: [Runtime]
+      operationId: postApiRuntimeUpdateInstall
+      summary: Create or run runtime update install
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/scanner/recognition-review/apply:
+    post:
+      tags: [Scanner]
+      operationId: postApiScannerRecognitionReviewApply
+      summary: Create or run scanner recognition-review apply
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/telegram/agent-text:
+    post:
+      tags: [Telegram]
+      operationId: postApiTelegramAgentText
+      summary: Create or run telegram agent-text
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/telegram/agent-text-callbacks:
+    post:
+      tags: [Telegram]
+      operationId: postApiTelegramAgentTextCallbacks
+      summary: Create or run telegram agent-text-callbacks
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/users:
+    get:
+      tags: [Users]
+      operationId: getApiUsers
+      summary: Get users
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Users]
+      operationId: postApiUsers
+      summary: Create or run users
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/users/invite:
+    post:
+      tags: [Users]
+      operationId: postApiUsersInvite
+      summary: Create or run users invite
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/users/{userID}:
+    delete:
+      tags: [Users]
+      operationId: deleteApiUsersByUserID
+      summary: Delete users userID
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: userID
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Users]
+      operationId: putApiUsersByUserID
+      summary: Update users userID
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: userID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/wishlist/{wishlistID}/restore:
+    post:
+      tags: [Wishlist]
+      operationId: postApiWishlistByWishlistIDRestore
+      summary: Create or run wishlist wishlistID restore
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: path
+          name: wishlistID
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
+    CabinetLocalSession:
+      type: apiKey
+      in: header
+      name: X-Cabinet-Session
+      description: Opaque unlocked local Cabinet session for profile-scoped write operations.
     CabinetOIDCSession:
       type: apiKey
       in: cookie
       name: cabinet_oidc_session
       description: Opaque HTTP-only Cabinet application session. Provider tokens remain server-side.
+    CompanionProfileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Profile-scoped Browser Companion credential accepted only by companion ingestion routes.
   parameters:
     ProfileID:
       in: path
@@ -4609,3 +7046,125 @@ components:
         action: { type: string }
         details: { type: string }
         created_at: { type: string }
+
+    CompanionModuleRegistry:
+      type: object
+      required: [modules]
+      properties:
+        modules:
+          type: array
+          items: { $ref: "#/components/schemas/CompanionModule" }
+    CompanionModule:
+      type: object
+      required: [id, site, actions, passive_only]
+      properties:
+        id: { type: string }
+        site: { type: string }
+        actions: { type: array, items: { type: string } }
+        passive_only: { type: boolean, const: true }
+    CompanionPayloadSubmission:
+      type: object
+      required: [profile_id, module_id, url, payload_type, passive, attempted_write, confidence_score]
+      properties:
+        profile_id: { type: string }
+        module_id: { type: string }
+        url: { type: string, format: uri }
+        payload_type: { type: string }
+        captured_at: { type: string, format: date-time }
+        passive: { type: boolean, const: true }
+        attempted_write: { type: boolean, const: false }
+        confidence_score: { type: number, minimum: 0, maximum: 1 }
+        data: { type: object, additionalProperties: true }
+    CompanionAcceptedPayload:
+      type: object
+      required: [accepted, profile_id, module_id, payload_type, sync_mode, remote_write, audit_trail, confidence_label]
+      properties:
+        accepted: { type: boolean, const: true }
+        profile_id: { type: string }
+        module_id: { type: string }
+        payload_type: { type: string }
+        sync_mode: { type: string, const: passive_capture }
+        remote_write: { type: boolean, const: false }
+        audit_trail: { type: array, items: { type: string } }
+        confidence_label: { type: string, enum: [low, medium, high] }
+    IntegrationInstancePatch:
+      type: object
+      required: [provider_id]
+      properties:
+        id: { type: string }
+        provider_id: { type: string }
+        display_name: { type: [string, "null"] }
+        enabled: { type: [boolean, "null"] }
+        config: { type: object, additionalProperties: { type: string } }
+        secrets:
+          type: object
+          description: Write-only secret values; values are never returned from integration-instance APIs.
+          additionalProperties: { type: string, writeOnly: true }
+        auth_state: { type: [string, "null"] }
+        health_state: { type: [string, "null"] }
+        last_checked_at: { type: [string, "null"] }
+        last_success_at: { type: [string, "null"] }
+        last_error: { type: [string, "null"] }
+    IntegrationInstance:
+      type: object
+      required: [id, profile_id, provider_id, enabled, created_at, updated_at]
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        provider_id: { type: string }
+        display_name: { type: string }
+        enabled: { type: boolean }
+        config: { type: object, additionalProperties: { type: string } }
+        secret_refs: { type: object, additionalProperties: { type: string } }
+        auth_state: { type: string }
+        health_state: { type: string }
+        last_checked_at: { type: string }
+        last_success_at: { type: string }
+        last_error: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    IntegrationInstanceList:
+      type: object
+      required: [instances]
+      properties:
+        instances: { type: array, items: { $ref: "#/components/schemas/IntegrationInstance" } }
+    IntegrationInstanceResponse:
+      type: object
+      required: [instance]
+      properties:
+        instance: { $ref: "#/components/schemas/IntegrationInstance" }
+    ProviderSearchRunRequest:
+      type: object
+      required: [query_set_id]
+      properties:
+        query_set_id: { type: string }
+    FrontlineDiscoveryRequest:
+      type: object
+      required: [asset_url]
+      properties:
+        asset_url: { type: string, format: uri }
+        fallback_asset_urls: { type: array, items: { type: string, format: uri } }
+    BrowserAwareProviderRunRequest:
+      type: object
+      required: [query_set_id]
+      properties:
+        query_set_id: { type: string }
+        discovery_asset_url: { type: string, format: uri }
+        fallback_discovery_asset_urls: { type: array, items: { type: string, format: uri } }
+        search_url: { type: string, format: uri }
+    FrontlineDiscoveryResponse:
+      type: object
+      required: [config, fallback_used, warning]
+      properties:
+        config: { type: object, additionalProperties: true }
+        fallback_used: { type: boolean }
+        warning: { type: string }
+    ProviderRunResponse:
+      type: object
+      required: [query_set_id, candidates, run]
+      properties:
+        query_set_id: { type: string }
+        candidates: { type: array, items: { $ref: "#/components/schemas/Candidate" } }
+        run: { type: object, additionalProperties: true }
+        run_summary: { type: object, additionalProperties: true }
+        warning: { type: string }

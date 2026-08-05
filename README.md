@@ -127,6 +127,13 @@ Notes:
 - Generated static docs output: `docs/api/index.html`
 - Validate spec: `./scripts/validate-openapi.ps1`
 - Generate static docs: `./scripts/generate-api-docs.ps1`
+- Verify runtime route/method parity and reject a zero-test result: `go run ./cmd/openapi-parity-gate`
+
+The OpenAPI contract distinguishes unlocked local Cabinet sessions (`X-Cabinet-Session`),
+ZITADEL application sessions (`cabinet_oidc_session`), and profile-scoped Browser Companion
+bearer credentials. `/healthz`, runtime discovery, the OpenAPI source, and the local companion
+module registry remain explicitly public; companion payload ingestion and provider/integration
+mutations declare their required security alternatives per operation.
 
 ## OpenSpec (Spec-First Workflow)
 - OpenSpec workspace: `openspec/`

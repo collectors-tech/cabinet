@@ -35,3 +35,24 @@ Cabinet's OpenAPI source SHALL use OpenAPI 3.1-compatible schema forms and YAML 
 - **WHEN** the Redocly lint and docs-build gates run against the document
 - **THEN** nullable response fields MUST use OpenAPI 3.1 schema representations accepted by Redocly
 - **AND** inline descriptions MUST be represented so punctuation in prose is parsed as description text rather than object properties
+
+### Requirement API-DOCS-005: Release gates SHALL enforce complete runtime route parity
+Every shipped runtime API route and HTTP method SHALL have one matching OpenAPI operation, and every documented operation SHALL map back to a shipped runtime route.
+
+#### Scenario: Validate runtime and OpenAPI inventories
+- **GIVEN** Cabinet registers static routes and parameterised route families in the Go runtime
+- **WHEN** the OpenAPI parity suite runs in the develop, release-candidate, or main gate
+- **THEN** the suite MUST compare runtime paths and HTTP methods against `docs/api/openapi.yaml` in both directions
+- **AND** each operation MUST have a unique `operationId` and an explicit `4XX` response
+- **AND** E2E-only routes MAY be excluded only through a reviewed exclusion entry with a reason
+- **AND** the gate MUST fail when the named parity suite executes zero tests
+
+### Requirement API-DOCS-006: OpenAPI SHALL distinguish Cabinet security boundaries
+The API contract SHALL identify routes that are intentionally public, routes that accept an unlocked local Cabinet session or a Cabinet OIDC session, and routes that require a Browser Companion profile credential.
+
+#### Scenario: Inspect protected companion and provider operations
+- **GIVEN** a client reads the OpenAPI source
+- **WHEN** it inspects companion ingestion, integration-instance, Frontline, Bonza, and Hobbytech operations
+- **THEN** companion ingestion MUST declare its profile-scoped bearer requirement
+- **AND** integration-instance and provider run operations MUST declare local-session and OIDC-session alternatives
+- **AND** intentionally public health, runtime discovery, OpenAPI, and companion-module registry operations MUST remain explicitly unauthenticated
