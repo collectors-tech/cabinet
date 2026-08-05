@@ -16,32 +16,12 @@ const executable = (commands) => commands.find((command) =>
 
 const pause = (milliseconds) => new Promise((resolvePause) => setTimeout(resolvePause, milliseconds))
 
-const targets = async (port) => {
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/json/list`)
-    return response.ok ? response.json() : []
-  } catch {
-    return []
-  }
-}
-
-const waitForDevTools = async (port, browserProcess) => {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`)
-      if (response.ok) return
-    } catch {
-      // The browser has not finished opening its debugging transports yet.
-    }
-    if (browserProcess.exitCode !== null) break
-    await pause(200)
-  }
-  throw new Error(`devtools_not_ready:${port}`)
-}
+let nextCommandID = 0
 
 const cdpCommand = (browserProcess, method, params) => new Promise((resolveCommand, rejectCommand) => {
   const input = browserProcess.stdio[3]
   const output = browserProcess.stdio[4]
+  const commandID = ++nextCommandID
   let buffered = ''
   const timeout = setTimeout(() => {
     output.removeListener('data', onData)
@@ -53,7 +33,7 @@ const cdpCommand = (browserProcess, method, params) => new Promise((resolveComma
     buffered = messages.pop() ?? ''
     for (const message of messages.filter(Boolean)) {
       const response = JSON.parse(message)
-      if (response.id !== 1) continue
+      if (response.id !== commandID) continue
       clearTimeout(timeout)
       output.removeListener('data', onData)
       if (response.error) rejectCommand(new Error(`cdp_${method}:${response.error.message}`))
@@ -61,21 +41,21 @@ const cdpCommand = (browserProcess, method, params) => new Promise((resolveComma
     }
   }
   output.on('data', onData)
-  input.write(`${JSON.stringify({ id: 1, method, params })}\0`)
+  input.write(`${JSON.stringify({ id: commandID, method, params })}\0`)
 })
 
-const verify = async (browser, port) => {
+const verify = async (browser) => {
   const command = executable(browser.commands)
   assert.ok(command, `${browser.name} is required for the Browser Companion load gate`)
-  const xvfb = executable(['xvfb-run'])
-  assert.ok(xvfb, 'xvfb-run is required for the normal-mode browser extension load gate')
   const profile = await mkdtemp(`${tmpdir()}/cabinet-${browser.name.toLowerCase()}-`)
   const output = []
-  const process = spawn(xvfb, ['-a', command,
+  const process = spawn(command, [
+    '--headless=new',
     '--no-sandbox',
     '--disable-gpu',
+    '--disable-dev-shm-usage',
+    '--no-first-run',
     '--enable-unsafe-extension-debugging',
-    `--remote-debugging-port=${port}`,
     '--remote-debugging-pipe',
     `--user-data-dir=${profile}`,
     'about:blank',
@@ -83,31 +63,37 @@ const verify = async (browser, port) => {
   process.stdout.on('data', (chunk) => output.push(chunk.toString()))
   process.stderr.on('data', (chunk) => output.push(chunk.toString()))
 
-  await waitForDevTools(port, process)
-  const loaded = await cdpCommand(process, 'Extensions.loadUnpacked', { path: extensionRoot })
-  assert.match(loaded?.id ?? '', /^[a-p]{32}$/, `${browser.name} did not return a valid extension ID`)
-
+  let loaded
   let extensionTarget
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const available = await targets(port)
-    extensionTarget = available.find((target) =>
-      target.type === 'service_worker' && target.url === `chrome-extension://${loaded.id}/background/service-worker.mjs`
-    )
-    if (extensionTarget) break
-    if (process.exitCode !== null) break
-    await pause(200)
+  try {
+    await cdpCommand(process, 'Browser.getVersion', {})
+    loaded = await cdpCommand(process, 'Extensions.loadUnpacked', { path: extensionRoot })
+    assert.match(loaded?.id ?? '', /^[a-p]{32}$/, `${browser.name} did not return a valid extension ID`)
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const available = await cdpCommand(process, 'Target.getTargets', {})
+      extensionTarget = available.targetInfos?.find((target) =>
+        target.type === 'service_worker' && target.url === `chrome-extension://${loaded.id}/background/service-worker.mjs`
+      )
+      if (extensionTarget) break
+      if (process.exitCode !== null) break
+      await pause(200)
+    }
+  } catch (error) {
+    throw new Error(`${browser.name} DevTools load failed: ${error.message}\n${output.join('').slice(-4000)}`)
+  } finally {
+    process.kill('SIGTERM')
+    await Promise.race([
+      new Promise((resolveExit) => process.once('exit', resolveExit)),
+      pause(2000),
+    ])
   }
 
-  process.kill('SIGTERM')
-  await Promise.race([
-    new Promise((resolveExit) => process.once('exit', resolveExit)),
-    pause(2000),
-  ])
   assert.ok(extensionTarget, `${browser.name} did not load the MV3 service worker:\n${output.join('').slice(-4000)}`)
   return { browser: browser.name, extension_origin: `chrome-extension://${loaded.id}` }
 }
 
 const results = []
-for (const [index, browser] of browsers.entries()) results.push(await verify(browser, 9330 + index))
+for (const browser of browsers) results.push(await verify(browser))
 assert.deepEqual(results.map((result) => result.browser), ['Chrome', 'Edge'])
 for (const result of results) console.log(`${result.browser} loaded Cabinet Browser Companion at ${result.extension_origin}`)
