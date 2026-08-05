@@ -35,6 +35,16 @@ Enabled integrations, display names, start pages, exact origins, URL patterns, c
 
 Image submissions accept only verified JPEG or PNG bytes tied to a durable capture field. Cabinet checks the SHA-256 digest and decoded dimensions, rejects login/challenge HTML masquerading as an image, and writes accepted files through canonical media storage. Identical content is stored once per profile but can retain several provenance links. The extension and API never return Cabinet's local media path.
 
+### Frontline Hobbies Browser Companion
+
+Enable the Frontline Hobbies integration in Cabinet, pair the companion, and grant only the exact `frontlinehobbies.com.au`, `www.frontlinehobbies.com.au`, and Frontline CDN origins. Open a public Frontline product, category, brand or search page yourself, choose **Check session**, and sync only after the module reports **Ready to sync**. This is a user-present catalogue workflow: it does not run as an unattended crawler.
+
+The module reads rendered public product cards and sends listing identity, title, AUD price, stock state, canonical product URL and image reference through Cabinet's versioned capture inbox. Cabinet records `au-webshop-frontlinehobbies-com-au` as the integration identity and `frontlinehobbies` as the Market Watch scope. It limits the module to six sync attempts per minute, strips query and fragment values from captured URLs, never exports cookies or tokens, never solves a challenge, and never clicks, writes, adds to cart or checks out.
+
+A sign-in form reports **Signed out**; a challenge reports **Action required**; selector drift or another unknown product-card shape reports **Page not supported** and `frontline_selector_drift`. A paginated or load-more page is recorded as partial, so missing products are never treated as deletion evidence. Direct provider search remains a best-effort fail-closed path and does not make the browser module unattended.
+
+Automated versioned fixtures prove ready, partial, signed-out, challenge and selector-drift handling, persistence and Wishlist hand-off. Those fixtures are not live acceptance. External live evidence from a normal user-present Frontline search is still required before the provider is marked release-validated, followed by the exact packaged journey in #1869.
+
 This boundary cannot protect a credential from malware or another person who already controls the unlocked operating-system account, Cabinet process or browser profile. If local compromise is suspected, close Cabinet, secure the operating-system account, revoke all companion sessions after recovery, remove unknown extensions, reinstall the trusted extension and pair again. Restore Cabinet from a known-good backup if its local database may have been altered.
 
 ## eBay setup

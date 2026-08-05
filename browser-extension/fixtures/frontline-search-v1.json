@@ -1,0 +1,82 @@
+{
+  "fixture_version": "1",
+  "cases": [
+    {
+      "name": "ready complete category results",
+      "url": "https://www.frontlinehobbies.com.au/brand/afx/",
+      "query": "AFX slot car",
+      "markers": ["li.product"],
+      "cards": [
+        {
+          "attributes": {"data-product-id": "FL-AFX-001"},
+          "nodes": {
+            "a.woocommerce-LoopProduct-link": {"href": "https://www.frontlinehobbies.com.au/afx-ford-gt40-mark-ii?tracking=drop", "text": "AFX Ford GT40 Mark II"},
+            ".woocommerce-loop-product__title": {"text": "AFX Ford GT40 Mark II"},
+            ".price ins .woocommerce-Price-amount": {"text": "$89.99"},
+            "img.attachment-woocommerce_thumbnail": {"src": "https://cdn.frontlinehobbies.com.au/media/catalog/afx-gt40.jpg?width=400"},
+            ".stock.in-stock": {"text": "In stock"}
+          }
+        },
+        {
+          "attributes": {"data-product-id": "FL-AFX-002"},
+          "nodes": {
+            "a.woocommerce-LoopProduct-link": {"href": "https://www.frontlinehobbies.com.au/afx-mega-g-mustang", "text": "AFX Mega-G+ Mustang"},
+            ".woocommerce-loop-product__title": {"text": "AFX Mega-G+ Mustang"},
+            ".price .woocommerce-Price-amount": {"text": "$74.95"},
+            "img.attachment-woocommerce_thumbnail": {"src": "https://www.frontlinehobbies.com.au/media/catalog/afx-mustang.jpg"},
+            ".stock.out-of-stock": {"text": "Sold out"}
+          }
+        }
+      ],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "ready", "complete": true, "items": 2}
+    },
+    {
+      "name": "partial paginated search",
+      "url": "https://www.frontlinehobbies.com.au/?s=AFX&paged=2",
+      "query": "AFX",
+      "markers": [".product-item", "a.next.page-numbers"],
+      "cards": [
+        {
+          "attributes": {"data-product-sku": "AX22032"},
+          "nodes": {
+            "a.product-item-link": {"href": "https://www.frontlinehobbies.com.au/afx-infinity-raceway-slot-car-set", "text": "AFX Infinity Raceway Slot Car Set"},
+            ".product-item-name": {"text": "AFX Infinity Raceway Slot Car Set"},
+            "[data-price-amount]": {"data-price-amount": "149.99", "text": "$149.99"},
+            "img.product-image-photo": {"src": "https://www.frontlinehobbies.com.au/media/catalog/afx-infinity.jpg"},
+            ".stock.available": {"text": "Available"}
+          }
+        }
+      ],
+      "pagination": {"current": 2, "total": 4, "has_next": true},
+      "expected": {"state": "ready", "complete": false, "items": 1}
+    },
+    {
+      "name": "challenge page",
+      "url": "https://www.frontlinehobbies.com.au/?s=AFX",
+      "query": "AFX",
+      "markers": ["form#challenge-form"],
+      "cards": [],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "challenge", "error": "frontline_challenge_action_required"}
+    },
+    {
+      "name": "logged-out account wall",
+      "url": "https://www.frontlinehobbies.com.au/?s=AFX",
+      "query": "AFX",
+      "markers": ["form.woocommerce-form-login input[type=password]"],
+      "cards": [],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "logged_out", "error": "frontline_login_required"}
+    },
+    {
+      "name": "selector drift",
+      "url": "https://www.frontlinehobbies.com.au/?s=AFX",
+      "query": "AFX",
+      "markers": ["main"],
+      "cards": [],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "unsupported", "error": "frontline_selector_drift"}
+    }
+  ]
+}

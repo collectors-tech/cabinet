@@ -10756,6 +10756,19 @@ func applyBetaMarketWatchReleaseStatus(provider map[string]any, settings map[str
 			provider["live_evidence_state"] = "unsupported_for_beta"
 			provider["actions"] = workflowActionsForRefs(workflowRefs, "disabled", "choose_supported_beta_market_watch_provider")
 		}
+	case "au-webshop-frontlinehobbies-com-au":
+		provider["live_evidence_required"] = true
+		evidenceProvider := strings.TrimSpace(fmt.Sprintf("%v", health["evidence_provider"]))
+		healthMessage := strings.TrimSpace(fmt.Sprintf("%v", health["message"]))
+		browserValidated := liveValidated && evidenceProvider == "frontlinehobbies" && strings.Contains(healthMessage, "browser_companion")
+		if browserValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		provider["beta_release_status"] = "browser_companion_live_evidence_required"
+		provider["live_evidence_state"] = "external_user_present_evidence_required"
+		provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "pair_browser_companion_and_attach_user_present_search_evidence")
 	default:
 		provider["live_evidence_required"] = true
 		if liveValidated {

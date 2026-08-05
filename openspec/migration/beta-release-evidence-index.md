@@ -38,10 +38,10 @@ This is the single repository-side release sequence and evidence hand-off for
 | #1936/#1937 canonical media and migration | Complete and merged | Revalidate layout, links, hashes, relocation and restore in #1869/#1867 |
 | Voglers (#1871) | Complete and merged | Run exact packaged journey in #1869 |
 | Hobbytech (#1943) | Direct live proof merged; source/live ready | Keep #1943 open only for exact packaged evidence |
-| #2033 secure companion pairing | Pending | Pair/reconnect/rotate/revoke in #1869 |
-| #2035 shared MV3 host/config/readiness | Pending | Install and verify browser/Cabinet/provider states in #1869 |
+| #2033 secure companion pairing | Complete and merged | Pair/reconnect/rotate/revoke in #1869 |
+| #2035 shared MV3 host/config/readiness | Complete and merged | Install and verify browser/Cabinet/provider states in #1869 |
 | #2032 item/image observation persistence | Source implementation complete | Commit-before-ack, fixtures, replay, media, restart, safe export and relocated restore are automated; exact packaged proof remains in #1869/#1867 |
-| Frontline (#1944) | Pending real browser-assisted source proof | Exact packaged journey in #1869 |
+| Frontline (#1944) | Exact-origin module, fail-closed fixtures, persistence and confirmed hand-off implemented; external user-present live proof pending | Exact packaged journey in #1869 |
 | Bonza (#1945) | Pending fail-closed decoder removal and real browser-assisted proof | Exact packaged journey in #1869 |
 | #2034 Chrome/Edge packaging | Pending exact files, release manifest and checksums | Nominate the same files/checksums in #1868/#1869 |
 
