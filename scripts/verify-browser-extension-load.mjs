@@ -64,21 +64,18 @@ const verify = async (browser) => {
   process.stderr.on('data', (chunk) => output.push(chunk.toString()))
 
   let loaded
-  let extensionTarget
+  let installedExtension
   try {
     await cdpCommand(process, 'Browser.getVersion', {})
     loaded = await cdpCommand(process, 'Extensions.loadUnpacked', { path: extensionRoot })
     assert.match(loaded?.id ?? '', /^[a-p]{32}$/, `${browser.name} did not return a valid extension ID`)
 
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const available = await cdpCommand(process, 'Target.getTargets', {})
-      extensionTarget = available.targetInfos?.find((target) =>
-        target.type === 'service_worker' && target.url === `chrome-extension://${loaded.id}/background/service-worker.mjs`
-      )
-      if (extensionTarget) break
-      if (process.exitCode !== null) break
-      await pause(200)
-    }
+    const installed = await cdpCommand(process, 'Extensions.getExtensions', {})
+    installedExtension = installed.extensions?.find((extension) => extension.id === loaded.id)
+    assert.equal(installedExtension?.enabled, true, `${browser.name} did not enable the unpacked extension`)
+    assert.equal(installedExtension?.name, 'Cabinet Browser Companion', `${browser.name} loaded the wrong extension`)
+    assert.equal(installedExtension?.version, '0.1.0', `${browser.name} loaded the wrong extension version`)
+    assert.equal(resolve(installedExtension?.path ?? ''), extensionRoot, `${browser.name} loaded the extension from the wrong path`)
   } catch (error) {
     throw new Error(`${browser.name} DevTools load failed: ${error.message}\n${output.join('').slice(-4000)}`)
   } finally {
@@ -89,7 +86,7 @@ const verify = async (browser) => {
     ])
   }
 
-  assert.ok(extensionTarget, `${browser.name} did not load the MV3 service worker:\n${output.join('').slice(-4000)}`)
+  assert.ok(installedExtension, `${browser.name} did not report the unpacked extension after loading`)
   return { browser: browser.name, extension_origin: `chrome-extension://${loaded.id}` }
 }
 
