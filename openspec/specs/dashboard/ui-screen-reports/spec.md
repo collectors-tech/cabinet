@@ -13,6 +13,11 @@ Reports SHALL provide summary metrics for wishlist hits, trends, stats, and sour
 ### Requirement UI-SCREEN-REPORTS-002: Reports SHALL support export operations
 Reports SHALL allow export of report/pricing history outputs.
 
+#### Scenario: Export report output
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **WHEN** user triggers export
+- **THEN** export payload SHALL be generated for selected scope
+
 ### Requirement UI-SCREEN-REPORTS-004: Reports toolbar SHALL expose refresh and export actions
 Reports toolbar SHALL expose `Refresh Reports` and `Export CSV` actions with deterministic behavior.
 
@@ -30,11 +35,6 @@ Reports toolbar SHALL expose `Refresh Reports` and `Export CSV` actions with det
 - **GIVEN** reports route is showing an unavailable/error state for active profile or report loading
 - **WHEN** user reviews toolbar actions
 - **THEN** `Export CSV` MUST be disabled until report context recovers and MUST NOT surface contradictory success feedback while the route remains unavailable
-
-#### Scenario: Export report output
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
-- **WHEN** user triggers export
-- **THEN** export payload SHALL be generated for selected scope
 
 ### Requirement UI-SCREEN-REPORTS-003: Reports SHALL support deterministic state handling
 Reports SHALL support loading, empty, error, and ready states.

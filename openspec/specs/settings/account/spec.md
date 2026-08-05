@@ -1,5 +1,5 @@
 ## Purpose
-Define Account settings screen behavior.
+Define Account settings screen behavior for editable profile identity, validation, persistence feedback, and missing active-profile recovery.
 
 ## Requirements
 ### Requirement UI-SCREEN-SETTINGS-ACCOUNT-001: Account screen SHALL support name, date-of-birth, and language updates

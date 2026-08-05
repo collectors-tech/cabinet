@@ -29,6 +29,7 @@ func TestProfileAssistantProviderResolverSelectsOpenAIIntegrationInstance(t *tes
 		Enabled:     &enabled,
 		Config: map[string]string{
 			"assistant_default_model": "gpt-4.1-mini",
+			"base_url":                "http://127.0.0.1:19833",
 		},
 		Secrets: map[string]string{
 			"openai_api_key": "sk-runtime-boundary-secret",
@@ -49,7 +50,7 @@ func TestProfileAssistantProviderResolverSelectsOpenAIIntegrationInstance(t *tes
 	if setup.ProviderID != "openai" || setup.IntegrationID != instance.ID || !setup.Enabled {
 		t.Fatalf("expected enabled OpenAI integration instance, got %+v", setup)
 	}
-	if setup.ActiveAuthMethod != "api_key" || setup.DefaultModel != "gpt-4.1-mini" || setup.HealthState != "ready" {
+	if setup.ActiveAuthMethod != "api_key" || setup.DefaultModel != "gpt-4.1-mini" || setup.HealthState != "ready" || setup.BaseURL != "http://127.0.0.1:19833" {
 		t.Fatalf("expected setup to merge profile auth and instance model/health, got %+v", setup)
 	}
 	if !assistantRuntimeStringSliceContains(setup.SupportedModels, "gpt-4o-mini") || !assistantRuntimeStringSliceContains(setup.SupportedModels, "gpt-4.1-mini") {

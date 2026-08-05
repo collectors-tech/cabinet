@@ -76,6 +76,14 @@ Cabinet SHALL expose provider health and last-run metadata required by integrati
 ### Requirement INTEGRATION-023: Provider registry MUST expose setup guidance and credential-presence signal
 Cabinet SHALL expose registry fields needed for safe credential UX and guided setup.
 
+#### Scenario: Registry payload supports credential-safe integrations UI
+- **GIVEN** active profile settings and provider registry are loaded
+- **WHEN** `GET /api/providers/registry` returns provider entries
+- **THEN** each provider entry MUST include:
+  - `setup_instructions` (string)
+  - `has_token` (boolean presence signal only)
+- **AND** registry response MUST NOT expose clear credential/token values
+
 ### Requirement INTEGRATION-024: Provider registry MUST expose provider-to-API-spec support mapping
 Registry entries SHALL declare API family mapping so Integrations UI can display how each provider is implemented (Woo/Boost/Algolia/custom).
 
@@ -84,14 +92,6 @@ Registry entries SHALL declare API family mapping so Integrations UI can display
 - **WHEN** payload is returned
 - **THEN** each provider entry MUST include `api_family` and `api_support_profile`
 - **AND** mapping MUST correspond to published provider API family contracts
-
-#### Scenario: Registry payload supports credential-safe integrations UI
-- **GIVEN** active profile settings and provider registry are loaded
-- **WHEN** `GET /api/providers/registry` returns provider entries
-- **THEN** each provider entry MUST include:
-  - `setup_instructions` (string)
-  - `has_token` (boolean presence signal only)
-- **AND** registry response MUST NOT expose clear credential/token values
 
 ### Requirement INTEGRATION-027: Provider registry MUST publish provider manifests and config schemas
 Cabinet SHALL treat each integration provider as a manifest-backed registry entry with a schema-driven setup contract.

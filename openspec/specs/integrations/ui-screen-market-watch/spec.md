@@ -74,19 +74,6 @@ Screen SHALL support loading, empty, ready, and error states with retry controls
 ### Requirement UI-SCREEN-MARKET-WATCH-005: Market Watch SHALL provide query-set table view with run output visibility
 Market Watch SHALL provide a table view for query sets so users can find saved queries quickly, inspect latest run outputs, and create new watched queries from the page toolbar.
 
-### Requirement UI-SCREEN-MARKET-WATCH-006: Market Watch SHALL support saved watched-query execution for Bonza `AFX`
-Market Watch SHALL support creating and running provider-scoped watched query `AFX` for Bonza and surface aggregated cross-page candidate outputs.
-
-#### Scenario: Create watched AFX query for Bonza
-- **GIVEN** user is on `/market-watch`
-- **WHEN** user creates query name `AFX` with provider scope `Bonza`
-- **THEN** query set MUST persist with watched flag and provider scope metadata
-
-#### Scenario: Run watched AFX query
-- **GIVEN** watched Bonza query `AFX` exists
-- **WHEN** user clicks `Run Now`
-- **THEN** Market Watch MUST display run output summary including total pages scanned and candidate count
-
 #### Scenario: Query table inspection
 - **GIVEN** query sets exist
 - **WHEN** user switches to `Table` view
@@ -118,6 +105,19 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 - **GIVEN** no query sets exist
 - **WHEN** screen loads
 - **THEN** empty state SHALL guide user to create first provider-scoped query set
+
+### Requirement UI-SCREEN-MARKET-WATCH-006: Market Watch SHALL support saved watched-query execution for Bonza `AFX`
+Market Watch SHALL support creating and running provider-scoped watched query `AFX` for Bonza and surface aggregated cross-page candidate outputs.
+
+#### Scenario: Create watched AFX query for Bonza
+- **GIVEN** user is on `/market-watch`
+- **WHEN** user creates query name `AFX` with provider scope `Bonza`
+- **THEN** query set MUST persist with watched flag and provider scope metadata
+
+#### Scenario: Run watched AFX query
+- **GIVEN** watched Bonza query `AFX` exists
+- **WHEN** user clicks `Run Now`
+- **THEN** Market Watch MUST display run output summary including total pages scanned and candidate count
 
 ### Requirement UI-SCREEN-MARKET-WATCH-007: Market Watch SHALL filter query table rows by operational state
 Market Watch SHALL provide query table filters for provider, latest run status, schedule mode, attention state, and result presence so users can narrow large saved-query workspaces without mutating saved query state.

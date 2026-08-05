@@ -38,6 +38,23 @@ type apiSkillPayload struct {
 	} `json:"permissions"`
 }
 
+type apiCapabilityExplanationPayload struct {
+	SkillID           string   `json:"skill_id"`
+	DisplayName       string   `json:"display_name"`
+	Status            string   `json:"status"`
+	SafetyLevel       string   `json:"safety_level"`
+	CapabilityState   string   `json:"capability_state"`
+	ExecutionBoundary string   `json:"execution_boundary"`
+	RequiredContext   []string `json:"required_context"`
+	RequiredSetup     []string `json:"required_setup"`
+	Authority         struct {
+		Decision   string `json:"decision"`
+		Blocker    string `json:"blocker"`
+		NextAction string `json:"next_action"`
+	} `json:"authority"`
+	NextAction string `json:"next_action"`
+}
+
 func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -183,6 +200,108 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	}
 }
 
+func TestAgentCapabilityExplanationDerivesFromRegistryAndProfileAuthority(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Capability Explanation"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	root := writeAgentSkillImportFixture(t, validAgentSkillImportManifest(""))
+	importResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/import", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"source_type":"folder",
+		"path":`+strconv.Quote(root)+`
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importResp.Code != http.StatusOK {
+		t.Fatalf("import skill status=%d body=%s", importResp.Code, importResp.Body.String())
+	}
+	disableResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/state", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.example.api_imported_reader",
+		"enabled":false
+	}`), map[string]string{"Content-Type": "application/json"})
+	if disableResp.Code != http.StatusOK {
+		t.Fatalf("disable imported skill status=%d body=%s", disableResp.Code, disableResp.Body.String())
+	}
+
+	repo := profile.NewRepository(a.db)
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeReadOnly,
+		ExternalWriteApproved: false,
+	}); err != nil {
+		t.Fatalf("set read-only authority policy: %v", err)
+	}
+
+	readonly := doRequest(t, a, http.MethodGet, "/api/agent/capabilities?profile_id="+p.ID, nil, nil)
+	if readonly.Code != http.StatusOK {
+		t.Fatalf("capabilities status=%d body=%s", readonly.Code, readonly.Body.String())
+	}
+	var locked struct {
+		ProfileID      string                            `json:"profile_id"`
+		AuthorityMode  string                            `json:"authority_mode"`
+		CapabilityHelp []apiCapabilityExplanationPayload `json:"capabilities"`
+	}
+	if err := json.NewDecoder(readonly.Body).Decode(&locked); err != nil {
+		t.Fatalf("decode capabilities: %v", err)
+	}
+	if locked.ProfileID != p.ID || locked.AuthorityMode != string(profile.AgentAuthorityModeReadOnly) {
+		t.Fatalf("expected profile and read-only authority echo, got %+v", locked)
+	}
+	inventorySearch := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.inventory.search_items")
+	if inventorySearch == nil || inventorySearch.CapabilityState != "available" || inventorySearch.ExecutionBoundary != "read_only" || inventorySearch.Authority.Decision != "allowed" {
+		t.Fatalf("expected read-only inventory skill to be available and allowed, got %+v", inventorySearch)
+	}
+	inventoryCreate := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.inventory.create_item")
+	if inventoryCreate == nil || inventoryCreate.CapabilityState != "blocked_by_policy" || inventoryCreate.Authority.Blocker != "agent_authority_read_only" || inventoryCreate.ExecutionBoundary != "preview_then_confirm" {
+		t.Fatalf("expected local-write inventory skill to be policy-blocked in read-only mode, got %+v", inventoryCreate)
+	}
+	externalWrite := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.integrations.configure_provider")
+	if externalWrite == nil || externalWrite.ExecutionBoundary != "external_write_confirmation" || externalWrite.CapabilityState != "blocked_by_policy" || len(externalWrite.RequiredSetup) == 0 {
+		t.Fatalf("expected external-write setup skill to show setup and policy blocker, got %+v", externalWrite)
+	}
+	unimplemented := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.guided.inventory.update_item")
+	if unimplemented == nil || unimplemented.CapabilityState != "unavailable" || unimplemented.Status != "requires-implementation" {
+		t.Fatalf("expected unimplemented guided skill to remain visible as unavailable, got %+v", unimplemented)
+	}
+	disabled := findCapabilityExplanation(locked.CapabilityHelp, "cabinet.example.api_imported_reader")
+	if disabled == nil || disabled.CapabilityState != "disabled" || disabled.NextAction == "" {
+		t.Fatalf("expected disabled imported skill explanation, got %+v", disabled)
+	}
+	if strings.Contains(readonly.Body.String(), root) || strings.Contains(readonly.Body.String(), "api_key") || strings.Contains(readonly.Body.String(), "preview_id") {
+		t.Fatalf("capability explanation leaked local path or hidden values: %s", readonly.Body.String())
+	}
+
+	if _, err := repo.PutAgentAuthorityPolicy(context.Background(), p.ID, profile.AgentAuthorityPolicy{
+		Mode:                  profile.AgentAuthorityModeAskBeforeLocalChanges,
+		ExternalWriteApproved: false,
+	}); err != nil {
+		t.Fatalf("set ask-before authority policy: %v", err)
+	}
+	unlocked := doRequest(t, a, http.MethodGet, "/api/agent/capabilities?profile_id="+p.ID, nil, nil)
+	if unlocked.Code != http.StatusOK {
+		t.Fatalf("capabilities after policy update status=%d body=%s", unlocked.Code, unlocked.Body.String())
+	}
+	var changed struct {
+		CapabilityHelp []apiCapabilityExplanationPayload `json:"capabilities"`
+	}
+	if err := json.NewDecoder(unlocked.Body).Decode(&changed); err != nil {
+		t.Fatalf("decode changed capabilities: %v", err)
+	}
+	changedCreate := findCapabilityExplanation(changed.CapabilityHelp, "cabinet.inventory.create_item")
+	if changedCreate == nil || changedCreate.CapabilityState != "confirm_required" || changedCreate.Authority.Blocker != "confirmation_required" {
+		t.Fatalf("expected authority mode change to make local write previewable with confirmation, got %+v", changedCreate)
+	}
+}
+
 func TestAgentSkillPreviewNormalizesAgentContextEnvelope(t *testing.T) {
 	t.Parallel()
 
@@ -244,7 +363,7 @@ func TestAgentSkillPreviewNormalizesAgentContextEnvelope(t *testing.T) {
 	}
 }
 
-func TestAgentSkillPreviewClarifiesMissingAgentContext(t *testing.T) {
+func TestAgentSkillPreviewAndApplyClarifyMissingAgentContext(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -259,18 +378,20 @@ func TestAgentSkillPreviewClarifiesMissingAgentContext(t *testing.T) {
 		t.Fatalf("decode profile: %v", err)
 	}
 
-	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
-		"profile_id":"`+p.ID+`",
+	requestBody := `{
+		"profile_id":"` + p.ID + `",
 		"skill_id":"cabinet.inventory.update_item",
 		"agent_context":{
-			"profile_id":"`+p.ID+`",
+			"profile_id":"` + p.ID + `",
 			"workspace_id":"workspace-agent-skill",
 			"thread_id":"thread-agent-skill",
 			"source_channel":"in-app",
 			"setup_state":"setup_needed"
 		},
 		"parameters":{"title":"Updated title"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`
+
+	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(requestBody), map[string]string{"Content-Type": "application/json"})
 	if resp.Code != http.StatusConflict {
 		t.Fatalf("preview status=%d body=%s", resp.Code, resp.Body.String())
 	}
@@ -292,6 +413,30 @@ func TestAgentSkillPreviewClarifiesMissingAgentContext(t *testing.T) {
 	}
 	if strings.Contains(resp.Body.String(), "direct-api") || strings.Contains(resp.Body.String(), "audit") {
 		t.Fatalf("clarification must not invent direct-api targets or leak audit context: %s", resp.Body.String())
+	}
+
+	applyResp := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(requestBody), map[string]string{"Content-Type": "application/json"})
+	if applyResp.Code != http.StatusConflict {
+		t.Fatalf("apply status=%d body=%s", applyResp.Code, applyResp.Body.String())
+	}
+	var applyPayload struct {
+		Error          string            `json:"error"`
+		MissingContext []string          `json:"missing_context"`
+		NextAction     string            `json:"next_action"`
+		Clarification  map[string]string `json:"clarification"`
+	}
+	if err := json.NewDecoder(applyResp.Body).Decode(&applyPayload); err != nil {
+		t.Fatalf("decode apply clarification: %v", err)
+	}
+	if applyPayload.Error != "missing_context" || !slices.Contains(applyPayload.MissingContext, "selected_item") ||
+		!slices.Contains(applyPayload.MissingContext, "route") || !slices.Contains(applyPayload.MissingContext, "setup_state") {
+		t.Fatalf("expected apply selected item, route, and setup clarification, got %+v", applyPayload)
+	}
+	if applyPayload.Clarification["selected_item"] == "" || applyPayload.Clarification["route"] == "" || applyPayload.Clarification["setup_state"] == "" || applyPayload.NextAction == "" {
+		t.Fatalf("expected actionable apply clarification guidance, got %+v", applyPayload)
+	}
+	if strings.Contains(applyResp.Body.String(), "direct-api") || strings.Contains(applyResp.Body.String(), "audit") {
+		t.Fatalf("apply clarification must not invent direct-api targets or leak audit context: %s", applyResp.Body.String())
 	}
 }
 
@@ -814,6 +959,263 @@ func TestAgentSkillDirectAPIGatesPreviewAndApplyWithProfileAuthorityPolicy(t *te
 	}
 	if createPayloadRef == nil || createPayloadRef["parameter_count"] == nil {
 		t.Fatalf("expected redacted payload reference on create-item authority audit, got %+v", decisions)
+	}
+}
+
+func TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Timeline"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	const threadID = "thread-agent-skill-timeline-1981"
+	const messageID = "message-agent-skill-timeline-1981"
+	previewMutation := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"`+messageID+`",
+		"parameters":{"part_number":"TIMELINE-1981","title":"Timeline Preview Item","brand":"AFX","category":"Slot Cars"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if previewMutation.Code != http.StatusOK {
+		t.Fatalf("preview mutation status=%d body=%s", previewMutation.Code, previewMutation.Body.String())
+	}
+	if !strings.Contains(previewMutation.Body.String(), `"confirmation_required":true`) ||
+		!strings.Contains(previewMutation.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(previewMutation.Body.String(), `"source_thread_id":"`+threadID+`"`) {
+		t.Fatalf("expected preview-required non-mutating source evidence, body=%s", previewMutation.Body.String())
+	}
+	var itemCount int
+	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number = 'TIMELINE-1981'`, p.ID).Scan(&itemCount); err != nil {
+		t.Fatalf("count items after preview: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("preview must not mutate inventory before confirmation, got %d items", itemCount)
+	}
+
+	applyMutation := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.create_item",
+		"confirm":true,
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"`+messageID+`",
+		"parameters":{"part_number":"TIMELINE-1981","title":"Timeline Preview Item","brand":"AFX","category":"Slot Cars"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if applyMutation.Code != http.StatusOK {
+		t.Fatalf("apply mutation status=%d body=%s", applyMutation.Code, applyMutation.Body.String())
+	}
+	if !strings.Contains(applyMutation.Body.String(), `"mutation_applied":true`) ||
+		!strings.Contains(applyMutation.Body.String(), `"source_channel":"in-app"`) {
+		t.Fatalf("expected confirmed apply evidence with source context, body=%s", applyMutation.Body.String())
+	}
+
+	readOnly := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inventory.search_items",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"message-agent-skill-readonly-1981",
+		"parameters":{"query":"TIMELINE-1981"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if readOnly.Code != http.StatusOK {
+		t.Fatalf("read-only apply status=%d body=%s", readOnly.Code, readOnly.Body.String())
+	}
+	if !strings.Contains(readOnly.Body.String(), `"read_only":true`) ||
+		!strings.Contains(readOnly.Body.String(), `"mutation_applied":false`) ||
+		strings.Contains(readOnly.Body.String(), `"confirmation_required":true`) {
+		t.Fatalf("expected read-only non-mutating execution without confirmation token, body=%s", readOnly.Body.String())
+	}
+
+	navigationPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.navigate.open_surface",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"message-agent-skill-shell-command-2005",
+		"parameters":{"workspace":"default","known_surface":"inventory","route":"/inventory"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if navigationPreview.Code != http.StatusOK {
+		t.Fatalf("navigation preview status=%d body=%s", navigationPreview.Code, navigationPreview.Body.String())
+	}
+	if !strings.Contains(navigationPreview.Body.String(), `"preview_only":true`) ||
+		strings.Contains(navigationPreview.Body.String(), `"mutation_applied":true`) {
+		t.Fatalf("expected preview-only shell command dispatch without mutation, body=%s", navigationPreview.Body.String())
+	}
+
+	providerReadinessPreview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.integrations.test_connection",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+threadID+`",
+		"source_message_id":"message-agent-skill-provider-readiness-2007",
+		"parameters":{"provider":"openai","readiness_check":"setup_status"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if providerReadinessPreview.Code != http.StatusOK {
+		t.Fatalf("provider-readiness preview status=%d body=%s", providerReadinessPreview.Code, providerReadinessPreview.Body.String())
+	}
+	if !strings.Contains(providerReadinessPreview.Body.String(), `"preview_only":true`) ||
+		strings.Contains(providerReadinessPreview.Body.String(), `"mutation_applied":true`) ||
+		strings.Contains(providerReadinessPreview.Body.String(), "test-secret") {
+		t.Fatalf("expected preview-only provider-readiness dispatch without mutation or secret leakage, body=%s", providerReadinessPreview.Body.String())
+	}
+
+	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+threadID, nil, nil)
+	if runs.Code != http.StatusOK {
+		t.Fatalf("workflow runs status=%d body=%s", runs.Code, runs.Body.String())
+	}
+	for _, want := range []string{
+		`"workflow_id":"agent-skill-direct-preview"`,
+		`"workflow_id":"agent-skill-direct-apply"`,
+		`"capability_id":"cabinet.inventory.create_item"`,
+		`"capability_id":"cabinet.inventory.search_items"`,
+		`"source_channel":"in-app"`,
+		`"source_thread_id":"` + threadID + `"`,
+		`"source_message_id":"` + messageID + `"`,
+		`"confirmation_state":"preview_required"`,
+		`"confirmation_state":"confirmed"`,
+		`"confirmation_state":"not_required"`,
+		`"authority_outcome":"apply_allowed"`,
+		`"mutation_applied":true`,
+		`"mutation_applied":false`,
+		`"ui_targets":["inventory.table","inventory.item.detail","inventory.item.editor"]`,
+		`"capability_id":"cabinet.navigate.open_surface"`,
+		`"source_message_id":"message-agent-skill-shell-command-2005"`,
+		`"shell_commands":["navigate.open_surface"]`,
+		`"shell_command_ids":["navigate.open_surface"]`,
+		`"capability_id":"cabinet.integrations.test_connection"`,
+		`"source_message_id":"message-agent-skill-provider-readiness-2007"`,
+		`"provider_readiness_ids":["provider-registry"]`,
+		`"provider_ids":["openai"]`,
+		`"dispatch_boundary":"provider_readiness_registry"`,
+		`"dispatch_outcome":"preview_only_no_mutation"`,
+	} {
+		if !strings.Contains(runs.Body.String(), want) {
+			t.Fatalf("workflow timeline evidence missing %s: body=%s", want, runs.Body.String())
+		}
+	}
+}
+
+func TestAgentSkillApplyAPIHandlesChatActionTimelineSkill(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Chat Timeline"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Action Timeline Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	createRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"chat.app_control.dispatch",
+		"capability_id":"inventory.item.search",
+		"source_channel":"in-app",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"message-action-timeline-2029",
+		"confirmation_state":"not_required",
+		"input":{"query":"private raw prompt should stay out"},
+		"provider_trace":{"preview_id":"preview-secret-2029","api_key":"sk-test-secret"},
+		"bulk_items":[{"id":"timeline-step","label":"Search Inventory"}]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createRun.Code != http.StatusCreated {
+		t.Fatalf("create workflow run status=%d body=%s", createRun.Code, createRun.Body.String())
+	}
+	var run struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createRun.Body).Decode(&run); err != nil {
+		t.Fatalf("decode workflow run: %v", err)
+	}
+	completeRun := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+run.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"result":{"operation":"inventory.item.search","authority_outcome":"apply_allowed","mutation_applied":false,"preview_id":"preview-secret-2029"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if completeRun.Code != http.StatusOK {
+		t.Fatalf("complete workflow run status=%d body=%s", completeRun.Code, completeRun.Body.String())
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.chat.action_timeline.view",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"message-action-timeline-request-2029",
+		"parameters":{"workspace_id":"workspace-chat-2029","thread_id":"`+thread.ID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("action timeline apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	body := apply.Body.String()
+	for _, want := range []string{
+		`"skill_id":"cabinet.chat.action_timeline.view"`,
+		`"read_only":true`,
+		`"mutation_applied":false`,
+		`"confirmation_required":false`,
+		`"scoped_action_timeline":true`,
+		`"thread_id":"` + thread.ID + `"`,
+		`"workflow_run_id":"` + run.ID + `"`,
+		`"workflow_id":"chat.app_control.dispatch"`,
+		`"capability_id":"inventory.item.search"`,
+		`"source_channel":"in-app"`,
+		`"source_message_id":"message-action-timeline-2029"`,
+		`"operation":"inventory.item.search"`,
+		`"authority_outcome":"apply_allowed"`,
+		`"evidence_redacted":true`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("action timeline evidence missing %s: body=%s", want, body)
+		}
+	}
+	for _, forbidden := range []string{"preview-secret-2029", "sk-test-secret", "private raw prompt should stay out", `"confirmation_token_returned":true`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("action timeline response leaked forbidden evidence %q: body=%s", forbidden, body)
+		}
+	}
+
+	crossThread := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.chat.action_timeline.view",
+		"source_surface":"chats.main",
+		"source_channel":"in-app",
+		"source_thread_id":"other-thread-2029",
+		"parameters":{"workspace_id":"workspace-chat-2029","thread_id":"other-thread-2029"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if crossThread.Code != http.StatusOK || strings.Contains(crossThread.Body.String(), run.ID) {
+		t.Fatalf("timeline skill must stay scoped to the requested thread, status=%d body=%s", crossThread.Code, crossThread.Body.String())
 	}
 }
 
@@ -1645,6 +2047,122 @@ func TestAgentSkillAPIPropagatesInvocationSourceContext(t *testing.T) {
 	}
 }
 
+func TestAgentSkillInboxReviewContextClarifiesMissingOrStaleNotification(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Inbox Context Clarification"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	record := doRequest(t, a, http.MethodPost, "/api/chat/inbox", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"records":[{
+			"local_history_id":"agent-skill-inbox-context-1987",
+			"title":"Agent skill Inbox context",
+			"summary":"Needs sourced review"
+		}]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if record.Code != http.StatusCreated {
+		t.Fatalf("create inbox record status=%d body=%s", record.Code, record.Body.String())
+	}
+	var recordPayload struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(record.Body).Decode(&recordPayload); err != nil {
+		t.Fatalf("decode inbox record: %v", err)
+	}
+	if len(recordPayload.Items) != 1 {
+		t.Fatalf("expected one inbox item, got %+v", recordPayload.Items)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"source_surface":"inbox.notification.card",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-inbox-context-1987",
+		"source_message_id":"message-inbox-context-1987",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"`+p.ID+`",
+			"route_id":"/inbox",
+			"surface_id":"inbox.notification.card",
+			"source_channel":"in-app",
+			"thread_id":"thread-inbox-context-1987",
+			"source_thread_id":"source-thread-1987",
+			"source_message_id":"source-message-1987",
+			"selected_notification":{"id":"`+recordPayload.Items[0].ID+`","source":"assistant_handoff"},
+			"setup_state":"ready"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview from Inbox agent_context status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"source_surface":"inbox.notification.card"`) ||
+		!strings.Contains(preview.Body.String(), `"source_thread_id":"thread-inbox-context-1987"`) ||
+		!strings.Contains(preview.Body.String(), `"mutation_applied":false`) {
+		t.Fatalf("expected preview to use canonical Inbox agent context without mutation, body=%s", preview.Body.String())
+	}
+
+	missing := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"confirm":true,
+		"source_surface":"inbox.notification.card",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-inbox-context-1987",
+		"source_message_id":"message-inbox-context-1987",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"`+p.ID+`",
+			"route_id":"/inbox",
+			"surface_id":"inbox.notification.card",
+			"source_channel":"in-app",
+			"thread_id":"thread-inbox-context-1987",
+			"setup_state":"ready"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if missing.Code != http.StatusConflict ||
+		!strings.Contains(missing.Body.String(), `"error":"missing_context"`) ||
+		!strings.Contains(missing.Body.String(), `"selected_notification"`) {
+		t.Fatalf("expected missing Inbox notification context clarification, status=%d body=%s", missing.Code, missing.Body.String())
+	}
+
+	stale := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.inbox.mark_handled",
+		"source_surface":"inbox.notification.card",
+		"source_channel":"in-app",
+		"source_thread_id":"thread-inbox-context-1987",
+		"source_message_id":"message-inbox-context-1987",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"`+p.ID+`",
+			"route_id":"/inbox",
+			"surface_id":"inbox.notification.card",
+			"source_channel":"in-app",
+			"thread_id":"thread-inbox-context-1987",
+			"selected_notification":{"id":"stale-notification-1987","source":"assistant_handoff"},
+			"setup_state":"ready"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if stale.Code != http.StatusConflict ||
+		!strings.Contains(stale.Body.String(), `"error":"missing_context"`) ||
+		!strings.Contains(stale.Body.String(), `"stale_selected_notification"`) ||
+		!strings.Contains(stale.Body.String(), `"stale-notification-1987"`) {
+		t.Fatalf("expected stale Inbox notification context clarification, status=%d body=%s", stale.Code, stale.Body.String())
+	}
+}
+
 func TestAgentSkillAPIPropagatesExternalChannelContextForMarketWatchAndPurchases(t *testing.T) {
 	t.Parallel()
 
@@ -2439,6 +2957,275 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 	}
 }
 
+func TestAgentSkillApplyAPIHandlesDataImportRestorePersistenceEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Data Restore"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	fixtureDir := t.TempDir()
+	importPath := filepath.Join(fixtureDir, "profile-import-private.json")
+	importPayload := []byte(`{"profile_settings":{"display_currency":"AUD","profile_private_note":"Sydney secure vault - private"},"items":[{"part_number":"IMP-2023-001","title":"Imported private kit"}]}`)
+	if err := os.WriteFile(importPath, importPayload, 0o600); err != nil {
+		t.Fatalf("write import fixture: %v", err)
+	}
+	backupPath := filepath.Join(fixtureDir, "cabinet-restore-private.zip")
+	if err := os.WriteFile(backupPath, []byte("fixture-backup-bytes"), 0o600); err != nil {
+		t.Fatalf("write restore fixture: %v", err)
+	}
+
+	importFile := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.import_file",
+		"confirm":true,
+		"parameters":{"file_path":"`+strings.ReplaceAll(importPath, `\`, `\\`)+`","import_note":"private note must not leak"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if importFile.Code != http.StatusOK {
+		t.Fatalf("import file apply status=%d body=%s", importFile.Code, importFile.Body.String())
+	}
+	importBody := importFile.Body.String()
+	for _, required := range []string{
+		`"mutation_applied":true`,
+		`"operation":"data.import.file"`,
+		`"import_persisted":true`,
+		`"profile_scope":"` + p.ID + `"`,
+		`"imported_item_count":1`,
+		`"settings_persisted":["display_currency"]`,
+		`"source_path_redacted":true`,
+		`"raw_payload_redacted":true`,
+	} {
+		if !strings.Contains(importBody, required) {
+			t.Fatalf("expected import persistence evidence %q, body=%s", required, importBody)
+		}
+	}
+	for _, forbidden := range []string{importPath, filepath.Base(importPath), "Sydney secure vault", "Imported private kit", "private note must not leak"} {
+		if strings.Contains(importBody, forbidden) {
+			t.Fatalf("import response leaked %q, body=%s", forbidden, importBody)
+		}
+	}
+	assertProfileSetting(t, a, p.ID, "display_currency", "AUD")
+
+	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.data.restore_backup",
+		"confirm":true,
+		"parameters":{"backup_path":"`+strings.ReplaceAll(backupPath, `\`, `\\`)+`","confirmation_phrase":"Restore profile `+p.ID+` from selected backup"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if restore.Code != http.StatusOK {
+		t.Fatalf("restore backup apply status=%d body=%s", restore.Code, restore.Body.String())
+	}
+	restoreBody := restore.Body.String()
+	for _, required := range []string{
+		`"mutation_applied":true`,
+		`"operation":"data.backup.restore"`,
+		`"destructive_confirmation":true`,
+		`"restore_drill_verified":true`,
+		`"profile_isolated":true`,
+		`"integrity_check":"ok"`,
+		`"selected_backup_redacted":true`,
+	} {
+		if !strings.Contains(restoreBody, required) {
+			t.Fatalf("expected restore drill evidence %q, body=%s", required, restoreBody)
+		}
+	}
+	for _, forbidden := range []string{backupPath, filepath.Base(backupPath), "fixture-backup-bytes"} {
+		if strings.Contains(restoreBody, forbidden) {
+			t.Fatalf("restore response leaked %q, body=%s", forbidden, restoreBody)
+		}
+	}
+}
+
+func TestAgentSkillApplyAPIHandlesSettingsProfilePersistenceEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Settings Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_profile",
+		"source_surface":"settings.profile.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-profile-thread",
+		"source_message_id":"settings-profile-message",
+		"parameters":{
+			"settings_profile":{
+				"display_currency":"AUD",
+				"telegram.catalog_capture.sender_id":"987654321",
+				"profile_private_note":"Sydney secure vault - private"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"confirmation_required":true`) ||
+		!strings.Contains(preview.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(preview.Body.String(), `"source_surface":"settings.profile.form"`) ||
+		!strings.Contains(preview.Body.String(), `"source_channel":"in-app"`) {
+		t.Fatalf("expected profile settings preview boundary with source context, body=%s", preview.Body.String())
+	}
+	var previewPersistedCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM profile_settings WHERE profile_id = ? AND key IN ('display_currency', 'telegram.catalog_capture.sender_id', 'profile_private_note')`, p.ID).Scan(&previewPersistedCount); err != nil {
+		t.Fatalf("count preview profile settings: %v", err)
+	}
+	if previewPersistedCount != 0 {
+		t.Fatalf("preview must not persist profile settings, count=%d", previewPersistedCount)
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_profile",
+		"confirm":true,
+		"source_surface":"settings.profile.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-profile-thread",
+		"source_message_id":"settings-profile-message",
+		"parameters":{
+			"settings_profile":{
+				"display_currency":"AUD",
+				"telegram.catalog_capture.sender_id":"987654321",
+				"profile_private_note":"Sydney secure vault - private"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"settings.profile.update"`,
+		`"source_surface":"settings.profile.form"`,
+		`"source_channel":"in-app"`,
+		`"source_thread_id":"settings-profile-thread"`,
+		`"source_message_id":"settings-profile-message"`,
+		`"settings_persisted":["`,
+		`"display_currency"`,
+		`"telegram.catalog_capture.sender_id"`,
+		`"profile_private_note"`,
+	} {
+		if !strings.Contains(apply.Body.String(), want) {
+			t.Fatalf("profile setting apply response missing %s: body=%s", want, apply.Body.String())
+		}
+	}
+	if strings.Contains(apply.Body.String(), "Sydney secure vault - private") {
+		t.Fatalf("profile setting apply response must not expose raw setting values: body=%s", apply.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "display_currency", "AUD")
+	assertProfileSetting(t, a, p.ID, "telegram.catalog_capture.sender_id", "987654321")
+	assertProfileSetting(t, a, p.ID, "profile_private_note", "Sydney secure vault - private")
+}
+
+func TestAgentSkillApplyAPIHandlesSettingsAccountPersistenceEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Skill Settings Account"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_account",
+		"source_surface":"settings.account.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-account-thread",
+		"source_message_id":"settings-account-message",
+		"parameters":{
+			"settings_account":{
+				"account.display_name":"Cabinet Account",
+				"account.default_language":"en-AU",
+				"account_private_note":"Do not echo account secret"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if !strings.Contains(preview.Body.String(), `"confirmation_required":true`) ||
+		!strings.Contains(preview.Body.String(), `"mutation_applied":false`) ||
+		!strings.Contains(preview.Body.String(), `"source_surface":"settings.account.form"`) ||
+		!strings.Contains(preview.Body.String(), `"source_channel":"in-app"`) {
+		t.Fatalf("expected account settings preview boundary with source context, body=%s", preview.Body.String())
+	}
+	var previewPersistedCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM profile_settings WHERE profile_id = ? AND key IN ('account.display_name', 'account.default_language', 'account_private_note')`, p.ID).Scan(&previewPersistedCount); err != nil {
+		t.Fatalf("count preview account settings: %v", err)
+	}
+	if previewPersistedCount != 0 {
+		t.Fatalf("preview must not persist account settings, count=%d", previewPersistedCount)
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"skill_id":"cabinet.settings.update_account",
+		"confirm":true,
+		"source_surface":"settings.account.form",
+		"source_channel":"in-app",
+		"source_thread_id":"settings-account-thread",
+		"source_message_id":"settings-account-message",
+		"parameters":{
+			"settings_account":{
+				"account.display_name":"Cabinet Account",
+				"account.default_language":"en-AU",
+				"account_private_note":"Do not echo account secret"
+			}
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	for _, want := range []string{
+		`"mutation_applied":true`,
+		`"operation":"settings.account.update"`,
+		`"source_surface":"settings.account.form"`,
+		`"source_channel":"in-app"`,
+		`"source_thread_id":"settings-account-thread"`,
+		`"source_message_id":"settings-account-message"`,
+		`"settings_persisted":["`,
+		`"account.display_name"`,
+		`"account.default_language"`,
+		`"account_private_note"`,
+	} {
+		if !strings.Contains(apply.Body.String(), want) {
+			t.Fatalf("account setting apply response missing %s: body=%s", want, apply.Body.String())
+		}
+	}
+	if strings.Contains(apply.Body.String(), "Do not echo account secret") ||
+		strings.Contains(apply.Body.String(), "Cabinet Account") ||
+		strings.Contains(apply.Body.String(), "en-AU") {
+		t.Fatalf("account setting apply response must not expose raw setting values: body=%s", apply.Body.String())
+	}
+	assertProfileSetting(t, a, p.ID, "account.display_name", "Cabinet Account")
+	assertProfileSetting(t, a, p.ID, "account.default_language", "en-AU")
+	assertProfileSetting(t, a, p.ID, "account_private_note", "Do not echo account secret")
+}
+
 func TestAgentSkillApplyAPICapturesStubbedProviderWritePathEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -3034,6 +3821,15 @@ func findAPISkill(skills []apiSkillPayload, id string) *apiSkillPayload {
 	for i := range skills {
 		if skills[i].ID == id {
 			return &skills[i]
+		}
+	}
+	return nil
+}
+
+func findCapabilityExplanation(capabilities []apiCapabilityExplanationPayload, id string) *apiCapabilityExplanationPayload {
+	for i := range capabilities {
+		if capabilities[i].SkillID == id {
+			return &capabilities[i]
 		}
 	}
 	return nil

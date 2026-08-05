@@ -46,7 +46,7 @@ func TestDiscoveriesPurposeAndHandoffSpecContracts(t *testing.T) {
 		"Market Watch output candidate",
 		"private collector inventory",
 		"private collector inventory records, private notes, storage locations, unpublished collection values",
-		"planned Cypress `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts`",
+		"Cypress `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` (`UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions`)",
 	}
 	for _, token := range requiredTokens {
 		if !strings.Contains(combined, token) {

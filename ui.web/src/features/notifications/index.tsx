@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Archive,
   Bell,
+  Bot,
   CheckCheck,
   ChevronDown,
   ChevronLeft,
@@ -40,6 +41,10 @@ type NotificationInboxItem = {
     category?: string
     detail?: string
     source_label?: string
+    source_surface?: string
+    source_channel?: string
+    source_thread_id?: string
+    source_message_id?: string
     assistant?: { provider?: string; model?: string }
     review_url?: string
     preview_id?: string
@@ -170,6 +175,18 @@ function sortNotifications(items: NotificationInboxItem[]) {
       new Date(a.updated_at ?? a.created_at ?? 0).getTime()
     )
   })
+}
+
+function assistantThreadKey(profileId: string) {
+  return `cabinet.assistant.workspace.thread.${profileId || 'local'}`
+}
+
+function assistantProviderKey(profileId: string) {
+  return `cabinet.assistant.workspace.provider.${profileId || 'local'}`
+}
+
+function assistantModelKey(profileId: string) {
+  return `cabinet.assistant.workspace.model.${profileId || 'local'}`
 }
 
 function itemFromToastHistory(
@@ -484,6 +501,64 @@ export function NotificationInbox() {
 
   function openCompactInbox() {
     setActiveWorkspace('inbox')
+  }
+
+  function openAgentForNotification(item: NotificationInboxItem) {
+    if (!activeProfileId || !item.thread_id) {
+      return
+    }
+    const sourceRoute = (() => {
+      try {
+        return (
+          window.localStorage.getItem(
+            'cabinet.notification_inbox.origin_route'
+          ) ||
+          '/'
+        )
+      } catch {
+        return '/'
+      }
+    })()
+    try {
+      window.localStorage.setItem(
+        assistantThreadKey(activeProfileId),
+        item.thread_id
+      )
+      if (item.metadata?.assistant?.provider) {
+        window.localStorage.setItem(
+          assistantProviderKey(activeProfileId),
+          item.metadata.assistant.provider
+        )
+      }
+      if (item.metadata?.assistant?.model) {
+        window.localStorage.setItem(
+          assistantModelKey(activeProfileId),
+          item.metadata.assistant.model
+        )
+      }
+      window.localStorage.setItem(
+        'cabinet.agent.inbox_notification_context',
+        JSON.stringify({
+          profile_id: activeProfileId,
+          thread_id: item.thread_id,
+          route_id: sourceRoute,
+          surface_id: item.metadata?.source_surface || 'inbox.notification.card',
+          source_channel: item.metadata?.source_channel || 'in-app',
+          selected_notification: {
+            id: item.id,
+            source: item.source,
+          },
+          source_thread_id: item.metadata?.source_thread_id,
+          source_message_id: item.metadata?.source_message_id,
+        })
+      )
+    } catch {
+      // The Assistant still opens; it will rebuild default context if storage fails.
+    }
+    setActiveWorkspace('assistant')
+    if (!window.location.pathname.startsWith(sourceRoute)) {
+      window.location.assign(sourceRoute)
+    }
   }
 
   function clearVisibleItems() {
@@ -958,6 +1033,19 @@ export function NotificationInbox() {
                         </Badge>
                       </div>
                       <div className='flex shrink-0 gap-2'>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='icon'
+                          disabled={updating || !selectedItem.thread_id}
+                          onClick={() => openAgentForNotification(selectedItem)}
+                          data-testid='notification-inbox-open-agent'
+                          aria-label='Open notification in Agent'
+                          title='Open notification in Agent'
+                        >
+                          <Bot className='h-4 w-4' />
+                          <span className='sr-only'>Open in Agent</span>
+                        </Button>
                         <Button
                           type='button'
                           variant='outline'

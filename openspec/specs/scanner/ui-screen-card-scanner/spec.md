@@ -5,6 +5,11 @@ Define Card Scanner behavior for camera/photo scanning, recognition, and invento
 ### Requirement UI-SCREEN-CARD-SCANNER-001: Card Scanner SHALL support camera and photo-upload capture
 Card Scanner SHALL allow live camera capture and file upload for card recognition.
 
+#### Scenario: Capture or upload card image
+- **GIVEN** user is on `/scanner`
+- **WHEN** user captures a photo or uploads an image
+- **THEN** image MUST be ingested for recognition workflow
+
 ### Requirement UI-SCREEN-CARD-SCANNER-006: Card Scanner SHALL provide quick-scan capture on mobile and desktop
 Card Scanner SHALL expose a `Quick Scan` action for fast capture workflows on both mobile and desktop surfaces.
 
@@ -18,11 +23,6 @@ Card Scanner SHALL expose a `Quick Scan` action for fast capture workflows on bo
 - **WHEN** user clicks `Quick Scan`
 - **THEN** app MUST offer camera capture (if available) and immediate upload fallback for rapid scan intake
 - **AND** quick-scan entry MUST remain reachable by keyboard (Tab + Enter/Space)
-
-#### Scenario: Capture or upload card image
-- **GIVEN** user is on `/scanner`
-- **WHEN** user captures a photo or uploads an image
-- **THEN** image MUST be ingested for recognition workflow
 
 ### Requirement UI-SCREEN-CARD-SCANNER-002: Card Scanner SHALL perform recognition with confidence and candidate list
 Recognition SHALL return top match, alternates, and confidence score with manual override support.
@@ -69,6 +69,11 @@ Scanner review apply API SHALL accept normalized recognition candidates, build t
 
 ### Requirement UI-SCREEN-CARD-SCANNER-004: Card Scanner SHALL support deterministic error/retry behavior
 Scanner SHALL surface human-readable failure states with retry guidance.
+
+#### Scenario: Recognition failure
+- **GIVEN** recognition request fails or low-confidence ambiguity occurs
+- **WHEN** scanner returns failure/ambiguous result
+- **THEN** UI MUST show actionable retry/manual-selection guidance
 
 ### Requirement UI-SCREEN-CARD-SCANNER-010: Card Scanner SHALL keep failed reads in manual review without linking scans
 Card Scanner SHALL keep low-confidence or failed recognition reads in the queued review surface, preserve manual override evidence, and avoid marking scans linked until a confirmed apply succeeds.
@@ -121,11 +126,6 @@ Scanner SHALL provide a quick-category area showing most recently added scan res
 - **WHEN** user opens quick-category panel and toggles `Cards`/`Table`
 - **THEN** scanner MUST render the same unlinked recent set in selected view mode with deterministic ordering by most-recent first
 - **AND** linked inventory records MUST NOT appear in the quick-category dataset
-
-#### Scenario: Recognition failure
-- **GIVEN** recognition request fails or low-confidence ambiguity occurs
-- **WHEN** scanner returns failure/ambiguous result
-- **THEN** UI MUST show actionable retry/manual-selection guidance
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |

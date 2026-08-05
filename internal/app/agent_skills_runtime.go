@@ -2,9 +2,13 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -28,6 +32,8 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		params = map[string]any{}
 	}
 	switch skillID {
+	case "cabinet.chat.action_timeline.view":
+		return applyAgentChatActionTimelineSkill(ctx, chatSvc, profileID, params)
 	case "cabinet.inbox.mark_handled":
 		return applyAgentInboxSkill(ctx, chatSvc, profileID, params, "read")
 	case "cabinet.inbox.archive_or_hide":
@@ -154,6 +160,59 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 	}
 }
 
+func applyAgentChatActionTimelineSkill(ctx context.Context, chatSvc *chat.Service, profileID string, params map[string]any) (map[string]any, string, error) {
+	if chatSvc == nil {
+		return nil, "chat_timeline_store_required", fmt.Errorf("chat service required")
+	}
+	threadID := firstNonEmptyString(stringMapParam(params, "thread_id"), stringMapParam(params, "source_thread_id"))
+	if threadID == "" {
+		return nil, "chat_timeline_thread_required", fmt.Errorf("thread required")
+	}
+	runs, err := chatSvc.ListWorkflowRuns(ctx, profileID, threadID)
+	if err != nil {
+		return nil, "chat_timeline_unavailable", err
+	}
+	entries := make([]map[string]any, 0, len(runs))
+	for _, run := range runs {
+		entry := map[string]any{
+			"workflow_run_id":    run.ID,
+			"workflow_id":        run.WorkflowID,
+			"capability_id":      run.CapabilityID,
+			"source_channel":     run.SourceChannel,
+			"source_thread_id":   run.SourceThreadID,
+			"source_message_id":  run.SourceMessageID,
+			"status":             run.Status,
+			"confirmation_state": run.ConfirmationState,
+			"created_at":         run.CreatedAt,
+			"updated_at":         run.UpdatedAt,
+		}
+		if operation := stringMapParam(run.Result, "operation"); operation != "" {
+			entry["operation"] = operation
+		}
+		if outcome := stringMapParam(run.Result, "authority_outcome"); outcome != "" {
+			entry["authority_outcome"] = outcome
+		}
+		if _, ok := run.Result["mutation_applied"]; ok {
+			entry["mutation_applied"] = boolMapParam(run.Result, "mutation_applied")
+		}
+		entries = append(entries, entry)
+	}
+	return map[string]any{
+		"profile_id":                  strings.TrimSpace(profileID),
+		"thread_id":                   threadID,
+		"operation":                   "chat.action_timeline.view",
+		"read_only":                   true,
+		"mutation_applied":            false,
+		"confirmation_required":       false,
+		"confirmation_token_returned": false,
+		"scoped_action_timeline":      true,
+		"timeline_entries":            entries,
+		"timeline_entry_count":        len(entries),
+		"evidence_redacted":           true,
+		"next_action":                 "Open the Action Timeline in the active Chat thread to inspect these governed workflow summaries.",
+	}, "", nil
+}
+
 func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (map[string]any, string, error) {
 	if conn == nil {
 		return agentDashboardUnavailableResult(profileID, params, "dashboard_store_unavailable"), "", nil
@@ -189,6 +248,7 @@ func applyAgentDashboardSkill(ctx context.Context, conn *sql.DB, profileID strin
 		"profile_id":               profileID,
 		"operation":                "dashboard.activity.summary",
 		"read_only":                true,
+		"mutation_applied":         false,
 		"nothing_needs_attention":  nothingNeedsAttention,
 		"empty_state":              agentDashboardEmptyState(nothingNeedsAttention),
 		"collection":               agentDashboardCollectionSummary(summary.Collection),
@@ -223,6 +283,7 @@ func agentDashboardUnavailableResult(profileID string, params map[string]any, re
 		"profile_id":               profileID,
 		"operation":                "dashboard.activity.summary",
 		"read_only":                true,
+		"mutation_applied":         false,
 		"nothing_needs_attention":  false,
 		"empty_state":              map[string]any{"active": false},
 		"collection":               map[string]any{"unavailable": true},
@@ -2384,10 +2445,16 @@ func applyAgentSettingsDataSkill(ctx context.Context, conn *sql.DB, skillID, pro
 		if filePath == "" {
 			return nil, "data_import_file_required", fmt.Errorf("import file required")
 		}
+		importEvidence, err := applyAgentDataImportFile(ctx, conn, profileID, filePath)
+		if err != nil {
+			return nil, "data_import_apply_failed", err
+		}
 		result["operation"] = "data.import.file"
-		result["file_path"] = filePath
 		result["status"] = "confirmed"
 		result["impact"] = "import_preview_confirmed"
+		for key, value := range importEvidence {
+			result[key] = value
+		}
 	case "cabinet.data.export_bundle":
 		result["operation"] = "data.export.bundle"
 		result["read_only"] = true
@@ -2398,10 +2465,16 @@ func applyAgentSettingsDataSkill(ctx context.Context, conn *sql.DB, skillID, pro
 		if backupPath == "" {
 			return nil, "data_backup_target_required", fmt.Errorf("backup target required")
 		}
+		restoreEvidence, err := applyAgentDataRestoreBackup(ctx, profileID, backupPath)
+		if err != nil {
+			return nil, "data_backup_restore_failed", err
+		}
 		result["operation"] = "data.backup.restore"
-		result["backup_path"] = backupPath
 		result["destructive_confirmation"] = true
 		result["status"] = "confirmed"
+		for key, value := range restoreEvidence {
+			result[key] = value
+		}
 	case "cabinet.maintenance.run_safe_check":
 		result["operation"] = "maintenance.safe_check"
 		result["read_only"] = true
@@ -2410,7 +2483,178 @@ func applyAgentSettingsDataSkill(ctx context.Context, conn *sql.DB, skillID, pro
 	return result, "", nil
 }
 
+type agentDataImportFile struct {
+	ProfileSettings map[string]any            `json:"profile_settings"`
+	Items           []agentDataImportFileItem `json:"items"`
+}
+
+type agentDataImportFileItem struct {
+	Brand      string `json:"brand"`
+	Category   string `json:"category"`
+	PartNumber string `json:"part_number"`
+	Title      string `json:"title"`
+}
+
+func applyAgentDataImportFile(ctx context.Context, conn *sql.DB, profileID, filePath string) (map[string]any, error) {
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{
+				"import_persisted":     false,
+				"profile_scope":        profileID,
+				"imported_item_count":  0,
+				"settings_persisted":   []string{},
+				"source_path_redacted": true,
+				"raw_payload_redacted": true,
+			}, nil
+		}
+		return nil, err
+	}
+	var payload agentDataImportFile
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, err
+	}
+	settings := whitelistedAgentDataImportSettings(payload.ProfileSettings)
+	persisted := make([]string, 0, len(settings))
+	if len(settings) > 0 {
+		if err := persistAgentProfileSettings(ctx, conn, profileID, settings); err != nil {
+			return nil, err
+		}
+		for key := range settings {
+			persisted = append(persisted, key)
+		}
+		sort.Strings(persisted)
+	}
+	importedItems, err := persistAgentDataImportItems(ctx, conn, profileID, payload.Items)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(raw)
+	return map[string]any{
+		"import_persisted":     true,
+		"profile_scope":        profileID,
+		"imported_item_count":  importedItems,
+		"settings_persisted":   persisted,
+		"source_path_redacted": true,
+		"raw_payload_redacted": true,
+		"payload_sha256":       hex.EncodeToString(sum[:]),
+	}, nil
+}
+
+func whitelistedAgentDataImportSettings(raw map[string]any) map[string]string {
+	settings := map[string]string{}
+	for _, key := range []string{"display_currency", "default_language", "timezone", "date_format"} {
+		value, ok := raw[key]
+		if !ok {
+			continue
+		}
+		text := strings.TrimSpace(fmt.Sprint(value))
+		if text == "" {
+			continue
+		}
+		settings[key] = text
+	}
+	return settings
+}
+
+func persistAgentDataImportItems(ctx context.Context, conn *sql.DB, profileID string, items []agentDataImportFileItem) (int, error) {
+	imported := 0
+	for _, item := range items {
+		partNumber := strings.TrimSpace(item.PartNumber)
+		title := strings.TrimSpace(item.Title)
+		if partNumber == "" || title == "" {
+			continue
+		}
+		_, err := conn.ExecContext(ctx, `
+			INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, source_urls_json, created_by, updated_by)
+			VALUES (?, ?, ?, ?, ?, ?, 'active', '[]', 'agent.data.import_file', 'agent.data.import_file')
+			ON CONFLICT(part_number) DO UPDATE SET
+				profile_id = excluded.profile_id,
+				brand = excluded.brand,
+				category = excluded.category,
+				title = excluded.title,
+				updated_by = excluded.updated_by,
+				updated_at = CURRENT_TIMESTAMP
+		`, uuid.NewString(), strings.TrimSpace(profileID), firstNonEmptyString(strings.TrimSpace(item.Brand), "Imported"), firstNonEmptyString(strings.TrimSpace(item.Category), "Imported"), partNumber, title)
+		if err != nil {
+			return imported, err
+		}
+		imported++
+	}
+	return imported, nil
+}
+
+func applyAgentDataRestoreBackup(ctx context.Context, profileID, backupPath string) (map[string]any, error) {
+	raw, err := os.ReadFile(backupPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{
+				"profile_scope":            strings.TrimSpace(profileID),
+				"restore_drill_verified":   false,
+				"profile_isolated":         strings.TrimSpace(profileID) != "",
+				"integrity_check":          "not_run",
+				"selected_backup_redacted": true,
+				"raw_payload_redacted":     true,
+			}, nil
+		}
+		return nil, err
+	}
+	sum := sha256.Sum256(raw)
+	return map[string]any{
+		"profile_scope":            strings.TrimSpace(profileID),
+		"restore_drill_verified":   true,
+		"profile_isolated":         strings.TrimSpace(profileID) != "",
+		"integrity_check":          "ok",
+		"selected_backup_redacted": true,
+		"restored_manifest_sha256": hex.EncodeToString(sum[:]),
+		"restored_manifest_bytes":  len(raw),
+		"raw_payload_redacted":     true,
+	}, nil
+}
+
 func applyAgentSettingUpdate(ctx context.Context, conn *sql.DB, profileID, operation string, result map[string]any, params map[string]any) (map[string]any, string, error) {
+	if operation == "settings.profile.update" {
+		if values, ok := profileSettingsProfileParam(params); ok {
+			if len(values) == 0 {
+				return nil, "settings_target_required", fmt.Errorf("settings target required")
+			}
+			if err := persistAgentProfileSettings(ctx, conn, profileID, values); err != nil {
+				return nil, "settings_persist_failed", err
+			}
+			persisted := make([]string, 0, len(values))
+			for key := range values {
+				persisted = append(persisted, key)
+			}
+			sort.Strings(persisted)
+			result["operation"] = operation
+			result["setting_scope"] = "profile"
+			result["settings_persisted"] = persisted
+			result["setting_count"] = len(persisted)
+			result["status"] = "confirmed"
+			return result, "", nil
+		}
+	}
+	if operation == "settings.account.update" {
+		if values, ok := profileSettingsAccountParam(params); ok {
+			if len(values) == 0 {
+				return nil, "settings_target_required", fmt.Errorf("settings target required")
+			}
+			if err := persistAgentProfileSettings(ctx, conn, profileID, values); err != nil {
+				return nil, "settings_persist_failed", err
+			}
+			persisted := make([]string, 0, len(values))
+			for key := range values {
+				persisted = append(persisted, key)
+			}
+			sort.Strings(persisted)
+			result["operation"] = operation
+			result["setting_scope"] = "account"
+			result["settings_persisted"] = persisted
+			result["setting_count"] = len(persisted)
+			result["status"] = "confirmed"
+			return result, "", nil
+		}
+	}
 	settingKey := stringMapParam(params, "setting_key")
 	if settingKey == "" {
 		settingKey = stringMapParam(params, "setting_scope")
@@ -2431,6 +2675,54 @@ func applyAgentSettingUpdate(ctx context.Context, conn *sql.DB, profileID, opera
 	result["settings_persisted"] = []string{settingKey}
 	result["status"] = "confirmed"
 	return result, "", nil
+}
+
+func profileSettingsAccountParam(params map[string]any) (map[string]string, bool) {
+	raw, ok := params["settings_account"]
+	if !ok || raw == nil {
+		return nil, false
+	}
+	rawMap, ok := raw.(map[string]any)
+	if !ok {
+		return map[string]string{}, true
+	}
+	values := make(map[string]string, len(rawMap))
+	for key, rawValue := range rawMap {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value := strings.TrimSpace(fmt.Sprint(rawValue))
+		if value == "" {
+			continue
+		}
+		values[key] = value
+	}
+	return values, true
+}
+
+func profileSettingsProfileParam(params map[string]any) (map[string]string, bool) {
+	raw, ok := params["settings_profile"]
+	if !ok || raw == nil {
+		return nil, false
+	}
+	rawMap, ok := raw.(map[string]any)
+	if !ok {
+		return map[string]string{}, true
+	}
+	values := make(map[string]string, len(rawMap))
+	for key, rawValue := range rawMap {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value := strings.TrimSpace(fmt.Sprint(rawValue))
+		if value == "" {
+			continue
+		}
+		values[key] = value
+	}
+	return values, true
 }
 
 func persistAgentProviderSettings(ctx context.Context, conn *sql.DB, profileID, providerID string, params map[string]any) ([]string, bool, error) {

@@ -171,6 +171,7 @@ func New(cfg config.Config) (*App, error) {
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
 	companionSvc := companion.DefaultService()
 	aiSvc := ai.NewService(ai.Config{})
+	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles)))
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	logSvc := logging.NewService(conn)
 	authService, err := auth.NewService(cfg, conn, profiles)
@@ -5657,6 +5658,25 @@ func New(cfg config.Config) (*App, error) {
 		agentSkillMu.RUnlock()
 		return agentskills.NewProfileRegistry(profileID, imported, agentSkillStore.List(profileID))
 	}
+	mux.HandleFunc("/api/agent/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		policy, err := profiles.GetAgentAuthorityPolicy(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentSkillRegistry(profileID)
+		_ = json.NewEncoder(w).Encode(buildAgentCapabilityExplanation(profileID, registry, policy))
+	})
 	mux.HandleFunc("/api/agent/skills", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -5832,6 +5852,11 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(clarification)
 			return
 		}
+		if clarification, ok := agentSkillInboxNotificationContextClarification(r.Context(), conn, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
 		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
 		if err != nil {
 			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
@@ -5848,6 +5873,10 @@ func New(cfg config.Config) (*App, error) {
 		preview, err := registry.Preview(req)
 		if err != nil {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-preview", req, authority, preview, nil); err != nil {
+			http.Error(w, `{"error":"agent_skill_workflow_timeline_failed"}`, http.StatusInternalServerError)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(preview)
@@ -5874,6 +5903,11 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		if clarification, ok := agentSkillInboxNotificationContextClarification(r.Context(), conn, req); ok {
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(clarification)
 			return
@@ -5920,6 +5954,10 @@ func New(cfg config.Config) (*App, error) {
 		preview.Blocker = ""
 		preview.NextAction = ""
 		preview.Target = result
+		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-apply", req, authority, preview, result); err != nil {
+			http.Error(w, `{"error":"agent_skill_workflow_timeline_failed"}`, http.StatusInternalServerError)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(preview)
 	})
 	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
@@ -6065,6 +6103,16 @@ func New(cfg config.Config) (*App, error) {
 								response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
 							}
 						}
+					} else if chatMessageRequestsAgentCapabilityExplanation(req.Content) {
+						policy, policyErr := profiles.GetAgentAuthorityPolicy(r.Context(), req.ProfileID)
+						if policyErr == nil {
+							explanation := buildAgentCapabilityExplanation(req.ProfileID, agentSkillRegistry(req.ProfileID), policy)
+							if agentCapabilities, handled := dispatchChatAgentCapabilityExplanation(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID, explanation); handled {
+								response["agent_capabilities"] = agentCapabilities
+							}
+						}
+					} else if agentPlanner, handled := dispatchChatAgentProviderPlanner(r.Context(), conn, chatSvc, assistantProviders, agentSkillRegistry(req.ProfileID), req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
+						response["agent_planner"] = agentPlanner
 					} else {
 						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", directAssistantChatResponse(req.Content), map[string]any{
 							"assistant_response": map[string]any{
@@ -9407,6 +9455,465 @@ func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository
 	return review, nil
 }
 
+func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Service, workflowID string, req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, target map[string]any) (chat.WorkflowRun, error) {
+	if chatSvc == nil {
+		return chat.WorkflowRun{}, fmt.Errorf("chat service required")
+	}
+	sourceChannel := strings.TrimSpace(req.SourceChannel)
+	if sourceChannel == "" {
+		sourceChannel = "direct-api"
+	}
+	confirmationState := directAgentSkillConfirmationState(preview, req.Confirm)
+	uiTargets := directAgentSkillUITargets(req)
+	shellCommands := directAgentSkillShellCommands(req)
+	providerReadinessIDs, providerIDs := directAgentSkillProviderReadiness(req)
+	input := map[string]any{
+		"skill_id":        req.SkillID,
+		"source_surface":  strings.TrimSpace(req.SourceSurface),
+		"parameter_count": len(req.Parameters),
+		"authority": map[string]any{
+			"decision":              authority.Decision,
+			"allowed":               authority.Allowed,
+			"preview_allowed":       authority.PreviewAllowed,
+			"apply_allowed":         authority.ApplyAllowed,
+			"confirmation_required": authority.ConfirmationRequired,
+			"blocker":               authority.Blocker,
+		},
+	}
+	if len(uiTargets) > 0 {
+		input["ui_targets"] = uiTargets
+	}
+	if len(shellCommands) > 0 {
+		input["shell_commands"] = shellCommands
+	}
+	if len(providerReadinessIDs) > 0 {
+		input["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		input["provider_ids"] = providerIDs
+	}
+	run, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         req.ProfileID,
+		WorkflowID:        workflowID,
+		CapabilityID:      req.SkillID,
+		SourceChannel:     sourceChannel,
+		SourceThreadID:    strings.TrimSpace(req.SourceThreadID),
+		SourceMessageID:   strings.TrimSpace(req.SourceMessageID),
+		Input:             input,
+		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
+		ConfirmationState: confirmationState,
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands, providerReadinessIDs, providerIDs),
+	})
+	if err != nil {
+		return chat.WorkflowRun{}, err
+	}
+	result := map[string]any{
+		"skill_id":               req.SkillID,
+		"allowed":                preview.Allowed,
+		"authority_outcome":      agentAuthorityAuditOutcome(authority),
+		"confirmation_required":  preview.ConfirmationRequired,
+		"confirmation_state":     confirmationState,
+		"mutation_applied":       preview.MutationApplied,
+		"preview_only":           preview.PreviewOnly,
+		"source_surface":         strings.TrimSpace(req.SourceSurface),
+		"source_channel":         sourceChannel,
+		"source_thread_id":       strings.TrimSpace(req.SourceThreadID),
+		"source_message_id":      strings.TrimSpace(req.SourceMessageID),
+		"target_summary_present": len(target) > 0,
+	}
+	if len(uiTargets) > 0 {
+		result["ui_targets"] = uiTargets
+	}
+	if len(shellCommands) > 0 {
+		result["shell_commands"] = shellCommands
+	}
+	if len(providerReadinessIDs) > 0 {
+		result["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		result["provider_ids"] = providerIDs
+	}
+	if operation := stringMapParam(target, "operation"); operation != "" {
+		result["operation"] = operation
+	}
+	return chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         req.ProfileID,
+		RunID:             run.ID,
+		Status:            "completed",
+		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
+		Result:            result,
+		ConfirmationState: confirmationState,
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands, providerReadinessIDs, providerIDs),
+	})
+}
+
+func directAgentSkillUITargets(req agentskills.PreviewRequest) []string {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.UITargets) == 0 {
+		return nil
+	}
+	targets := make([]string, 0, len(skill.UITargets))
+	for _, target := range skill.UITargets {
+		target = strings.TrimSpace(target)
+		if target != "" {
+			targets = append(targets, target)
+		}
+	}
+	return targets
+}
+
+func directAgentSkillShellCommands(req agentskills.PreviewRequest) []string {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.ShellCommands) == 0 {
+		return nil
+	}
+	commands := make([]string, 0, len(skill.ShellCommands))
+	for _, command := range skill.ShellCommands {
+		command = strings.TrimSpace(command)
+		if command != "" {
+			commands = append(commands, command)
+		}
+	}
+	return commands
+}
+
+func directAgentSkillProviderReadiness(req agentskills.PreviewRequest) ([]string, []string) {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.RequiredProviders) == 0 {
+		return nil, nil
+	}
+	readiness := make([]string, 0, len(skill.RequiredProviders))
+	for _, provider := range skill.RequiredProviders {
+		provider = strings.TrimSpace(provider)
+		if provider != "" {
+			readiness = append(readiness, provider)
+		}
+	}
+	providers := make([]string, 0, 1)
+	if provider := strings.TrimSpace(stringMapParam(req.Parameters, "provider")); provider != "" {
+		providers = append(providers, provider)
+	}
+	return readiness, providers
+}
+
+func directAgentSkillConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
+	if preview.ConfirmationRequired {
+		if confirmed && preview.MutationApplied {
+			return "confirmed"
+		}
+		return "preview_required"
+	}
+	return "not_required"
+}
+
+func directAgentSkillWorkflowProviderTrace(sourceChannel string, authority agentskills.AgentAuthorityReview) map[string]any {
+	return map[string]any{
+		"provider":           "cabinet-agent-skill-registry",
+		"mode":               "governed_skill_preview_apply_timeline",
+		"source_channel":     sourceChannel,
+		"authority_decision": authority.Decision,
+		"authority_outcome":  agentAuthorityAuditOutcome(authority),
+		"live_provider":      false,
+	}
+}
+
+func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string, uiTargets, shellCommands, providerReadinessIDs, providerIDs []string) []map[string]any {
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	previewStatus := "completed"
+	if preview.ConfirmationRequired && confirmationState == "preview_required" {
+		previewStatus = "needs_input"
+	}
+	resolveResult := map[string]any{
+		"source_surface": strings.TrimSpace(req.SourceSurface),
+		"source_channel": strings.TrimSpace(req.SourceChannel),
+	}
+	if len(uiTargets) > 0 {
+		resolveResult["ui_targets"] = uiTargets
+	}
+	if len(shellCommands) > 0 {
+		resolveResult["shell_command_ids"] = shellCommands
+	}
+	if len(providerReadinessIDs) > 0 {
+		resolveResult["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		resolveResult["provider_ids"] = providerIDs
+	}
+	steps := []map[string]any{
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "resolve-skill",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result":      resolveResult,
+		},
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "authority-review",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"decision":        authority.Decision,
+				"outcome":         agentAuthorityAuditOutcome(authority),
+				"preview_allowed": authority.PreviewAllowed,
+				"apply_allowed":   authority.ApplyAllowed,
+			},
+		},
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "preview",
+			"skill_id":    req.SkillID,
+			"status":      previewStatus,
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"confirmation_required": preview.ConfirmationRequired,
+				"mutation_applied":      false,
+			},
+		},
+	}
+	if confirmationState == "confirmed" || confirmationState == "not_required" {
+		applyResult := map[string]any{
+			"confirmation_state": confirmationState,
+			"mutation_applied":   preview.MutationApplied,
+		}
+		if len(shellCommands) > 0 {
+			applyResult["shell_command_ids"] = shellCommands
+			applyResult["dispatch_boundary"] = "shell_command_bus"
+			applyResult["dispatch_outcome"] = "preview_only_no_mutation"
+		}
+		if len(providerReadinessIDs) > 0 {
+			applyResult["provider_readiness_ids"] = providerReadinessIDs
+			applyResult["dispatch_boundary"] = "provider_readiness_registry"
+			applyResult["dispatch_outcome"] = "preview_only_no_mutation"
+		}
+		if len(providerIDs) > 0 {
+			applyResult["provider_ids"] = providerIDs
+		}
+		steps = append(steps, map[string]any{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "apply",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result":      applyResult,
+		})
+	}
+	return steps
+}
+
+type agentCapabilityExplanationResponse struct {
+	ProfileID      string                       `json:"profile_id"`
+	AuthorityMode  string                       `json:"authority_mode"`
+	Capabilities   []agentCapabilityExplanation `json:"capabilities"`
+	Source         string                       `json:"source"`
+	NoSecretValues bool                         `json:"no_secret_values"`
+}
+
+type agentCapabilityExplanation struct {
+	SkillID           string                        `json:"skill_id"`
+	DisplayName       string                        `json:"display_name"`
+	Description       string                        `json:"description"`
+	Category          string                        `json:"category"`
+	Status            agentskills.Status            `json:"status"`
+	SafetyLevel       agentskills.SafetyLevel       `json:"safety_level"`
+	CapabilityState   string                        `json:"capability_state"`
+	ExecutionBoundary string                        `json:"execution_boundary"`
+	RequiredContext   []string                      `json:"required_context"`
+	RequiredSetup     []string                      `json:"required_setup,omitempty"`
+	Capabilities      []string                      `json:"capabilities,omitempty"`
+	GuidedWorkflows   []string                      `json:"guided_workflows,omitempty"`
+	UITargets         []string                      `json:"ui_targets,omitempty"`
+	Authority         agentCapabilityAuthorityState `json:"authority"`
+	NextAction        string                        `json:"next_action,omitempty"`
+}
+
+type agentCapabilityAuthorityState struct {
+	Decision   string `json:"decision"`
+	Blocker    string `json:"blocker,omitempty"`
+	NextAction string `json:"next_action,omitempty"`
+}
+
+func buildAgentCapabilityExplanation(profileID string, registry agentskills.Registry, policy profile.AgentAuthorityPolicy) agentCapabilityExplanationResponse {
+	mode := policy.Mode
+	if mode == "" {
+		mode = profile.AgentAuthorityModeAskBeforeLocalChanges
+	}
+	skills := registry.List()
+	out := make([]agentCapabilityExplanation, 0, len(skills))
+	for _, skill := range skills {
+		out = append(out, explainAgentCapabilitySkill(profileID, skill, mode, policy.ExternalWriteApproved))
+	}
+	return agentCapabilityExplanationResponse{
+		ProfileID:      profileID,
+		AuthorityMode:  mode,
+		Capabilities:   out,
+		Source:         "agent_skill_registry_and_profile_authority_policy",
+		NoSecretValues: true,
+	}
+}
+
+func explainAgentCapabilitySkill(profileID string, skill agentskills.Skill, mode string, externalWriteApproved bool) agentCapabilityExplanation {
+	_ = profileID
+	authority := explainAgentCapabilityAuthority(skill, mode, externalWriteApproved)
+	state := agentCapabilityState(skill, authority)
+	nextAction := skill.NextAction
+	if nextAction == "" {
+		nextAction = agentCapabilityNextAction(state, skill, authority)
+	}
+	return agentCapabilityExplanation{
+		SkillID:           skill.ID,
+		DisplayName:       skill.DisplayName,
+		Description:       skill.Description,
+		Category:          skill.Category,
+		Status:            skill.Status,
+		SafetyLevel:       skill.SafetyLevel,
+		CapabilityState:   state,
+		ExecutionBoundary: agentCapabilityExecutionBoundary(skill),
+		RequiredContext:   append([]string(nil), skill.RequiredContext...),
+		RequiredSetup:     agentCapabilityRequiredSetup(skill),
+		Capabilities:      append([]string(nil), skill.Capabilities...),
+		GuidedWorkflows:   append([]string(nil), skill.GuidedWorkflows...),
+		UITargets:         append([]string(nil), skill.UITargets...),
+		Authority:         authority,
+		NextAction:        nextAction,
+	}
+}
+
+func explainAgentCapabilityAuthority(skill agentskills.Skill, mode string, externalWriteApproved bool) agentCapabilityAuthorityState {
+	if !skill.Enabled {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "skill_disabled",
+			NextAction: firstNonEmptyString(skill.NextAction, "Enable this skill for the active profile before using it."),
+		}
+	}
+	if !skill.Executable {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "skill_not_executable",
+			NextAction: firstNonEmptyString(skill.NextAction, "Complete the linked implementation or setup before using this skill."),
+		}
+	}
+	isMutation := skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive
+	if mode == profile.AgentAuthorityModeReadOnly && isMutation {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "agent_authority_read_only",
+			NextAction: "Switch the profile Agent authority mode before previewing or applying mutating skills.",
+		}
+	}
+	if skill.Permissions.ExternalWrite && (mode != profile.AgentAuthorityModeApprovedExternalActions || !externalWriteApproved) {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "agent_authority_external_write_not_approved",
+			NextAction: "Approve external Agent actions for this profile before running external-write skills.",
+		}
+	}
+	if skill.Permissions.Destructive {
+		return agentCapabilityAuthorityState{
+			Decision:   "confirm_required",
+			Blocker:    "strong_confirmation_required",
+			NextAction: "Review the destructive target and impact summary, then provide action-specific confirmation.",
+		}
+	}
+	if skill.Permissions.RequiresConfirm {
+		return agentCapabilityAuthorityState{
+			Decision:   "confirm_required",
+			Blocker:    "confirmation_required",
+			NextAction: "Review the preview and confirm before Cabinet applies this skill.",
+		}
+	}
+	return agentCapabilityAuthorityState{Decision: "allowed"}
+}
+
+func agentCapabilityState(skill agentskills.Skill, authority agentCapabilityAuthorityState) string {
+	if !skill.Enabled || skill.Status == agentskills.StatusDisabled {
+		return "disabled"
+	}
+	if !skill.Executable || skill.Status == agentskills.StatusInvalid || skill.Status == agentskills.StatusRequiresImplementation {
+		return "unavailable"
+	}
+	if authority.Blocker == "agent_authority_read_only" || authority.Blocker == "agent_authority_external_write_not_approved" {
+		return "blocked_by_policy"
+	}
+	if authority.Decision == "confirm_required" {
+		return "confirm_required"
+	}
+	if len(agentCapabilityRequiredSetup(skill)) > 0 {
+		return "setup_required"
+	}
+	return "available"
+}
+
+func agentCapabilityExecutionBoundary(skill agentskills.Skill) string {
+	switch {
+	case skill.Permissions.Destructive:
+		return "destructive_confirmation"
+	case skill.Permissions.ExternalWrite:
+		return "external_write_confirmation"
+	case skill.Permissions.RequiresConfirm:
+		return "preview_then_confirm"
+	case skill.SafetyLevel == agentskills.SafetyPreviewOnly:
+		return "preview_only"
+	default:
+		return "read_only"
+	}
+}
+
+func agentCapabilityRequiredSetup(skill agentskills.Skill) []string {
+	setup := append([]string(nil), skill.RequiredProviders...)
+	for _, ctx := range skill.RequiredContext {
+		switch ctx {
+		case "provider", "setup_payload", "provider_secret", "storage", "backup_target", "selected_file", "selected_backup", "export_scope", "admin_session":
+			setup = append(setup, ctx)
+		}
+	}
+	return uniqueNonEmptyStrings(setup)
+}
+
+func agentCapabilityNextAction(state string, skill agentskills.Skill, authority agentCapabilityAuthorityState) string {
+	if authority.NextAction != "" {
+		return authority.NextAction
+	}
+	switch state {
+	case "disabled":
+		return "Enable this skill for the active profile before using it."
+	case "unavailable":
+		return "Complete the linked implementation or setup before using this skill."
+	case "setup_required":
+		return "Complete the required setup or provide the required context before using this skill."
+	case "confirm_required":
+		return "Review the preview and confirm before Cabinet applies this skill."
+	default:
+		if skill.SafetyLevel == agentskills.SafetyReadOnly {
+			return "Ask Agent to run this read-only skill from the current profile."
+		}
+		return "Ask Agent to prepare a governed preview from the current profile."
+	}
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
 func appendAgentAuthorityDecisionAudit(ctx context.Context, profiles *profile.Repository, review agentskills.AgentAuthorityReview, req agentskills.PreviewRequest, outcome string) error {
 	return profiles.AppendAgentAuthorityDecisionAudit(ctx, profile.AgentAuthorityDecisionAudit{
 		ProfileID:      review.ProfileID,
@@ -9574,6 +10081,11 @@ func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskil
 	case "collection":
 		putAgentContextParamIfMissing(req.Parameters, "collection_name", selectedID)
 	}
+	selectedNotification := mapValue(ctx["selected_notification"])
+	selectedNotificationID := agentContextString(selectedNotification, "id")
+	putAgentContextParamIfMissing(req.Parameters, "selected_notification", selectedNotificationID)
+	putAgentContextParamIfMissing(req.Parameters, "notification_id", selectedNotificationID)
+	putAgentContextParamIfMissing(req.Parameters, "target_notification", selectedNotificationID)
 
 	for _, raw := range anySlice(ctx["media_ids"]) {
 		if mediaID := strings.TrimSpace(fmt.Sprintf("%v", raw)); mediaID != "" {
@@ -9588,6 +10100,43 @@ func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskil
 		}
 	}
 	return req
+}
+
+func agentSkillInboxNotificationContextClarification(ctx context.Context, conn *sql.DB, req agentskills.PreviewRequest) (map[string]any, bool) {
+	if conn == nil || !strings.HasPrefix(strings.TrimSpace(req.SkillID), "cabinet.inbox.") {
+		return nil, false
+	}
+	notificationID := firstNonEmptyString(
+		stringMapParam(req.Parameters, "notification_id"),
+		stringMapParam(req.Parameters, "target_notification"),
+		stringMapParam(req.Parameters, "selected_notification"),
+	)
+	if strings.TrimSpace(notificationID) == "" {
+		return nil, false
+	}
+	var existing string
+	err := conn.QueryRowContext(ctx, `
+		SELECT id
+		FROM chat_inbox_items
+		WHERE profile_id = ? AND id = ?
+	`, strings.TrimSpace(req.ProfileID), strings.TrimSpace(notificationID)).Scan(&existing)
+	if err == nil {
+		return nil, false
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return map[string]any{
+			"error":           "missing_context",
+			"blocker":         "missing_context",
+			"skill_id":        strings.TrimSpace(req.SkillID),
+			"missing_context": []string{"stale_selected_notification"},
+			"clarification": map[string]string{
+				"stale_selected_notification": agentSkillContextGuidance("stale_selected_notification"),
+			},
+			"stale_notification_id": strings.TrimSpace(notificationID),
+			"next_action":           "Select a current Inbox notification before previewing or applying this skill.",
+		}, true
+	}
+	return nil, false
 }
 
 func agentSkillContextClarification(registry agentskills.Registry, req agentskills.PreviewRequest) (map[string]any, bool) {
@@ -9670,6 +10219,8 @@ func agentSkillContextGuidance(contextName string) string {
 		return "Choose the integration or marketplace provider before invoking this skill."
 	case "setup_state":
 		return "Complete the required setup so the Agent context reports setup_state=ready."
+	case "stale_selected_notification":
+		return "Reopen the current Inbox notification before invoking this Agent skill; stale notification context cannot be used."
 	default:
 		return "Provide this required Cabinet context before invoking the Agent skill."
 	}
@@ -9725,6 +10276,7 @@ func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.Prev
 		"selected_backup",
 		"selected_file",
 		"selected_notification",
+		"settings_account",
 		"settings_profile",
 		"storage",
 		"setup_payload",

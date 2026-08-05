@@ -56,30 +56,29 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 
 	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
 	allowed := map[string][]string{
-		"AGENT-SKILLS-REGISTRY-009": {
-			"| partial |",
-			"#1667/#1668/#1672/#1715",
-			"TestAgentSkillAPIPropagatesInvocationSourceContext",
-			"broader skill execution timeline coverage remains planned",
-		},
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
-			"#1701/#1702/#1666",
+			"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019/#2021/#2023",
 			"openspec/traceability/agent-skill-coverage.md",
 			"TestAgentSkillCoverageMatrixCoversRequiredSurfacesAndFields",
 			"TestAgentSkillCoverageTraceabilityStaysBoundToOpenSpec",
+			"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
+			"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
+			"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
+			"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
+			"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
+			"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
+			"TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchToIssue2021Evidence",
+			"TestAgentSkillCoverageMatrixBindsDataImportRestorePersistenceToIssue2023Evidence",
+			"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-001": {
-			"| planned |",
-			"#1701/#1712/#1714",
-			"AGENT-UNIVERSAL-CHANNELS-001 opens Agent from supported surfaces with preserved context",
-			"preserve profile/route/thread/selection/source context",
-		},
-		"AGENT-UNIVERSAL-CHANNELS-002": {
-			"| planned |",
-			"#1701/#1712/#1708/#1709/#1710/#1711/#1715",
-			"TestAgentExplainsAvailableSkillsAndSetupStates",
-			"read-only, preview-only, confirm-required, external-write, blocked, and unavailable work",
+			"| partial |",
+			"#1701/#1979/#1987/#1712/#1714",
+			"TestChatMessagesNormalizeAgentContextEnvelopeForMainAndSidePanel",
+			"assistant-inbox-agent-context/spec.cy.ts",
+			"AGENT-CONTEXT-003/#1714 sends selected inventory row context",
+			"AGENT-CONTEXT-004/#1714 preserves side-panel Agent context",
 		},
 		"AGENT-UNIVERSAL-CHANNELS-004": {
 			"| planned |",
@@ -106,12 +105,6 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"docs/integrations/provider-authoring.md",
 			"TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow",
 			"provider-authoring workflow",
-		},
-		"ASSISTANT-EXECUTION-010": {
-			"| planned |",
-			"#1509/#1514",
-			"TestGuidedWalkthroughModesGovernCommandPermissions",
-			"ASSISTANT-EXECUTION-010 preserves confirm-before-apply across walkthrough modes",
 		},
 		"UI-SCREEN-CHAT-COPILOT-018": {
 			"| planned |",
@@ -165,6 +158,13 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 			"TestProviderWorkflowTraceabilityPartialRowsAreActionable",
 			"TestRemainingTraceabilityBacklogRowsAreExplicit",
 		},
+		"RUNTIME-CORE-020": {
+			"| partial |",
+			"#1869",
+			"openspec/migration/beta-packaged-core-workflow-acceptance.md",
+			"TestPackagedCoreWorkflowAcceptanceChecklistCoversIssue1869",
+			"#1864 release approval guardrails",
+		},
 	}
 
 	seen := map[string]bool{}
@@ -206,4 +206,269 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 		sort.Strings(missing)
 		t.Fatalf("expected allowed non-implemented traceability rows to remain explicit: %s", strings.Join(missing, ", "))
 	}
+}
+
+func TestAssistantExecution010TraceabilityNamesMergedGuidedWalkthroughEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "ASSISTANT-EXECUTION-010")
+	for _, stale := range []string{
+		"| planned |",
+		"planned:",
+		"guided-inventory-update/spec.cy.ts",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("ASSISTANT-EXECUTION-010 must not keep stale planned guided-walkthrough wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1509/#1514/#1991",
+		"TestGuidedWorkflowRegistryMatchesInventoryItemUpdateRecipe",
+		"TestChatMessageAppControlPlannerStartsGuidedInventoryWalkthrough",
+		"ASSISTANT-WORKSPACE-008/#1509 starts a show-mode guided item-update walkthrough without mutation",
+		"TestGuidedInventoryUpdatePersistsTimelineAndConfirmedMutation",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("ASSISTANT-EXECUTION-010 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestAssistantExecution012TraceabilityNamesMergedTargetHighlightEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "ASSISTANT-EXECUTION-012")
+	for _, stale := range []string{
+		"planned follow-on Cypress",
+		"guided-inventory-update/spec.cy.ts",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("ASSISTANT-EXECUTION-012 must not keep stale planned target-highlight wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1511/#1514/#1993",
+		"TestAssistantUITargetRegistryBindsInventoryWalkthroughTargets",
+		"TestAssistantUITargetTraceabilityIsImplemented",
+		"ASSISTANT-WORKSPACE-008/#1503 renders app-control route and preview cards from assistant thread context",
+		"ui-guidance-highlight",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("ASSISTANT-EXECUTION-012 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestDiscovery003TraceabilityNamesMergedCandidateProvenanceEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "DISCOVERY-003")
+	for _, stale := range []string{
+		"planned Cypress",
+		"planned:",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("DISCOVERY-003 must not keep stale planned UI evidence wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1111/#1124/#1125/#1995",
+		"TestDiscoveriesPurposeAndHandoffSpecContracts",
+		"TestDiscoveryCandidateContractIncludesStatusAndSourceResultAuditLink",
+		"UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions",
+		"source/provider",
+		"triage status",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("DISCOVERY-003 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestAgentUniversalChannels002TraceabilityNamesCapabilityExplanationEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "AGENT-UNIVERSAL-CHANNELS-002")
+	for _, stale := range []string{
+		"| partial |",
+		"| planned |",
+		"planned:",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("AGENT-UNIVERSAL-CHANNELS-002 must not keep stale capability-explanation wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1701/#1977/#1997",
+		"registry-derived capability/setup-state explanation",
+		"TestAgentCapabilityExplanationDerivesFromRegistryAndProfileAuthority",
+		"TestChatMessagesExplainAgentCapabilitiesForMainAndSidePanel",
+		"direct API, main Chat, and side-panel Chat",
+		"without claiming live Telegram/external-channel completion",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("AGENT-UNIVERSAL-CHANNELS-002 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestAgentSkillsRegistry009TraceabilityNamesRemainingExecutionBoundary(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "AGENT-SKILLS-REGISTRY-009")
+	for _, stale := range []string{
+		"#1667/#1668/#1672/#1715/#1981;",
+		"routes through governed capability/workflow/UI target/command/provider readiness/preview-apply/Action Timeline boundaries",
+		"remaining in-app UI target, shell command, and provider-readiness execution dispatch proof",
+		"remaining shell command and provider-readiness execution dispatch proof",
+		"remaining provider-readiness execution dispatch proof",
+		"| partial |",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("AGENT-SKILLS-REGISTRY-009 must not keep stale broad execution wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| implemented |",
+		"#1667/#1668/#1672/#1715/#1981/#1999/#2003/#2005/#2007",
+		"TestAgentSkillAPIPropagatesInvocationSourceContext",
+		"TestAgentSkillDirectAPIRecordsGovernedTimelineEvidence",
+		"preview-required non-mutation",
+		"confirmed mutation",
+		"read-only non-mutating execution",
+		"UI target ids",
+		"shell command ids",
+		"provider readiness ids",
+		"provider ids",
+		"dispatch boundary",
+		"dispatch outcome",
+		"without duplicating #1981 direct timeline evidence",
+		"or claiming live Telegram/external-channel completion or live provider credentials",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("AGENT-SKILLS-REGISTRY-009 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func TestAgentSkillCoverage001TraceabilityNamesMergedCoverageMatrixEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := traceabilityRow(t, string(raw), "AGENT-SKILL-COVERAGE-001")
+	for _, stale := range []string{
+		"#1701/#1702/#1666/#1987/#1989;",
+		"per-surface Agent skill coverage matrix lists required Cabinet surfaces",
+		"without claiming Settings/Profile UI/channel dispatch",
+		"Settings/Profile UI/channel dispatch, and #1701 parent closure",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, restore drill, Settings Data/Maintenance, and #1701 parent closure",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("AGENT-SKILL-COVERAGE-001 must not keep stale broad coverage wording %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"| partial |",
+		"#1701/#1702/#1666/#1985/#1987/#1989/#2001/#2009/#2011/#2013/#2015/#2017/#2019/#2021/#2023",
+		"#1985 reconciles the Skills page detail/actions entry point",
+		"#1987 binds Inbox review Agent launch context",
+		"#1989 reconciles Inbox missing/stale context evidence",
+		"#2009 reconciles Settings/Profile",
+		"structured `settings_profile` payloads",
+		"key-only persisted-setting evidence",
+		"#2011 reconciles Settings/Profile UI/channel dispatch",
+		"side-panel Agent Skill preview/apply dispatch",
+		"`source_channel=in-app`",
+		"private-note redaction",
+		"#2013 reconciles Settings/Appearance UI/channel dispatch",
+		"`setting_key`/`setting_scope`/`setting_value` parameters",
+		"setting-value redaction",
+		"#2015 reconciles Settings/Account",
+		"structured `settings_account` payloads",
+		"#2017 reconciles Settings/Account UI/channel dispatch",
+		"structured `settings_account` parameters",
+		"#2019 reconciles Settings Storage UI/channel dispatch",
+		"`backup_target`/`backup_schedule`/`storage_note` parameters",
+		"local filesystem path redaction",
+		"no external-write claim",
+		"#2021 reconciles Settings Data/Maintenance UI/channel dispatch",
+		"`maintenance_scope`/`check_level`/`maintenance_note` parameters",
+		"without claiming real import/restore persistence, destructive restore drill, live Telegram/external-channel validation, packaged/release acceptance, or #1701 parent closure",
+		"#2023 reconciles Settings Data import/restore direct API persistence and restore-drill proof",
+		"selected fixture import persistence",
+		"profile-scoped setting/item changes",
+		"key-only persisted-setting evidence",
+		"selected path/raw payload redaction",
+		"restore-drill SHA-256 integrity evidence",
+		"profile isolation without touching live user data",
+		"TestAgentSkillCoverageMatrixBindsSkillsPageToMergedIssue1670Evidence",
+		"TestAgentSkillCoverageMatrixBindsInboxReviewToIssue1987Evidence",
+		"TestAgentSkillCoverageMatrixBindsInboxMissingStaleContextToIssue1987Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsProfilePersistenceToIssue2009Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue2011Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsAccountPersistenceToIssue2015Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsAccountUIChannelDispatchToIssue2017Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue2013Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue2019Evidence",
+		"TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchToIssue2021Evidence",
+		"TestAgentSkillCoverageMatrixBindsDataImportRestorePersistenceToIssue2023Evidence",
+		"remaining partial status is limited to live Telegram/external-channel validation, broader unfinished matrix surfaces, and #1701 parent closure",
+		"without duplicating closed #1985/#1989 scope",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("AGENT-SKILL-COVERAGE-001 traceability row must include %q; row: %s", required, row)
+		}
+	}
+}
+
+func traceabilityRow(t *testing.T, raw, id string) string {
+	t.Helper()
+	prefixWithTicks := "| `" + id + "` |"
+	prefixWithoutTicks := "| " + id + " |"
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.HasPrefix(line, prefixWithTicks) || strings.HasPrefix(line, prefixWithoutTicks) {
+			return line
+		}
+	}
+	t.Fatalf("missing traceability row for %s", id)
+	return ""
 }

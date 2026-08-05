@@ -95,7 +95,11 @@ func (p *OpenAIAssistantProvider) RunAssistantTurn(ctx context.Context, req Assi
 		respBase.SetupNextAction = "configure_openai_api_key"
 		return respBase, fmt.Errorf("openai api key is required")
 	}
-	text, err := p.service.runAssistantChatCompletion(ctx, apiKey, respBase.Model, req.Messages)
+	service := p.service
+	if baseURL := strings.TrimSpace(setup.BaseURL); baseURL != "" {
+		service = NewService(Config{BaseURL: baseURL})
+	}
+	text, err := service.runAssistantChatCompletion(ctx, apiKey, respBase.Model, req.Messages)
 	if err != nil {
 		respBase.ErrorClass = classifyAssistantProviderError(err)
 		respBase.SetupNextAction = assistantProviderFailureNextAction(respBase.ErrorClass)
@@ -366,6 +370,7 @@ func openAIAssistantSetupMetadata(setup AssistantProviderSetup) map[string]strin
 		"health_state":              strings.TrimSpace(setup.HealthState),
 		"integration_mode":          strings.TrimSpace(setup.IntegrationMode),
 		"integration_id":            strings.TrimSpace(setup.IntegrationID),
+		"base_domain":               providerBaseDomain(setup.BaseURL),
 		"config_schema_ref":         strings.TrimSpace(setup.ConfigSchemaRef),
 		"workflow_ref":              strings.TrimSpace(setup.WorkflowReference),
 		"cabinet_tool_authority":    "none",
@@ -379,6 +384,19 @@ func openAIAssistantSetupMetadata(setup AssistantProviderSetup) map[string]strin
 		}
 	}
 	return metadata
+}
+
+func providerBaseDomain(baseURL string) string {
+	trimmed := strings.TrimSpace(baseURL)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.TrimPrefix(trimmed, "https://")
+	trimmed = strings.TrimPrefix(trimmed, "http://")
+	if slash := strings.Index(trimmed, "/"); slash >= 0 {
+		trimmed = trimmed[:slash]
+	}
+	return trimmed
 }
 
 func (s *Service) SuggestFromPhoto(ctx context.Context, apiKey, imageURL string) (Suggestion, error) {

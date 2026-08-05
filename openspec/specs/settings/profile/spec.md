@@ -1,5 +1,5 @@
 ## Purpose
-Define Profile settings screen behavior.
+Define Profile settings screen behavior for identity details, profile links, Telegram capture authorization, persistence feedback, and missing active-profile recovery.
 
 ## Requirements
 ### Requirement UI-SCREEN-SETTINGS-PROFILE-001: Profile screen SHALL support validated profile editing

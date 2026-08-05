@@ -190,6 +190,20 @@ type AgentSelectedRecord = {
   route_id?: string
 }
 
+type InboxAgentContext = {
+  profile_id?: string
+  thread_id?: string
+  route_id?: string
+  surface_id?: string
+  source_channel?: string
+  selected_notification?: {
+    id?: string
+    source?: string
+  }
+  source_thread_id?: string
+  source_message_id?: string
+}
+
 type AgentSkillOption = {
   id: string
   label: string
@@ -223,6 +237,46 @@ const agentSkillOptions = [
     primaryLabel: 'Provider',
     contextLabel: 'Setup step',
     secretLabel: 'Secret input is redacted',
+  },
+  {
+    id: 'cabinet.settings.update_profile',
+    label: 'Update profile settings',
+    surface: 'settings.profile.form',
+    primaryLabel: 'Display currency',
+    contextLabel: 'Timezone',
+    secretLabel: 'Private note',
+  },
+  {
+    id: 'cabinet.settings.update_account',
+    label: 'Update account settings',
+    surface: 'settings.account.form',
+    primaryLabel: 'Account email',
+    contextLabel: 'Locale',
+    secretLabel: 'Private account note',
+  },
+  {
+    id: 'cabinet.settings.update_appearance',
+    label: 'Update appearance settings',
+    surface: 'settings.appearance.form',
+    primaryLabel: 'Setting key',
+    contextLabel: 'Setting scope',
+    secretLabel: 'Setting value',
+  },
+  {
+    id: 'cabinet.storage.configure_backup',
+    label: 'Configure backup storage',
+    surface: 'settings.storage.backup',
+    primaryLabel: 'Backup target',
+    contextLabel: 'Backup schedule',
+    secretLabel: 'Private storage note',
+  },
+  {
+    id: 'cabinet.maintenance.run_safe_check',
+    label: 'Run data maintenance check',
+    surface: 'settings.data.maintenance',
+    primaryLabel: 'Maintenance scope',
+    contextLabel: 'Check level',
+    secretLabel: 'Private maintenance note',
   },
   {
     id: 'cabinet.market_watch.run_watch',
@@ -519,6 +573,29 @@ function surfaceIDForAgentSelectedRecord(record: AgentSelectedRecord | null) {
   return `${record.type}.detail`
 }
 
+function loadInboxAgentContext(
+  profileId: string,
+  threadId: string
+): InboxAgentContext | null {
+  if (typeof window === 'undefined' || !profileId || !threadId) return null
+  try {
+    const raw = window.localStorage.getItem(
+      'cabinet.agent.inbox_notification_context'
+    )
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as InboxAgentContext
+    if (parsed.profile_id !== profileId || parsed.thread_id !== threadId) {
+      return null
+    }
+    if (!parsed.selected_notification?.id?.trim()) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 function defaultModelForProvider(provider: string) {
   return (
     assistantProviderOptions.find((option) => option.provider === provider)
@@ -674,12 +751,18 @@ export function AssistantWorkspacePanel() {
     () => loadAgentSelectedRecord(activeProfileId, routeContext.pathname),
     [activeProfileId, messages.length, routeContext.pathname, location.search]
   )
+  const inboxAgentContext = useMemo(
+    () => loadInboxAgentContext(activeProfileId, threadId),
+    [activeProfileId, threadId, messages.length]
+  )
   const agentContextEnvelope = useMemo(
     () => ({
       profile_id: activeProfileId,
       workspace_id: profileScope,
-      route_id: routeContext.pathname,
-      surface_id: surfaceIDForAgentSelectedRecord(selectedAgentRecordContext),
+      route_id: inboxAgentContext?.route_id || routeContext.pathname,
+      surface_id:
+        inboxAgentContext?.surface_id ||
+        surfaceIDForAgentSelectedRecord(selectedAgentRecordContext),
       selected_record: selectedAgentRecordContext
         ? {
             type: selectedAgentRecordContext.type,
@@ -687,12 +770,21 @@ export function AssistantWorkspacePanel() {
           }
         : undefined,
       thread_id: threadId,
-      source_channel: 'in-app',
+      source_channel: inboxAgentContext?.source_channel || 'in-app',
+      selected_notification: inboxAgentContext?.selected_notification
+        ? {
+            id: inboxAgentContext.selected_notification.id,
+            source: inboxAgentContext.selected_notification.source,
+          }
+        : undefined,
+      source_thread_id: inboxAgentContext?.source_thread_id,
+      source_message_id: inboxAgentContext?.source_message_id,
       permission_state: 'ask_before_local_changes',
       setup_state: 'ready',
     }),
     [
       activeProfileId,
+      inboxAgentContext,
       profileScope,
       routeContext.pathname,
       selectedAgentRecordContext,
@@ -1413,7 +1505,7 @@ export function AssistantWorkspacePanel() {
     const primary = agentSkillProvider.trim()
     const context = agentSkillSetupStep.trim()
     const secretOrTarget = agentSkillSecret.trim()
-    const params: Record<string, string> = {}
+    const params: Record<string, string | Record<string, string>> = {}
     if (agentSkillID === 'cabinet.dashboard.summarise_activity') {
       if (primary) {
         params.window = primary
@@ -1594,6 +1686,52 @@ export function AssistantWorkspacePanel() {
       }
       if (secretOrTarget) {
         params.notes = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.settings.update_profile') {
+      params.settings_profile = {
+        display_currency: primary,
+        timezone: context,
+        profile_private_note: secretOrTarget,
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.settings.update_account') {
+      params.settings_account = {
+        account_email: primary,
+        locale: context,
+        account_private_note: secretOrTarget,
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.settings.update_appearance') {
+      params.setting_key = primary
+      params.setting_scope = context || 'appearance'
+      params.setting_value = secretOrTarget
+      return params
+    }
+    if (agentSkillID === 'cabinet.storage.configure_backup') {
+      if (primary) {
+        params.backup_target = primary
+      }
+      if (context) {
+        params.backup_schedule = context
+      }
+      if (secretOrTarget) {
+        params.storage_note = secretOrTarget
+      }
+      return params
+    }
+    if (agentSkillID === 'cabinet.maintenance.run_safe_check') {
+      if (primary) {
+        params.maintenance_scope = primary
+      }
+      if (context) {
+        params.check_level = context
+      }
+      if (secretOrTarget) {
+        params.maintenance_note = secretOrTarget
       }
       return params
     }

@@ -32,14 +32,60 @@ Algolia-backed providers SHALL discover application/search keys and index names 
 ### Requirement PROVIDER-FAMILY-004: Family contracts SHALL expose shared pagination/stock normalization semantics
 All API families SHALL map to common pagination/stock schema to keep Market Watch behavior consistent.
 
+#### Scenario: Unified normalization output
+- **GIVEN** provider run returns family-specific payload
+- **WHEN** normalization completes
+- **THEN** output MUST include common fields: `provider_id`, `query`, `page`, `effective_page_size`, `candidate_count`, `stock_signal` (with source attribution), and `observed_at`
+
 ### Requirement PROVIDER-FAMILY-005: Provider onboarding SHALL support URL-based API family auto-detection
 Given a provider homepage URL, onboarding SHALL run detection heuristics to infer likely API family and confidence before manual confirmation.
+
+#### Scenario: URL-based family detection
+- **GIVEN** user enters provider homepage URL
+- **WHEN** detection process scans page HTML/assets/scripts/known endpoints
+- **THEN** runtime MUST propose `api_family` with confidence score and evidence markers
+- **AND** user MUST confirm or override mapping before saving provider
+
+#### Scenario: Detection heuristics evidence
+- **GIVEN** detector runs against provider URL
+- **WHEN** result is returned
+- **THEN** evidence MUST include matched markers such as:
+  - WooCommerce: `/wp-json/wc/store/v1`, `woocommerce` markers
+  - Boost/Shopify: `services.mybcapps.com/bc-sf-filter`, Boost script signatures
+  - Algolia: `algoliasearch(` calls, app/search key/index markers
+  - Shopify JSON: `/products.json` or `/collections/*/products.json` endpoint responses
+  - Doofinder: `cdn.doofinder.com` loader/config script + `hashid`/`search_engines` markers
 
 ### Requirement PROVIDER-FAMILY-006: BigCommerce family SHALL support storefront-access-first retrieval with token-aware fallback
 BigCommerce-backed providers SHALL use available storefront-accessible data paths first and support token-aware GraphQL/management API integration when credentials are provided.
 
+#### Scenario: BigCommerce public/storefront-access run
+- **GIVEN** provider is classified as BigCommerce family and no privileged API token is configured
+- **WHEN** query run executes
+- **THEN** runtime MUST use storefront-accessible endpoints/content paths and normalize candidates
+- **AND** runtime MUST record capability limits when stock/variant depth is unavailable without token
+
+#### Scenario: BigCommerce token-enabled run
+- **GIVEN** provider has valid BigCommerce storefront/admin credentials configured
+- **WHEN** query run executes
+- **THEN** runtime MAY use GraphQL Storefront and/or Management API paths for richer catalog/stock fields
+- **AND** run summary MUST declare auth mode and data depth source
+- **AND** token-enabled run output MUST persist normalized provider-domain candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
+
 ### Requirement PROVIDER-FAMILY-007: Doofinder family SHALL support hashid-based search with origin-aware headers
 Doofinder-backed providers SHALL execute search via Doofinder search endpoint using discovered `hashid` and required origin/referrer headers when enforced by endpoint policy.
+
+#### Scenario: Doofinder search execution
+- **GIVEN** provider is classified as Doofinder family and hashid is discovered from Doofinder config
+- **WHEN** runtime executes query
+- **THEN** runtime MUST call Doofinder search endpoint with query/page/rpp params
+- **AND** runtime MUST include origin/referrer headers where required to avoid forbidden responses
+- **AND** provider-specific run output MUST persist normalized candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
+
+#### Scenario: Doofinder discovery inputs
+- **GIVEN** onboarding detection scans provider assets
+- **WHEN** Doofinder scripts/config are present
+- **THEN** runtime MUST extract `store` UUID, `zone`, and `hashid` (`search_engines` mapping) for query execution
 
 ### Requirement PROVIDER-FAMILY-008: Provider URL router SHALL detect known product URLs deterministically
 Cabinet SHALL parse pasted URLs, normalize host/path values, and route known provider product URLs to the matching provider family without AI inference.
@@ -79,13 +125,6 @@ WooCommerce-backed product URL ingestion SHALL resolve product detail from the p
 - **THEN** runtime MAY use product page metadata or HTML to fill missing title, image, price, category, description, or stock fields
 - **AND** fallback evidence MUST identify the field source
 
-#### Scenario: Doofinder search execution
-- **GIVEN** provider is classified as Doofinder family and hashid is discovered from Doofinder config
-- **WHEN** runtime executes query
-- **THEN** runtime MUST call Doofinder search endpoint with query/page/rpp params
-- **AND** runtime MUST include origin/referrer headers where required to avoid forbidden responses
-- **AND** provider-specific run output MUST persist normalized candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
-
 ### Requirement PROVIDER-FAMILY-010: Shopify storefront family SHALL use public catalogue JSON without private APIs
 Shopify-backed source-matching providers SHALL use public storefront catalogue endpoints such as `/products.json` or collection product JSON responses for catalogue discovery.
 
@@ -102,45 +141,6 @@ Shopify-backed source-matching providers SHALL use public storefront catalogue e
 - **THEN** runtime MUST persist normalized candidates into the shared scanner/Discoveries candidate store
 - **AND** the query-set latest-run snapshot MUST hydrate after reload with succeeded status and candidate count
 - **AND** provider health MUST record public storefront proof for the provider id and market-watch scope without claiming private API, login, cart, checkout, payment, or admin API support
-
-#### Scenario: Doofinder discovery inputs
-- **GIVEN** onboarding detection scans provider assets
-- **WHEN** Doofinder scripts/config are present
-- **THEN** runtime MUST extract `store` UUID, `zone`, and `hashid` (`search_engines` mapping) for query execution
-
-#### Scenario: BigCommerce public/storefront-access run
-- **GIVEN** provider is classified as BigCommerce family and no privileged API token is configured
-- **WHEN** query run executes
-- **THEN** runtime MUST use storefront-accessible endpoints/content paths and normalize candidates
-- **AND** runtime MUST record capability limits when stock/variant depth is unavailable without token
-
-#### Scenario: BigCommerce token-enabled run
-- **GIVEN** provider has valid BigCommerce storefront/admin credentials configured
-- **WHEN** query run executes
-- **THEN** runtime MAY use GraphQL Storefront and/or Management API paths for richer catalog/stock fields
-- **AND** run summary MUST declare auth mode and data depth source
-- **AND** token-enabled run output MUST persist normalized provider-domain candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
-
-#### Scenario: URL-based family detection
-- **GIVEN** user enters provider homepage URL
-- **WHEN** detection process scans page HTML/assets/scripts/known endpoints
-- **THEN** runtime MUST propose `api_family` with confidence score and evidence markers
-- **AND** user MUST confirm or override mapping before saving provider
-
-#### Scenario: Detection heuristics evidence
-- **GIVEN** detector runs against provider URL
-- **WHEN** result is returned
-- **THEN** evidence MUST include matched markers such as:
-  - WooCommerce: `/wp-json/wc/store/v1`, `woocommerce` markers
-  - Boost/Shopify: `services.mybcapps.com/bc-sf-filter`, Boost script signatures
-  - Algolia: `algoliasearch(` calls, app/search key/index markers
-  - Shopify JSON: `/products.json` or `/collections/*/products.json` endpoint responses
-  - Doofinder: `cdn.doofinder.com` loader/config script + `hashid`/`search_engines` markers
-
-#### Scenario: Unified normalization output
-- **GIVEN** provider run returns family-specific payload
-- **WHEN** normalization completes
-- **THEN** output MUST include common fields: `provider_id`, `query`, `page`, `effective_page_size`, `candidate_count`, `stock_signal` (with source attribution), and `observed_at`
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
