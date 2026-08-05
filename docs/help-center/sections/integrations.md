@@ -25,6 +25,14 @@ Cabinet accepts companion traffic only over loopback and binds a random credenti
 
 The companion captures only supported page data that the collector is legitimately viewing. It must not export browser cookies, solve access challenges, crawl invisibly or perform provider writes. Item and media submissions remain passive transport envelopes until Cabinet's review and persistence workflow explicitly accepts them.
 
+### Install and use the Chrome or Edge companion
+
+Cabinet uses one modular Manifest V3 companion for Chrome and Edge. A paired extension loads the current profile's enabled browser integrations from Cabinet; installing a separate extension per provider is not required. During development, open `chrome://extensions` or `edge://extensions`, enable developer mode, select **Load unpacked**, and choose the repository's `browser-extension` directory. Store-signed packages and checksums are handled by the extension release process.
+
+The popup always shows a Cabinet row and then zero, one or many enabled browser modules. Choose **Open Cabinet** to focus the local app. For a provider, grant its exact optional site permission, open its page and choose **Check session**. An open tab alone is not treated as proof of login. The companion reports **Site access required**, **Browser required**, **Signed out**, **Action required**, **Ready to sync**, or **Page not supported** from bounded module evidence. A challenge always requires normal user action in the provider tab.
+
+Enabled integrations, display names, start pages, exact origins, URL patterns, capture schemas, workflows, redaction rules, fixture version, item/media policy, review destination, cadence, help path and readiness evidence come from Cabinet's versioned module registry. Chrome and Edge therefore use the same host code, and later provider modules can be added without provider branches in the popup or background worker. The extension persists idempotent pending jobs across service-worker, browser and Cabinet restarts, uses bounded retry backoff, and keeps its pending/error state visible. Item and image persistence remains owned by #2032, so Cabinet currently advertises `sync_available: false`; a ready page must not be described as synchronised until that pipeline accepts it.
+
 This boundary cannot protect a credential from malware or another person who already controls the unlocked operating-system account, Cabinet process or browser profile. If local compromise is suspected, close Cabinet, secure the operating-system account, revoke all companion sessions after recovery, remove unknown extensions, reinstall the trusted extension and pair again. Restore Cabinet from a known-good backup if its local database may have been altered.
 
 ## eBay setup

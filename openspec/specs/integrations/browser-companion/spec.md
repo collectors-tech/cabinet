@@ -89,3 +89,47 @@ Cabinet SHALL document the browser-origin, local-compromise and recovery boundar
 - **THEN** they MUST be able to revoke one or all profile sessions and pair again
 - **AND** development and production extension origins MUST pair separately
 - **AND** no recovery step may ask the collector to copy a credential into a URL, log, screenshot or chat.
+
+### Requirement INTEGRATION-072: One MV3 host MUST project enabled integrations from Cabinet
+The Browser Companion SHALL use one Chrome/Edge Manifest V3 host whose popup and background runtime consume versioned profile modules from Cabinet rather than provider-specific host branches.
+
+#### Scenario: Project zero, one or many enabled modules
+- **GIVEN** a paired profile with any number of enabled browser-capable integration instances
+- **WHEN** the extension refreshes authenticated module discovery
+- **THEN** it MUST show a Cabinet row and one accessible row per returned integration-instance identifier
+- **AND** disabled, cross-profile or hardcoded provider rows MUST remain absent
+- **AND** a new valid provider module MUST NOT require a popup or background-worker code change.
+
+### Requirement INTEGRATION-073: Provider permission and readiness MUST remain truthful
+Each browser module SHALL declare bounded exact HTTPS origins, a start URL and selectors for ready, logged-out and challenge states.
+
+#### Scenario: Check a provider session
+- **GIVEN** a module row in the companion
+- **WHEN** the collector grants or removes optional site access, opens its provider page, or checks session readiness
+- **THEN** the extension MUST distinguish permission-required, browser-required, logged-out, action-required, ready and unsupported states
+- **AND** an open tab alone MUST NOT prove login
+- **AND** challenge evidence MUST take priority and MUST NOT be solved or bypassed by the extension.
+
+#### Scenario: Keep Cabinet authoritative for module behaviour
+- **GIVEN** an enabled browser integration
+- **WHEN** Cabinet publishes its versioned module definition
+- **THEN** the definition MUST include URL patterns, capture schemas, supported workflows, redaction rules, fixture version, capture mode, item/media policy, review destination, cadence and help path
+- **AND** `sync_available` MUST remain false until a packaged capture script and durable Cabinet persistence path both exist.
+
+### Requirement INTEGRATION-074: Background sync control MUST survive suspension
+The MV3 service worker SHALL persist idempotent queued work and expose bounded retry, pending and error state without claiming provider or Cabinet mutations that have not completed.
+
+#### Scenario: Resume after interruption
+- **GIVEN** a queued passive sync job and an interrupted service worker, browser or Cabinet runtime
+- **WHEN** the extension resumes
+- **THEN** it MUST restore one copy of the job, apply bounded retry and circuit-breaker state, and remove it only after Cabinet accepts it
+- **AND** the popup and badge MUST keep pending or error state visible.
+
+### Requirement INTEGRATION-075: Extension permissions and privacy MUST be reviewable
+The extension SHALL document its loopback access, credential storage, optional-origin model, passive-only boundary and permission-removal path.
+
+#### Scenario: Review or withdraw browser access
+- **GIVEN** a collector evaluating or using the companion
+- **WHEN** they review its privacy disclosure or remove a module permission
+- **THEN** the disclosure MUST state that cookies, passwords, tokens and challenge answers are prohibited
+- **AND** removing the exact site permission MUST stop that module's browser access without revoking unrelated modules.

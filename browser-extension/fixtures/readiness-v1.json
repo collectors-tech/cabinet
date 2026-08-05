@@ -1,0 +1,14 @@
+{
+  "fixture_version": "1",
+  "definition": {
+    "ready": ["[data-fixture-state=ready]"],
+    "logged_out": ["[data-fixture-state=logged-out]"],
+    "challenge": ["[data-fixture-state=challenge]"]
+  },
+  "cases": [
+    { "name": "signed in", "evidence": ["[data-fixture-state=ready]"], "expected": "ready" },
+    { "name": "signed out", "evidence": ["[data-fixture-state=logged-out]"], "expected": "logged_out" },
+    { "name": "challenge", "evidence": ["[data-fixture-state=challenge]"], "expected": "action_required" },
+    { "name": "unknown page", "evidence": [], "expected": "unsupported" }
+  ]
+}
