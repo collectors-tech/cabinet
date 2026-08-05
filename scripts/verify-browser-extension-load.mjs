@@ -25,6 +25,20 @@ const targets = async (port) => {
   }
 }
 
+const waitForDevTools = async (port, browserProcess) => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`)
+      if (response.ok) return
+    } catch {
+      // The browser has not finished opening its debugging transports yet.
+    }
+    if (browserProcess.exitCode !== null) break
+    await pause(200)
+  }
+  throw new Error(`devtools_not_ready:${port}`)
+}
+
 const cdpCommand = (browserProcess, method, params) => new Promise((resolveCommand, rejectCommand) => {
   const input = browserProcess.stdio[3]
   const output = browserProcess.stdio[4]
@@ -69,6 +83,7 @@ const verify = async (browser, port) => {
   process.stdout.on('data', (chunk) => output.push(chunk.toString()))
   process.stderr.on('data', (chunk) => output.push(chunk.toString()))
 
+  await waitForDevTools(port, process)
   const loaded = await cdpCommand(process, 'Extensions.loadUnpacked', { path: extensionRoot })
   assert.match(loaded?.id ?? '', /^[a-p]{32}$/, `${browser.name} did not return a valid extension ID`)
 
