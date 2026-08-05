@@ -81,9 +81,12 @@ jobs:
       - name: OpenAPI parity and docs
         shell: pwsh
         run: |
-          go test ./internal/app -run TestOpenAPIDocumentsOnboardingSampleDataEndpoint -count=1 *>&1 | Tee-Object .logs/release-candidate/openapi-go.log
+          go run ./cmd/openapi-parity-gate *>&1 | Tee-Object .logs/release-candidate/openapi-go.log
+          if ($LASTEXITCODE -ne 0) { throw "OpenAPI parity gate failed with exit code $LASTEXITCODE" }
           npx --yes @redocly/cli@latest lint docs/api/openapi.yaml *>&1 | Tee-Object .logs/release-candidate/openapi-lint.log
+          if ($LASTEXITCODE -ne 0) { throw "OpenAPI lint failed with exit code $LASTEXITCODE" }
           npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html *>&1 | Tee-Object .logs/release-candidate/openapi-build.log
+          if ($LASTEXITCODE -ne 0) { throw "OpenAPI docs build failed with exit code $LASTEXITCODE" }
 
       - name: Cypress release pack
         shell: pwsh
@@ -120,4 +123,3 @@ jobs:
             ui.web/cypress/artifacts
             ui.web/cypress/screenshots
             ui.web/cypress/videos
-

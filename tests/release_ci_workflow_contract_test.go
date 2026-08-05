@@ -34,7 +34,7 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 		"fetch-depth: 0",
 		"go test ./internal/... ./cmd/...",
 		"Build runtime UI static bundle for OpenAPI tests",
-		"go test ./internal/app -run TestOpenAPIDocumentsOnboardingSampleDataEndpoint -count=1",
+		"go run ./cmd/openapi-parity-gate",
 		"@redocly/cli@latest lint docs/api/openapi.yaml",
 		"@redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html",
 		"npm run e2e:ci-smoke",
@@ -98,5 +98,33 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		if strings.Contains(content, forbidden) {
 			t.Fatalf("release-candidate gate contains forbidden fragment %q", forbidden)
 		}
+	}
+}
+
+func TestReleaseWorkflowsUseVerifiedOpenAPIParityGate(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := resolveRepoRoot(t)
+	for _, relativePath := range []string{
+		filepath.Join(".github", "workflows", "develop-quality-gate.yml"),
+		filepath.Join(".github", "workflows", "beta-release-candidate.yml"),
+		filepath.Join(".github", "workflows", "main-gate.yml"),
+	} {
+		relativePath := relativePath
+		t.Run(relativePath, func(t *testing.T) {
+			t.Parallel()
+
+			raw, err := os.ReadFile(filepath.Join(repoRoot, relativePath))
+			if err != nil {
+				t.Fatalf("read %s: %v", relativePath, err)
+			}
+			content := string(raw)
+			if !strings.Contains(content, "go run ./cmd/openapi-parity-gate") {
+				t.Fatalf("%s does not invoke the verified OpenAPI parity gate", relativePath)
+			}
+			if strings.Contains(content, "TestOpenAPIDocumentsOnboardingSampleDataEndpoint") {
+				t.Fatalf("%s still invokes the nonexistent OpenAPI test target", relativePath)
+			}
+		})
 	}
 }

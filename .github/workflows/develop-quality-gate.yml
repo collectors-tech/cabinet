@@ -111,8 +111,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Verify critical API/OpenAPI parity tests
-        run: go test ./internal/app -run TestOpenAPIDocumentsOnboardingSampleDataEndpoint -count=1
+      - name: Verify complete API/OpenAPI parity suite
+        run: go run ./cmd/openapi-parity-gate
       - name: Lint OpenAPI
         run: npx --yes @redocly/cli@latest lint docs/api/openapi.yaml
       - name: Build API docs
