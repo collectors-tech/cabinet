@@ -78,6 +78,34 @@ jobs:
         shell: pwsh
         run: node --test browser-extension/tests/*.test.mjs *>&1 | Tee-Object .logs/release-candidate/browser-companion-contract.log
 
+      - name: Browser Companion package controls
+        shell: pwsh
+        run: npm run test:companion-package *>&1 | Tee-Object .logs/release-candidate/browser-companion-package-test.log
+
+      - name: Enforce immutable Browser Companion version tag
+        shell: pwsh
+        run: |
+          $releaseConfig = Get-Content browser-extension/release.json -Raw | ConvertFrom-Json
+          $sourcePrefix = "${{ steps.commit.outputs.sha }}".Substring(0, 12).ToLowerInvariant()
+          $candidateVersion = "$($releaseConfig.version_name_prefix).g$sourcePrefix"
+          $tag = "$($releaseConfig.immutable_tag_prefix)$candidateVersion"
+          $matchingTag = git tag --list $tag
+          if ($matchingTag) {
+            $tagCommit = git rev-list -n 1 $tag
+            if ($tagCommit -ne "${{ steps.commit.outputs.sha }}") {
+              throw "Immutable Browser Companion version $candidateVersion is already tagged at $tagCommit."
+            }
+          }
+
+      - name: Build and verify exact Browser Companion packages
+        shell: pwsh
+        run: |
+          $epoch = git show -s --format=%ct HEAD
+          node scripts/package-browser-companion.mjs --source-commit "${{ steps.commit.outputs.sha }}" --source-date-epoch $epoch --output dist/browser-companion --keep-staging *>&1 | Tee-Object .logs/release-candidate/browser-companion-package.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion packaging failed with exit code $LASTEXITCODE" }
+          node scripts/verify-browser-companion-package.mjs --manifest dist/browser-companion/browser-companion-release-manifest.json --expected-source-commit "${{ steps.commit.outputs.sha }}" *>&1 | Tee-Object .logs/release-candidate/browser-companion-verify.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion verification failed with exit code $LASTEXITCODE" }
+
       - name: Full Go test suite
         shell: pwsh
         run: go test ./... *>&1 | Tee-Object .logs/release-candidate/go-test.log
@@ -114,7 +142,10 @@ jobs:
             "This workflow validates the exact checkout only and does not merge develop into main."
           )
           $summary | Set-Content .logs/release-candidate/summary.md
-          $summary | Add-Content $env:GITHUB_STEP_SUMMARY
+          if (Test-Path dist/browser-companion/browser-companion-candidate-summary.md) {
+            Get-Content dist/browser-companion/browser-companion-candidate-summary.md | Add-Content .logs/release-candidate/summary.md
+          }
+          Get-Content .logs/release-candidate/summary.md | Add-Content $env:GITHUB_STEP_SUMMARY
 
       - name: Upload release-candidate logs
         if: always()
@@ -127,3 +158,8 @@ jobs:
             ui.web/cypress/artifacts
             ui.web/cypress/screenshots
             ui.web/cypress/videos
+            dist/browser-companion/browser-companion-release-manifest.json
+            dist/browser-companion/browser-companion-candidate-summary.md
+            dist/browser-companion/cabinet-browser-companion-*-release-notes.md
+            dist/browser-companion/cabinet-browser-companion-*.zip
+            dist/browser-companion/cabinet-browser-companion-*.zip.sha256

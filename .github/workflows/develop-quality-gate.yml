@@ -69,7 +69,18 @@ jobs:
         working-directory: ui.web
       - name: Verify Browser Companion protocol lifecycle
         run: node --test browser-extension/tests/*.test.mjs
-      - name: Load Browser Companion in Chrome and Edge
+      - name: Verify Browser Companion package controls
+        run: npm run test:companion-package
+      - name: Build deterministic Browser Companion validation packages
+        run: |
+          companion_sha="$(git rev-parse HEAD)"
+          companion_epoch="$(git show -s --format=%ct HEAD)"
+          node scripts/package-browser-companion.mjs --source-commit "$companion_sha" --source-date-epoch "$companion_epoch" --output "$RUNNER_TEMP/browser-companion" --keep-staging
+          node scripts/verify-browser-companion-package.mjs --manifest "$RUNNER_TEMP/browser-companion/browser-companion-release-manifest.json" --expected-source-commit "$companion_sha"
+      - name: Load packaged Browser Companion in Chrome and Edge
+        env:
+          CABINET_EXTENSION_CHROME_ROOT: ${{ runner.temp }}/browser-companion/.staging/chrome
+          CABINET_EXTENSION_EDGE_ROOT: ${{ runner.temp }}/browser-companion/.staging/edge
         run: node scripts/verify-browser-extension-load.mjs
 
   go-tests:

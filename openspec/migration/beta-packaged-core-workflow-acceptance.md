@@ -17,6 +17,7 @@ The final approval follows packaged acceptance and #1867 data-safety evidence.
 - [ ] Cabinet source commit SHA is recorded.
 - [ ] Browser name/version and Browser Companion package filename are recorded.
 - [ ] Browser Companion package SHA-256, source commit, extension version and release-manifest path are recorded.
+- [ ] Browser Companion production identity, target, protocol compatibility and immutable candidate version match the release manifest; the Development source build is not used.
 - [ ] `/api/runtime.app_version`, build date, runtime port, and pid are recorded.
 - [ ] Cabinet and Browser Companion release notes paths are recorded.
 
@@ -36,6 +37,7 @@ The final approval follows packaged acceptance and #1867 data-safety evidence.
 ## Required Provider and Companion Journey
 
 - [ ] Install the exact Chrome and Edge packages through the documented beta path without developer source tools.
+- [ ] Upgrade and rollback use only verified versioned packages, preserve visible pending jobs, revoke stale origins and fail closed on checksum or protocol mismatch.
 - [ ] Pair to Cabinet through #2033 and verify reconnect, credential rotation, revoke-one and revoke-all.
 - [ ] Enabled browser-capable integration changes propagate from Cabinet without rebuilding the extension.
 - [ ] Cabinet/provider open-focus and ready, login-required, action-required, partial, selector-drift and disconnected states are truthful.

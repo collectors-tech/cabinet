@@ -43,7 +43,7 @@ This is the single repository-side release sequence and evidence hand-off for
 | #2032 item/image observation persistence | Source implementation complete | Commit-before-ack, fixtures, replay, media, restart, safe export and relocated restore are automated; exact packaged proof remains in #1869/#1867 |
 | Frontline (#1944) | Exact-origin module, fail-closed fixtures, persistence and confirmed hand-off implemented; external user-present live proof pending | Exact packaged journey in #1869 |
 | Bonza (#1945) | Decoder/retry removed; exact-origin module, fail-closed fixtures and canonical persistence implemented; external user-present live proof pending | Exact packaged journey in #1869 |
-| #2034 Chrome/Edge packaging | Pending exact files, release manifest and checksums | Nominate the same files/checksums in #1868/#1869 |
+| #2034 Chrome/Edge packaging | Deterministic target packages, release manifest, checksums, verifier, immutable-version preflight and manual recovery guidance implemented; exact candidate files pending #1868 | Nominate and install/pair the same files/checksums in #1868/#1869 |
 
 #1929 may record a provider as source/live ready for packaging while its focused
 issue remains open for #1869 packaged evidence. #1929 closure is not a prerequisite
@@ -61,7 +61,7 @@ for #1868; completion of every source-ready checklist row is.
 | #1936/#1937 canonical media | Merged implementation and migration evidence | Source complete; packaged rerun pending |
 | #1943 Hobbytech | PR #1955 plus live provider-run proof | Source/live ready; packaged rerun pending |
 | #2037 truthful OpenAPI gate | PR #2038; Develop Quality Gate `31018831485` green | Done |
-| #2033/#2035/#2032/#1944/#1945/#2034 | Browser Companion release programme | Source/live gate pending |
+| #2033/#2035/#2032/#1944/#1945/#2034 | Browser Companion release programme | Packaging source implemented; external Frontline/Bonza and exact-candidate evidence pending |
 | #1868 exact internal candidate | Packaging source from PRs #1910/#1913 exists | Rebuild only after source/live gate and freeze |
 | #1869 packaged acceptance | Stable checklist exists | Execute after #1868 internal candidate |
 
