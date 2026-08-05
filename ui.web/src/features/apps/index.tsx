@@ -407,6 +407,34 @@ type ProfileOption = {
   name: string
 }
 
+type CompanionPairingRequest = {
+  request_id: string
+  pairing_code: string
+  device_id: string
+  device_name: string
+  origin: string
+  protocol_version: string
+  capabilities: string[]
+  status: 'pending' | 'approved' | string
+  expires_at: string
+  created_at: string
+}
+
+type CompanionSession = {
+  id: string
+  cabinet_instance_id: string
+  profile_id: string
+  device_id: string
+  device_name: string
+  origin: string
+  protocol_version: string
+  capabilities: string[]
+  created_at: string
+  expires_at: string
+  last_used_at?: string
+  revoked_at?: string
+}
+
 type AppsProps = {
   title?: string
   description?: string
@@ -599,7 +627,10 @@ function providerDefaultSetupSchema(
   if (provider.setup_schema?.fields?.length) {
     return provider.setup_schema
   }
-  if (provider.provider_id !== 'ebay' && provider.integration_mode !== 'web_ingestion') {
+  if (
+    provider.provider_id !== 'ebay' &&
+    provider.integration_mode !== 'web_ingestion'
+  ) {
     return provider.setup_schema
   }
   const keys = providerSettingsKeys(provider.provider_id)
@@ -836,6 +867,16 @@ export function Apps({
   const [providers, setProviders] = useState<ProviderRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+  const [companionPairingRequests, setCompanionPairingRequests] = useState<
+    CompanionPairingRequest[]
+  >([])
+  const [companionSessions, setCompanionSessions] = useState<
+    CompanionSession[]
+  >([])
+  const [companionSecurityError, setCompanionSecurityError] = useState<
+    string | null
+  >(null)
+  const [companionWorking, setCompanionWorking] = useState<string | null>(null)
   const [availableProfiles, setAvailableProfiles] = useState<ProfileOption[]>(
     []
   )
@@ -918,6 +959,33 @@ export function Apps({
   const [landedCostResult, setLandedCostResult] =
     useState<LandedCostPlanResult | null>(null)
 
+  const loadCompanionSecurity = useCallback(async () => {
+    setCompanionSecurityError(null)
+    try {
+      const [pairingResponse, sessionsResponse] = await Promise.all([
+        fetch('/api/companion/pairing/requests'),
+        fetch('/api/companion/sessions'),
+      ])
+      if (!pairingResponse.ok || !sessionsResponse.ok) {
+        throw new Error('companion_security_load_failed')
+      }
+      const pairingPayload = (await pairingResponse.json()) as {
+        requests?: CompanionPairingRequest[]
+      }
+      const sessionsPayload = (await sessionsResponse.json()) as {
+        sessions?: CompanionSession[]
+      }
+      setCompanionPairingRequests(pairingPayload.requests ?? [])
+      setCompanionSessions(sessionsPayload.sessions ?? [])
+    } catch {
+      setCompanionPairingRequests([])
+      setCompanionSessions([])
+      setCompanionSecurityError(
+        'Browser Companion security status is unavailable. Unlock Cabinet and retry.'
+      )
+    }
+  }, [])
+
   const loadBootstrap = useCallback(async () => {
     setLoading(true)
     setBootstrapError(null)
@@ -943,7 +1011,9 @@ export function Apps({
       const registryPayload = (await registryResp.json()) as {
         providers?: ProviderRecord[]
       }
-      setProviders((registryPayload.providers ?? []).map(withDefaultSetupSchema))
+      setProviders(
+        (registryPayload.providers ?? []).map(withDefaultSetupSchema)
+      )
 
       const settingsResp = await fetch(`/api/profiles/${profileID}/settings`)
       if (!settingsResp.ok) {
@@ -953,6 +1023,7 @@ export function Apps({
         settings?: Record<string, string>
       }
       setSettings(settingsPayload.settings ?? {})
+      await loadCompanionSecurity()
     } catch (error) {
       if (
         error instanceof Error &&
@@ -968,7 +1039,7 @@ export function Apps({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loadCompanionSecurity])
 
   useEffect(() => {
     void loadBootstrap()
@@ -1221,6 +1292,80 @@ export function Apps({
         view: nextView === 'rows' ? undefined : nextView,
       }),
     })
+  }
+
+  const approveCompanionPairing = async (request: CompanionPairingRequest) => {
+    setCompanionWorking(request.request_id)
+    setCompanionSecurityError(null)
+    try {
+      const response = await fetch('/api/companion/pairing/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_id: request.request_id,
+          profile_id: activeProfileId,
+          capabilities: request.capabilities,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(`companion_pairing_approval_${response.status}`)
+      }
+      setActionMessage(`Approved Browser Companion ${request.device_name}.`)
+      await loadCompanionSecurity()
+    } catch {
+      setCompanionSecurityError(
+        'Pairing approval failed. Confirm the request is still open and Cabinet is unlocked.'
+      )
+    } finally {
+      setCompanionWorking(null)
+    }
+  }
+
+  const rejectCompanionPairing = async (request: CompanionPairingRequest) => {
+    setCompanionWorking(request.request_id)
+    setCompanionSecurityError(null)
+    try {
+      const response = await fetch(
+        `/api/companion/pairing/requests?id=${encodeURIComponent(request.request_id)}`,
+        { method: 'DELETE' }
+      )
+      if (!response.ok) {
+        throw new Error(`companion_pairing_reject_${response.status}`)
+      }
+      setActionMessage(`Rejected Browser Companion ${request.device_name}.`)
+      await loadCompanionSecurity()
+    } catch {
+      setCompanionSecurityError('Could not reject the pairing request.')
+    } finally {
+      setCompanionWorking(null)
+    }
+  }
+
+  const revokeCompanionSessions = async (sessionID?: string) => {
+    const workingID = sessionID ?? 'all'
+    setCompanionWorking(workingID)
+    setCompanionSecurityError(null)
+    try {
+      const query = sessionID
+        ? `id=${encodeURIComponent(sessionID)}`
+        : 'all=true'
+      const response = await fetch(`/api/companion/sessions?${query}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        throw new Error(`companion_session_revoke_${response.status}`)
+      }
+      setActionMessage(
+        sessionID
+          ? 'Revoked the selected Browser Companion session.'
+          : 'Revoked all Browser Companion sessions for this profile.'
+      )
+      await loadCompanionSecurity()
+    } catch {
+      setCompanionSecurityError('Could not revoke Browser Companion access.')
+    } finally {
+      setCompanionWorking(null)
+    }
   }
 
   const openIntegration = (provider: ProviderRecord) => {
@@ -2452,6 +2597,175 @@ export function Apps({
           <div className='rounded-md border bg-muted/30 px-3 py-2 text-sm'>
             {actionMessage}
           </div>
+        ) : null}
+
+        {!bootstrapError && activeProfileId ? (
+          <section
+            className='rounded-md border bg-muted/20 p-4 text-sm'
+            data-testid='browser-companion-security'
+            aria-labelledby='browser-companion-security-title'
+          >
+            <div className='flex flex-wrap items-start justify-between gap-3'>
+              <div>
+                <h2
+                  id='browser-companion-security-title'
+                  className='font-semibold'
+                >
+                  Browser Companion access
+                </h2>
+                <p className='mt-1 text-muted-foreground'>
+                  Approve only an extension and pairing code you recognise.
+                  Credentials stay hidden and can be revoked here at any time.
+                </p>
+              </div>
+              <div className='flex gap-2'>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  disabled={companionWorking !== null}
+                  onClick={() => void loadCompanionSecurity()}
+                >
+                  Refresh
+                </Button>
+                {companionSessions.some((session) => !session.revoked_at) ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='destructive'
+                    disabled={companionWorking !== null}
+                    onClick={() => void revokeCompanionSessions()}
+                  >
+                    Revoke all
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {companionSecurityError ? (
+              <p
+                className='mt-3 text-destructive'
+                role='alert'
+                data-testid='browser-companion-security-error'
+              >
+                {companionSecurityError}
+              </p>
+            ) : null}
+
+            <div className='mt-4 grid gap-3 lg:grid-cols-2'>
+              <div>
+                <h3 className='font-medium'>Pairing requests</h3>
+                {companionPairingRequests.length ? (
+                  <div className='mt-2 grid gap-2'>
+                    {companionPairingRequests.map((request) => (
+                      <article
+                        key={request.request_id}
+                        className='rounded-md border bg-background p-3'
+                        data-testid={`browser-companion-pairing-${request.request_id}`}
+                      >
+                        <div className='flex flex-wrap justify-between gap-2'>
+                          <div>
+                            <p className='font-medium'>{request.device_name}</p>
+                            <p className='text-muted-foreground'>
+                              Code {request.pairing_code} · {request.origin}
+                            </p>
+                            <p className='mt-1 text-xs text-muted-foreground'>
+                              {request.capabilities.join(', ')} · expires{' '}
+                              {new Date(request.expires_at).toLocaleString()}
+                            </p>
+                          </div>
+                          {request.status === 'pending' ? (
+                            <div className='flex gap-2'>
+                              <Button
+                                type='button'
+                                size='sm'
+                                disabled={companionWorking !== null}
+                                onClick={() =>
+                                  void approveCompanionPairing(request)
+                                }
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                disabled={companionWorking !== null}
+                                onClick={() =>
+                                  void rejectCompanionPairing(request)
+                                }
+                              >
+                                Reject
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className='text-xs font-medium text-muted-foreground'>
+                              Approved; waiting for extension
+                            </span>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className='mt-2 text-muted-foreground'>
+                    No active pairing requests.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <h3 className='font-medium'>Paired extensions</h3>
+                {companionSessions.filter((session) => !session.revoked_at)
+                  .length ? (
+                  <div className='mt-2 grid gap-2'>
+                    {companionSessions
+                      .filter((session) => !session.revoked_at)
+                      .map((session) => (
+                        <article
+                          key={session.id}
+                          className='flex flex-wrap items-start justify-between gap-2 rounded-md border bg-background p-3'
+                          data-testid={`browser-companion-session-${session.id}`}
+                        >
+                          <div>
+                            <p className='font-medium'>{session.device_name}</p>
+                            <p className='text-muted-foreground'>
+                              {session.origin} · protocol{' '}
+                              {session.protocol_version}
+                            </p>
+                            <p className='mt-1 text-xs text-muted-foreground'>
+                              Last used{' '}
+                              {session.last_used_at
+                                ? new Date(
+                                    session.last_used_at
+                                  ).toLocaleString()
+                                : 'never'}{' '}
+                              · expires{' '}
+                              {new Date(session.expires_at).toLocaleString()}
+                            </p>
+                          </div>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            disabled={companionWorking !== null}
+                            onClick={() =>
+                              void revokeCompanionSessions(session.id)
+                            }
+                          >
+                            Revoke
+                          </Button>
+                        </article>
+                      ))}
+                  </div>
+                ) : (
+                  <p className='mt-2 text-muted-foreground'>
+                    No paired extensions for this profile.
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
         ) : null}
 
         <div className='flex items-end justify-between gap-3 sm:items-center'>

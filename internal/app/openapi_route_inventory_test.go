@@ -83,11 +83,32 @@ func TestOpenAPIParitySuite(t *testing.T) {
 	t.Run("critical security and payload contracts are explicit", func(t *testing.T) {
 		_, raw := readOpenAPISpec(t)
 		for path, required := range map[string][]string{
+			"/api/companion/pairing/requests": {
+				"security: []", "CabinetLocalSession", "CompanionDeviceID", "CompanionPairingRequestInput", "CompanionPairingReceipt", "CompanionPairingSummary", `"413":`, `"429":`,
+			},
+			"/api/companion/pairing/approvals": {
+				"CabinetLocalSession", "CabinetOIDCSession", "CompanionPairingApproval", "CompanionPairingSummary", `"401":`, `"409":`,
+			},
+			"/api/companion/pairing/exchanges": {
+				"security: []", "CompanionPairingExchange", "CompanionCredentialResponse", "Cache-Control", `"409":`, `"429":`,
+			},
+			"/api/companion/session": {
+				"CompanionProfileBearer", "CompanionDeviceID", "CompanionSession", "Calling credential revoked", `"401":`, `"429":`,
+			},
+			"/api/companion/session/rotate": {
+				"CompanionProfileBearer", "CompanionCredentialResponse", "Cache-Control", `"401":`, `"429":`,
+			},
+			"/api/companion/sessions": {
+				"CabinetLocalSession", "CabinetOIDCSession", "CompanionSession", "revoked_count", `"401":`,
+			},
 			"/api/companion/modules": {
-				"security: []", "Local loopback module registry", "application/json", "CompanionModuleRegistry", `"400":`,
+				"CompanionProfileBearer", "profile-scoped registry", "application/json", "CompanionModuleRegistry", `"401":`, `"429":`,
 			},
 			"/api/companion/payloads": {
-				"CompanionProfileBearer", "CabinetOIDCSession", "application/json", "CompanionPayloadSubmission", "CompanionAcceptedPayload", `"400":`, `"401":`,
+				"CompanionProfileBearer", "application/json", "CompanionPayloadSubmission", "CompanionAcceptedPayload", `"413":`, `"429":`,
+			},
+			"/api/companion/media-submissions": {
+				"CompanionProfileBearer", "X-Cabinet-Profile", "X-Cabinet-Idempotency-Key", "X-Cabinet-Media-SHA256", "8388608", `"413":`, `"501":`,
 			},
 			"/api/profiles/{profileID}/integration-instances": {
 				"CabinetLocalSession", "CabinetOIDCSession", "application/json", "IntegrationInstancePatch", "IntegrationInstanceList", "IntegrationInstanceResponse", "name: id", `"400":`,
@@ -223,9 +244,9 @@ func readOpenAPIRouteInventory(t *testing.T) map[string]map[string]openAPIOperat
 
 	specPath, raw := readOpenAPISpec(t)
 	pathPattern := regexp.MustCompile(`^  (/[^:]+):\s*$`)
-	methodPattern := regexp.MustCompile(`^    (get|post|put|patch|delete):\s*$`)
+	methodPattern := regexp.MustCompile(`^    (get|post|put|patch|delete|options):\s*$`)
 	operationIDPattern := regexp.MustCompile(`^      operationId:\s*([A-Za-z][A-Za-z0-9]*)\s*$`)
-	clientErrorPattern := regexp.MustCompile(`^        ["']?4[0-9]{2}["']?:\s*$`)
+	clientErrorPattern := regexp.MustCompile(`^        ["']?4[0-9]{2}["']?:`)
 
 	inventory := make(map[string]map[string]openAPIOperationContract)
 	currentPath := ""

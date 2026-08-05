@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cabinet.local/contracts/browser-companion/v1",
+  "title": "Cabinet Browser Companion protocol v1",
+  "protocol_version": "1",
+  "base_url": "http://127.0.0.1:17880",
+  "authentication": {
+    "scheme": "Bearer",
+    "credential_prefix": "cabcmp_",
+    "transport": "Authorization header",
+    "forbidden_transports": ["query", "fragment", "path"]
+  },
+  "headers": {
+    "device": "X-Cabinet-Companion-Device",
+    "profile": "X-Cabinet-Profile",
+    "idempotency": "X-Cabinet-Idempotency-Key",
+    "media_sha256": "X-Cabinet-Media-SHA256"
+  },
+  "capabilities": [
+    "modules:read",
+    "captures:submit",
+    "media:submit",
+    "session:manage"
+  ],
+  "limits": {
+    "pairing_json_bytes": 16384,
+    "capture_json_bytes": 1048576,
+    "media_bytes": 8388608
+  },
+  "operations": {
+    "pair": { "method": "POST", "path": "/api/companion/pairing/requests", "auth": false },
+    "approve": { "method": "POST", "path": "/api/companion/pairing/approvals", "auth": "cabinet" },
+    "exchange": { "method": "POST", "path": "/api/companion/pairing/exchanges", "auth": false },
+    "session": { "method": "GET", "path": "/api/companion/session", "auth": true },
+    "rotate": { "method": "POST", "path": "/api/companion/session/rotate", "auth": true },
+    "revoke": { "method": "DELETE", "path": "/api/companion/session", "auth": true },
+    "modules": { "method": "GET", "path": "/api/companion/modules", "auth": true },
+    "captures": { "method": "POST", "path": "/api/companion/payloads", "auth": true },
+    "media": { "method": "POST", "path": "/api/companion/media-submissions", "auth": true }
+  }
+}

@@ -53,6 +53,7 @@ The API contract SHALL identify routes that are intentionally public, routes tha
 #### Scenario: Inspect protected companion and provider operations
 - **GIVEN** a client reads the OpenAPI source
 - **WHEN** it inspects companion ingestion, integration-instance, Frontline, Bonza, and Hobbytech operations
-- **THEN** companion ingestion MUST declare its profile-scoped bearer requirement
+- **THEN** companion session, module discovery, capture and media operations MUST declare their paired profile bearer requirement
+- **AND** companion pairing request/exchange operations MUST explicitly declare their one-time unauthenticated exchange boundary while approval/session-management operations declare Cabinet-session protection
 - **AND** integration-instance and provider run operations MUST declare local-session and OIDC-session alternatives
-- **AND** intentionally public health, runtime discovery, OpenAPI, and companion-module registry operations MUST remain explicitly unauthenticated
+- **AND** intentionally public health, runtime discovery and OpenAPI operations MUST remain explicitly unauthenticated

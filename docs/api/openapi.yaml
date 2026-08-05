@@ -4312,31 +4312,282 @@ paths:
                 additionalProperties: true
         "400":
           $ref: "#/components/responses/Error"
+  /api/companion/pairing/requests:
+    post:
+      tags: [Companion]
+      operationId: postApiCompanionPairingRequests
+      summary: Start Browser Companion pairing
+      description: Creates a five-minute, extension-origin-bound request that must be approved inside unlocked Cabinet.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanionPairingRequestInput"
+      responses:
+        "201":
+          description: Pairing request created; the exchange secret is returned once and must remain in extension storage.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionPairingReceipt"
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+    get:
+      tags: [Companion]
+      operationId: getApiCompanionPairingRequests
+      summary: List pending Browser Companion pairing requests
+      security:
+        - CabinetLocalSession: []
+      responses:
+        "200":
+          description: Non-secret pending and approved request summaries for the Cabinet approval UI.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests]
+                properties:
+                  requests:
+                    type: array
+                    items: { $ref: "#/components/schemas/CompanionPairingSummary" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Companion]
+      operationId: deleteApiCompanionPairingRequests
+      summary: Reject a Browser Companion pairing request
+      security:
+        - CabinetLocalSession: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Pairing request rejected.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rejected]
+                properties:
+                  rejected: { type: boolean, const: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    options:
+      tags: [Companion]
+      operationId: optionsApiCompanionPairingRequests
+      summary: Negotiate extension-origin pairing access
+      security: []
+      responses:
+        "204": { description: Origin accepted for the pairing request preflight. }
+        "403": { $ref: "#/components/responses/Error" }
+  /api/companion/pairing/approvals:
+    post:
+      tags: [Companion]
+      operationId: postApiCompanionPairingApprovals
+      summary: Approve a Browser Companion pairing request inside Cabinet
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanionPairingApproval"
+      responses:
+        "200":
+          description: Pairing approved for one profile and the requested capability subset.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionPairingSummary" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/companion/pairing/exchanges:
+    post:
+      tags: [Companion]
+      operationId: postApiCompanionPairingExchanges
+      summary: Exchange an approved one-time pairing challenge
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanionPairingExchange"
+      responses:
+        "200":
+          description: Random session credential returned once after approval.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionCredentialResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/companion/session:
+    get:
+      tags: [Companion]
+      operationId: getApiCompanionSession
+      summary: Inspect the paired Browser Companion session
+      security:
+        - CompanionProfileBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+      responses:
+        "200":
+          description: Bound non-secret session status and negotiated protocol capabilities.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionSession" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Companion]
+      operationId: deleteApiCompanionSession
+      summary: Revoke the calling Browser Companion session
+      security:
+        - CompanionProfileBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+      responses:
+        "200":
+          description: Calling credential revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked]
+                properties:
+                  revoked: { type: boolean, const: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/companion/session/rotate:
+    post:
+      tags: [Companion]
+      operationId: postApiCompanionSessionRotate
+      summary: Rotate the calling Browser Companion credential
+      security:
+        - CompanionProfileBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+      responses:
+        "200":
+          description: Replacement credential returned once; the previous credential is revoked atomically.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionCredentialResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/companion/sessions:
+    get:
+      tags: [Companion]
+      operationId: getApiCompanionSessions
+      summary: List paired Browser Companion sessions for the active profile
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      responses:
+        "200":
+          description: Redacted session summaries; credential material is never returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/CompanionSession" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Companion]
+      operationId: deleteApiCompanionSessions
+      summary: Revoke one or all Browser Companion sessions for the active profile
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: query
+          name: id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: all
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Matching sessions revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked_count]
+                properties:
+                  revoked_count: { type: integer, minimum: 0 }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /api/companion/modules:
     get:
       tags: [Companion]
       operationId: getApiCompanionModules
-      summary: Get companion modules
-      description: Local loopback module registry used by the installed Cabinet Browser Companion.
-      security: []
+      summary: Get enabled Browser Companion modules
+      description: Authenticated, profile-scoped registry containing only safe configuration for enabled browser-capable integration instances.
+      security:
+        - CompanionProfileBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
       responses:
         "200":
-          description: Successful response
+          description: Profile- and instance-scoped module registry.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CompanionModuleRegistry"
-        "400":
-          $ref: "#/components/responses/Error"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /api/companion/payloads:
     post:
       tags: [Companion]
       operationId: postApiCompanionPayloads
-      summary: Create or run companion payloads
+      summary: Submit a bounded passive capture envelope
       security:
         - CompanionProfileBearer: []
-        - CompanionProfileBearer: []
-          CabinetOIDCSession: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
       requestBody:
         required: true
         content:
@@ -4345,15 +4596,57 @@ paths:
               $ref: "#/components/schemas/CompanionPayloadSubmission"
       responses:
         "202":
-          description: Successful response
+          description: Versioned transport envelope accepted; persistence is owned by the item/image sync workstream.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CompanionAcceptedPayload"
-        "400":
-          $ref: "#/components/responses/Error"
-        "401":
-          $ref: "#/components/responses/Error"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/companion/media-submissions:
+    post:
+      tags: [Companion]
+      operationId: postApiCompanionMediaSubmissions
+      summary: Submit a bounded media transport envelope
+      description: Validates the v1 authenticated media transport contract. Durable media persistence is implemented by #2032.
+      security:
+        - CompanionProfileBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+        - in: header
+          name: X-Cabinet-Profile
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Cabinet-Idempotency-Key
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - in: header
+          name: X-Cabinet-Media-SHA256
+          required: true
+          schema: { type: string, pattern: "^[a-fA-F0-9]{64}$" }
+      requestBody:
+        required: true
+        content:
+          image/*:
+            schema: { type: string, format: binary, maxLength: 8388608 }
+          application/octet-stream:
+            schema: { type: string, format: binary, maxLength: 8388608 }
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "501":
+          description: Transport validated but durable media persistence is not implemented until #2032.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /api/diagnostics/config:
     get:
       tags: [Diagnostics]
@@ -5908,8 +6201,17 @@ components:
       type: http
       scheme: bearer
       bearerFormat: opaque
-      description: Profile-scoped Browser Companion credential accepted only by companion ingestion routes.
+      description: Random, revocable Browser Companion credential bound to one Cabinet instance, profile, extension origin, device, protocol version and capability set.
   parameters:
+    CompanionDeviceID:
+      in: header
+      name: X-Cabinet-Companion-Device
+      required: true
+      description: Stable extension-installation identifier that must match the pairing body and bound session.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
     ProfileID:
       in: path
       name: profileID
@@ -7049,19 +7351,116 @@ components:
 
     CompanionModuleRegistry:
       type: object
-      required: [modules]
+      required: [protocol_version, profile_id, modules]
       properties:
+        protocol_version: { type: string, const: "1" }
+        profile_id: { type: string }
         modules:
           type: array
           items: { $ref: "#/components/schemas/CompanionModule" }
     CompanionModule:
       type: object
-      required: [id, site, actions, passive_only]
+      required: [id, site, provider_id, integration_instance_id, actions, passive_only]
       properties:
         id: { type: string }
         site: { type: string }
+        provider_id: { type: string }
+        integration_instance_id: { type: string }
         actions: { type: array, items: { type: string } }
         passive_only: { type: boolean, const: true }
+        safe_config:
+          type: object
+          description: Non-secret integration configuration; token, password, cookie, secret and API-key fields are removed server-side.
+          additionalProperties: { type: string }
+    CompanionPairingRequestInput:
+      type: object
+      additionalProperties: false
+      required: [device_id, device_name, protocol_version, capabilities]
+      properties:
+        device_id: { type: string, minLength: 1, maxLength: 128 }
+        device_name: { type: string, minLength: 1, maxLength: 128 }
+        protocol_version: { type: string, const: "1" }
+        capabilities:
+          $ref: "#/components/schemas/CompanionCapabilities"
+    CompanionPairingReceipt:
+      type: object
+      required: [request_id, exchange_secret, pairing_code, status, expires_at, protocol_version, capabilities]
+      properties:
+        request_id: { type: string }
+        exchange_secret:
+          type: string
+          writeOnly: true
+          description: One-time random exchange material returned only to the requesting extension.
+        pairing_code: { type: string, pattern: "^[0-9]{6}$" }
+        status: { type: string, const: pending }
+        expires_at: { type: string, format: date-time }
+        protocol_version: { type: string, const: "1" }
+        capabilities: { $ref: "#/components/schemas/CompanionCapabilities" }
+    CompanionPairingSummary:
+      type: object
+      required: [request_id, pairing_code, device_id, device_name, origin, protocol_version, capabilities, status, expires_at, created_at]
+      properties:
+        request_id: { type: string }
+        pairing_code: { type: string, pattern: "^[0-9]{6}$" }
+        device_id: { type: string }
+        device_name: { type: string }
+        origin: { type: string, pattern: "^(chrome|moz)-extension://" }
+        protocol_version: { type: string, const: "1" }
+        capabilities: { $ref: "#/components/schemas/CompanionCapabilities" }
+        status: { type: string, enum: [pending, approved] }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    CompanionPairingApproval:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id: { type: string }
+        profile_id: { type: string, description: Defaults to and must match the active Cabinet profile. }
+        capabilities: { $ref: "#/components/schemas/CompanionCapabilities" }
+    CompanionPairingExchange:
+      type: object
+      additionalProperties: false
+      required: [request_id, exchange_secret, device_id, protocol_version]
+      properties:
+        request_id: { type: string }
+        exchange_secret: { type: string, writeOnly: true }
+        device_id: { type: string, maxLength: 128 }
+        protocol_version: { type: string, const: "1" }
+    CompanionCredentialResponse:
+      type: object
+      required: [credential, session]
+      properties:
+        credential:
+          type: string
+          pattern: "^cabcmp_"
+          writeOnly: true
+          description: At least 256 bits of random material returned once and never listed by Cabinet.
+        session: { $ref: "#/components/schemas/CompanionSession" }
+    CompanionCapabilities:
+      type: array
+      uniqueItems: true
+      minItems: 1
+      items:
+        type: string
+        enum: ["modules:read", "captures:submit", "media:submit", "session:manage"]
+    CompanionSession:
+      type: object
+      required: [id, cabinet_instance_id, profile_id, device_id, device_name, origin, protocol_version, capabilities, created_at, expires_at]
+      properties:
+        id: { type: string }
+        cabinet_instance_id: { type: string }
+        profile_id: { type: string }
+        device_id: { type: string }
+        device_name: { type: string }
+        origin: { type: string, pattern: "^(chrome|moz)-extension://" }
+        protocol_version: { type: string, const: "1" }
+        capabilities: { $ref: "#/components/schemas/CompanionCapabilities" }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+        rotated_from_id: { type: string }
     CompanionPayloadSubmission:
       type: object
       required: [profile_id, module_id, url, payload_type, passive, attempted_write, confidence_score]
