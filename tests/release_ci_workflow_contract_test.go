@@ -31,6 +31,7 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 		"npm run test:auth-infra",
 		"openspec validate --all --strict --no-interactive",
 		"npm run build",
+		"node scripts/verify-browser-extension-load.mjs",
 		"fetch-depth: 0",
 		"go test ./internal/... ./cmd/...",
 		"Build runtime UI static bundle for OpenAPI tests",

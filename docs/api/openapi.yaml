@@ -4563,7 +4563,7 @@ paths:
       tags: [Companion]
       operationId: getApiCompanionModules
       summary: Get enabled Browser Companion modules
-      description: Authenticated, profile-scoped registry containing only safe configuration for enabled browser-capable integration instances.
+      description: Authenticated, profile-scoped registry containing versioned browser behaviour and only safe configuration for enabled browser-capable integration instances. Exact HTTPS origins are requested individually as optional browser permissions.
       security:
         - CompanionProfileBearer: []
       parameters:
@@ -7360,14 +7360,78 @@ components:
           items: { $ref: "#/components/schemas/CompanionModule" }
     CompanionModule:
       type: object
-      required: [id, site, provider_id, integration_instance_id, actions, passive_only]
+      required: [id, module_version, site, provider_id, integration_instance_id, actions, passive_only, capture_schemas, workflows, redaction_rules, fixture_version, display, browser, configuration]
       properties:
         id: { type: string }
+        module_version: { type: string }
         site: { type: string }
         provider_id: { type: string }
         integration_instance_id: { type: string }
         actions: { type: array, items: { type: string } }
         passive_only: { type: boolean, const: true }
+        capture_schemas:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [payload_type, fields, media_fields]
+            properties:
+              payload_type: { type: string }
+              fields: { type: array, minItems: 1, maxItems: 64, items: { type: string, maxLength: 128 } }
+              media_fields: { type: array, maxItems: 32, items: { type: string, maxLength: 128 } }
+        workflows: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 128 } }
+        redaction_rules: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 128 } }
+        fixture_version: { type: string }
+        display:
+          type: object
+          additionalProperties: false
+          required: [name]
+          properties:
+            name: { type: string }
+        browser:
+          type: object
+          additionalProperties: false
+          required: [start_url, origins, url_patterns, readiness]
+          properties:
+            start_url: { type: string, format: uri, pattern: "^https://" }
+            origins:
+              type: array
+              minItems: 1
+              maxItems: 10
+              items: { type: string, pattern: "^https://[^*]+/\\*$" }
+            url_patterns:
+              type: array
+              minItems: 1
+              maxItems: 20
+              items: { type: string, pattern: "^https://[^*]+\\*$" }
+            capture_script:
+              type: string
+              pattern: "^modules/[a-zA-Z0-9._/-]+\\.js$"
+            readiness:
+              type: object
+              additionalProperties: false
+              required: [ready, logged_out, challenge]
+              properties:
+                ready: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 256 } }
+                logged_out: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 256 } }
+                challenge: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 256 } }
+        configuration:
+          type: object
+          additionalProperties: false
+          required: [capture_mode, item_fields, media_policy, review_destination, rate_limit_per_minute, help_url, setup_required, sync_available]
+          properties:
+            capture_mode: { type: string, enum: [manual_user_present, browser_open_scheduled] }
+            item_fields: { type: array, minItems: 1, maxItems: 64, items: { type: string, maxLength: 128 } }
+            media_policy: { type: string }
+            review_destination: { type: string, pattern: "^[a-z0-9][a-z0-9-]*$" }
+            rate_limit_per_minute: { type: integer, minimum: 1, maximum: 60 }
+            help_url: { type: string, pattern: "^/[^/]" }
+            setup_required: { type: boolean }
+            sync_available:
+              type: boolean
+              description: True only when the packaged extension has a compatible capture module and Cabinet persistence path.
         safe_config:
           type: object
           description: Non-secret integration configuration; token, password, cookie, secret and API-key fields are removed server-side.

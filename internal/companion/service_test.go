@@ -16,7 +16,15 @@ const companionTestOrigin = "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 func TestCompanionRegistryNormalizesPassiveModules(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService([]Module{{ID: " ebay-purchase-capture ", Site: " ebay ", Actions: []string{"capture_tracking", "capture_item"}}})
+	svc := NewService([]Module{{
+		ID: " ebay-purchase-capture ", ModuleVersion: "1.0.0", Site: " ebay ",
+		Actions: []string{"capture_tracking", "capture_item"}, PassiveOnly: true, Display: ModuleDisplay{Name: "eBay"},
+		CaptureSchemas: []CaptureSchema{{PayloadType: "purchase_order", Fields: []string{"title"}}}, Workflows: []string{"manual_capture"},
+		RedactionRules: []string{"no_tokens"}, FixtureVersion: "1",
+		Browser: BrowserContract{StartURL: "https://www.ebay.com/mye/myebay/purchase", Origins: []string{"https://www.ebay.com/*"}, URLPatterns: []string{"https://www.ebay.com/mye/myebay/purchase*"},
+			Readiness: BrowserReadiness{Ready: []string{"#ready"}, LoggedOut: []string{"#logged-out"}, Challenge: []string{"#challenge"}}},
+		Configuration: ModuleConfiguration{CaptureMode: "manual_user_present", ItemFields: []string{"title"}, MediaPolicy: "review", ReviewDestination: "purchases", RateLimitPerMinute: 6, HelpURL: "/help"},
+	}})
 	registry := svc.Registry()
 	if len(registry.Modules) != 1 || registry.ProtocolVersion != ProtocolVersionV1 {
 		t.Fatalf("expected one v1 module, got %+v", registry)
@@ -27,6 +35,47 @@ func TestCompanionRegistryNormalizesPassiveModules(t *testing.T) {
 	}
 	if got := module.Actions; len(got) != 2 || got[0] != "capture_item" || got[1] != "capture_tracking" {
 		t.Fatalf("actions were not sorted and preserved: %+v", got)
+	}
+}
+
+func TestCompanionRegistryPublishesDataDrivenBrowserHostContract(t *testing.T) {
+	t.Parallel()
+
+	registry := NewService(DefaultModules()).Registry()
+	if len(registry.Modules) != 1 {
+		t.Fatalf("expected one default browser module, got %+v", registry.Modules)
+	}
+	module := registry.Modules[0]
+	if module.ModuleVersion != "1.0.0" || module.Display.Name != "eBay purchases" {
+		t.Fatalf("missing versioned display contract: %+v", module)
+	}
+	if module.Browser.StartURL != "https://www.ebay.com/mye/myebay/purchase" ||
+		len(module.Browser.Origins) != 1 || module.Browser.Origins[0] != "https://www.ebay.com/*" {
+		t.Fatalf("unsafe or incomplete browser origin contract: %+v", module.Browser)
+	}
+	if len(module.Browser.Readiness.Ready) == 0 || len(module.Browser.Readiness.LoggedOut) == 0 ||
+		len(module.Browser.Readiness.Challenge) == 0 {
+		t.Fatalf("readiness evidence contract is incomplete: %+v", module.Browser.Readiness)
+	}
+	if len(module.Browser.URLPatterns) == 0 || len(module.CaptureSchemas) == 0 || len(module.Workflows) == 0 ||
+		len(module.RedactionRules) == 0 || module.FixtureVersion != "1" {
+		t.Fatalf("versioned capture module contract is incomplete: %+v", module)
+	}
+	if module.Configuration.CaptureMode != "manual_user_present" || module.Configuration.SyncAvailable ||
+		module.Configuration.ReviewDestination != "purchases" || module.Configuration.RateLimitPerMinute != 6 {
+		t.Fatalf("Cabinet module configuration is not authoritative or truthful: %+v", module.Configuration)
+	}
+}
+
+func TestCompanionRegistryDoesNotAdvertiseSyncBeforeDurablePersistence(t *testing.T) {
+	t.Parallel()
+
+	modules := DefaultModules()
+	modules[0].Browser.CaptureScript = "modules/fixture.js"
+	modules[0].Configuration.SyncAvailable = true
+	registry := NewService(modules).Registry()
+	if len(registry.Modules) != 1 || registry.Modules[0].Configuration.SyncAvailable {
+		t.Fatalf("module advertised item/media sync before #2032 durable persistence: %+v", registry.Modules)
 	}
 }
 

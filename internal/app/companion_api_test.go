@@ -52,7 +52,13 @@ func TestCompanionPairingAPIRequiresApprovalAndSupportsSessionLifecycle(t *testi
 
 	authorization := "Bearer " + credential.Credential
 	modules := doCompanionExtensionRequest(t, a, http.MethodGet, "/api/companion/modules", nil, map[string]string{"Authorization": authorization})
-	if modules.Code != http.StatusOK || !strings.Contains(modules.Body.String(), `"integration_instance_id"`) || strings.Contains(modules.Body.String(), "must-not-project") {
+	if modules.Code != http.StatusOK || !strings.Contains(modules.Body.String(), `"integration_instance_id"`) ||
+		!strings.Contains(modules.Body.String(), `"module_version":"1.0.0"`) ||
+		!strings.Contains(modules.Body.String(), `"start_url":"https://www.ebay.com/mye/myebay/purchase"`) ||
+		!strings.Contains(modules.Body.String(), `"origins":["https://www.ebay.com/*"]`) ||
+		!strings.Contains(modules.Body.String(), `"capture_mode":"manual_user_present"`) ||
+		!strings.Contains(modules.Body.String(), `"sync_available":false`) ||
+		strings.Contains(modules.Body.String(), "must-not-project") {
 		t.Fatalf("modules status=%d body=%s", modules.Code, modules.Body.String())
 	}
 

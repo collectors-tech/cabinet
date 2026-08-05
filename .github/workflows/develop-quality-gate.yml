@@ -68,7 +68,9 @@ jobs:
         run: npm run build
         working-directory: ui.web
       - name: Verify Browser Companion protocol lifecycle
-        run: node --test browser-extension/tests/companion-protocol-contract.test.mjs
+        run: node --test browser-extension/tests/*.test.mjs
+      - name: Load Browser Companion in Chrome and Edge
+        run: node scripts/verify-browser-extension-load.mjs
 
   go-tests:
     name: Go runtime package tests
