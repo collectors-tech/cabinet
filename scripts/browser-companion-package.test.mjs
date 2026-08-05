@@ -17,7 +17,6 @@ import {
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceCommit = 'a'.repeat(40)
-const otherCommit = 'b'.repeat(40)
 const sourceDateEpoch = 1_786_000_000
 
 const build = async (name, commit = sourceCommit, epoch = sourceDateEpoch) => {
@@ -113,6 +112,13 @@ test('candidate workflow validates and uploads exact companion evidence without 
   assert.match(workflow, /browser-companion-release-manifest\.json/)
   assert.match(workflow, /cabinet-browser-companion-\*\.zip\.sha256/)
   assert.doesNotMatch(workflow, /create-release|upload-release-asset|webstore|edge.*publish/i)
+})
+
+test('packaged browser loader reads target roots without shadowing the Node process', async () => {
+  const loader = await readFile(join(repositoryRoot, 'scripts', 'verify-browser-extension-load.mjs'), 'utf8')
+  assert.match(loader, /process\.env\[browser\.rootVariable\]/)
+  assert.match(loader, /const browserProcess = spawn\(/)
+  assert.doesNotMatch(loader, /const process = spawn\(/)
 })
 
 test('private-beta operator guide is truthful about install, permissions, rollback and removal', async () => {
