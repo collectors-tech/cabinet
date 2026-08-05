@@ -48,9 +48,10 @@ func ErrorCode(err error) string {
 }
 
 type RequestMetadata struct {
-	Origin        string
-	DeviceID      string
-	RemoteAddress string
+	Origin         string
+	DeviceID       string
+	RemoteAddress  string
+	IdempotencyKey string
 }
 
 type PairingRequestInput struct {
@@ -144,6 +145,9 @@ func NewPersistentService(ctx context.Context, conn *sql.DB, profiles *profile.R
 		return nil, err
 	}
 	svc.instanceID = instanceID
+	if err := svc.ResumePendingCaptures(ctx); err != nil {
+		return nil, fmt.Errorf("resume companion captures: %w", err)
+	}
 	return svc, nil
 }
 
@@ -449,8 +453,8 @@ func (s *Service) BeginBoundedRequest(ctx context.Context, authorization string,
 	return session, release, nil
 }
 
-func (s *Service) RecordMediaTransport(ctx context.Context, session Session, metadata RequestMetadata) {
-	s.recordAudit(ctx, session.ProfileID, session.ID, "media.transport.validated", "persistence_pending", metadata)
+func (s *Service) RecordMediaTransport(ctx context.Context, session Session, metadata RequestMetadata, result string) {
+	s.recordAudit(ctx, session.ProfileID, session.ID, "media.transport.validated", boundedCaptureText(result, 64), metadata)
 }
 
 func (s *Service) RotateCredential(ctx context.Context, authorization string, metadata RequestMetadata) (CredentialResponse, error) {

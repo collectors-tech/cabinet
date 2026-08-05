@@ -4580,6 +4580,30 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
   /api/companion/payloads:
+    get:
+      tags: [Companion]
+      operationId: getApiCompanionPayloads
+      summary: List the profile-scoped durable capture inbox
+      security:
+        - CompanionProfileBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+        - in: query
+          name: state
+          schema: { type: string, enum: [accepted, validating, queued, processing, partial, review, completed, retryable-failed, permanently-failed, cancelled] }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Capture records and actionable status totals; raw payloads are not returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionCaptureInbox" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
     post:
       tags: [Companion]
       operationId: postApiCompanionPayloads
@@ -4596,7 +4620,7 @@ paths:
               $ref: "#/components/schemas/CompanionPayloadSubmission"
       responses:
         "202":
-          description: Versioned transport envelope accepted; persistence is owned by the item/image sync workstream.
+          description: Raw envelope durably committed and dispatched to a typed, idempotent synchronisation pipeline.
           content:
             application/json:
               schema:
@@ -4606,12 +4630,35 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+        "507": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Companion]
+      operationId: deleteApiCompanionPayloads
+      summary: Cancel a pending or retryable capture
+      security:
+        - CompanionProfileBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CompanionDeviceID"
+        - in: query
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Capture cancelled without deleting its immutable provenance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionCaptureRecord" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/companion/media-submissions:
     post:
       tags: [Companion]
       operationId: postApiCompanionMediaSubmissions
       summary: Submit a bounded media transport envelope
-      description: Validates the v1 authenticated media transport contract. Durable media persistence is implemented by #2032.
+      description: Validates an authenticated JPEG or PNG, verifies its digest and dimensions, then stores it in canonical media storage with capture provenance. Content-addressed replay is idempotent and no local path is returned.
       security:
         - CompanionProfileBearer: []
       parameters:
@@ -4625,28 +4672,47 @@ paths:
           required: true
           schema: { type: string, maxLength: 128 }
         - in: header
+          name: X-Cabinet-Capture-ID
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - in: header
+          name: X-Cabinet-Media-Field
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - in: header
+          name: X-Cabinet-Media-Filename
+          required: true
+          schema: { type: string, maxLength: 255 }
+        - in: header
           name: X-Cabinet-Media-SHA256
           required: true
           schema: { type: string, pattern: "^[a-fA-F0-9]{64}$" }
       requestBody:
         required: true
         content:
-          image/*:
+          image/jpeg:
             schema: { type: string, format: binary, maxLength: 8388608 }
-          application/octet-stream:
+          image/png:
             schema: { type: string, format: binary, maxLength: 8388608 }
       responses:
+        "200":
+          description: Existing content-addressed asset linked idempotently to this capture field.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionMediaAsset" }
+        "201":
+          description: New canonical media asset and capture link committed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanionMediaAsset" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
         "415": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
-        "501":
-          description: Transport validated but durable media persistence is not implemented until #2032.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500": { $ref: "#/components/responses/Error" }
   /api/diagnostics/config:
     get:
       tags: [Diagnostics]
@@ -7527,29 +7593,90 @@ components:
         rotated_from_id: { type: string }
     CompanionPayloadSubmission:
       type: object
-      required: [profile_id, module_id, url, payload_type, passive, attempted_write, confidence_score]
+      additionalProperties: false
+      required: [protocol_version, profile_id, module_id, module_version, schema_version, integration_instance_id, provider_id, url, payload_type, captured_at, page_complete, passive, attempted_write, confidence_score, redaction_summary, payload_hash, data]
       properties:
+        protocol_version: { type: string, const: "1" }
         profile_id: { type: string }
         module_id: { type: string }
+        module_version: { type: string }
+        schema_version: { type: string }
+        integration_instance_id: { type: string }
+        provider_id: { type: string }
         url: { type: string, format: uri }
         payload_type: { type: string }
         captured_at: { type: string, format: date-time }
+        page_complete: { type: boolean }
         passive: { type: boolean, const: true }
         attempted_write: { type: boolean, const: false }
         confidence_score: { type: number, minimum: 0, maximum: 1 }
+        redaction_summary: { type: array, uniqueItems: true, items: { type: string } }
+        payload_hash: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        idempotency_key: { type: string, maxLength: 128 }
         data: { type: object, additionalProperties: true }
     CompanionAcceptedPayload:
       type: object
-      required: [accepted, profile_id, module_id, payload_type, sync_mode, remote_write, audit_trail, confidence_label]
+      required: [accepted, committed, replayed, capture_id, profile_id, module_id, payload_type, state, sync_mode, remote_write, checkpoint, audit_trail, confidence_label]
       properties:
         accepted: { type: boolean, const: true }
+        committed: { type: boolean }
+        replayed: { type: boolean }
+        capture_id: { type: string }
         profile_id: { type: string }
         module_id: { type: string }
         payload_type: { type: string }
+        state: { type: string, enum: [accepted, validating, queued, processing, partial, review, completed, retryable-failed, permanently-failed, cancelled] }
         sync_mode: { type: string, const: passive_capture }
         remote_write: { type: boolean, const: false }
+        checkpoint: { type: object, additionalProperties: true }
         audit_trail: { type: array, items: { type: string } }
         confidence_label: { type: string, enum: [low, medium, high] }
+    CompanionCaptureRecord:
+      type: object
+      required: [id, profile_id, module_id, module_version, schema_version, provider_id, integration_instance_id, payload_type, source_url, captured_at, page_complete, payload_hash, state, attempt_count, checkpoint, created_at, updated_at]
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        module_id: { type: string }
+        module_version: { type: string }
+        schema_version: { type: string }
+        provider_id: { type: string }
+        integration_instance_id: { type: string }
+        payload_type: { type: string }
+        source_url: { type: string, format: uri }
+        captured_at: { type: string, format: date-time }
+        page_complete: { type: boolean }
+        payload_hash: { type: string }
+        state: { type: string }
+        attempt_count: { type: integer, minimum: 0 }
+        last_error: { type: string }
+        checkpoint: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CompanionCaptureInbox:
+      type: object
+      required: [captures, pending, failed, review]
+      properties:
+        captures: { type: array, items: { $ref: "#/components/schemas/CompanionCaptureRecord" } }
+        pending: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
+        review: { type: integer, minimum: 0 }
+    CompanionMediaAsset:
+      type: object
+      required: [asset_id, capture_id, field_name, content_hash, filename, mime_type, byte_size, width, height, deduplicated, committed, created_at]
+      properties:
+        asset_id: { type: string }
+        capture_id: { type: string }
+        field_name: { type: string }
+        content_hash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        filename: { type: string }
+        mime_type: { type: string, enum: [image/jpeg, image/png] }
+        byte_size: { type: integer, minimum: 1 }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        deduplicated: { type: boolean }
+        committed: { type: boolean, const: true }
+        created_at: { type: string, format: date-time }
     IntegrationInstancePatch:
       type: object
       required: [provider_id]

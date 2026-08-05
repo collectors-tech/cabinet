@@ -34,6 +34,9 @@ test('ships one installable Chromium MV3 host for Chrome and Edge', async () => 
   assert.doesNotMatch(worker, /globalThis\.(chrome|browser)/)
   assert.doesNotMatch(worker, /frontline|bonza|ebay|hobbytech/i)
   assert.match(worker, /browserPlatform/)
+	assert.match(worker, /accepted\?\.committed !== true/)
+	assert.match(worker, /\['completed', 'partial', 'review'\]/)
+	assert.match(worker, /await normaliseCapture/)
 })
 
 test('popup provider projection is Cabinet-driven rather than hardcoded', async () => {

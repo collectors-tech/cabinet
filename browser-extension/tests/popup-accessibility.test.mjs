@@ -7,6 +7,7 @@ const root = new URL('../', import.meta.url)
 test('popup exposes accessible zero, one and many module controls', async () => {
   const html = await readFile(new URL('popup/popup.html', root), 'utf8')
   const css = await readFile(new URL('popup/popup.css', root), 'utf8')
+	const controller = await readFile(new URL('popup/popup-controller.mjs', root), 'utf8')
   assert.match(html, /<main/)
   assert.match(html, /aria-live="polite"/)
   assert.match(html, /id="module-list"/)
@@ -20,6 +21,10 @@ test('popup exposes accessible zero, one and many module controls', async () => 
   assert.match(html, /id="sync-toggle"/)
   assert.match(css, /:focus-visible/)
   assert.match(css, /prefers-reduced-motion/)
+	assert.match(controller, /Cabinet jobs pending/)
+	assert.match(controller, /cabinet_failed/)
+	assert.match(controller, /cabinet_review/)
+	assert.match(controller, /host:review-module/)
 })
 
 test('privacy disclosure names optional origins and prohibited data', async () => {

@@ -68,6 +68,9 @@ const moduleRow = (module) => {
   row.querySelector('[data-module-meta]').textContent = [
     'Enabled',
     `${module.pending ?? 0} pending`,
+	(module.cabinet_pending ?? 0) ? `${module.cabinet_pending} Cabinet pending` : '',
+	(module.cabinet_failed ?? 0) ? `${module.cabinet_failed} failed` : '',
+	(module.cabinet_review ?? 0) ? `${module.cabinet_review} to review` : '',
     module.last_sync ? `last sync ${new Date(module.last_sync).toLocaleString()}` : 'not yet synced',
     module.error ? `error: ${module.error}` : '',
   ].filter(Boolean).join(' · ')
@@ -98,7 +101,7 @@ const moduleRow = (module) => {
   pause.textContent = module.paused ? 'Resume' : 'Pause'
   pause.addEventListener('click', (event) => act(event.currentTarget, 'host:set-module-paused', { ...detail, paused: !module.paused }))
   const review = row.querySelector('[data-action="review"]')
-  review.hidden = !module.last_sync
+	review.hidden = !module.last_sync && !(module.cabinet_review > 0 || module.cabinet_failed > 0)
   review.addEventListener('click', (event) => act(event.currentTarget, 'host:review-module', detail))
   row.querySelector('[data-action="help"]').addEventListener('click', (event) => act(event.currentTarget, 'host:help-module', detail))
   return fragment
@@ -109,7 +112,7 @@ const render = async (state) => {
   elements.cabinetDetail.textContent = state.pairing_code
     ? `Pairing code ${state.pairing_code}. Compare and approve it in Cabinet.`
     : state.profile_id
-    ? `Version ${state.extension_version}. Connected to profile ${state.profile_id}. ${state.pending ?? 0} sync jobs pending.`
+	? `Version ${state.extension_version}. Connected to profile ${state.profile_id}. ${state.pending ?? 0} extension jobs pending; ${state.cabinet_pending ?? 0} Cabinet jobs pending; ${state.cabinet_failed ?? 0} failed; ${state.cabinet_review ?? 0} to review.`
     : `Version ${state.extension_version}. Connect to load enabled integrations.`
   elements.cabinetURL.value = state.cabinet_url ?? ''
   elements.syncToggle.textContent = state.sync_paused ? 'Resume sync' : 'Pause sync'

@@ -81,6 +81,41 @@ type WorkspaceAttachment struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// CompanionAssetInput binds an immutable browser-companion media object to the
+// capture and typed field that supplied it. ContentHash is a lower-case SHA-256
+// hex digest; cookies, credentials and local filesystem paths are never part of
+// this contract.
+type CompanionAssetInput struct {
+	ProfileID      string
+	CaptureID      string
+	FieldName      string
+	IdempotencyKey string
+	Filename       string
+	MIMEType       string
+	SourceURL      string
+	ContentHash    string
+	Width          int
+	Height         int
+	Provenance     map[string]string
+}
+
+var ErrCompanionMediaIdempotencyConflict = errors.New("companion media idempotency conflict")
+
+type CompanionAsset struct {
+	ID           string `json:"asset_id"`
+	CaptureID    string `json:"capture_id"`
+	FieldName    string `json:"field_name"`
+	ContentHash  string `json:"content_hash"`
+	Filename     string `json:"filename"`
+	MIMEType     string `json:"mime_type"`
+	ByteSize     int64  `json:"byte_size"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	Deduplicated bool   `json:"deduplicated"`
+	Committed    bool   `json:"committed"`
+	CreatedAt    string `json:"created_at"`
+}
+
 type WorkspaceSummary struct {
 	Total           int `json:"total"`
 	Unlinked        int `json:"unlinked"`
@@ -328,6 +363,166 @@ func (s *Service) SaveWorkspaceAttachment(ctx context.Context, profileID, thread
 		return WorkspaceAttachment{}, fmt.Errorf("save workspace media attachment: %w", err)
 	}
 	return s.getWorkspaceAttachment(ctx, profileID, assetID)
+}
+
+func (s *Service) SaveCompanionAsset(ctx context.Context, input CompanionAssetInput, src io.Reader) (CompanionAsset, error) {
+	input.ProfileID = strings.TrimSpace(input.ProfileID)
+	input.CaptureID = strings.TrimSpace(input.CaptureID)
+	input.FieldName = strings.TrimSpace(input.FieldName)
+	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
+	input.Filename = filepath.Base(strings.TrimSpace(input.Filename))
+	input.MIMEType = strings.ToLower(strings.TrimSpace(input.MIMEType))
+	input.ContentHash = strings.ToLower(strings.TrimSpace(input.ContentHash))
+	if input.ProfileID == "" || input.CaptureID == "" || input.FieldName == "" || input.IdempotencyKey == "" || input.Filename == "" || len(input.ContentHash) != 64 {
+		return CompanionAsset{}, fmt.Errorf("companion media metadata is required")
+	}
+	if input.MIMEType != "image/jpeg" && input.MIMEType != "image/png" {
+		return CompanionAsset{}, fmt.Errorf("companion media type is not supported")
+	}
+	inputExtension := strings.ToLower(filepath.Ext(input.Filename))
+	if input.MIMEType == "image/png" && inputExtension != ".png" ||
+		input.MIMEType == "image/jpeg" && inputExtension != ".jpg" && inputExtension != ".jpeg" {
+		return CompanionAsset{}, fmt.Errorf("companion media extension does not match its type")
+	}
+	var captureCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM companion_captures WHERE id = ? AND profile_id = ?`, input.CaptureID, input.ProfileID).Scan(&captureCount); err != nil {
+		return CompanionAsset{}, fmt.Errorf("check companion capture: %w", err)
+	}
+	if captureCount != 1 {
+		return CompanionAsset{}, fmt.Errorf("companion capture not found")
+	}
+
+	body, err := io.ReadAll(io.LimitReader(src, (8<<20)+1))
+	if err != nil {
+		return CompanionAsset{}, fmt.Errorf("read companion media: %w", err)
+	}
+	if len(body) == 0 || len(body) > 8<<20 {
+		return CompanionAsset{}, fmt.Errorf("companion media size is invalid")
+	}
+	digest := sha256.Sum256(body)
+	if hex.EncodeToString(digest[:]) != input.ContentHash {
+		return CompanionAsset{}, fmt.Errorf("companion media checksum mismatch")
+	}
+	config, decodedType, err := image.DecodeConfig(bytes.NewReader(body))
+	if err != nil || "image/"+decodedType != input.MIMEType || config.Width < 1 || config.Height < 1 || config.Width > 16384 || config.Height > 16384 {
+		return CompanionAsset{}, fmt.Errorf("companion media image is invalid")
+	}
+	if input.Width != 0 && input.Width != config.Width || input.Height != 0 && input.Height != config.Height {
+		return CompanionAsset{}, fmt.Errorf("companion media dimensions mismatch")
+	}
+	input.Width, input.Height = config.Width, config.Height
+	if existing, found, lookupErr := s.companionAssetByIdempotency(ctx, input); lookupErr != nil {
+		return CompanionAsset{}, lookupErr
+	} else if found {
+		if existing.ContentHash != input.ContentHash || existing.FieldName != input.FieldName {
+			return CompanionAsset{}, ErrCompanionMediaIdempotencyConflict
+		}
+		existing.CaptureID, existing.FieldName = input.CaptureID, input.FieldName
+		existing.Deduplicated, existing.Committed = true, true
+		return existing, nil
+	}
+
+	if existing, found, lookupErr := s.companionAssetByHash(ctx, input); lookupErr != nil {
+		return CompanionAsset{}, lookupErr
+	} else if found {
+		if err := s.linkCompanionAsset(ctx, existing.ID, input); err != nil {
+			return CompanionAsset{}, err
+		}
+		existing.CaptureID, existing.FieldName = input.CaptureID, input.FieldName
+		existing.Deduplicated, existing.Committed = true, true
+		return existing, nil
+	}
+
+	mediaRoot, err := s.resolveMediaDirForProfile(ctx, input.ProfileID)
+	if err != nil {
+		return CompanionAsset{}, err
+	}
+	assetID := uuid.NewString()
+	safeName := safeMediaFilename(input.Filename)
+	wantedExtension := ".png"
+	if input.MIMEType == "image/jpeg" {
+		wantedExtension = ".jpg"
+	}
+	if extension := strings.ToLower(filepath.Ext(safeName)); extension != wantedExtension && !(wantedExtension == ".jpg" && extension == ".jpeg") {
+		safeName = strings.TrimSuffix(safeName, filepath.Ext(safeName)) + wantedExtension
+	}
+	provenance := map[string]string{"source": "companion.media.submit", "capture_id": input.CaptureID, "field_name": input.FieldName}
+	for key, value := range input.Provenance {
+		if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
+			provenance[key] = strings.TrimSpace(value)
+		}
+	}
+	originalPath, _, _, err := s.createCanonicalAsset(ctx, mediaRoot, assetID, safeName, input.Filename, input.MIMEType,
+		bytes.NewReader(body), []AssetManifestOwner{{Type: "companion_capture", ID: input.CaptureID}}, provenance)
+	if err != nil {
+		return CompanionAsset{}, err
+	}
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(originalPath)))
+		return CompanionAsset{}, fmt.Errorf("begin companion media transaction: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO companion_media_assets
+		(id, profile_id, content_hash, filename, mime_type, byte_size, width, height, original_path, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, assetID, input.ProfileID, input.ContentHash, input.Filename, input.MIMEType,
+		len(body), input.Width, input.Height, mediaRootRelativePath(mediaRoot, originalPath), createdAt); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(originalPath)))
+		return CompanionAsset{}, fmt.Errorf("save companion media asset: %w", err)
+	}
+	provenanceJSON, _ := json.Marshal(provenance)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO companion_media_links(asset_id, capture_id, field_name, idempotency_key, source_url, provenance_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, assetID, input.CaptureID, input.FieldName, input.IdempotencyKey, strings.TrimSpace(input.SourceURL), string(provenanceJSON), createdAt); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(originalPath)))
+		return CompanionAsset{}, fmt.Errorf("link companion media asset: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(originalPath)))
+		return CompanionAsset{}, fmt.Errorf("commit companion media asset: %w", err)
+	}
+	return CompanionAsset{ID: assetID, CaptureID: input.CaptureID, FieldName: input.FieldName, ContentHash: input.ContentHash,
+		Filename: input.Filename, MIMEType: input.MIMEType, ByteSize: int64(len(body)), Width: input.Width, Height: input.Height,
+		Committed: true, CreatedAt: createdAt}, nil
+}
+
+func (s *Service) companionAssetByIdempotency(ctx context.Context, input CompanionAssetInput) (CompanionAsset, bool, error) {
+	var asset CompanionAsset
+	err := s.db.QueryRowContext(ctx, `SELECT a.id, l.field_name, a.content_hash, a.filename, a.mime_type, a.byte_size, a.width, a.height, a.created_at
+		FROM companion_media_links l JOIN companion_media_assets a ON a.id = l.asset_id
+		WHERE l.capture_id = ? AND l.idempotency_key = ? AND a.profile_id = ?`, input.CaptureID, input.IdempotencyKey, input.ProfileID).
+		Scan(&asset.ID, &asset.FieldName, &asset.ContentHash, &asset.Filename, &asset.MIMEType, &asset.ByteSize, &asset.Width, &asset.Height, &asset.CreatedAt)
+	if err == sql.ErrNoRows {
+		return CompanionAsset{}, false, nil
+	}
+	if err != nil {
+		return CompanionAsset{}, false, fmt.Errorf("find idempotent companion media asset: %w", err)
+	}
+	return asset, true, nil
+}
+
+func (s *Service) companionAssetByHash(ctx context.Context, input CompanionAssetInput) (CompanionAsset, bool, error) {
+	var asset CompanionAsset
+	err := s.db.QueryRowContext(ctx, `SELECT id, content_hash, filename, mime_type, byte_size, width, height, created_at
+		FROM companion_media_assets WHERE profile_id = ? AND content_hash = ?`, input.ProfileID, input.ContentHash).
+		Scan(&asset.ID, &asset.ContentHash, &asset.Filename, &asset.MIMEType, &asset.ByteSize, &asset.Width, &asset.Height, &asset.CreatedAt)
+	if err == sql.ErrNoRows {
+		return CompanionAsset{}, false, nil
+	}
+	if err != nil {
+		return CompanionAsset{}, false, fmt.Errorf("find companion media asset: %w", err)
+	}
+	return asset, true, nil
+}
+
+func (s *Service) linkCompanionAsset(ctx context.Context, assetID string, input CompanionAssetInput) error {
+	provenanceJSON, _ := json.Marshal(input.Provenance)
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO companion_media_links(asset_id, capture_id, field_name, idempotency_key, source_url, provenance_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, assetID, input.CaptureID, input.FieldName, input.IdempotencyKey, strings.TrimSpace(input.SourceURL), string(provenanceJSON), time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return fmt.Errorf("link existing companion media asset: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) getWorkspaceAttachment(ctx context.Context, profileID, attachmentID string) (WorkspaceAttachment, error) {

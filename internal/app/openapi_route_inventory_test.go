@@ -105,10 +105,10 @@ func TestOpenAPIParitySuite(t *testing.T) {
 				"CompanionProfileBearer", "profile-scoped registry", "application/json", "CompanionModuleRegistry", `"401":`, `"429":`,
 			},
 			"/api/companion/payloads": {
-				"CompanionProfileBearer", "application/json", "CompanionPayloadSubmission", "CompanionAcceptedPayload", `"413":`, `"429":`,
+				"CompanionProfileBearer", "application/json", "CompanionPayloadSubmission", "CompanionAcceptedPayload", "CompanionCaptureInbox", "Cancel a pending", `"413":`, `"429":`, `"507":`,
 			},
 			"/api/companion/media-submissions": {
-				"CompanionProfileBearer", "X-Cabinet-Profile", "X-Cabinet-Idempotency-Key", "X-Cabinet-Media-SHA256", "8388608", `"413":`, `"501":`,
+				"CompanionProfileBearer", "X-Cabinet-Profile", "X-Cabinet-Idempotency-Key", "X-Cabinet-Capture-ID", "X-Cabinet-Media-Field", "X-Cabinet-Media-Filename", "X-Cabinet-Media-SHA256", "CompanionMediaAsset", "8388608", `"201":`, `"413":`,
 			},
 			"/api/profiles/{profileID}/integration-instances": {
 				"CabinetLocalSession", "CabinetOIDCSession", "application/json", "IntegrationInstancePatch", "IntegrationInstanceList", "IntegrationInstanceResponse", "name: id", `"400":`,

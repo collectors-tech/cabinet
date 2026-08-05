@@ -14,6 +14,9 @@
     "device": "X-Cabinet-Companion-Device",
     "profile": "X-Cabinet-Profile",
     "idempotency": "X-Cabinet-Idempotency-Key",
+	"capture_id": "X-Cabinet-Capture-ID",
+	"media_field": "X-Cabinet-Media-Field",
+	"media_filename": "X-Cabinet-Media-Filename",
     "media_sha256": "X-Cabinet-Media-SHA256"
   },
   "capabilities": [
@@ -35,7 +38,9 @@
     "rotate": { "method": "POST", "path": "/api/companion/session/rotate", "auth": true },
     "revoke": { "method": "DELETE", "path": "/api/companion/session", "auth": true },
     "modules": { "method": "GET", "path": "/api/companion/modules", "auth": true },
-    "captures": { "method": "POST", "path": "/api/companion/payloads", "auth": true },
+	"captures": { "method": "POST", "path": "/api/companion/payloads", "auth": true, "acknowledgement": "durably_committed" },
+	"capture_inbox": { "method": "GET", "path": "/api/companion/payloads", "auth": true },
+	"cancel_capture": { "method": "DELETE", "path": "/api/companion/payloads", "auth": true },
     "media": { "method": "POST", "path": "/api/companion/media-submissions", "auth": true }
   }
 }

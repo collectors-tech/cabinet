@@ -1,12 +1,46 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestPurchaseInboxLoadsDurableCompanionCardsAndCommitsHandOff(t *testing.T) {
+	t.Parallel()
+	a := newTestApp(t)
+	profileID := prepareCompanionAPIProfile(t, a)
+	card := `{"order_id":"ORDER-CAPTURED","listing_id":"12345","transaction_id":"TX-CAPTURED","listing_title":"Durable purchase","purchased_identity":"Durable purchase","quantity":1,"item_price":"AU $12.00","item_url":"https://www.ebay.com/itm/12345"}`
+	if _, err := a.db.ExecContext(context.Background(), `
+		INSERT INTO companion_captures(id, profile_id, session_id, module_id, module_version, schema_version, provider_id,
+			integration_instance_id, payload_type, source_url, captured_at, payload_hash, idempotency_key,
+			redaction_summary_json, raw_payload_json, state, created_at, updated_at)
+		VALUES ('capture-purchase','`+profileID+`','session','ebay-purchase-capture','1.0.0','1','ebay','instance','purchase_order','https://www.ebay.com/mye/myebay/purchase','2026-08-06T00:00:00Z','sha256:capture','capture-purchase','[]','{}','review','2026-08-06T00:00:00Z','2026-08-06T00:00:00Z');
+		INSERT INTO companion_purchase_inbox(id, capture_id, profile_id, provider_id, order_key, item_key, card_json, state, first_seen, last_seen, created_at, updated_at)
+		VALUES ('purchase-1','capture-purchase','`+profileID+`','ebay','ORDER-CAPTURED','TX-CAPTURED',?,'review','2026-08-06T00:00:00Z','2026-08-06T00:00:00Z','2026-08-06T00:00:00Z','2026-08-06T00:00:00Z')
+	`, card); err != nil {
+		t.Fatalf("seed durable companion purchase: %v", err)
+	}
+
+	reviews := doRequest(t, a, http.MethodPost, "/api/integrations/ebay/purchase-inbox/reviews", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
+	if reviews.Code != http.StatusOK || !strings.Contains(reviews.Body.String(), "Durable purchase") {
+		t.Fatalf("durable reviews status=%d body=%s", reviews.Code, reviews.Body.String())
+	}
+	action := doRequest(t, a, http.MethodPost, "/api/integrations/ebay/purchase-inbox/actions", strings.NewReader(`{"action_id":"convert_to_inventory_item","target_key":"TX-CAPTURED","confirmed":true,"card":`+card+`}`), map[string]string{"Content-Type": "application/json"})
+	if action.Code != http.StatusOK {
+		t.Fatalf("durable hand-off status=%d body=%s", action.Code, action.Body.String())
+	}
+	var state, linkedItemID string
+	if err := a.db.QueryRowContext(context.Background(), `SELECT state, linked_item_id FROM companion_purchase_inbox WHERE id = 'purchase-1'`).Scan(&state, &linkedItemID); err != nil {
+		t.Fatalf("load durable hand-off: %v", err)
+	}
+	if state != "converted" || linkedItemID == "" {
+		t.Fatalf("durable hand-off state=%q linked_item_id=%q", state, linkedItemID)
+	}
+}
 
 func TestPurchaseInboxReviewsAPIPreparesReviewRecordsWithoutInventoryMutation(t *testing.T) {
 	t.Parallel()

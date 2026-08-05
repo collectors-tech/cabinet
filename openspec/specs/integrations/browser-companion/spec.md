@@ -66,7 +66,7 @@ Authenticated module discovery SHALL project only browser-capable modules backed
 - **AND** secret, token, password, cookie and API-key configuration MUST be removed server-side.
 
 ### Requirement INTEGRATION-070: Companion transport MUST be bounded, versioned and auditable
-The loopback transport SHALL negotiate protocol v1 capabilities and enforce body, media, rate and concurrency limits before later item/media persistence work executes.
+The loopback transport SHALL negotiate protocol v1 capabilities and enforce body, media, rate and concurrency limits before item/media persistence executes.
 
 #### Scenario: Reject unsafe transport requests
 - **GIVEN** a pairing, capture or media request
@@ -75,10 +75,10 @@ The loopback transport SHALL negotiate protocol v1 capabilities and enforce body
 - **AND** it MUST NOT persist item or media data.
 
 #### Scenario: Validate media transport before persistence
-- **GIVEN** a session with `media:submit` and an image or octet-stream body no larger than 8 MiB
-- **WHEN** the bound profile, SHA-256 and bounded idempotency key are valid
-- **THEN** Cabinet MUST accept the v1 transport checks
-- **AND** until #2032 supplies durable media ingestion it MUST return `501 companion_media_persistence_not_implemented` rather than claiming synchronisation.
+- **GIVEN** a session with `media:submit` and a JPEG or PNG body no larger than 8 MiB
+- **WHEN** the bound profile, parent capture, typed field, filename, SHA-256 and bounded idempotency key are valid
+- **THEN** Cabinet MUST verify the declared type against decoded image bytes and dimensions
+- **AND** an HTML login/challenge response or invalid image MUST fail before any file or database record is written.
 
 ### Requirement INTEGRATION-071: Pairing recovery MUST preserve the local trust boundary
 Cabinet SHALL document the browser-origin, local-compromise and recovery boundaries and SHALL keep user approval and revocation controls inside the local Cabinet UI.
@@ -133,3 +133,27 @@ The extension SHALL document its loopback access, credential storage, optional-o
 - **WHEN** they review its privacy disclosure or remove a module permission
 - **THEN** the disclosure MUST state that cookies, passwords, tokens and challenge answers are prohibited
 - **AND** removing the exact site permission MUST stop that module's browser access without revoking unrelated modules.
+
+### Requirement INTEGRATION-076: Companion item and media sync MUST be durable, idempotent and recoverable
+Cabinet SHALL commit each validated versioned capture envelope before acknowledgement, dispatch typed records through canonical review pipelines and retain actionable queue provenance across restart, backup and relocation.
+
+#### Scenario: Commit typed item and purchase observations
+- **GIVEN** a paired module submits a valid search, item-detail, purchase, readiness or explicit user-intent envelope
+- **WHEN** the module, schema, provider, integration instance, source origin, redaction summary, payload digest and idempotency key match the registry contract
+- **THEN** Cabinet MUST durably commit the raw envelope before reporting `committed=true`
+- **AND** it MUST dispatch provider observations to Market Watch/Discoveries or purchases to the review inbox without directly creating inventory
+- **AND** replay of the same digest/key MUST not duplicate observations while reuse of the key with another digest MUST fail.
+
+#### Scenario: Preserve partial and interrupted synchronisation
+- **GIVEN** a partial page range or a job interrupted while Cabinet or the MV3 worker restarts
+- **WHEN** processing resumes
+- **THEN** previously observed candidates MUST remain available and must not be interpreted as deleted
+- **AND** the capture inbox MUST expose pending, partial, review, retryable, failed and cancelled state with a bounded checkpoint
+- **AND** the extension MUST remove its durable job only after Cabinet returns a committed terminal acknowledgement.
+
+#### Scenario: Persist and deduplicate canonical images
+- **GIVEN** a valid media submission tied to an accepted capture and typed media field
+- **WHEN** its JPEG/PNG bytes, digest and dimensions pass validation
+- **THEN** Cabinet MUST write the immutable original, renditions and provenance manifest through canonical media storage before acknowledgement
+- **AND** equal content in one profile MUST reuse one asset while retaining every capture/field link
+- **AND** the response MUST not disclose a local filesystem path.

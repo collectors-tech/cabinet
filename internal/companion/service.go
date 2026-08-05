@@ -3,7 +3,6 @@ package companion
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/url"
 	"sort"
 	"strings"
@@ -13,10 +12,9 @@ import (
 )
 
 const (
-	SyncModePassiveCapture = "passive_capture"
-	AuthSchemeBearer       = "Bearer "
-	// DurableCapturePersistenceAvailable remains false until #2032 commits item/media observations atomically.
-	DurableCapturePersistenceAvailable = false
+	SyncModePassiveCapture             = "passive_capture"
+	AuthSchemeBearer                   = "Bearer "
+	DurableCapturePersistenceAvailable = true
 )
 
 type Module struct {
@@ -76,29 +74,6 @@ type Registry struct {
 	ProtocolVersion string   `json:"protocol_version"`
 	ProfileID       string   `json:"profile_id"`
 	Modules         []Module `json:"modules"`
-}
-
-type PayloadSubmission struct {
-	ProfileID       string         `json:"profile_id"`
-	ModuleID        string         `json:"module_id"`
-	URL             string         `json:"url"`
-	PayloadType     string         `json:"payload_type"`
-	CapturedAt      string         `json:"captured_at,omitempty"`
-	Passive         bool           `json:"passive"`
-	AttemptedWrite  bool           `json:"attempted_write"`
-	ConfidenceScore float64        `json:"confidence_score"`
-	Data            map[string]any `json:"data,omitempty"`
-}
-
-type AcceptedPayload struct {
-	Accepted        bool     `json:"accepted"`
-	ProfileID       string   `json:"profile_id"`
-	ModuleID        string   `json:"module_id"`
-	PayloadType     string   `json:"payload_type"`
-	SyncMode        string   `json:"sync_mode"`
-	RemoteWrite     bool     `json:"remote_write"`
-	AuditTrail      []string `json:"audit_trail"`
-	ConfidenceLabel string   `json:"confidence_label"`
 }
 
 type Service struct {
@@ -167,8 +142,8 @@ func DefaultModules() []Module {
 			PassiveOnly:   true,
 			CaptureSchemas: []CaptureSchema{{
 				PayloadType: "purchase_order",
-				Fields:      []string{"order_id", "item_id", "title", "seller", "price", "currency", "tracking_number"},
-				MediaFields: []string{"image_url"},
+				Fields:      []string{"cards"},
+				MediaFields: []string{"cards.image_url"},
 			}},
 			Workflows:      []string{"manual_purchase_capture"},
 			RedactionRules: []string{"no_cookies", "no_raw_page", "no_tokens"},
@@ -370,81 +345,6 @@ func copyCaptureSchemas(schemas []CaptureSchema) []CaptureSchema {
 	return copied
 }
 
-func (s *Service) AcceptPayload(ctx context.Context, in PayloadSubmission, authorization string, metadata RequestMetadata) (AcceptedPayload, error) {
-	profileID := strings.TrimSpace(in.ProfileID)
-	moduleID := strings.TrimSpace(in.ModuleID)
-	payloadType := strings.TrimSpace(in.PayloadType)
-	if profileID == "" {
-		return AcceptedPayload{}, protocolError("companion_profile_required")
-	}
-	session, err := s.Authenticate(ctx, authorization, metadata, CapabilityCapturesSubmit)
-	if err != nil {
-		return AcceptedPayload{}, err
-	}
-	if session.ProfileID != profileID {
-		return AcceptedPayload{}, protocolError("companion_profile_mismatch")
-	}
-	release, err := s.acquireSession(session.ID)
-	if err != nil {
-		return AcceptedPayload{}, err
-	}
-	defer release()
-	registry, err := s.registryForProfile(ctx, session.ProfileID)
-	if err != nil {
-		return AcceptedPayload{}, err
-	}
-	moduleRegistered := false
-	for _, module := range registry.Modules {
-		if module.ID == moduleID {
-			moduleRegistered = true
-			break
-		}
-	}
-	if !moduleRegistered {
-		return AcceptedPayload{}, protocolError("companion_module_not_registered")
-	}
-	if payloadType == "" {
-		return AcceptedPayload{}, protocolError("companion_payload_type_required")
-	}
-	if !validCaptureURL(in.URL) {
-		return AcceptedPayload{}, protocolError("companion_capture_url_required")
-	}
-	if !in.Passive || in.AttemptedWrite {
-		return AcceptedPayload{}, protocolError("companion_payload_must_be_passive")
-	}
-	if in.ConfidenceScore < 0 || in.ConfidenceScore > 1 {
-		return AcceptedPayload{}, protocolError("companion_confidence_score_out_of_range")
-	}
-	if raw, err := json.Marshal(in.Data); err != nil || len(raw) > 1024*1024 {
-		return AcceptedPayload{}, protocolError("companion_payload_too_large")
-	}
-	s.recordAudit(ctx, session.ProfileID, session.ID, "capture.transport.accepted", "accepted", metadata)
-	return AcceptedPayload{
-		Accepted:        true,
-		ProfileID:       profileID,
-		ModuleID:        moduleID,
-		PayloadType:     payloadType,
-		SyncMode:        SyncModePassiveCapture,
-		RemoteWrite:     false,
-		ConfidenceLabel: confidenceLabel(in.ConfidenceScore),
-		AuditTrail: []string{
-			"companion_module=" + moduleID,
-			"companion_session=" + session.ID,
-			"protocol_version=" + session.ProtocolVersion,
-			"sync_mode=" + SyncModePassiveCapture,
-			"remote_write=false",
-		},
-	}, nil
-}
-
-func validCaptureURL(rawURL string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || parsed.Host == "" {
-		return false
-	}
-	return parsed.Scheme == "http" || parsed.Scheme == "https"
-}
-
 func safeModuleConfig(input map[string]string) map[string]string {
 	result := map[string]string{}
 	for key, value := range input {
@@ -461,15 +361,4 @@ func safeModuleConfig(input map[string]string) map[string]string {
 		return nil
 	}
 	return result
-}
-
-func confidenceLabel(score float64) string {
-	switch {
-	case score >= 0.8:
-		return "high"
-	case score >= 0.5:
-		return "medium"
-	default:
-		return "low"
-	}
 }

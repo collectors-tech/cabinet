@@ -41,7 +41,9 @@ func TestBrowserCompanionSecurityDocumentation(t *testing.T) {
 		"INTEGRATION-069",
 		"INTEGRATION-070",
 		"INTEGRATION-071",
-		"companion_media_persistence_not_implemented",
+		"INTEGRATION-076",
+		"commit each validated versioned capture envelope before acknowledgement",
+		"local filesystem path",
 	)
 	assertFileContains(
 		"browser-extension/contracts/companion-protocol-v1.json",

@@ -26,6 +26,9 @@ const state = {
   profile_id: '',
   modules: [],
   pending: 0,
+	cabinet_pending: 0,
+	cabinet_failed: 0,
+	cabinet_review: 0,
   last_sync: '',
   error: '',
   sync_paused: false,
@@ -66,7 +69,13 @@ const client = async () => new CompanionClient({
 })
 
 const refreshModules = async () => {
-  const registry = normaliseRegistry(await (await client()).modules())
+	const companionClient = await client()
+	const registry = normaliseRegistry(await companionClient.modules())
+	let inbox = { captures: [], pending: 0, failed: 0, review: 0 }
+	try { inbox = await companionClient.captureInbox() } catch (error) {
+	  if (!(error instanceof CompanionProtocolError) || error.status !== 403) throw error
+	}
+	const captures = Array.isArray(inbox?.captures) ? inbox.captures : []
   const modules = []
   for (const module of registry.modules) {
     const permission = await browserPlatform.permissions.contains(permissionOrigins(module))
@@ -83,11 +92,17 @@ const refreshModules = async () => {
       guidance: previous?.guidance ?? '',
       last_checked: previous?.last_checked ?? '',
       last_attempt_at: previous?.last_attempt_at ?? 0,
+	  cabinet_pending: captures.filter((capture) => capture.module_id === module.id && ['accepted', 'validating', 'queued', 'processing', 'retryable-failed'].includes(capture.state)).length,
+	  cabinet_failed: captures.filter((capture) => capture.module_id === module.id && ['retryable-failed', 'permanently-failed'].includes(capture.state)).length,
+	  cabinet_review: captures.filter((capture) => capture.module_id === module.id && capture.state === 'review').length,
     })
   }
   state.connection = 'connected'
   state.profile_id = registry.profile_id
   state.modules = modules
+	state.cabinet_pending = Number(inbox?.pending ?? 0)
+	state.cabinet_failed = Number(inbox?.failed ?? 0)
+	state.cabinet_review = Number(inbox?.review ?? 0)
   state.error = ''
   await saveState()
   return state
@@ -169,7 +184,10 @@ const processQueue = async () => {
   }
   try {
     if (job.kind !== 'capture') throw new Error('queue_kind_unsupported')
-    await (await client()).submitCapture(job.payload)
+	const accepted = await (await client()).submitCapture(job.payload)
+	if (accepted?.committed !== true || !['completed', 'partial', 'review'].includes(accepted.state)) {
+	  throw new Error('capture_not_committed')
+	}
     governor.success(job.module_id)
     await storage.set(governorKey, governor.snapshot())
     await queue.complete(job.id)
@@ -301,10 +319,11 @@ browserPlatform.runtime.onMessage((message, _sender, sendResponse) => {
         if (!tab) throw new Error('module_browser_required')
         await browserPlatform.scripting.execute({ target: { tabId: tab.id }, files: [module.browser.capture_script] })
         const observation = await browserPlatform.tabs.sendMessage(tab.id, { type: 'cabinet:capture', module_id: module.id })
-        const payload = normaliseCapture(module, observation, tab.url, state.profile_id)
-        const partial = module.configuration.item_fields.some((field) => payload.data[field] === undefined || payload.data[field] === '')
+		const jobID = crypto.randomUUID()
+		const payload = await normaliseCapture(module, observation, tab.url, state.profile_id, jobID)
+		const partial = payload.page_complete !== true
         await queue.enqueue({
-          id: crypto.randomUUID(),
+		  id: jobID,
           integration_instance_id: module.integration_instance_id,
           module_id: module.id,
           kind: 'capture',
