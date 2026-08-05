@@ -2,14 +2,18 @@
 
 Issue: #1868
 Version: 0.1.0-beta.1
-Release gate: #1864 approval required before publishing, attaching prerelease artifacts, or promoting `develop` to `main`.
+Release gate: validate the private/internal candidate before approval; require #1864 approval before external publication or promotion.
 
-This checklist records the non-publishing Windows validation still required before #1868 can claim the portable beta package is release-ready. It complements `release/windows-portable-artifact-validation.md` by proving the artifact can start cleanly and can be run against an existing data directory with backup and rollback evidence.
+Internal candidate creation does not require final #1864 approval.
+Final #1864 approval is required before external prerelease publication or `develop` to `main` promotion.
+
+This checklist records the non-publishing Windows validation required before #1869 acceptance can pass. It complements `release/windows-portable-artifact-validation.md` by proving the exact frozen-commit artefact can start cleanly and can be run against an existing data directory with backup and rollback evidence.
 
 ## Candidate Identity
 
 - Build or nominate `dist/cabinet-0.1.0-beta.1-windows-amd64-portable.zip` from a clean commit.
 - Record the matching `.sha256` value, release notes path, commit SHA, build date, and package extraction path.
+- Record the paired #2034 Browser Companion filename, SHA-256, source commit, manifest and browser version.
 - Confirm the extracted package contains `cabinet.exe`, `README.md`, and `WINDOWS-PORTABLE-BETA.md`.
 
 ## Clean Install and Start
@@ -34,4 +38,5 @@ This checklist records the non-publishing Windows validation still required befo
 - Preserve the pre-upgrade backup outside the extracted package folder.
 - Confirm rollback instructions identify closing Cabinet, restoring the backup or prior data directory, and re-running the prior package if needed.
 - Store command output, runtime JSON, checksum proof, screenshots or notes, and pass/fail summary under `.work-agent/logs/issue-1868-portable-upgrade-validation/`.
-- Do not publish a GitHub prerelease, attach artifacts to a release, or claim final #1868 completion until #1864 approval exists.
+- Link the private/internal proof to #1869 and #1867 before the #1864 decision.
+- Do not publish a GitHub prerelease, attach artefacts to an external release, or promote `develop` to `main` until final #1864 approval exists after packaged acceptance.
