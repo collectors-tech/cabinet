@@ -42,10 +42,19 @@ func TestCompanionRegistryPublishesDataDrivenBrowserHostContract(t *testing.T) {
 	t.Parallel()
 
 	registry := NewService(DefaultModules()).Registry()
-	if len(registry.Modules) != 1 {
-		t.Fatalf("expected one default browser module, got %+v", registry.Modules)
+	if len(registry.Modules) < 2 {
+		t.Fatalf("expected default browser modules, got %+v", registry.Modules)
 	}
-	module := registry.Modules[0]
+	var module Module
+	for _, candidate := range registry.Modules {
+		if candidate.ID == "ebay-purchase-capture" {
+			module = candidate
+			break
+		}
+	}
+	if module.ID == "" {
+		t.Fatalf("expected eBay default module, got %+v", registry.Modules)
+	}
 	if module.ModuleVersion != "1.0.0" || module.Display.Name != "eBay purchases" {
 		t.Fatalf("missing versioned display contract: %+v", module)
 	}
@@ -74,7 +83,14 @@ func TestCompanionRegistryAdvertisesSyncOnlyForPackagedCaptureModules(t *testing
 	modules[0].Browser.CaptureScript = "modules/fixture.js"
 	modules[0].Configuration.SyncAvailable = true
 	registry := NewService(modules).Registry()
-	if len(registry.Modules) != 1 || !registry.Modules[0].Configuration.SyncAvailable {
+	var ebay Module
+	for _, module := range registry.Modules {
+		if module.ID == "ebay-purchase-capture" {
+			ebay = module
+			break
+		}
+	}
+	if ebay.ID == "" || !ebay.Configuration.SyncAvailable {
 		t.Fatalf("durable persistence did not enable the packaged capture module: %+v", registry.Modules)
 	}
 }

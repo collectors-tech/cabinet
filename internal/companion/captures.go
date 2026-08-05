@@ -398,7 +398,8 @@ func (s *Service) processCapture(ctx context.Context, captureID string) (Capture
 			items = normalised.Search.Items
 			query = normalised.Search.Query
 		}
-		observations, candidates, err = dispatchProviderItems(ctx, tx, captureID, in, items, query)
+		complete := in.PageComplete && (normalised.Search == nil || normalised.Search.Complete)
+		observations, candidates, err = dispatchProviderItems(ctx, tx, captureID, in, items, query, module.Site, complete)
 	}
 	if err == nil && len(normalised.Purchases) > 0 {
 		purchases, err = dispatchPurchaseItems(ctx, tx, captureID, in, normalised.Purchases)
@@ -455,17 +456,21 @@ func captureNeedsReview(in PayloadSubmission, normalised normalisedCapture) bool
 	return false
 }
 
-func dispatchProviderItems(ctx context.Context, tx *sql.Tx, captureID string, in PayloadSubmission, items []captureProviderItem, query string) (int, int, error) {
+func dispatchProviderItems(ctx context.Context, tx *sql.Tx, captureID string, in PayloadSubmission, items []captureProviderItem, query, providerScope string, complete bool) (int, int, error) {
 	now := strings.TrimSpace(in.CapturedAt)
+	providerScope = boundedCaptureText(providerScope, 128)
+	if providerScope == "" {
+		providerScope = in.ProviderID
+	}
 	querySetID := deterministicID("companion-query", in.ProfileID, in.IntegrationInstanceID, query)
 	keywords, _ := json.Marshal([]string{query})
-	providers, _ := json.Marshal([]string{in.ProviderID})
+	providers, _ := json.Marshal([]string{providerScope})
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json, enabled, created_at, updated_at)
 		VALUES(?, ?, ?, ?, '[]', ?, 1, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name=excluded.name, keywords_json=excluded.keywords_json,
 			provider_scope_json=excluded.provider_scope_json, updated_at=excluded.updated_at
-	`, querySetID, in.ProfileID, "Browser Companion: "+in.ProviderID, string(keywords), string(providers), now, now); err != nil {
+	`, querySetID, in.ProfileID, "Browser Companion: "+providerScope, string(keywords), string(providers), now, now); err != nil {
 		return 0, 0, err
 	}
 	for _, item := range items {
@@ -508,7 +513,7 @@ func dispatchProviderItems(ctx context.Context, tx *sql.Tx, captureID string, in
 				stock_state=excluded.stock_state, stock_count=excluded.stock_count
 		`, candidateID, in.ProfileID, querySetID, listingKey, item.Title, item.Price, item.Shipping, item.URL,
 			item.ImageURL, item.Seller, firstNonEmpty(item.FirstSeen, now), firstNonEmpty(item.LastSeen, now), status,
-			in.ProviderID, item.Currency, sanitiseCaptureURL(in.URL), stockState, stockCount); err != nil {
+			providerScope, item.Currency, sanitiseCaptureURL(in.URL), stockState, stockCount); err != nil {
 			return 0, 0, err
 		}
 	}
@@ -516,7 +521,20 @@ func dispatchProviderItems(ctx context.Context, tx *sql.Tx, captureID string, in
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO scanner_runs(id, profile_id, query_set_id, provider, trigger_type, started_at, finished_at, status, result_count, new_result_count)
 		VALUES(?, ?, ?, ?, 'browser_companion', ?, ?, 'completed', ?, ?)
-	`, runID, in.ProfileID, querySetID, in.ProviderID, now, now, len(items), len(items)); err != nil {
+	`, runID, in.ProfileID, querySetID, providerScope, now, now, len(items), len(items)); err != nil {
+		return 0, 0, err
+	}
+	healthStatus := "partial"
+	if complete {
+		healthStatus = "ok"
+	}
+	healthMessage := fmt.Sprintf("browser_companion module=%s module_version=%s schema_version=%s capture=%s", in.ModuleID, in.ModuleVersion, in.SchemaVersion, captureID)
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at)
+		VALUES(?, ?, ?, 0, ?)
+		ON CONFLICT(provider) DO UPDATE SET status=excluded.status, message=excluded.message,
+			retry_after_seconds=0, updated_at=excluded.updated_at
+	`, providerScope, healthStatus, healthMessage, now); err != nil {
 		return 0, 0, err
 	}
 	return len(items), len(items), nil

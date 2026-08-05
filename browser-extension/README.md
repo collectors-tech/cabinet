@@ -24,3 +24,9 @@ Unpacked Chrome and Edge installs can receive different extension origins. Pair 
 The extension does not infer login from an open tab alone. It retains bounded idempotent jobs through service-worker and browser restarts, applies retry backoff, and exposes pending/error state through the popup and badge.
 
 The popup shows setup, sync, pause/resume and review actions only when the Cabinet module contract proves they are available. Cabinet advertises `sync_available: true` only when a module has a packaged capture script and the durable Cabinet capture pipeline is available. The core loads that separately packaged script, accepts only declared bounded typed fields, strips query/fragment data from source URLs, rejects raw page/session fields, and keeps the passive envelope queued until Cabinet returns a committed terminal acknowledgement. Cabinet-side pending, failed and review counts remain visible and open the module's configured review surface.
+
+## Frontline Hobbies module
+
+The versioned `frontlinehobbies-search-capture` module is projected only for an enabled `au-webshop-frontlinehobbies-com-au` integration instance. It requests exact Frontline storefront/CDN origins, recognises rendered public product cards, and submits search batches under the `frontlinehobbies` Market Watch scope. Ready, partial, signed-out, challenge and selector-drift fixtures are deterministic; challenges and unknown page shapes fail closed. It is manual and user-present, capped at six attempts per minute, and has no cookie, token, network-fetch, click, cart, checkout or other provider-write mechanism.
+
+Fixture and integration tests are source evidence, not live acceptance. A normal user-present Frontline search must still be attached to #1944, and the same journey must be repeated from the exact package in #1869.

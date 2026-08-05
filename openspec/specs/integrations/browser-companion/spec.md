@@ -157,3 +157,20 @@ Cabinet SHALL commit each validated versioned capture envelope before acknowledg
 - **THEN** Cabinet MUST write the immutable original, renditions and provenance manifest through canonical media storage before acknowledgement
 - **AND** equal content in one profile MUST reuse one asset while retaining every capture/field link
 - **AND** the response MUST not disclose a local filesystem path.
+
+### Requirement INTEGRATION-077: Frontline capture MUST preserve provider identity and fail closed
+Cabinet SHALL expose one passive, user-present Frontline Hobbies module for enabled `au-webshop-frontlinehobbies-com-au` instances while persisting Market Watch output under the canonical `frontlinehobbies` scope.
+
+#### Scenario: Capture a supported public Frontline result page
+- **GIVEN** the paired collector grants the exact Frontline storefront and CDN origins and opens a supported public result page
+- **WHEN** the module proves a ready product-card shape and the collector starts sync
+- **THEN** it MUST emit bounded version-1 search results with canonical URL, AUD price, stock, image and field-confidence evidence
+- **AND** Cabinet MUST preserve integration, transport, module and schema provenance through Market Watch, Discoveries and confirmed Wishlist or Inventory hand-off
+- **AND** the extension MUST perform no provider fetch, click, cookie/token access, challenge solution or remote write.
+
+#### Scenario: Fail closed on an incomplete or unsupported page
+- **GIVEN** a paginated result, sign-in form, challenge page or changed product-card shape
+- **WHEN** the module checks readiness or capture state
+- **THEN** it MUST report partial, signed-out, action-required or selector-drift state respectively
+- **AND** a partial capture MUST NOT remove earlier candidates
+- **AND** fixtures MUST remain explicitly separate from the external user-present live evidence and packaged acceptance required by #1944 and #1869.

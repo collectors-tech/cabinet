@@ -105,6 +105,11 @@ func (m integrationProviderManifest) payload() map[string]any {
 		payload["headless_state"] = "opt_in_required"
 		payload["manual_capture_action"] = "provider_product_url_ingest"
 	}
+	if strings.TrimSpace(m.BaseDomain) == "frontlinehobbies.com.au" {
+		payload["fallback_state"] = "browser_companion_user_present"
+		payload["browser_companion_state"] = "available_when_paired"
+		payload["direct_search_state"] = "best_effort_fail_closed"
+	}
 	if strings.TrimSpace(m.BaseDomain) == "hobbytechtoys.com.au" {
 		payload["parts_finder_state"] = "public_page_discovery"
 		payload["parts_finder_path"] = "/pages/parts-finder"
@@ -623,6 +628,13 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 	}
 	if domain == "bonzaslotcars.com.au" {
 		manifest.SetupInstructions = "Webshop ingestion uses Store API static extraction first. Product URLs can be captured for manual review; headless browsing is opt-in only."
+	}
+	if domain == "frontlinehobbies.com.au" {
+		manifest.CapabilityFlags["browser_companion"] = true
+		manifest.CapabilityFlags["user_present_search"] = true
+		manifest.CapabilityFlags["unattended_search"] = false
+		manifest.CapabilityFlags["challenge_bypass"] = false
+		manifest.SetupInstructions = "Pair the Browser Companion, grant the exact Frontline origins, then open a public Frontline search as the user and sync the rendered products. Cabinet never exports cookies or solves a challenge; the direct search path remains best-effort and fails closed."
 	}
 	return manifest
 }

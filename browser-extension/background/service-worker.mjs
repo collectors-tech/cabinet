@@ -319,6 +319,11 @@ browserPlatform.runtime.onMessage((message, _sender, sendResponse) => {
         if (!tab) throw new Error('module_browser_required')
         await browserPlatform.scripting.execute({ target: { tabId: tab.id }, files: [module.browser.capture_script] })
         const observation = await browserPlatform.tabs.sendMessage(tab.id, { type: 'cabinet:capture', module_id: module.id })
+		if (observation?.error) {
+		  const failure = new Error(observation.error)
+		  failure.code = observation.error
+		  throw failure
+		}
 		const jobID = crypto.randomUUID()
 		const payload = await normaliseCapture(module, observation, tab.url, state.profile_id, jobID)
 		const partial = payload.page_complete !== true

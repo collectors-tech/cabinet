@@ -165,6 +165,62 @@ func DefaultModules() []Module {
 				HelpURL: "/help-center/integrations", SetupRequired: false, SyncAvailable: false,
 			},
 		},
+		{
+			ID:            "frontlinehobbies-search-capture",
+			ModuleVersion: "1.0.0",
+			Site:          "frontlinehobbies",
+			ProviderID:    "au-webshop-frontlinehobbies-com-au",
+			Actions:       []string{"capture_search_results", "capture_item"},
+			PassiveOnly:   true,
+			CaptureSchemas: []CaptureSchema{
+				{
+					PayloadType: "search_results",
+					Fields:      []string{"query", "page", "page_size", "range_start", "range_end", "total_pages", "complete", "items"},
+					MediaFields: []string{"items.image_url"},
+				},
+				{
+					PayloadType: "readiness_diagnostic",
+					Fields:      []string{"state", "evidence_ids", "fixture_version"},
+				},
+			},
+			Workflows:      []string{"manual_search_capture", "market_watch_observation"},
+			RedactionRules: []string{"no_cookies", "no_raw_page", "no_tokens"},
+			FixtureVersion: "1",
+			Display:        ModuleDisplay{Name: "Frontline Hobbies"},
+			Browser: BrowserContract{
+				StartURL: "https://www.frontlinehobbies.com.au/",
+				Origins: []string{
+					"https://www.frontlinehobbies.com.au/*",
+					"https://frontlinehobbies.com.au/*",
+					"https://cdn.frontlinehobbies.com.au/*",
+				},
+				URLPatterns: []string{
+					"https://www.frontlinehobbies.com.au/*",
+					"https://frontlinehobbies.com.au/*",
+				},
+				CaptureScript: "modules/frontlinehobbies.js",
+				Readiness: BrowserReadiness{
+					Ready: []string{
+						"li.product", ".product-item", "[data-product-id]", "[data-product-sku]",
+						"[itemtype=\"https://schema.org/Product\"]", "[itemtype=\"http://schema.org/Product\"]",
+					},
+					LoggedOut: []string{
+						"form.woocommerce-form-login input[type=password]", "form[action*=\"login\"] input[type=password]",
+					},
+					Challenge: []string{
+						"form#challenge-form", ".cf-challenge", "[data-cabinet-provider-state=\"challenge\"]",
+					},
+				},
+			},
+			Configuration: ModuleConfiguration{
+				CaptureMode: "manual_user_present",
+				ItemFields: []string{
+					"listing_id", "title", "price", "currency", "url", "image_url", "seller", "stock_state", "stock_count",
+				},
+				MediaPolicy: "references_by_default", ReviewDestination: "discoveries", RateLimitPerMinute: 6,
+				HelpURL: "/help-center/integrations", SetupRequired: false, SyncAvailable: true,
+			},
+		},
 	}
 }
 
