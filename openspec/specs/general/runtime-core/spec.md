@@ -53,6 +53,18 @@ Cabinet beta release acceptance SHALL be encoded as a stable checklist before pa
 - **AND** every failure SHALL create or link a focused issue before rerun
 - **AND** the final packaged journey SHALL use the packaged binary without test-only hooks, dirty worktree state, unapproved release publication, or `develop` to `main` promotion
 
+### Requirement RUNTIME-CORE-021: Beta release gates SHALL remain acyclic
+Cabinet SHALL separate source/live readiness, internal candidate creation, packaged acceptance, final approval and external publication into ordered release gates.
+
+#### Scenario: Advance an exact candidate through release gates
+- **GIVEN** every required provider, media and Browser Companion source-ready prerequisite is merged and evidenced
+- **WHEN** the release programme nominates an exact frozen `develop` commit
+- **THEN** #1868 MAY create private/internal Cabinet and companion candidate artefacts without final #1864 approval
+- **AND** #1869 SHALL test those exact files before #1867 attaches final packaged data-safety evidence
+- **AND** final #1864 approval SHALL occur only after packaged evidence exists
+- **AND** external prerelease publication and `develop` to `main` promotion SHALL remain prohibited until that explicit approval
+- **AND** any accepted release-blocking fix SHALL create a new exact candidate commit and invalidate earlier candidate acceptance
+
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
 

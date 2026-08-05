@@ -22,8 +22,9 @@ func TestPackagedCoreWorkflowAcceptanceChecklistCoversIssue1869(t *testing.T) {
 		"Issue: #1869",
 		"Windows portable beta package from #1868",
 		"#1864 approval required",
-		"Package SHA-256",
-		"Source commit SHA",
+		"Cabinet package SHA-256",
+		"Cabinet source commit SHA",
+		"Browser Companion package SHA-256",
 		"/api/runtime.app_version",
 		"Fresh start and onboarding/profile setup",
 		"Inventory item can be created, edited, searched, filtered, reloaded",
@@ -33,7 +34,12 @@ func TestPackagedCoreWorkflowAcceptanceChecklistCoversIssue1869(t *testing.T) {
 		"Data export and backup",
 		"#1937 media migration evidence records discovered, migrated, already-migrated, duplicate, skipped, failed, and orphan counts",
 		"Backup restore into an isolated target preserves core record counts and relationships",
-		"A saved Market Watch can run against the chosen live beta provider",
+		"Voglers",
+		"Hobbytech",
+		"Frontline",
+		"Bonza",
+		"Pair to Cabinet through #2033",
+		"canonical asset manifest/layout",
 		"Discovery review can hand an item to Wishlist or Inventory",
 		"One failed provider and one invalid import/restore input",
 		"Persistence is verified after reload and application restart",
@@ -44,6 +50,7 @@ func TestPackagedCoreWorkflowAcceptanceChecklistCoversIssue1869(t *testing.T) {
 		"uses the packaged binary, not a dev server",
 		"does not require test-only hooks",
 		"does not merge `develop` into `main`",
+		"final approval follows packaged acceptance",
 	}
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {

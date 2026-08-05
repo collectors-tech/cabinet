@@ -2,7 +2,9 @@
 
 Issue: #1867 `P0(beta): validate database upgrade, backup, export and restore round trip`
 
-Status as of 2026-07-12: implementation and automated regression evidence is in place for the release data-safety contracts. #1867 should remain in release review until packaged Windows release acceptance (#1868/#1869) attaches binary-level evidence to #1864.
+Status as of 2026-08-06: implementation and automated regression evidence is in place for the release data-safety contracts. #1867 remains in release review until #1869 tests the exact private/internal Cabinet + Browser Companion candidate and attaches binary-level evidence to #1864.
+
+Internal candidate creation does not require final #1864 approval. Final #1864 approval follows #1869/#1867 evidence and is required before external prerelease publication or `develop` to `main` promotion.
 
 ## Acceptance matrix
 
@@ -14,7 +16,7 @@ Status as of 2026-07-12: implementation and automated regression evidence is in 
 | Exported data can be imported/restored and key counts/relationships match | PR #1901 covered item/barcode/instance relationship round-trip, PR #1902 covered media/photo references, and PR #1905 covered saved filter/view definitions through export -> clean import -> export. | Covered |
 | Secrets are not leaked into normal export/diagnostic artifacts | PR #1900 covered active-profile data export scope plus non-leakage of stored profile secret values and raw license material through `TestDataExportsDoNotLeakProfileSecretsOrLicenses`. | Covered |
 | Restore failure leaves prior workspace recoverable | PR #1904 added `TestRestoreRejectsIncompleteArchiveWithoutChangingActiveDatabase`; PR #1899 covered atomic restore replacement/recovery behavior. | Covered |
-| Windows packaged-binary evidence is attached to #1864 | This is intentionally release-lane evidence, not a source-only PR claim. It remains owned by #1868/#1869 on the exact packaged beta artifact/commit. | Pending packaged release acceptance |
+| Windows packaged-binary evidence is attached to #1864 | This is intentionally release-lane evidence, not a source-only PR claim. It remains owned by #1868/#1869 on the exact Cabinet + Browser Companion candidate, files, checksums and commit. | Pending packaged release acceptance |
 | Zero data-loss defects remain open for the release candidate | No open #1867 data-loss implementation blocker is known after merged PRs #1896, #1897, #1899, #1900, #1901, #1902, #1903, #1904, and #1905. Final confirmation belongs to #1869 packaged core-workflow acceptance on the release candidate. | Pending packaged release acceptance |
 
 ## Merged proof slices
@@ -35,4 +37,5 @@ Status as of 2026-07-12: implementation and automated regression evidence is in 
 
 1. #1868 produces the versioned Windows beta artifact and checksums.
 2. #1869 runs packaged core-workflow acceptance against that artifact.
-3. #1864 receives the exact release commit, artifact, checksum, packaged data-safety, and rollback/recovery evidence.
+3. #1869/#1867 verify canonical media manifests and links through companion image sync, restart, relocation, backup and restore.
+4. #1864 receives the exact release commit, Cabinet and companion artifacts/checksums, packaged data-safety, and rollback/recovery evidence before the final approval decision.

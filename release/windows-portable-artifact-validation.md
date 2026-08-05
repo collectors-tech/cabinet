@@ -2,9 +2,12 @@
 
 Issue: #1868
 Version: 0.1.0-beta.1
-Release gate: #1864 approval required before publishing, attaching prerelease artifacts, or promoting `develop` to `main`.
+Release gate: build private/internal evidence before approval; require #1864 approval before external publication or promotion.
 
-This checklist records the non-publishing proof required before the private beta package can move to release approval. It validates the portable artifact generated from a clean Cabinet commit without creating or updating a GitHub prerelease.
+Internal candidate creation does not require final #1864 approval.
+Final #1864 approval is required before external prerelease publication or `develop` to `main` promotion.
+
+This checklist records the non-publishing proof required before the private beta package can move to packaged acceptance and then release approval. It validates the portable artifact generated from a clean, frozen Cabinet commit without creating or updating a GitHub prerelease.
 
 ## Build
 
@@ -13,6 +16,7 @@ This checklist records the non-publishing proof required before the private beta
 - Confirm the generated checksum file is `dist/cabinet-0.1.0-beta.1-windows-amd64-portable.zip.sha256`.
 - Confirm release notes are generated at `dist/cabinet-0.1.0-beta.1-release-notes.md`.
 - Confirm the ZIP contains `cabinet.exe`, `cabinet-mcp.exe`, `README.md`, and `WINDOWS-PORTABLE-BETA.md`.
+- Record the exact #2034 Browser Companion filenames, versions, source commit, release manifest and separate SHA-256 checksums nominated with this Cabinet candidate.
 
 ## Runtime Smoke
 
@@ -24,4 +28,5 @@ This checklist records the non-publishing proof required before the private beta
 ## Release Gate
 
 - Preserve package path, SHA-256, release notes path, runtime smoke output, and command logs under `.work-agent/logs/issue-1868-portable-artifact-validation/`.
-- Must not publish a GitHub prerelease, attach artifacts to a release, or claim final Windows install/start acceptance until #1864 approval exists.
+- Preserve the Cabinet and companion files as private/internal acceptance artefacts for #1869.
+- Must not publish a GitHub prerelease, attach artefacts to an external release, or promote `develop` to `main` until final #1864 approval exists after packaged acceptance.

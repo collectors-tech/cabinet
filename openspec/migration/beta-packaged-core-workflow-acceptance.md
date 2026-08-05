@@ -1,21 +1,26 @@
 # Cabinet 0.1 Packaged Core-Workflow Acceptance Checklist
 
 Issue: #1869
-Package lane: Windows portable beta package from #1868
-Release gate: #1864 approval required before prerelease publication or `develop` to `main`
+Package lane: Windows portable beta package from #1868 plus the exact #2034 Browser Companion package
+Release gate: #1864 approval required before external prerelease publication or `develop` to `main`
 
-This checklist is the stable packaged-candidate acceptance pack for Cabinet 0.1 private beta. It must be run against the exact Windows artefact, checksum, commit SHA, and app version intended for release.
+This checklist runs against the private/internal candidate produced after the
+source-ready gate. Internal candidate creation does not require final #1864 approval.
+Final #1864 approval is required before external prerelease publication or `develop` to `main` promotion.
+The final approval follows packaged acceptance and #1867 data-safety evidence.
 
 ## Candidate Identity
 
 - [ ] OS version and host profile are recorded.
-- [ ] Package filename is recorded.
-- [ ] Package SHA-256 is recorded and matches the `.sha256` file.
-- [ ] Source commit SHA is recorded.
+- [ ] Cabinet package filename is recorded.
+- [ ] Cabinet package SHA-256 is recorded and matches its `.sha256` file.
+- [ ] Cabinet source commit SHA is recorded.
+- [ ] Browser name/version and Browser Companion package filename are recorded.
+- [ ] Browser Companion package SHA-256, source commit, extension version and release-manifest path are recorded.
 - [ ] `/api/runtime.app_version`, build date, runtime port, and pid are recorded.
-- [ ] Release notes path or prerelease draft URL is recorded.
+- [ ] Cabinet and Browser Companion release notes paths are recorded.
 
-## Required Journey
+## Required Collector Journey
 
 - [ ] Fresh start and onboarding/profile setup complete from a clean Windows data directory.
 - [ ] Inventory item can be created, edited, searched, filtered, reloaded, and verified after restart.
@@ -25,23 +30,38 @@ This checklist is the stable packaged-candidate acceptance pack for Cabinet 0.1 
 - [ ] Collection can be created/edited, receive/move an item, soft-delete safely, and protect All Items.
 - [ ] Data export and backup both complete with non-secret artefacts.
 - [ ] Backup restore into an isolated target preserves core record counts and relationships.
-- [ ] A saved Market Watch can run against the chosen live beta provider with non-secret provider evidence.
 - [ ] Discovery review can hand an item to Wishlist or Inventory without ownership confusion.
 - [ ] One failed provider and one invalid import/restore input show useful recovery/error behavior.
+
+## Required Provider and Companion Journey
+
+- [ ] Install the exact Chrome and Edge packages through the documented beta path without developer source tools.
+- [ ] Pair to Cabinet through #2033 and verify reconnect, credential rotation, revoke-one and revoke-all.
+- [ ] Enabled browser-capable integration changes propagate from Cabinet without rebuilding the extension.
+- [ ] Cabinet/provider open-focus and ready, login-required, action-required, partial, selector-drift and disconnected states are truthful.
+- [ ] A real saved Market Watch and Discovery hand-off pass independently for Voglers.
+- [ ] A real saved Market Watch and Discovery hand-off pass independently for Hobbytech.
+- [ ] A user-present real search, persisted observation and Discovery hand-off pass independently for Frontline.
+- [ ] A user-present real search after normal browser interaction, persisted observation and Discovery hand-off pass independently for Bonza.
+- [ ] Failure of one provider does not prevent, mutate or corrupt another provider's watches or observations.
+- [ ] Replaying one capture proves item and media idempotency with transport/module/schema provenance.
+- [ ] One durable protected-provider image uses the canonical asset manifest/layout and survives restart, backup, relocation and restore.
+- [ ] Browser-closed, Cabinet-restart and extension-service-worker recovery resume without duplicate observations.
 
 ## Cross-Cutting Proof
 
 - [ ] Persistence is verified after reload and application restart.
-- [ ] Active-profile isolation is verified for at least one created record and one export/restore path.
+- [ ] Active-profile isolation is verified for at least one created record, companion session and export/restore path.
 - [ ] No raw translation keys, placeholder security claims, or unsigned-installer claims appear in release UI/docs.
+- [ ] No cookie/token export, challenge solving, hidden crawling or silent inventory mutation occurs.
 - [ ] Empty and error states are useful enough for a beta user to recover or report the issue.
-- [ ] Exact package version and commit are visible in runtime UI or `/api/runtime` evidence.
+- [ ] Exact Cabinet and extension versions/commits are visible in recorded evidence.
 
 ## Failure Handling
 
 - [ ] Every failure creates or links a focused GitHub issue with route/surface, expected behavior, actual behavior, repro steps, evidence, requirement link, and planned validation target.
 - [ ] Release-blocking failures are linked back to #1864 and #1869 before rerun.
-- [ ] The acceptance pack is rerun after release-blocking fixes.
+- [ ] The acceptance pack is rerun after release-blocking fixes against a new exact candidate commit.
 - [ ] Final evidence explicitly states pass, fail with blockers, or not run, without using visual toasts or redirects as persistence proof.
 
 ## Prohibited Shortcuts
