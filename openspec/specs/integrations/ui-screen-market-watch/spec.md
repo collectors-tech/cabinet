@@ -304,22 +304,23 @@ Market Watch SHALL frame the primary route as a collector-facing saved integrati
 - **AND** provider health, saved-watch table controls, result inbox controls, and secondary manual listing capture MUST be visible or reachable from the same dashboard surface
 
 ### Requirement UI-SCREEN-MARKET-WATCH-019: Beta Market Watch providers SHALL fail closed until live proof exists
-Market Watch provider registry projection SHALL distinguish live-validated, setup-required, beta-limited, manual-capture-only, and disabled providers so beta users are not shown unsupported or unproven provider paths as connected production-ready integrations.
+Market Watch provider registry projection SHALL distinguish live-validated, setup-required, browser-companion-evidence-required, beta-limited, manual-capture-only, and disabled providers so beta users are not shown unsupported or unproven provider paths as connected production-ready integrations.
 
 #### Scenario: Beta provider registry status fails closed
 - **GIVEN** Cabinet is preparing the 0.1 beta Market Watch provider proof path
 - **WHEN** `/api/providers/registry` projects Market Watch-capable providers
 - **THEN** eBay MUST remain `setup_required` with unavailable Market Watch actions until credentials and live proof are present
 - **AND** disabled or unsupported providers MUST expose disabled actions and a next safe provider-selection action
-- **AND** public storefront providers without attached live proof MUST declare `beta_limited` or `manual_url_capture_only` status rather than `available_live_validated`
+- **AND** public storefront providers without attached live proof MUST declare `beta_limited`, `manual_url_capture_only` or `browser_companion_live_evidence_required` rather than `available_live_validated`
 - **AND** live evidence state MUST be visible in the registry response for release evidence review
 
-#### Scenario: Bonza live proof upgrades beta provider status
-- **GIVEN** a Bonza-scoped saved Market Watch query runs successfully against the public Store API
-- **WHEN** Cabinet persists normalized candidates and records provider health for the Bonza registry provider
+#### Scenario: Bonza user-present Browser Companion proof upgrades beta provider status
+- **GIVEN** a paired collector opens a real Bonza search, completes normal site interaction and submits a complete passive capture
+- **WHEN** Cabinet persists normalized candidates and scoped `browser_companion` health for `bonzaslotcars`
 - **THEN** `/api/providers/registry` MUST project Bonza as `available_live_validated`
 - **AND** Bonza MUST expose `live_evidence_state=validated` and an available `market_watch.run` action
-- **AND** the release evidence MUST remain non-secret and identify the access method, rate-limit/cache boundary, observed result provenance, and log path
+- **AND** a direct Store API fixture/run MUST NOT satisfy the live evidence gate
+- **AND** the release evidence MUST remain non-secret and identify the module/fixture version, exact origins, user-present access method, rate limit, observed result provenance and capture/provider-health evidence
 
 #### Scenario: BigCommerce HTML storefront live proof upgrades beta provider status
 - **GIVEN** a Voglers-scoped saved Market Watch query runs successfully against the public BigCommerce storefront search page
@@ -352,6 +353,6 @@ Market Watch provider registry projection SHALL distinguish live-validated, setu
 | UC-MW-19 | Result inbox lifecycle review | Output detail result inbox shows status/provider/match/wishlist filters, match rationale, seen timestamps, total price, lifecycle status, and decision history without losing dismissed or downstream-handoff results; candidate API supports status/provider pagination, profile-scoped lifecycle status persistence, and durable transition history | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-016 + #1548 renders result inbox lifecycle filters and match provenance`; `internal/scanner/service_test.go` `TestCandidateResultInboxFiltersPaginationAndLifecycleUpdate`; `internal/app/scanner_api_test.go` `TestScannerCandidatesResultInboxFiltersPaginationAndLifecycleAPI`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbaySavedSearchHandoffContract`; `ui.web/src/features/scanner/index.tsx` `market-watch-results-inbox-*`; `docs/api/openapi.yaml` `CandidateDecisionHistoryRecord` |
 | UC-MW-20 | Provider health and run history | Unknown provider health stays actionable, provider health taxonomy includes label/guidance/retry timing, health transitions persist after run outcomes, and persisted run history lists provider outcomes after reload | implemented: `internal/scanner/service_test.go` `TestRunNowPersistsClassifiedProviderHealthTransitions`; `internal/app/openapi_parity_test.go` `TestOpenAPIDocumentsEbayProviderHealthContract`; `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-017 shows actionable provider health and persisted run history`; `UI-SCREEN-MARKET-WATCH-017 shows provider health taxonomy labels guidance and retry timing` |
 | UC-MW-21 | Saved integration search dashboard shell | Header, top summary, create controls, provider health, saved-watch table, result inbox, and manual listing entry present Market Watch as a saved integration search dashboard | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-018 + #1540 presents saved integration search dashboard shell` |
-| UC-MW-22 | Beta provider registry fail-closed status | Registry marks eBay setup-required without credentials, disables unsupported provider actions, and labels unproven storefronts beta-limited/manual-capture-only until live evidence is attached | implemented: `internal/app/integration_migration_regression_test.go` `TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof` |
-| UC-MW-23 | Bonza public provider beta proof | Successful Bonza Store API Market Watch run records provider health and upgrades registry status to live validated with non-secret release evidence | implemented: `internal/app/provider_bonza_run_api_test.go` `TestBonzaRunRecordsLiveProviderProofForBetaRegistry`; `openspec/migration/market-watch-beta-provider-proof.md` |
+| UC-MW-22 | Beta provider registry fail-closed status | Registry marks eBay setup-required without credentials, disables unsupported provider actions, and labels unproven storefronts beta-limited/manual-capture-only/browser-companion-evidence-required until live evidence is attached | implemented: `internal/app/integration_migration_regression_test.go` `TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof` |
+| UC-MW-23 | Bonza user-present provider beta proof | A complete scoped Browser Companion capture records provider health and can upgrade registry status; direct Store API fixtures/runs cannot | implemented: `internal/app/provider_bonza_companion_api_test.go` `TestBonzaCompleteCompanionCaptureProducesScopedLiveEvidence`; `internal/app/provider_bonza_run_api_test.go` `TestBonzaDirectFixtureRunDoesNotSatisfyBrowserCompanionLiveEvidence`; `openspec/migration/market-watch-beta-provider-proof.md` |
 | UC-MW-24 | Voglers BigCommerce public provider beta proof | Successful public BigCommerce storefront HTML Market Watch run records provider health and upgrades registry status to live validated with non-secret release evidence | implemented: `internal/app/provider_bigcommerce_api_test.go` `TestBigCommerceRunStorefrontHTMLModeRecordsLiveProof`; `openspec/migration/market-watch-beta-provider-proof.md` |

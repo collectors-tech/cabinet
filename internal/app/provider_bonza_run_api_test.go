@@ -145,7 +145,7 @@ func TestBonzaRunAggregatesPagesAndEnrichesWatchedStock(t *testing.T) {
 	}
 }
 
-func TestBonzaRunRecordsLiveProviderProofForBetaRegistry(t *testing.T) {
+func TestBonzaDirectFixtureRunDoesNotSatisfyBrowserCompanionLiveEvidence(t *testing.T) {
 	t.Parallel()
 
 	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,21 +212,21 @@ func TestBonzaRunRecordsLiveProviderProofForBetaRegistry(t *testing.T) {
 	if bonzaProvider == nil {
 		t.Fatalf("Bonza provider missing from registry payload: %+v", payload.Providers)
 	}
-	if got := fmt.Sprintf("%v", bonzaProvider["beta_release_status"]); got != "available_live_validated" {
-		t.Fatalf("Bonza beta release status got %q want available_live_validated: %+v", got, bonzaProvider)
+	if got := fmt.Sprintf("%v", bonzaProvider["beta_release_status"]); got != "browser_companion_live_evidence_required" {
+		t.Fatalf("Bonza beta release status got %q want browser_companion_live_evidence_required: %+v", got, bonzaProvider)
 	}
-	if got := fmt.Sprintf("%v", bonzaProvider["live_evidence_state"]); got != "validated" {
-		t.Fatalf("Bonza live evidence state got %q want validated: %+v", got, bonzaProvider)
+	if got := fmt.Sprintf("%v", bonzaProvider["live_evidence_state"]); got != "external_user_present_evidence_required" {
+		t.Fatalf("Bonza live evidence state got %q want external_user_present_evidence_required: %+v", got, bonzaProvider)
 	}
 	action := findRegistryAction(anySlice(bonzaProvider["actions"]), "market_watch.run")
 	if action == nil {
 		t.Fatalf("Bonza provider missing market_watch.run action after live proof: %+v", bonzaProvider)
 	}
-	if got := fmt.Sprintf("%v", action["availability_state"]); got != "available" {
-		t.Fatalf("Bonza market_watch.run availability got %q want available: %+v", got, action)
+	if got := fmt.Sprintf("%v", action["availability_state"]); got != "setup_needed" {
+		t.Fatalf("Bonza market_watch.run availability got %q want setup_needed: %+v", got, action)
 	}
-	if action["next_action"] != nil {
-		t.Fatalf("Bonza market_watch.run next_action got %+v want nil after live proof: %+v", action["next_action"], action)
+	if action["next_action"] != "pair_browser_companion_and_attach_user_present_search_evidence" {
+		t.Fatalf("Bonza market_watch.run next_action got %+v: %+v", action["next_action"], action)
 	}
 }
 

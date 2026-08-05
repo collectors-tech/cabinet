@@ -221,6 +221,61 @@ func DefaultModules() []Module {
 				HelpURL: "/help-center/integrations", SetupRequired: false, SyncAvailable: true,
 			},
 		},
+		{
+			ID:            "bonzaslotcars-search-capture",
+			ModuleVersion: "1.0.0",
+			Site:          "bonzaslotcars",
+			ProviderID:    "au-webshop-bonzaslotcars-com-au",
+			Actions:       []string{"capture_search_results", "capture_item"},
+			PassiveOnly:   true,
+			CaptureSchemas: []CaptureSchema{
+				{
+					PayloadType: "search_results",
+					Fields:      []string{"query", "page", "page_size", "range_start", "range_end", "total_pages", "complete", "items"},
+					MediaFields: []string{"items.image_url"},
+				},
+				{
+					PayloadType: "readiness_diagnostic",
+					Fields:      []string{"state", "evidence_ids", "fixture_version"},
+				},
+			},
+			Workflows:      []string{"manual_search_capture", "market_watch_observation"},
+			RedactionRules: []string{"no_cookies", "no_raw_page", "no_tokens"},
+			FixtureVersion: "1",
+			Display:        ModuleDisplay{Name: "Bonza Slot Cars"},
+			Browser: BrowserContract{
+				StartURL: "https://www.bonzaslotcars.com.au/",
+				Origins: []string{
+					"https://www.bonzaslotcars.com.au/*",
+					"https://bonzaslotcars.com.au/*",
+				},
+				URLPatterns: []string{
+					"https://www.bonzaslotcars.com.au/*",
+					"https://bonzaslotcars.com.au/*",
+				},
+				CaptureScript: "modules/bonzaslotcars.js",
+				Readiness: BrowserReadiness{
+					Ready: []string{
+						"li.product", ".products .product", ".wc-block-grid__product", "[data-product_id]", "[data-product-id]",
+						"[itemtype=\"https://schema.org/Product\"]", "[itemtype=\"http://schema.org/Product\"]",
+					},
+					LoggedOut: []string{
+						"form.woocommerce-form-login input[type=password]", "form[action*=\"my-account\"] input[type=password]",
+					},
+					Challenge: []string{
+						"script-marker:sucuri_cloudproxy_js", "[data-cabinet-provider-state=\"challenge\"]",
+					},
+				},
+			},
+			Configuration: ModuleConfiguration{
+				CaptureMode: "manual_user_present",
+				ItemFields: []string{
+					"listing_id", "variation_id", "title", "price", "currency", "url", "image_url", "seller", "stock_state", "stock_count",
+				},
+				MediaPolicy: "references_by_default", ReviewDestination: "discoveries", RateLimitPerMinute: 6,
+				HelpURL: "/help-center/integrations", SetupRequired: false, SyncAvailable: true,
+			},
+		},
 	}
 }
 

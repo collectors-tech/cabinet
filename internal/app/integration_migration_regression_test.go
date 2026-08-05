@@ -522,9 +522,13 @@ func TestBetaMarketWatchProviderRegistryFailsClosedWithoutLiveProof(t *testing.T
 	if bonza == nil {
 		t.Fatalf("Bonza provider missing from registry payload: %+v", payload.Providers)
 	}
-	if got := fmt.Sprintf("%v", bonza["beta_release_status"]); got != "manual_url_capture_only" {
-		t.Fatalf("Bonza beta release status got %q want manual_url_capture_only: %+v", got, bonza)
+	if got := fmt.Sprintf("%v", bonza["beta_release_status"]); got != "browser_companion_live_evidence_required" {
+		t.Fatalf("Bonza beta release status got %q want browser_companion_live_evidence_required: %+v", got, bonza)
 	}
+	if got := fmt.Sprintf("%v", bonza["live_evidence_state"]); got != "external_user_present_evidence_required" {
+		t.Fatalf("Bonza live evidence state got %q: %+v", got, bonza)
+	}
+	assertRegistryActionAvailability(t, bonza, "market_watch.run", "setup_needed", "pair_browser_companion_and_attach_user_present_search_evidence")
 
 	frontline := findRegistryProvider(payload.Providers, "au-webshop-frontlinehobbies-com-au")
 	if frontline == nil {

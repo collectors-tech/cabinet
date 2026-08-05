@@ -101,8 +101,9 @@ func (m integrationProviderManifest) payload() map[string]any {
 		payload["market_watch_scope"] = strings.TrimSpace(m.MarketWatchScope)
 	}
 	if strings.TrimSpace(m.BaseDomain) == "bonzaslotcars.com.au" {
-		payload["fallback_state"] = "manual_url_capture"
-		payload["headless_state"] = "opt_in_required"
+		payload["fallback_state"] = "browser_companion_user_present"
+		payload["browser_companion_state"] = "available_when_paired"
+		payload["direct_search_state"] = "best_effort_fail_closed"
 		payload["manual_capture_action"] = "provider_product_url_ingest"
 	}
 	if strings.TrimSpace(m.BaseDomain) == "frontlinehobbies.com.au" {
@@ -627,7 +628,11 @@ func auWebshopProviderManifest(domain string) integrationProviderManifest {
 		manifest.SetupInstructions = "Hobbytech ingestion uses Boost search plus public Parts Finder page discovery for catalogue/source matching only; login, cart, checkout, payment, and purchase actions remain out of scope."
 	}
 	if domain == "bonzaslotcars.com.au" {
-		manifest.SetupInstructions = "Webshop ingestion uses Store API static extraction first. Product URLs can be captured for manual review; headless browsing is opt-in only."
+		manifest.CapabilityFlags["browser_companion"] = true
+		manifest.CapabilityFlags["user_present_search"] = true
+		manifest.CapabilityFlags["unattended_search"] = false
+		manifest.CapabilityFlags["challenge_bypass"] = false
+		manifest.SetupInstructions = "Pair the Browser Companion, grant the exact Bonza origins, then open Bonza as the user and complete any normal site challenge yourself before syncing rendered products. Cabinet never exports cookies, decodes a challenge, or retries with synthesised credentials; direct Store API extraction remains best-effort and fails closed."
 	}
 	if domain == "frontlinehobbies.com.au" {
 		manifest.CapabilityFlags["browser_companion"] = true

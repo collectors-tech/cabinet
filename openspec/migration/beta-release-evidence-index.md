@@ -42,7 +42,7 @@ This is the single repository-side release sequence and evidence hand-off for
 | #2035 shared MV3 host/config/readiness | Complete and merged | Install and verify browser/Cabinet/provider states in #1869 |
 | #2032 item/image observation persistence | Source implementation complete | Commit-before-ack, fixtures, replay, media, restart, safe export and relocated restore are automated; exact packaged proof remains in #1869/#1867 |
 | Frontline (#1944) | Exact-origin module, fail-closed fixtures, persistence and confirmed hand-off implemented; external user-present live proof pending | Exact packaged journey in #1869 |
-| Bonza (#1945) | Pending fail-closed decoder removal and real browser-assisted proof | Exact packaged journey in #1869 |
+| Bonza (#1945) | Decoder/retry removed; exact-origin module, fail-closed fixtures and canonical persistence implemented; external user-present live proof pending | Exact packaged journey in #1869 |
 | #2034 Chrome/Edge packaging | Pending exact files, release manifest and checksums | Nominate the same files/checksums in #1868/#1869 |
 
 #1929 may record a provider as source/live ready for packaging while its focused
