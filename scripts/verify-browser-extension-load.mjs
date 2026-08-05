@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 
-const extensionRoot = resolve('browser-extension')
 const browsers = [
-  { name: 'Chrome', commands: ['google-chrome', 'google-chrome-stable'] },
-  { name: 'Edge', commands: ['microsoft-edge', 'microsoft-edge-stable'] },
+  { name: 'Chrome', commands: ['google-chrome', 'google-chrome-stable'], rootVariable: 'CABINET_EXTENSION_CHROME_ROOT' },
+  { name: 'Edge', commands: ['microsoft-edge', 'microsoft-edge-stable'], rootVariable: 'CABINET_EXTENSION_EDGE_ROOT' },
 ]
 
 const executable = (commands) => commands.find((command) =>
@@ -47,6 +46,8 @@ const cdpCommand = (browserProcess, method, params) => new Promise((resolveComma
 const verify = async (browser) => {
   const command = executable(browser.commands)
   assert.ok(command, `${browser.name} is required for the Browser Companion load gate`)
+  const extensionRoot = resolve(process.env[browser.rootVariable] ?? 'browser-extension')
+  const manifest = JSON.parse(await readFile(resolve(extensionRoot, 'manifest.json'), 'utf8'))
   const profile = await mkdtemp(`${tmpdir()}/cabinet-${browser.name.toLowerCase()}-`)
   const output = []
   const process = spawn(command, [
@@ -73,8 +74,8 @@ const verify = async (browser) => {
     const installed = await cdpCommand(process, 'Extensions.getExtensions', {})
     installedExtension = installed.extensions?.find((extension) => extension.id === loaded.id)
     assert.equal(installedExtension?.enabled, true, `${browser.name} did not enable the unpacked extension`)
-    assert.equal(installedExtension?.name, 'Cabinet Browser Companion', `${browser.name} loaded the wrong extension`)
-    assert.equal(installedExtension?.version, '0.1.0', `${browser.name} loaded the wrong extension version`)
+    assert.equal(installedExtension?.name, manifest.name, `${browser.name} loaded the wrong extension`)
+    assert.equal(installedExtension?.version, manifest.version, `${browser.name} loaded the wrong extension version`)
     assert.equal(resolve(installedExtension?.path ?? ''), extensionRoot, `${browser.name} loaded the extension from the wrong path`)
   } catch (error) {
     throw new Error(`${browser.name} DevTools load failed: ${error.message}\n${output.join('').slice(-4000)}`)

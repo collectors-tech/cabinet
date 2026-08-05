@@ -198,3 +198,27 @@ Cabinet SHALL expose one passive, user-present Bonza Slot Cars module for enable
 - **THEN** it MUST report partial, signed-out or selector-drift state respectively
 - **AND** a partial capture MUST NOT remove earlier candidates
 - **AND** fixtures MUST remain explicitly separate from the external user-present live evidence and packaged acceptance required by #1945 and #1869.
+
+### Requirement INTEGRATION-079: Browser Companion packages MUST be exact, verifiable and recoverable
+Cabinet SHALL produce separate Chrome and Edge private-beta packages from one exact source commit with deterministic contents, a release manifest, file and archive SHA-256 values, protocol compatibility and truthful manual-distribution controls.
+
+#### Scenario: Build and verify one exact candidate
+- **GIVEN** a full source commit, source timestamp and unused extension version
+- **WHEN** the release workflow builds the Browser Companion candidate
+- **THEN** it MUST test before packaging and produce separate Chrome and Edge ZIPs whose allow-listed files, production manifest, target, version, source commit, protocol range and checksums pass the repository verifier
+- **AND** development identity and files, tests, fixtures, source maps, secrets, challenge/session bypass code and unexpected permissions MUST be rejected
+- **AND** the same inputs MUST reproduce the same package SHA-256 values.
+
+#### Scenario: Install, update or roll back a private candidate
+- **GIVEN** a collector receives an exact target ZIP, checksum and release manifest
+- **WHEN** they verify and manually load the extracted package
+- **THEN** documentation MUST state that it is not an installer or store release and has no automatic updates
+- **AND** only the exact provider origin required by an enabled module may be granted at runtime
+- **AND** an unknown version, failed checksum, reused version, missing manifest or incompatible Cabinet protocol MUST fail closed
+- **AND** upgrade, rollback, revoke and uninstall guidance MUST preserve visible jobs and remove stale paired sessions.
+
+#### Scenario: Keep candidate creation separate from release acceptance
+- **GIVEN** source packaging controls have passed
+- **WHEN** a private/internal candidate is created under #1868
+- **THEN** clean Chrome and Edge install/pair/sync/recovery proof MUST remain pending until #1869 tests the exact package files
+- **AND** no external release or immutable tag MAY be published before #1864 approval.

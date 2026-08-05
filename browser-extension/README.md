@@ -10,7 +10,11 @@ This directory is the source for one Manifest V3 extension that runs unpacked in
 4. Open the companion, choose **Connect**, then approve the displayed request and pairing code in Cabinet's Integrations screen.
 5. Finish pairing in the companion. Enabled browser-capable integrations then appear automatically.
 
-Unpacked Chrome and Edge installs can receive different extension origins. Pair each browser separately. Store packaging, signing, checksums and rollback are owned by #2034.
+Unpacked Chrome and Edge installs can receive different extension origins. Pair each browser separately. The source manifest is deliberately labelled **Development** and is not release evidence.
+
+## Private-beta package
+
+The private beta produces separate verified Chrome and Edge ZIPs from one exact source commit. They are manually extracted and loaded unpacked; they are not store releases, installers or automatic-update packages. Verify the target ZIP against its SHA-256 and release manifest before loading it, and never use the repository source directory for packaged acceptance. See [the private-beta package guide](../openspec/migration/browser-companion-private-beta-package-guide.md) for installation, exact-origin permissions, upgrade, rollback, revocation and uninstall controls.
 
 ## Truthful states
 
