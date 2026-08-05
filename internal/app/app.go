@@ -7718,7 +7718,6 @@ type runtimeSetupRequest struct {
 	StorageDataDir       string `json:"storage_data_dir"`
 	PortableMode         bool   `json:"portable_mode"`
 	AuthMode             string `json:"auth_mode"`
-	ClerkPublishableKey  string `json:"clerk_publishable_key"`
 	RuntimePortMode      string `json:"runtime_port_mode"`
 	RuntimeFixedPort     int    `json:"runtime_fixed_port"`
 	FeatureChat          *bool  `json:"feature_chat"`
@@ -7767,13 +7766,31 @@ type runtimeSetupRuntimeConfig struct {
 }
 
 type runtimeSetupAuthConfig struct {
-	Mode  string                      `json:"mode"`
-	Clerk runtimeSetupClerkAuthConfig `json:"clerk"`
+	Mode    string                        `json:"mode"`
+	Zitadel runtimeSetupZitadelAuthConfig `json:"zitadel"`
 }
 
-type runtimeSetupClerkAuthConfig struct {
-	PublishableKey string `json:"publishableKey"`
-	Enabled        bool   `json:"enabled"`
+type runtimeSetupZitadelAuthConfig struct{}
+
+func (authConfig *runtimeSetupAuthConfig) UnmarshalJSON(data []byte) error {
+	type authAlias runtimeSetupAuthConfig
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for key := range raw {
+		switch key {
+		case "mode", "zitadel":
+		default:
+			return fmt.Errorf("auth.%s is not supported; expected auth.mode and auth.zitadel only", key)
+		}
+	}
+	var decoded authAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*authConfig = runtimeSetupAuthConfig(decoded)
+	return nil
 }
 
 type runtimeSetupBootstrapConfig struct {
@@ -8044,11 +8061,8 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			ResolvedURL: fmt.Sprintf("http://%s:%d", host, port),
 		},
 		Auth: runtimeSetupAuthConfig{
-			Mode: authMode,
-			Clerk: runtimeSetupClerkAuthConfig{
-				PublishableKey: strings.TrimSpace(req.ClerkPublishableKey),
-				Enabled:        false,
-			},
+			Mode:    authMode,
+			Zitadel: runtimeSetupZitadelAuthConfig{},
 		},
 		Bootstrap: runtimeSetupBootstrapConfig{
 			Workspace:       workspace,
@@ -8159,10 +8173,36 @@ func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {
 	return nil
 }
 
+func validateRuntimeSetupRawAuthSchema(raw []byte) error {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return nil
+	}
+	authRaw, ok := root["auth"]
+	if !ok {
+		return nil
+	}
+	var auth map[string]json.RawMessage
+	if err := json.Unmarshal(authRaw, &auth); err != nil {
+		return fmt.Errorf("auth must be an object")
+	}
+	for key := range auth {
+		switch key {
+		case "mode", "zitadel":
+		default:
+			return fmt.Errorf("auth.%s is not supported; expected auth.mode and auth.zitadel only", key)
+		}
+	}
+	return nil
+}
+
 func importRuntimeSetupConfigFromPath(cfg config.Config, sourcePath string) (runtimeSetupConfigFile, error) {
 	raw, err := os.ReadFile(strings.TrimSpace(sourcePath))
 	if err != nil {
 		return runtimeSetupConfigFile{}, fmt.Errorf("failed to read source config")
+	}
+	if err := validateRuntimeSetupRawAuthSchema(raw); err != nil {
+		return runtimeSetupConfigFile{}, fmt.Errorf("source config validation failed: %v", err)
 	}
 	var payload runtimeSetupConfigFile
 	if err := json.Unmarshal(raw, &payload); err != nil {

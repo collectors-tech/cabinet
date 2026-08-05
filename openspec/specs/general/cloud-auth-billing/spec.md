@@ -53,4 +53,4 @@ Production cloud auth mode SHALL not rely on unsigned/unchecked token claim pars
 3. Security posture is explicit and testable for token/webhook verification paths.
 
 ## Source Mapping
-- Legacy Clerk billing setup runbook has been normalized into this spec.
+- Cloud auth billing requirements are maintained here as the active local/ZITADEL entitlement contract.

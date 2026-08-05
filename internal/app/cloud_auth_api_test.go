@@ -31,7 +31,7 @@ func TestCloudSessionBootstrapReturnsEntitlement(t *testing.T) {
 	}
 }
 
-func TestCloudSessionBootstrapRejectsRetiredClerkProvider(t *testing.T) {
+func TestCloudSessionBootstrapRejectsUnsupportedProvider(t *testing.T) {
 	a := newTestApp(t)
 
 	token := "e30.eyJzdWIiOiJ1c2VyXzEyMyIsImVtYWlsIjoib3duZXJAZXhhbXBsZS5jb20iLCJwbGFuIjoicHJvIn0.e30"
@@ -45,7 +45,7 @@ func TestCloudSessionBootstrapRejectsRetiredClerkProvider(t *testing.T) {
 	)
 
 	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("retired clerk provider expected 400, got %d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("unsupported provider expected 400, got %d body=%s", resp.Code, resp.Body.String())
 	}
 	if !strings.Contains(resp.Body.String(), `"error":"unsupported_provider"`) {
 		t.Fatalf("expected unsupported_provider error, got %s", resp.Body.String())

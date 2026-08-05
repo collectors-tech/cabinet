@@ -2,14 +2,14 @@
 Define ZITADEL identity integration and permissions test matrix for multi-account, multi-plan verification.
 
 ## Requirements
-### Requirement AUTH-PERM-001: Identity provider mode SHALL support local and ZITADEL with retired Clerk ignored
-Runtime SHALL support explicit local and ZITADEL integration modes and deterministic fallback/error behavior when retired Clerk config is present.
+### Requirement AUTH-PERM-001: Identity provider mode SHALL support local and ZITADEL only
+Runtime SHALL support explicit local and ZITADEL integration modes and deterministic fallback/error behavior when unsupported identity config is present.
 
 #### Scenario: ZITADEL mode initialization
 - **GIVEN** auth mode is configured to ZITADEL
 - **WHEN** app initializes auth stack
 - **THEN** sign-in provider list and session resolution MUST use ZITADEL context deterministically
-- **AND** retired Clerk environment values MUST NOT select or report an active provider
+- **AND** unsupported identity-provider environment values MUST NOT select or report an active provider
 
 ### Requirement AUTH-PERM-002: Entitlement resolution SHALL map account plan to capability permissions
 Plan/subscription levels MUST resolve to explicit capability permissions consumed by API and UI gates.

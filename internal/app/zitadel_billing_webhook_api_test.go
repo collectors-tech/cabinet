@@ -32,7 +32,7 @@ func TestZitadelBillingWebhookRejectsInvalidSignature(t *testing.T) {
 	}
 }
 
-func TestZitadelBillingWebhookRejectsRetiredClerkRoute(t *testing.T) {
+func TestZitadelBillingWebhookRejectsUnsupportedProviderRoute(t *testing.T) {
 	secret := "test-secret"
 	_ = os.Setenv("CABINET_ZITADEL_WEBHOOK_SECRET", secret)
 	t.Cleanup(func() { _ = os.Unsetenv("CABINET_ZITADEL_WEBHOOK_SECRET") })
@@ -51,7 +51,7 @@ func TestZitadelBillingWebhookRejectsRetiredClerkRoute(t *testing.T) {
 		},
 	)
 	if resp.Code != http.StatusNotFound {
-		t.Fatalf("retired clerk webhook expected 404, got %d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("unsupported provider webhook expected 404, got %d body=%s", resp.Code, resp.Body.String())
 	}
 }
 
