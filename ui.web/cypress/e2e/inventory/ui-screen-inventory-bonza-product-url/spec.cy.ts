@@ -159,14 +159,14 @@ describe("inventory Bonza product URL ingest", () => {
         mode: "provider_product_url_ingest",
         error: "failed_to_ingest_bonza_product_url",
         guidance:
-          "Static product extraction was attempted first but the storefront did not return usable public product data. Keep the URL as a manual review item; do not run headless browsing unless this provider is explicitly opted in.",
+          "Static product extraction was attempted first but the storefront did not return usable public product data. Open Bonza yourself in the paired Browser Companion and sync the rendered product; Cabinet does not run a hidden browser or export session data.",
         review_capture_persisted: true,
         review_capture: {
           item_id: "item-bonza-manual-review",
           title: "Manual review: bonzaslotcars.com.au/product/bonza-mug-white",
           status: "manual_review",
           source_url: bonzaURL,
-          fallback_state: "headless_required",
+          fallback_state: "browser_companion_user_present",
         },
       },
       });

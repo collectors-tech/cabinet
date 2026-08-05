@@ -1,0 +1,87 @@
+{
+  "fixture_version": "1",
+  "cases": [
+    {
+      "name": "ready complete category results",
+      "url": "https://www.bonzaslotcars.com.au/product-category/slot-cars/",
+      "query": "Scalextric slot cars",
+      "markers": ["li.product"],
+      "script_markers": [],
+      "cards": [
+        {
+          "attributes": {"data-product_id": "BONZA-501", "data-variation_id": "RED"},
+          "nodes": {
+            "a.woocommerce-LoopProduct-link": {"href": "https://www.bonzaslotcars.com.au/product/scalextric-mustang-bathurst-red/?tracking=drop", "text": "Scalextric Ford Mustang Bathurst Red"},
+            ".woocommerce-loop-product__title": {"text": "Scalextric Ford Mustang Bathurst Red"},
+            ".price ins .woocommerce-Price-amount": {"text": "$99.95"},
+            "img.attachment-woocommerce_thumbnail": {"src": "https://www.bonzaslotcars.com.au/wp-content/uploads/mustang-red.jpg?width=400"},
+            ".stock.in-stock": {"text": "Only 2 in stock"}
+          }
+        },
+        {
+          "attributes": {"data-product-id": "BONZA-502"},
+          "nodes": {
+            "a[href*=\"/product/\"]": {"href": "https://bonzaslotcars.com.au/product/scalextric-holden-bathurst-winner/", "text": "Scalextric Holden Bathurst Winner"},
+            "[itemprop=\"name\"]": {"text": "Scalextric Holden Bathurst Winner"},
+            "[itemprop=\"price\"]": {"content": "109.95", "text": "$109.95"},
+            "img[itemprop=\"image\"]": {"src": "https://bonzaslotcars.com.au/wp-content/uploads/holden-winner.jpg"},
+            ".stock.low-stock": {"text": "Only 1 left"}
+          }
+        }
+      ],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "ready", "complete": true, "items": 2}
+    },
+    {
+      "name": "partial paginated search",
+      "url": "https://www.bonzaslotcars.com.au/?s=Bathurst&product-page=2",
+      "query": "Bathurst",
+      "markers": [".products .product", "a.next.page-numbers"],
+      "script_markers": [],
+      "cards": [
+        {
+          "attributes": {"data-product_id": "BONZA-503"},
+          "nodes": {
+            "a.woocommerce-LoopProduct-link": {"href": "https://www.bonzaslotcars.com.au/product/bathurst-legends-set/", "text": "Bathurst Legends Set"},
+            ".woocommerce-loop-product__title": {"text": "Bathurst Legends Set"},
+            ".price .woocommerce-Price-amount": {"text": "AUD $149.99"},
+            "img.attachment-woocommerce_thumbnail": {"src": "https://www.bonzaslotcars.com.au/wp-content/uploads/bathurst-set.jpg"},
+            ".stock.available": {"text": "Available"}
+          }
+        }
+      ],
+      "pagination": {"current": 2, "total": 4, "has_next": true},
+      "expected": {"state": "ready", "complete": false, "items": 1}
+    },
+    {
+      "name": "Sucuri challenge page",
+      "url": "https://www.bonzaslotcars.com.au/?s=Bathurst",
+      "query": "Bathurst",
+      "markers": [],
+      "script_markers": ["window.sucuri_cloudproxy_js = ''"],
+      "cards": [],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "challenge", "error": "bonza_challenge_action_required"}
+    },
+    {
+      "name": "logged-out account wall",
+      "url": "https://www.bonzaslotcars.com.au/my-account/",
+      "query": "Bonza account",
+      "markers": ["form.woocommerce-form-login input[type=password]"],
+      "script_markers": [],
+      "cards": [],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "logged_out", "error": "bonza_login_required"}
+    },
+    {
+      "name": "selector drift",
+      "url": "https://www.bonzaslotcars.com.au/?s=Bathurst",
+      "query": "Bathurst",
+      "markers": ["main"],
+      "script_markers": [],
+      "cards": [],
+      "pagination": {"current": 1, "total": 1, "has_next": false},
+      "expected": {"state": "unsupported", "error": "bonza_selector_drift"}
+    }
+  ]
+}

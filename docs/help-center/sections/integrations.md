@@ -45,6 +45,16 @@ A sign-in form reports **Signed out**; a challenge reports **Action required**; 
 
 Automated versioned fixtures prove ready, partial, signed-out, challenge and selector-drift handling, persistence and Wishlist hand-off. Those fixtures are not live acceptance. External live evidence from a normal user-present Frontline search is still required before the provider is marked release-validated, followed by the exact packaged journey in #1869.
 
+### Bonza Slot Cars Browser Companion
+
+Enable the Bonza Slot Cars integration in Cabinet, pair the companion, and grant only the exact `bonzaslotcars.com.au` and `www.bonzaslotcars.com.au` origins. Open a Bonza product, category or search page yourself. If Bonza presents its normal Sucuri challenge, complete it in the provider tab, then choose **Check session** and sync only after the module reports **Ready to sync**. This is a user-present catalogue workflow, not an unattended crawler or challenge bypass.
+
+The module reads rendered public WooCommerce product cards and sends listing and variation identity, title, AUD price, stock state, canonical product URL and image reference through Cabinet's versioned capture inbox. Cabinet records `au-webshop-bonzaslotcars-com-au` as the integration identity and `bonzaslotcars` as the Market Watch scope. It limits the module to six sync attempts per minute, strips query and fragment values from captured URLs, never exports cookies or tokens, never decodes or solves the Sucuri challenge, and never clicks, writes, adds to cart or checks out.
+
+A sign-in form reports **Signed out**; a Sucuri challenge reports **Action required**; selector drift or another unknown product-card shape reports **Page not supported** and `bonza_selector_drift`. A paginated or load-more page is recorded as partial, so missing products are never treated as deletion evidence. Direct Store API extraction remains a best-effort fail-closed convenience and cannot satisfy the browser-companion release gate.
+
+Automated versioned fixtures prove ready, partial, signed-out, Sucuri challenge and selector-drift handling plus canonical persistence. Those fixtures are not live acceptance. External live evidence from a normal user-present Bonza search is still required before the provider is marked release-validated, followed by the exact packaged journey in #1869.
+
 This boundary cannot protect a credential from malware or another person who already controls the unlocked operating-system account, Cabinet process or browser profile. If local compromise is suspected, close Cabinet, secure the operating-system account, revoke all companion sessions after recovery, remove unknown extensions, reinstall the trusted extension and pair again. Restore Cabinet from a known-good backup if its local database may have been altered.
 
 ## eBay setup

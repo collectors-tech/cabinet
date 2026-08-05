@@ -181,16 +181,17 @@ Bonza product URL ingestion SHALL check existing item source evidence before all
 - **THEN** runtime MUST return duplicate candidate information
 - **AND** Inventory UI MUST offer to open the existing item or continue only with explicit user confirmation
 
-### Requirement PROVIDER-AU-WEBSHOPS-FALLBACK-001: Manual URL capture fallback states SHALL be explicit and guarded
-AU webshop providers that cannot safely complete normal catalogue crawling SHALL expose explicit fallback state metadata and operator guidance before any headless workflow is considered.
+### Requirement PROVIDER-AU-WEBSHOPS-FALLBACK-001: Browser Companion fallback states SHALL be explicit and guarded
+AU webshop providers that cannot safely complete direct catalogue requests SHALL expose explicit user-present Browser Companion metadata and operator guidance without challenge bypass or hidden browsing.
 
-#### Scenario: Bonza registry exposes manual capture and headless guard state
+#### Scenario: Bonza registry exposes user-present browser fallback state
 - **GIVEN** `/api/providers/registry` returns the Bonza provider entry
 - **WHEN** consumers inspect fallback metadata and capabilities
-- **THEN** the entry MUST expose `fallback_state: manual_url_capture`
+- **THEN** the entry MUST expose `fallback_state: browser_companion_user_present`
+- **AND** the entry MUST expose `browser_companion_state: available_when_paired`
+- **AND** the entry MUST expose `direct_search_state: best_effort_fail_closed`
 - **AND** the entry MUST expose `manual_capture_action: provider_product_url_ingest`
-- **AND** the entry MUST expose `headless_state: opt_in_required`
-- **AND** capabilities MUST include `manual_url_capture=true` and `headless_default=false`
+- **AND** capabilities MUST include `browser_companion=true`, `user_present_search=true`, `unattended_search=false`, `challenge_bypass=false`, `manual_url_capture=true` and `headless_default=false`
 
 #### Scenario: Unsupported or failed product URL extraction returns actionable guidance
 - **GIVEN** a user submits a Bonza URL for manual product URL capture
@@ -198,14 +199,21 @@ AU webshop providers that cannot safely complete normal catalogue crawling SHALL
 - **THEN** the response MUST identify whether static extraction was attempted
 - **AND** the response MUST include an explicit fallback state
 - **AND** the response MUST include a user-facing next action and guidance
-- **AND** the response MUST NOT imply default headless crawling, login, cart, checkout, payment, or purchase automation
+- **AND** the response MUST NOT imply hidden browsing, challenge solving, login, cart, checkout, payment, or purchase automation
+
+#### Scenario: Sucuri challenge fails closed into browser action
+- **GIVEN** direct Bonza product ingestion receives a Sucuri JavaScript challenge
+- **WHEN** the bounded challenge marker is detected
+- **THEN** Cabinet MUST stop after one request and return HTTP 409 with `error: browser_action_required`
+- **AND** the response MUST expose `fallback_state: browser_companion_user_present` and `next_action: open_in_browser_and_sync_with_companion`
+- **AND** Cabinet MUST NOT decode the challenge, synthesise or export a cookie, or retry the provider request with session material
 
 #### Scenario: Manual review capture preserves failed fallback URL evidence
 - **GIVEN** a user explicitly asks Cabinet to capture a failed or unsupported Bonza URL for review
 - **WHEN** static extraction cannot produce a supported product draft
 - **THEN** Cabinet MUST persist a profile-scoped review item with the original source URL
 - **AND** the review item MUST include manual URL capture tags and fallback evidence notes
-- **AND** the response MUST identify the persisted review item and continue to mark headless browsing as opt-in review work
+- **AND** the response MUST identify the persisted review item and direct the user to the paired Browser Companion while present
 
 ### Requirement INTEGRATION-015: Frontline provider config discovery SHALL be runtime-resolved from site assets with safe fallback
 Frontline integration SHALL discover Algolia runtime config (application ID, search key, index names) from maintained site assets (e.g., `pd-search.js`) and use cached last-known-good config when discovery fails.

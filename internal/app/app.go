@@ -3116,19 +3116,34 @@ func New(cfg config.Config) (*App, error) {
 		}
 		draft, err := ingestBonzaProductURL(r.Context(), http.DefaultClient, baseURL, route)
 		if err != nil {
+			if errors.Is(err, errBonzaBrowserActionRequired) {
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"mode":                        "provider_product_url_ingest",
+					"error":                       "browser_action_required",
+					"provider":                    route.Provider,
+					"family":                      route.Family,
+					"route":                       route,
+					"fallback_state":              "browser_companion_user_present",
+					"static_extraction_attempted": true,
+					"next_action":                 "open_in_browser_and_sync_with_companion",
+					"guidance":                    "Open Bonza in your paired browser, complete any site challenge yourself, then use the Cabinet Browser Companion to sync the rendered product. Cabinet does not decode challenges, export cookies, or retry with synthesised credentials.",
+				})
+				return
+			}
 			response := map[string]any{
 				"mode":                        "provider_product_url_ingest",
 				"error":                       "failed_to_ingest_bonza_product_url",
 				"provider":                    route.Provider,
 				"family":                      route.Family,
 				"route":                       route,
-				"fallback_state":              "headless_required",
+				"fallback_state":              "browser_companion_user_present",
 				"static_extraction_attempted": true,
-				"next_action":                 "capture_url_for_manual_review",
-				"guidance":                    "Static product extraction was attempted first but the storefront did not return usable public product data. Keep the URL as a manual review item; do not run headless browsing unless this provider is explicitly opted in.",
+				"next_action":                 "open_in_browser_and_sync_with_companion",
+				"guidance":                    "Static product extraction was attempted first but the storefront did not return usable public product data. Open Bonza yourself in the paired Browser Companion and sync the rendered product; Cabinet does not run a hidden browser or export session data.",
 			}
 			if req.CaptureForReview {
-				if review, err := persistProviderURLManualReviewCapture(r.Context(), profiles, collectionRepo, req.URL, route.Provider, route.Family, "headless_required", true, "Static Store API extraction failed; headless browsing remains opt-in."); err != nil {
+				if review, err := persistProviderURLManualReviewCapture(r.Context(), profiles, collectionRepo, req.URL, route.Provider, route.Family, "browser_companion_user_present", true, "Static Store API extraction failed; use the paired browser companion while present."); err != nil {
 					response["review_capture_persisted"] = false
 					response["review_capture_error"] = "failed_to_persist_manual_review_capture"
 				} else {
@@ -10769,6 +10784,19 @@ func applyBetaMarketWatchReleaseStatus(provider map[string]any, settings map[str
 		provider["beta_release_status"] = "browser_companion_live_evidence_required"
 		provider["live_evidence_state"] = "external_user_present_evidence_required"
 		provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "pair_browser_companion_and_attach_user_present_search_evidence")
+	case "au-webshop-bonzaslotcars-com-au":
+		provider["live_evidence_required"] = true
+		evidenceProvider := strings.TrimSpace(fmt.Sprintf("%v", health["evidence_provider"]))
+		healthMessage := strings.TrimSpace(fmt.Sprintf("%v", health["message"]))
+		browserValidated := liveValidated && evidenceProvider == "bonzaslotcars" && strings.Contains(healthMessage, "browser_companion")
+		if browserValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		provider["beta_release_status"] = "browser_companion_live_evidence_required"
+		provider["live_evidence_state"] = "external_user_present_evidence_required"
+		provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "pair_browser_companion_and_attach_user_present_search_evidence")
 	default:
 		provider["live_evidence_required"] = true
 		if liveValidated {
@@ -13096,136 +13124,54 @@ func fetchBonzaProductURLProducts(ctx context.Context, client *http.Client, requ
 	return products, nil
 }
 
-func fetchBonzaProductURLProductsResponse(ctx context.Context, client *http.Client, requestURL string) (*http.Response, error) {
-	const maxChallengeRetries = 5
-	cookies := map[string]string{}
-	var lastChallengeErr error
+var errBonzaBrowserActionRequired = errors.New("bonza browser action required")
 
-	for attempt := 0; attempt <= maxChallengeRetries; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
-		if err != nil {
-			return nil, fmt.Errorf("build bonza product ingest request: %w", err)
-		}
-		applyBonzaProductURLRequestHeaders(req, cookies)
-		resp, err := client.Do(req)
-		if err != nil {
-			if attempt == 0 {
-				return nil, fmt.Errorf("request bonza product ingest: %w", err)
-			}
-			return nil, fmt.Errorf("retry bonza product ingest after challenge: %w", err)
-		}
-		challengeBody, readChallenge := readBonzaSucuriChallenge(resp)
-		if !readChallenge {
-			return resp, nil
-		}
-		cookie, cookieErr := bonzaSucuriChallengeCookie(challengeBody)
-		if cookieErr != nil || cookie == "" {
-			if cookieErr == nil {
-				cookieErr = fmt.Errorf("empty challenge cookie")
-			}
-			return nil, fmt.Errorf("solve bonza product ingest challenge: %w", cookieErr)
-		}
-		name, value, ok := strings.Cut(cookie, "=")
-		if !ok || strings.TrimSpace(name) == "" || strings.TrimSpace(value) == "" {
-			return nil, fmt.Errorf("solve bonza product ingest challenge: invalid cookie")
-		}
-		cookies[strings.TrimSpace(name)] = strings.TrimSpace(value)
-		lastChallengeErr = fmt.Errorf("bonza product ingest challenge did not clear after %d attempt(s)", attempt+1)
+func fetchBonzaProductURLProductsResponse(ctx context.Context, client *http.Client, requestURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build bonza product ingest request: %w", err)
 	}
-	return nil, lastChallengeErr
+	applyBonzaProductURLRequestHeaders(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request bonza product ingest: %w", err)
+	}
+	if readBonzaSucuriChallenge(resp) {
+		return nil, errBonzaBrowserActionRequired
+	}
+	return resp, nil
 }
 
-func applyBonzaProductURLRequestHeaders(req *http.Request, cookies map[string]string) {
+func applyBonzaProductURLRequestHeaders(req *http.Request) {
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "en-AU,en;q=0.9")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 Cabinet/1.0")
+	req.Header.Set("User-Agent", "Cabinet/1.0 (+local catalogue source matching)")
 	if req.URL != nil {
 		req.Header.Set("Referer", strings.TrimRight(req.URL.Scheme+"://"+req.URL.Host, "/")+"/")
 	}
-	if len(cookies) > 0 {
-		names := make([]string, 0, len(cookies))
-		for name := range cookies {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		parts := make([]string, 0, len(names))
-		for _, name := range names {
-			parts = append(parts, name+"="+cookies[name])
-		}
-		req.Header.Set("Cookie", strings.Join(parts, "; "))
-	}
 }
 
-func readBonzaSucuriChallenge(resp *http.Response) (string, bool) {
-	if resp == nil || resp.Body == nil || resp.StatusCode < http.StatusMultipleChoices || resp.StatusCode >= http.StatusBadRequest {
-		return "", false
+func readBonzaSucuriChallenge(resp *http.Response) bool {
+	if resp == nil || resp.Body == nil {
+		return false
 	}
-	body, err := io.ReadAll(resp.Body)
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	redirect := resp.StatusCode >= http.StatusMultipleChoices && resp.StatusCode < http.StatusBadRequest
+	if !redirect && !strings.Contains(contentType, "text/html") {
+		return false
+	}
+	const maximumChallengeBody = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maximumChallengeBody+1))
 	resp.Body.Close()
-	if err != nil {
-		return "", false
+	if err != nil || len(body) > maximumChallengeBody {
+		return false
 	}
 	content := string(body)
-	return content, strings.Contains(content, "sucuri_cloudproxy_js") && strings.Contains(content, "S='")
-}
-
-func bonzaSucuriChallengeCookie(body string) (string, error) {
-	scriptMatch := regexp.MustCompile(`S='([^']+)'`).FindStringSubmatch(body)
-	if len(scriptMatch) != 2 {
-		return "", fmt.Errorf("missing challenge script")
+	if strings.Contains(content, "sucuri_cloudproxy_js") {
+		return true
 	}
-	decoded, err := base64.StdEncoding.DecodeString(scriptMatch[1])
-	if err != nil {
-		return "", fmt.Errorf("decode challenge script: %w", err)
-	}
-	challenge := string(decoded)
-	assignment := regexp.MustCompile(`^([A-Za-z])=(.+?);document\.cookie=(.+)$`).FindStringSubmatch(challenge)
-	if len(assignment) != 4 {
-		return "", fmt.Errorf("unsupported challenge assignment")
-	}
-	value, err := evalSucuriConcatExpression(assignment[2])
-	if err != nil {
-		return "", fmt.Errorf("decode challenge value: %w", err)
-	}
-	cookiePattern := regexp.MustCompile(`\+\s*["']=["']\s*\+\s*` + regexp.QuoteMeta(assignment[1]) + `\s*\+`)
-	cookieParts := cookiePattern.Split(assignment[3], 2)
-	if len(cookieParts) != 2 {
-		return "", fmt.Errorf("unsupported challenge cookie expression")
-	}
-	name, err := evalSucuriConcatExpression(cookieParts[0])
-	if err != nil {
-		return "", fmt.Errorf("decode challenge cookie name: %w", err)
-	}
-	if name == "" || value == "" {
-		return "", fmt.Errorf("empty challenge cookie")
-	}
-	return name + "=" + value, nil
-}
-
-func evalSucuriConcatExpression(expr string) (string, error) {
-	parts := strings.Split(expr, "+")
-	var out strings.Builder
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
-			continue
-		}
-		if len(trimmed) >= 2 && ((trimmed[0] == '\'' && trimmed[len(trimmed)-1] == '\'') || (trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"')) {
-			out.WriteString(trimmed[1 : len(trimmed)-1])
-			continue
-		}
-		match := regexp.MustCompile(`^String\.fromCharCode\((\d+)\)$`).FindStringSubmatch(trimmed)
-		if len(match) == 2 {
-			codepoint, err := strconv.Atoi(match[1])
-			if err != nil {
-				return "", err
-			}
-			out.WriteRune(rune(codepoint))
-			continue
-		}
-		return "", fmt.Errorf("unsupported concat token %q", trimmed)
-	}
-	return out.String(), nil
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return false
 }
 
 func bonzaProductMatchesRoute(product bonzaProductResponse, route providerProductURLRoute) bool {

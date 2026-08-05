@@ -176,39 +176,19 @@ func TestProviderProductURLIngestReturnsDuplicateCandidates(t *testing.T) {
 	}
 }
 
-func TestProviderProductURLIngestSolvesBonzaSucuriChallenge(t *testing.T) {
+func TestProviderProductURLIngestSucuriChallengeRequiresBrowserAction(t *testing.T) {
 	t.Parallel()
 
-	const challengeCookie = "sucuri_cloudproxy_uuid_d7cbc918a=6b8cc2469d5d14ef58e8d55a94069178"
 	challengeScript := `r=String.fromCharCode(54)+'b'+"8"+"c"+String.fromCharCode(99)+"2"+"4"+"6"+"9"+"d"+"5"+"d"+"1"+"4"+"e"+"f"+"5"+"8"+"e"+"8"+"d"+"5"+"5"+"a"+"9"+"4"+"0"+"6"+"9"+"1"+"7"+"8"+'';document.cookie='s'+'u'+'c'+'u'+'r'+'i'+'_'+'c'+'l'+'o'+'u'+'d'+'p'+'r'+'o'+'x'+'y'+'_'+'u'+'u'+'i'+'d'+'_'+'d'+'7'+'c'+'b'+'c'+'9'+'1'+'8'+'a'+"=" + r + ';path=/;max-age=86400'; location.reload();`
 	challengeBody := "Javascript is required.<script>S='" + base64.StdEncoding.EncodeToString([]byte(challengeScript)) + "';sucuri_cloudproxy_js='';</script>"
-	cookie, err := bonzaSucuriChallengeCookie(challengeBody)
-	if err != nil {
-		t.Fatalf("challenge cookie failed: %v", err)
-	}
-	if cookie != challengeCookie {
-		t.Fatalf("challenge cookie=%q want %q", cookie, challengeCookie)
-	}
 	requests := 0
 	var cookies []string
 	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		cookies = append(cookies, r.Header.Get("Cookie"))
-		if r.Header.Get("Cookie") != challengeCookie {
-			w.WriteHeader(http.StatusTemporaryRedirect)
-			_, _ = w.Write([]byte(challengeBody))
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{
-			"id":19603,
-			"name":"BONZA MUG WHITE",
-			"slug":"bonza-mug-white",
-			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
-			"prices":{"currency_code":"AUD","price":"995"},
-			"is_in_stock":true,
-			"attributes":[{"name":"Brand","terms":[{"name":"AFX","slug":"afx"}]}]
-		}]`))
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(challengeBody))
 	}))
 	defer bonza.Close()
 
@@ -220,50 +200,37 @@ func TestProviderProductURLIngestSolvesBonzaSucuriChallenge(t *testing.T) {
 	}
 
 	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
-	if ingest.Code != http.StatusOK {
-		t.Fatalf("ingest status=%d requests=%d cookies=%q body=%s", ingest.Code, requests, cookies, ingest.Body.String())
+	if ingest.Code != http.StatusConflict {
+		t.Fatalf("ingest status=%d want=%d requests=%d cookies=%q body=%s", ingest.Code, http.StatusConflict, requests, cookies, ingest.Body.String())
 	}
-	if requests != 2 {
-		t.Fatalf("expected challenge request plus cookie retry, got %d requests", requests)
+	if requests != 1 {
+		t.Fatalf("expected one fail-closed request without challenge retry, got %d requests", requests)
 	}
-	if !strings.Contains(ingest.Body.String(), `"provider_product_id":"19603"`) {
-		t.Fatalf("expected Bonza product payload after challenge retry, got %s", ingest.Body.String())
+	if len(cookies) != 1 || cookies[0] != "" {
+		t.Fatalf("expected no exported or synthesised cookies, got %q", cookies)
+	}
+	for _, want := range []string{
+		`"error":"browser_action_required"`,
+		`"fallback_state":"browser_companion_user_present"`,
+		`"next_action":"open_in_browser_and_sync_with_companion"`,
+	} {
+		if !strings.Contains(ingest.Body.String(), want) {
+			t.Fatalf("expected %s in browser-action response, got %s", want, ingest.Body.String())
+		}
 	}
 }
 
-func TestProviderProductURLIngestSolvesChainedBonzaSucuriChallenges(t *testing.T) {
+func TestProviderProductURLIngestDoesNotRetryChainedSucuriChallenges(t *testing.T) {
 	t.Parallel()
 
-	firstCookie := "sucuri_cloudproxy_uuid_first=first-cookie-value"
-	secondCookie := "sucuri_cloudproxy_uuid_second=second-cookie-value"
 	firstChallenge := bonzaSucuriChallengeBody(t, "sucuri_cloudproxy_uuid_first", "first-cookie-value")
-	secondChallenge := bonzaSucuriChallengeBody(t, "sucuri_cloudproxy_uuid_second", "second-cookie-value")
 	requests := 0
 	var cookies []string
 	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
-		cookie := r.Header.Get("Cookie")
-		cookies = append(cookies, cookie)
-		switch {
-		case !strings.Contains(cookie, firstCookie):
-			w.WriteHeader(http.StatusTemporaryRedirect)
-			_, _ = w.Write([]byte(firstChallenge))
-			return
-		case !strings.Contains(cookie, secondCookie):
-			w.WriteHeader(http.StatusTemporaryRedirect)
-			_, _ = w.Write([]byte(secondChallenge))
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{
-			"id":19603,
-			"name":"BONZA MUG WHITE",
-			"slug":"bonza-mug-white",
-			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
-			"prices":{"currency_code":"AUD","price":"995"},
-			"is_in_stock":true,
-			"attributes":[{"name":"Brand","terms":[{"name":"AFX","slug":"afx"}]}]
-		}]`))
+		cookies = append(cookies, r.Header.Get("Cookie"))
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		_, _ = w.Write([]byte(firstChallenge))
 	}))
 	defer bonza.Close()
 
@@ -275,20 +242,17 @@ func TestProviderProductURLIngestSolvesChainedBonzaSucuriChallenges(t *testing.T
 	}
 
 	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
-	if ingest.Code != http.StatusOK {
-		t.Fatalf("ingest status=%d requests=%d cookies=%q body=%s", ingest.Code, requests, cookies, ingest.Body.String())
+	if ingest.Code != http.StatusConflict {
+		t.Fatalf("ingest status=%d want=%d requests=%d cookies=%q body=%s", ingest.Code, http.StatusConflict, requests, cookies, ingest.Body.String())
 	}
-	if requests != 3 {
-		t.Fatalf("expected first challenge, second challenge, and cookie retry, got %d requests", requests)
+	if requests != 1 {
+		t.Fatalf("expected one fail-closed request, got %d requests", requests)
 	}
-	if !strings.Contains(cookies[2], firstCookie) || !strings.Contains(cookies[2], secondCookie) {
-		t.Fatalf("expected final retry to send both challenge cookies, got %q", cookies)
+	if len(cookies) != 1 || cookies[0] != "" {
+		t.Fatalf("expected no exported or synthesised cookies, got %q", cookies)
 	}
-	if !strings.Contains(ingest.Body.String(), `"provider_product_id":"19603"`) {
-		t.Fatalf("expected Bonza product payload after chained challenge retries, got %s", ingest.Body.String())
-	}
-	if !strings.Contains(ingest.Body.String(), `"Brand":"AFX"`) {
-		t.Fatalf("expected object-shaped Bonza attribute terms to normalize, got %s", ingest.Body.String())
+	if !strings.Contains(ingest.Body.String(), `"error":"browser_action_required"`) {
+		t.Fatalf("expected browser_action_required, got %s", ingest.Body.String())
 	}
 }
 
@@ -362,7 +326,7 @@ func TestProviderProductURLIngestPersistsManualReviewCaptureForUnsupportedPage(t
 	}
 }
 
-func TestProviderProductURLIngestReturnsHeadlessRequiredGuidanceAfterStaticFailure(t *testing.T) {
+func TestProviderProductURLIngestReturnsBrowserCompanionGuidanceAfterStaticFailure(t *testing.T) {
 	t.Parallel()
 
 	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -389,10 +353,10 @@ func TestProviderProductURLIngestReturnsHeadlessRequiredGuidanceAfterStaticFailu
 	body := ingest.Body.String()
 	for _, want := range []string{
 		`"error":"failed_to_ingest_bonza_product_url"`,
-		`"fallback_state":"headless_required"`,
+		`"fallback_state":"browser_companion_user_present"`,
 		`"static_extraction_attempted":true`,
-		`"next_action":"capture_url_for_manual_review"`,
-		`"guidance":"Static product extraction was attempted first but the storefront did not return usable public product data. Keep the URL as a manual review item; do not run headless browsing unless this provider is explicitly opted in."`,
+		`"next_action":"open_in_browser_and_sync_with_companion"`,
+		`"guidance":"Static product extraction was attempted first but the storefront did not return usable public product data. Open Bonza yourself in the paired Browser Companion and sync the rendered product; Cabinet does not run a hidden browser or export session data."`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected %s in failure guidance, got %s", want, body)
@@ -400,7 +364,7 @@ func TestProviderProductURLIngestReturnsHeadlessRequiredGuidanceAfterStaticFailu
 	}
 }
 
-func TestProviderRegistryPublishesManualURLFallbackStates(t *testing.T) {
+func TestProviderRegistryPublishesBrowserCompanionFallbackStates(t *testing.T) {
 	t.Parallel()
 
 	a, _ := newBonzaIngestTestApp(t)
@@ -424,11 +388,11 @@ func TestProviderRegistryPublishesManualURLFallbackStates(t *testing.T) {
 	if bonza == nil {
 		t.Fatal("expected Bonza provider registry entry")
 	}
-	if got := fmt.Sprintf("%v", bonza["fallback_state"]); got != "manual_url_capture" {
-		t.Fatalf("Bonza fallback_state got %q want manual_url_capture: %+v", got, bonza)
+	if got := fmt.Sprintf("%v", bonza["fallback_state"]); got != "browser_companion_user_present" {
+		t.Fatalf("Bonza fallback_state got %q want browser_companion_user_present: %+v", got, bonza)
 	}
-	if got := fmt.Sprintf("%v", bonza["headless_state"]); got != "opt_in_required" {
-		t.Fatalf("Bonza headless_state got %q want opt_in_required: %+v", got, bonza)
+	if got := fmt.Sprintf("%v", bonza["browser_companion_state"]); got != "available_when_paired" {
+		t.Fatalf("Bonza browser_companion_state got %q want available_when_paired: %+v", got, bonza)
 	}
 	if got := fmt.Sprintf("%v", bonza["manual_capture_action"]); got != "provider_product_url_ingest" {
 		t.Fatalf("Bonza manual_capture_action got %q want provider_product_url_ingest: %+v", got, bonza)

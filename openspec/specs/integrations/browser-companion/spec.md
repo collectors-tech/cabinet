@@ -174,3 +174,27 @@ Cabinet SHALL expose one passive, user-present Frontline Hobbies module for enab
 - **THEN** it MUST report partial, signed-out, action-required or selector-drift state respectively
 - **AND** a partial capture MUST NOT remove earlier candidates
 - **AND** fixtures MUST remain explicitly separate from the external user-present live evidence and packaged acceptance required by #1944 and #1869.
+
+### Requirement INTEGRATION-078: Bonza capture MUST replace challenge decoding with user-present sync
+Cabinet SHALL expose one passive, user-present Bonza Slot Cars module for enabled `au-webshop-bonzaslotcars-com-au` instances while persisting Market Watch output under the canonical `bonzaslotcars` scope.
+
+#### Scenario: Capture a supported Bonza result page after normal browser interaction
+- **GIVEN** the paired collector grants the exact Bonza storefront origins, opens a supported public result page and completes any normal Sucuri site check themselves
+- **WHEN** the module proves a ready WooCommerce product-card shape and the collector starts sync
+- **THEN** it MUST emit bounded version-1 search results with listing/variation identity, canonical URL, AUD price, stock, image and field-confidence evidence
+- **AND** Cabinet MUST preserve integration, transport, module and schema provenance through the durable Market Watch/Discoveries pipeline
+- **AND** only a complete `browser_companion` capture for scope `bonzaslotcars` MAY satisfy the provider's source live-evidence state.
+
+#### Scenario: Fail closed without challenge or session bypass
+- **GIVEN** direct Store API extraction or the open browser page encounters a Sucuri challenge
+- **WHEN** Cabinet detects the bounded challenge marker
+- **THEN** direct ingestion MUST make no cookie-bearing retry and MUST return `browser_action_required`
+- **AND** the extension MUST return action-required without exporting script contents, cookies, tokens, challenge answers or raw page data
+- **AND** the extension MUST perform no provider fetch, click, challenge decoding, challenge solution or remote write.
+
+#### Scenario: Preserve incomplete and external evidence boundaries
+- **GIVEN** a paginated result, sign-in form or changed product-card shape
+- **WHEN** the module checks readiness or capture state
+- **THEN** it MUST report partial, signed-out or selector-drift state respectively
+- **AND** a partial capture MUST NOT remove earlier candidates
+- **AND** fixtures MUST remain explicitly separate from the external user-present live evidence and packaged acceptance required by #1945 and #1869.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import vm from 'node:vm'
 
 import {
   normaliseRegistry,
@@ -115,4 +116,25 @@ test('readiness bridge returns evidence identifiers without page or session data
   const bridge = await readFile(new URL('../content/provider-bridge.js', import.meta.url), 'utf8')
   assert.doesNotMatch(bridge, /document\.(cookie|body)|innerHTML|outerHTML|localStorage|sessionStorage|location\.href/)
   assert.match(bridge, /matched/)
+  assert.match(bridge, /script-marker:/)
+  assert.match(bridge, /querySelectorAll\('script'\)/)
+
+  let listener
+  const context = vm.createContext({
+    document: {
+      querySelector: (selector) => selector === '[data-ready]' ? {} : null,
+      querySelectorAll: (selector) => selector === 'script'
+        ? [{ textContent: "window.sucuri_cloudproxy_js = ''" }, { textContent: 'private unrelated script value' }]
+        : [],
+    },
+    chrome: { runtime: { onMessage: { addListener: (value) => { listener = value } } } },
+  })
+  vm.runInContext(bridge, context, { filename: 'content/provider-bridge.js' })
+  let response
+  listener({
+    type: 'cabinet:probe-readiness',
+    selectors: ['script-marker:sucuri_cloudproxy_js', 'script-marker:bad marker', '[data-ready]'],
+  }, {}, (value) => { response = value })
+  assert.deepEqual([...response.matched], ['script-marker:sucuri_cloudproxy_js', '[data-ready]'])
+  assert.equal(JSON.stringify(response).includes('private unrelated'), false)
 })

@@ -30,3 +30,11 @@ The popup shows setup, sync, pause/resume and review actions only when the Cabin
 The versioned `frontlinehobbies-search-capture` module is projected only for an enabled `au-webshop-frontlinehobbies-com-au` integration instance. It requests exact Frontline storefront/CDN origins, recognises rendered public product cards, and submits search batches under the `frontlinehobbies` Market Watch scope. Ready, partial, signed-out, challenge and selector-drift fixtures are deterministic; challenges and unknown page shapes fail closed. It is manual and user-present, capped at six attempts per minute, and has no cookie, token, network-fetch, click, cart, checkout or other provider-write mechanism.
 
 Fixture and integration tests are source evidence, not live acceptance. A normal user-present Frontline search must still be attached to #1944, and the same journey must be repeated from the exact package in #1869.
+
+## Bonza Slot Cars module
+
+The versioned `bonzaslotcars-search-capture` module is projected only for an enabled `au-webshop-bonzaslotcars-com-au` integration instance. It requests the two exact Bonza storefront origins, recognises rendered WooCommerce product cards, and submits search batches under the `bonzaslotcars` Market Watch scope. Ready, partial, signed-out, Sucuri-challenge and selector-drift fixtures are deterministic; challenges and unknown page shapes fail closed. It is manual and user-present, capped at six attempts per minute, and has no cookie, token, challenge-decoding, network-fetch, click, cart, checkout or other provider-write mechanism.
+
+The Sucuri readiness signal is a fixed, bounded script-marker identifier. The bridge returns only that identifier, never script contents, raw page data or challenge material. The collector completes any normal site interaction in the Bonza tab before checking readiness and choosing sync.
+
+Fixture and integration tests are source evidence, not live acceptance. A normal user-present Bonza search must still be attached to #1945, and the same journey must be repeated from the exact package in #1869.
