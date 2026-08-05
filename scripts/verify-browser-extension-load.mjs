@@ -28,10 +28,11 @@ const targets = async (port) => {
 const verify = async (browser, port) => {
   const command = executable(browser.commands)
   assert.ok(command, `${browser.name} is required for the Browser Companion load gate`)
+  const xvfb = executable(['xvfb-run'])
+  assert.ok(xvfb, 'xvfb-run is required for the normal-mode browser extension load gate')
   const profile = await mkdtemp(`${tmpdir()}/cabinet-${browser.name.toLowerCase()}-`)
   const output = []
-  const process = spawn(command, [
-    '--headless=new',
+  const process = spawn(xvfb, ['-a', command,
     '--no-sandbox',
     '--disable-gpu',
     `--remote-debugging-port=${port}`,
