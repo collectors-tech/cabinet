@@ -1,85 +1,225 @@
 # TASK_LIST
 
-Last reconciled from live GitHub/OpenSpec state: 2026-08-06 +10:00
+Last reconciled from clean `develop` commit
+`d676ac02cdbc466402ba38f14a741292f9165320`, live GitHub state, OpenSpec,
+source inspection, and local validation on 2026-08-10 AEST.
 
-This file is the Cabinet 0.1 private beta execution summary. Historical issue
-snapshots from April 2026 have been retired from this top-level queue; use
-GitHub issues and OpenSpec change/task files for detailed execution history.
+This file is the high-level Cabinet 0.1 private-beta execution summary.
+Repository issues are the detailed source of truth. Historical implementation
+evidence remains in GitHub, OpenSpec migration notes, and traceability files.
 
-## Status Legend
+## Ship Verdict
 
-- `OPEN`: issue is open and needs focused implementation, validation, release evidence, or governance work.
-- `IN REVIEW`: issue implementation evidence is merged, but release-lane validation or final review still owns closure.
-- `DONE`: issue is closed with linked evidence on GitHub.
-- `POST-BETA`: issue/epic is intentionally outside Cabinet 0.1 private beta unless a release test exposes it as a direct blocker.
-- Work is executed one focused issue branch at a time, validated, merged into `develop`, then demo/release lanes are rebuilt from `develop`.
+**Not yet shippable.** Cabinet has broad source implementation, but the exact
+Windows private-beta candidate has not been created or accepted. The current
+release lane is also blocked by confirmed source-gate, security, dependency,
+provider-timeout, and candidate-pack gaps.
 
-## Cabinet 0.1 Private Beta Critical Path
+Do not start the release freeze or run #1868 until every P0 preflight issue in
+this file is merged and revalidated and the Frontline/Bonza live-source rows are
+complete.
 
-Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`
+## Verified Product State
 
-Completed foundations: #1865, #1866, #1870, #1871, #1872, #1936 and #1937.
+### Implemented with merged source evidence
 
-1. [x] #2037 [DONE] Enforce the complete runtime/OpenAPI route parity gate.
-   - Evidence: PR #2038 and Develop Quality Gate run `31018831485` passed on the exact PR head.
-2. [x] #2036 [DONE] Keep the release dependency graph, evidence and approval sequence acyclic.
-3. [x] #2033 [DONE] Replace predictable companion access with secure pairing/session transport.
-4. [x] #2035 [DONE] Build the shared Chromium MV3 host, configuration and readiness UI.
-5. [x] #2032 [DONE] Persist idempotent provider item/image observations through Cabinet.
-6. [ ] #1944 and #1945 [OPEN] Prove Frontline and Bonza browser-assisted live source readiness; #1943 Hobbytech is already source/live ready.
-7. [ ] #2034 [OPEN] Package source controls are merged; exact Chrome/Edge candidate files and #1869 pairing evidence remain.
-8. [ ] #1868 [IN PROGRESS] Build the exact private/internal candidate for Cabinet + Browser Companion.
-   - Internal candidate creation is allowed before final approval; external prerelease publication is not.
-   - Cabinet/companion manifests and the combined candidate bundle are built only after the exact candidate validation job passes.
-9. [ ] #1869 [IN PROGRESS] Run packaged collector, four-provider, companion and media acceptance.
-10. [ ] #1867 [IN REVIEW] Attach exact-candidate upgrade, backup, export, restore and relocation evidence.
-11. [ ] #1864 [IN PROGRESS] Decide final approval after all exact-candidate evidence is linked.
-   - Only explicit final approval permits external prerelease publication and `develop` to `main` promotion.
+- Desktop-first Go/SQLite runtime with embedded React UI and local MCP launcher.
+- Inventory, Wishlist, Collections, media, search/matching, Discoveries,
+  Market Watch, import/export, backup/restore, settings, local/ZITADEL modes,
+  Assistant/Agent preview surfaces, and deployment/runtime foundations.
+- Browser Companion secure pairing, rotation/revocation, profile scoping,
+  exact optional origins, durable/idempotent item and media capture,
+  fail-closed protected-provider handling, and deterministic Chrome/Edge
+  package controls (#2033, #2035, and #2032).
+- Source-level upgrade, restore, export, relationship, media, saved-filter, and
+  secret-exclusion data-safety tests.
+- Canonical Cabinet 0.1 capability/limitation disclosure in UI and generated
+  release notes (#2047, PR #2049).
+- Acyclic release/evidence graph (#2036 [DONE]) and complete runtime/OpenAPI
+  route parity gate (#2037 [DONE]).
 
-## Current Release Governance Work
+### Verified evidence snapshot
 
-- [x] #1872 reconciled every unchecked OpenSpec task into completed/archive evidence, linked focused issue, or explicit deferred/post-beta reason.
-- [x] #2036 defines provider source-ready separately from packaged evidence and removes the candidate/approval cycle.
-- [ ] Keep labels/status aligned after each live issue is verified.
-- [ ] Keep #1864 as the single private beta release summary, final evidence parent and approval decision.
-  - Current repo evidence index: `openspec/migration/beta-release-evidence-index.md`.
-- [ ] Start the temporary release freeze after every source/live-ready prerequisite is merged.
-  - During the freeze, accept only a P0 release blocker, directly required test/evidence repair or release-document correction through a focused issue and green PR.
-  - Every accepted fix creates a new exact candidate commit and invalidates older candidate acceptance.
-- [ ] Do not publish externally or merge `develop` into `main` until Max explicitly approves the tested release candidate.
+- PR #2049: all seven Develop Quality Gate jobs passed.
+- `go run ./cmd/openapi-parity-gate`: passed during the 2026-08-10 audit.
+- `npx --yes @fission-ai/openspec@latest validate --all --strict --no-interactive`:
+  138 passed, 0 failed.
+- `npm run test:release-package`: 14 passed, 0 failed.
+- `npm run test:companion-package`: 6 passed, 0 failed.
+- `npm run build` in `ui.web`: passed; two large-chunk warnings remain.
+- Test inventory: 192 Go test files, 127 Cypress specs, plus extension and Node
+  contract suites.
+- All 17 remaining OpenSpec change folders report complete tasks; they are
+  archive hygiene, not unfinished beta features.
 
-## Active OpenSpec Change Inventory
+### Confirmed red or unproven evidence
 
-Captured with `openspec list` on 2026-07-11. Updated in #1872 to archive completed Agent-channel, Agent-skill registry, inventory grading, runtime startup, parity route-contract, inventory accessibility selector, and Bonza URL changes, then reconcile the final active changes to explicit closed/deferred issue holders.
+- `go test ./... -count=1` fails three root contract tests; #2050 owns the
+  repairs and the missing Develop-gate coverage.
+- `npm audit --omit=dev` reports 1 critical and 6 high production package
+  families; GitHub reports 45 open Dependabot alerts, including 1 critical and
+  21 high; #2051 owns remediation and adjudication.
+- Local/LAN/cloud request boundaries, loopback origin protection, pseudo-login
+  credentials, and unchecked entitlement claims require P0 remediation (#2052).
+- Diagnostic redaction is not complete before persistence/export/remote send
+  (#2053).
+- Beta provider HTTP calls can hang without bounded timeouts (#2054).
+- The candidate workflow can default to an under-scoped Cypress spec instead of
+  a fixed beta core pack (#2055).
+- Frontline and Bonza still lack genuine user-present live-source evidence
+  (#1944/#1945).
+- No exact Cabinet + Browser Companion beta candidate, packaged acceptance pack,
+  same-candidate recovery evidence, or beta prerelease exists.
+- `develop` is 1,766 commits ahead of `main`; promotion remains prohibited until
+  exact-candidate approval.
 
-- `finalize-onboarding-and-collector-ux`: 14/14 tasks reconciled. Product remainder is post-beta and tracked by #1889 unless #1864/#1869 release acceptance exposes one task as a beta blocker.
-- `complete-screen-api-parity-audits`: 15/15 tasks reconciled. Original audit holders #143, #144, and #145 are closed; renewed parity failures should be filed from #1869 evidence as focused issues.
-- `stabilize-inventory-runtime-regressions`: 11/11 tasks reconciled. Legacy inventory non-500 holder #149 is closed; remaining concrete runtime/startup regressions are deferred to #1890 unless release acceptance exposes a beta blocker.
-Archived during #1872 reconciliation:
+## Cabinet 0.1 Private-Beta Critical Path
 
-- `ingest-bonza-product-urls`: archived into canonical provider-family, AU-webshop, and inventory specs after reconciling closed #811 live verification and #1077 QA evidence.
-- `define-universal-agent-channel-contracts`: archived into `openspec/specs/agent-universal-channels/spec.md`; broad Agent/Telegram implementation remains post-beta unless #1864 acceptance exposes a release blocker.
-- `define-agent-skill-registry`: archived into `openspec/specs/agent-skills-registry/spec.md`; Agent skill registry product breadth remains post-beta unless #1864 acceptance exposes a release blocker.
-- `inventory-item-type-condition-scales`: archived after confirming its requirements already exist in canonical inventory specs and traceability rows.
-- `harden-runtime-single-endpoint-startup`: archived after confirming its requirements already exist in canonical runtime specs and traceability rows.
-- `stabilize-startup-nfr-gates`: archived into `openspec/specs/fresh-runtime-startup/spec.md`; #446 and #448 are closed with PR/demo evidence and package-level release acceptance remains tracked by #1869.
-- `stabilize-parity-components-route-contracts`: archived into `openspec/specs/parity-components-route-contracts/spec.md`; broader packaged release acceptance remains tracked by #1869.
-- `stabilize-inventory-a11y-keyboard-selectors`: archived into `openspec/specs/inventory-a11y-keyboard-selectors/spec.md`; broader packaged release acceptance remains tracked by #1869.
+Parent release epic: #1864 `epic(beta): ship Cabinet 0.1 private beta`.
+
+### Gate A - P0 source, security, and release preflight
+
+These issues are executable dev-agent work and may run in parallel. #2050 is the
+first handoff because it restores the complete gate that the other work must
+pass.
+
+1. [ ] #2050 [READY] Restore `go test ./...`, repair the three red root
+   contracts, and make Develop Quality Gate include the root `tests` package.
+2. [ ] #2051 [READY] Remove or adjudicate all critical/high production
+   dependency vulnerabilities and add repeatable dependency security gating.
+3. [ ] #2052 [READY] Enforce local/LAN/cloud authentication and request
+   boundaries, loopback origin/CSRF protection, truthful setup responses, and
+   verified entitlement claims.
+4. [ ] #2053 [READY] Redact credentials, cookies, tokens, secrets, private
+   content, session identifiers, and sensitive paths before diagnostics are
+   persisted, exported, or sent remotely.
+5. [ ] #2054 [READY] Give every beta provider request bounded timeouts and
+   deterministic fail-closed behavior without cross-provider corruption.
+6. [ ] #2055 [READY] Bind the exact candidate workflow to a fixed, versioned
+   beta core Cypress pack and reject under-scoped dispatch.
+
+Gate A exit criteria:
+
+- all six issues are merged through green focused PRs;
+- `go test ./... -count=1`, strict OpenSpec, OpenAPI parity, production UI
+  build, release/companion package contracts, dependency security gate, and the
+  fixed source-level Cypress release pack pass on one clean `develop` commit;
+- no unresolved candidate-blocking security or data-loss issue remains.
+
+### Gate B - Human live-provider source proof
+
+These rows require normal user-present browser/operator interaction. They are
+not substitutable with fixtures, CI extension loading, screenshots, hidden
+crawling, cookie export, or challenge solving.
+
+1. [ ] #1944 [BLOCKED] A real Frontline search persists candidates with
+   transport/module/schema provenance and completes confirmed hand-off.
+2. [ ] #1945 [BLOCKED] A real Bonza search after normal browser interaction
+   persists candidates with provenance and completes confirmed hand-off.
+3. [ ] #1929 [BLOCKED] Mark the four-provider source/live checklist ready only
+   after Frontline and Bonza evidence passes. Voglers and Hobbytech source proof
+   is already complete.
+
+Gate B can proceed while dev agents execute Gate A.
+
+### Gate C - Freeze and exact private/internal candidate
+
+1. [ ] Nominate one exact clean `develop` commit after Gates A and B pass.
+2. [ ] Start the temporary release freeze. Accept only a focused P0 blocker,
+   required evidence repair, or release-document correction through a green PR.
+   Any accepted change invalidates older candidate evidence.
+3. [ ] #1868 [BLOCKED] Run the non-publishing exact candidate workflow.
+4. [ ] #2034 [BLOCKED] Retain the exact Chrome and Edge packages, versions,
+   manifests, checksums, install identity, and pairing evidence from the same
+   commit.
+
+Internal candidate creation does not require final #1864 approval. External
+publication and `develop` to `main` promotion do.
+
+### Gate D - Exact packaged Windows acceptance
+
+1. [ ] #2048 [READY] Build the resumable, fail-closed evidence recorder before
+   the candidate run. It must never auto-pass human/browser/provider steps.
+2. [ ] #1869 [BLOCKED] Run the complete packaged collector, provider,
+   companion, media, isolation, restart, error, and recovery checklist against
+   the exact Gate C files.
+3. [ ] Re-run Voglers, Hobbytech, Frontline, and Bonza packaged journeys with
+   exact versions, provenance, hand-off, idempotency, and failure isolation.
+4. [ ] Record pass, fail with focused blockers, or not-run for every checklist
+   row. A release-blocking fix returns the programme to Gate C with a new commit.
+
+### Gate E - Data safety, decision, and publication
+
+1. [ ] #1867 [BLOCKED] Attach same-candidate database upgrade, backup, export,
+   restore, media relocation, manifest/link, and zero-data-loss evidence.
+2. [ ] #2056 [READY/P1] Enforce required develop checks and approval-controlled
+   main promotion before final release approval.
+3. [ ] #2057 [READY/P1] Align README, privacy, terms, Help Center, data-path,
+   diagnostics, Browser Companion, and support claims with verified behavior.
+4. [ ] #1864 [IN PROGRESS] Review all exact-candidate evidence and known
+   limitations. Only Max's trusted exact-commit approval may publish the beta
+   prerelease or promote `develop` to `main`.
+
+## Dev-Agent Allocation Before the Operator Critical Path
+
+Recommended order:
+
+1. **Primary dev agent: #2050.** The release-candidate gate is currently
+   guaranteed to fail and the develop PR gate is blind to the root contracts.
+2. **Security/dependency lane: #2051 and #2052.** These are independent of live
+   provider proof and must be resolved before a candidate can be trusted.
+3. **Reliability lane: #2053 and #2054.** Harden diagnostic data handling and
+   provider failure behavior while the operator gathers live proof.
+4. **Release-tooling lane: #2055, then #2048.** Fix the source release pack,
+   then build the resumable packaged-evidence recorder.
+5. **Release-governance/docs lane: #2056 and #2057.** Complete after security
+   behavior stabilizes and before final approval.
+
+The dev agent cannot complete #1944/#1945 live provider proof, #1869 packaged
+Windows acceptance, #1867 same-candidate recovery proof, or #1864 approval.
+
+## Backlog Cleanup Applied on 2026-08-10
+
+- Closed #2047 after PR #2049 merge, seven green PR jobs, focused source
+  revalidation, checked acceptance criteria, and #1864 evidence linkage.
+- Created #2050-#2057 as focused owners for newly verified shippability gaps.
+- Added missing release issues to the Cabinet project and aligned active
+  statuses: #1864 is the only programme item in progress; executable work is
+  Ready; operator/candidate-dependent work is Blocked.
+- Paused post-beta #1701 Agent breadth and moved #1939 UI table refactoring to
+  deferred Backlog.
+- Closed empty legacy milestones M1-M4 and created the `0.1 private beta`
+  milestone for the active release chain.
+- Preserved #1943 and #2034 as open/blocked because their source work is merged
+  but exact packaged evidence is still missing.
 
 ## Post-Beta Scope Guardrails
 
-The following broad work remains visible but is outside Cabinet 0.1 private beta unless release testing proves a direct blocker:
+Unless Gate D exposes a direct beta blocker, keep these outside Cabinet 0.1:
 
 - Metadata Studio breadth and Homebox/iCollect parity.
-- Public identity, signed receipts, signed feedback, reputation, Git/Radicle/P2P ledgers, and community governance.
-- Telegram as a general Agent channel and universal Agent entry points across every surface.
-- eBay seller/listing/fulfilment command-centre scope.
-- Broad retailer/provider expansion beyond required beta providers Voglers, Hobbytech, Frontline and Bonza.
-- Store/venue nodes, event infrastructure, escrow, or payment processing.
+- Universal Agent/Telegram entry points and live Telegram acceptance.
+- eBay seller/listing/fulfilment command-centre breadth.
+- Broad retailer/provider expansion, Shopify/generic crawling, and Hobbytech
+  Parts Finder breadth beyond the required beta journey.
+- Inventory bulk/lightbox breadth, dashboard attention-centre breadth, and
+  shared table/action refactoring.
+- Public identity, signed receipts/feedback, reputation, Git/Radicle/P2P
+  ledgers, community governance, venues/events, escrow, and payments.
+
+Post-beta quality hygiene also includes archiving the 17 completed OpenSpec
+change folders, classifying 13 intentionally skipped Purchases Cypress tests,
+adding coverage trends/thresholds, and considering SBOM/attestation and broader
+CodeQL/gosec/govulncheck automation. These do not waive any P0 gate above.
 
 ## Validation Expectations
 
-- OpenSpec changes: `openspec validate --all --strict --no-interactive`
-- Backend/runtime changes: targeted `go test` package(s), then broader gates when merging.
-- UI changes: targeted Cypress spec(s) through `cypress.ps1`, with live persistence/state verification for mutating flows.
-- Release candidate: exact commit gate, packaged Windows acceptance evidence, checksums, release notes, and demo/runtime evidence from `develop`.
+- OpenSpec: `npx --yes @fission-ai/openspec@latest validate --all --strict --no-interactive`
+- Full Go source and contracts: `go test ./... -count=1`
+- OpenAPI/runtime parity: `go run ./cmd/openapi-parity-gate`
+- UI: production build plus the fixed beta Cypress source pack.
+- Release packages: Cabinet and Browser Companion contract/verifier suites,
+  exact manifests, versions, separate SHA-256 values, and combined candidate
+  identity.
+- Packaged release: #2048/#1869 evidence against the exact Windows files, then
+  #1867 recovery evidence and #1864 approval.
