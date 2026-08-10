@@ -2,12 +2,14 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/collectors-tech/cabinet/internal/scanner"
 )
@@ -256,6 +258,141 @@ func TestShopifyStorefrontFixtureDetectsMissingCoreFields(t *testing.T) {
 	}
 	if normalized := shopifyCandidatesForScanner(candidates, "metrohobbies.com.au"); len(normalized) != 0 {
 		t.Fatalf("expected missing required Shopify fields to be rejected, got %+v", normalized)
+	}
+}
+
+func TestProviderHTTPClientFailsClosedOnStalledResponseHeaders(t *testing.T) {
+	stalled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer stalled.Close()
+	client := newProviderHTTPClient(120 * time.Millisecond)
+
+	start := time.Now()
+	candidates, err := runBigCommerceStorefrontSearch(
+		context.Background(),
+		client,
+		stalled.URL+"/search.php",
+		"afx",
+		1,
+		24,
+		"voglers.com.au",
+	)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatalf("expected stalled provider request to fail closed, got candidates=%+v", candidates)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "timeout") && !strings.Contains(strings.ToLower(err.Error()), "deadline") {
+		t.Fatalf("expected timeout/deadline failure detail, got %v", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("stalled provider request was not bounded: elapsed=%s err=%v", elapsed, err)
+	}
+}
+
+func TestProviderTimeoutDoesNotPoisonNextProviderRun(t *testing.T) {
+	stalled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer stalled.Close()
+	client := newProviderHTTPClient(120 * time.Millisecond)
+
+	if _, err := runShopifyStorefrontSearch(context.Background(), client, stalled.URL+"/products.json", "afx", "andrewshobbies.com.au"); err == nil {
+		t.Fatalf("expected stalled Shopify request to fail closed")
+	}
+
+	healthy := shoppingFixtureServer(t)
+	candidates, err := runShopifyStorefrontSearch(
+		context.Background(),
+		client,
+		healthy.URL+"/shopify/products.json",
+		"tamiya",
+		"andrewshobbies.com.au",
+	)
+	if err != nil {
+		t.Fatalf("healthy provider run after timeout failed: %v", err)
+	}
+	if normalized := shopifyCandidatesForScanner(candidates, "andrewshobbies.com.au"); len(normalized) != 1 {
+		t.Fatalf("expected next provider run to persist one normalized candidate, got %+v", normalized)
+	}
+}
+
+func TestProviderHTTPClientFailsClosedOnPartialBody(t *testing.T) {
+	partial := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"products":[{"id":`))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer partial.Close()
+
+	client := newProviderHTTPClient(120 * time.Millisecond)
+	candidates, err := runShopifyStorefrontSearch(
+		context.Background(),
+		client,
+		partial.URL+"/products.json",
+		"afx",
+		"andrewshobbies.com.au",
+	)
+	if err == nil {
+		t.Fatalf("expected partial provider body to fail closed, got candidates=%+v", candidates)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("partial provider response returned candidates: %+v", candidates)
+	}
+}
+
+func TestProviderHTTPClientPropagatesRequestCancellation(t *testing.T) {
+	started := make(chan struct{})
+	stalled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer stalled.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-started
+		cancel()
+	}()
+
+	start := time.Now()
+	candidates, err := runBigCommerceStorefrontSearch(
+		ctx,
+		newProviderHTTPClient(2*time.Second),
+		stalled.URL+"/search.php",
+		"afx",
+		1,
+		24,
+		"voglers.com.au",
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got candidates=%+v err=%v", candidates, err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("cancelled provider request returned candidates: %+v", candidates)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("provider cancellation was not propagated promptly: %s", elapsed)
+	}
+}
+
+func TestProviderHTTPClientIsSharedAndFullyBounded(t *testing.T) {
+	client := providerHTTPClient()
+	if client != providerHTTPClient() {
+		t.Fatal("provider HTTP client must be shared across production provider runs")
+	}
+	if client.Timeout != defaultProviderHTTPTimeout {
+		t.Fatalf("provider HTTP full-exchange timeout=%s want=%s", client.Timeout, defaultProviderHTTPTimeout)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("provider HTTP transport type=%T want *http.Transport", client.Transport)
+	}
+	if transport.DialContext == nil || transport.ResponseHeaderTimeout <= 0 || transport.TLSHandshakeTimeout <= 0 {
+		t.Fatalf("provider HTTP transport is not fully bounded: %+v", transport)
 	}
 }
 
