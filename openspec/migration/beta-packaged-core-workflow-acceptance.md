@@ -38,6 +38,8 @@ The final approval follows packaged acceptance and #1867 data-safety evidence.
 
 ## Required Provider and Companion Journey
 
+The #2062 real-runtime Cypress preflight proves that both unconfigured providers can be selected with native pointer/keyboard input, saved as enabled active-profile integration instances, reopened with retained non-secret values, scoped in a saved Market Watch query, and projected into the paired Browser Companion module registry. This is configuration-path evidence only; it does not satisfy either external user-present live-search checkbox below.
+
 - [ ] Install the exact Chrome and Edge packages through the documented beta path without developer source tools.
 - [ ] Upgrade and rollback use only verified versioned packages, preserve visible pending jobs, revoke stale origins and fail closed on checksum or protocol mismatch.
 - [ ] Pair to Cabinet through #2033 and verify reconnect, credential rotation, revoke-one and revoke-all.

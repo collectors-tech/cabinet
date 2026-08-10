@@ -889,6 +889,8 @@ export function Apps({
     null
   )
   const [providerSelectorOpen, setProviderSelectorOpen] = useState(false)
+  const [pendingProviderSetup, setPendingProviderSetup] =
+    useState<ProviderRecord | null>(null)
   const [providerCatalogSearchTerm, setProviderCatalogSearchTerm] = useState('')
   const [providerCatalogCategory, setProviderCatalogCategory] = useState('all')
   const [saving, setSaving] = useState(false)
@@ -906,6 +908,9 @@ export function Apps({
   )
   const [rowEditOpen, setRowEditOpen] = useState(false)
   const clickTimerRef = useRef<number | null>(null)
+  const addIntegrationButtonRef = useRef<HTMLButtonElement | null>(null)
+  const providerSelectorWasOpenedRef = useRef(false)
+  const providerSetupHandoffFrameRef = useRef<number | null>(null)
   const tokenInputRef = useRef<HTMLInputElement | null>(null)
   const [form, setForm] = useState<IntegrationForm>({
     baseURL: '',
@@ -1368,67 +1373,104 @@ export function Apps({
     }
   }
 
-  const openIntegration = (provider: ProviderRecord) => {
-    setActionMessage(null)
-    setSaveError(null)
-    setEditingProviderID(provider.provider_id)
-    const keys = providerSettingsKeys(provider.provider_id)
-    setForm({
-      baseURL:
-        settings[keys.baseURLKey] ??
-        (provider.base_domain ? `https://${provider.base_domain}` : ''),
-      token: '',
-      marketplace: settings[keys.marketplaceKey] ?? 'AU',
-      itemsPerPage: settings[keys.itemsPerPageKey] ?? '24',
-      openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
-      openAiTestPrompt:
-        'Write one sentence confirming OpenAI is connected to Cabinet.',
-      telegramSenderId: settings['telegram.catalog_capture.sender_id'] ?? '',
-      telegramChatId: settings['telegram.catalog_capture.chat_id'] ?? '',
-      telegramWebhookConfigured:
-        settings['telegram.webhook_configured'] === 'true' ||
-        settings['telegram.webhook_url_set'] === 'true' ||
-        provider.auth_methods?.webhook?.connected === true,
-      buyerInterestPayload: defaultBuyerInterestPayload,
-      landedCostPayload: defaultLandedCostPayload,
-      listingLifecycleItemId: 'item-local-1',
-      listingLifecycleDraftId: 'draft-local-1',
-      listingLifecycleListingId: 'listing-live-1',
-      listingLifecycleTitle: 'Cabinet eBay listing draft',
+  const openIntegration = useCallback(
+    (provider: ProviderRecord) => {
+      setActionMessage(null)
+      setSaveError(null)
+      setEditingProviderID(provider.provider_id)
+      const keys = providerSettingsKeys(provider.provider_id)
+      setForm({
+        baseURL:
+          settings[keys.baseURLKey] ??
+          (provider.base_domain ? `https://${provider.base_domain}` : ''),
+        token: '',
+        marketplace: settings[keys.marketplaceKey] ?? 'AU',
+        itemsPerPage: settings[keys.itemsPerPageKey] ?? '24',
+        openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
+        openAiTestPrompt:
+          'Write one sentence confirming OpenAI is connected to Cabinet.',
+        telegramSenderId: settings['telegram.catalog_capture.sender_id'] ?? '',
+        telegramChatId: settings['telegram.catalog_capture.chat_id'] ?? '',
+        telegramWebhookConfigured:
+          settings['telegram.webhook_configured'] === 'true' ||
+          settings['telegram.webhook_url_set'] === 'true' ||
+          provider.auth_methods?.webhook?.connected === true,
+        buyerInterestPayload: defaultBuyerInterestPayload,
+        landedCostPayload: defaultLandedCostPayload,
+        listingLifecycleItemId: 'item-local-1',
+        listingLifecycleDraftId: 'draft-local-1',
+        listingLifecycleListingId: 'listing-live-1',
+        listingLifecycleTitle: 'Cabinet eBay listing draft',
+      })
+      setSetupSchemaValues(
+        Object.fromEntries(
+          (provider.setup_schema?.fields ?? []).map((field) => [
+            field.key,
+            setupFieldInitialValue(provider, field, settings),
+          ])
+        )
+      )
+      setBuyerInterestError(null)
+      setBuyerInterestResult(null)
+      setSellerOperationError(null)
+      setSellerOperationResult(null)
+      setSellerOperationExecution(null)
+      setSellerOperationWorking(null)
+      setListingLifecycleError(null)
+      setListingLifecycleResult(null)
+      setListingLifecycleExecution(null)
+      setListingLifecycleWorking(null)
+      setLandedCostError(null)
+      setLandedCostResult(null)
+      setLandedCostWorking(false)
+      setReplaceToken(
+        !(
+          provider.has_token ||
+          provider.auth_methods?.bot_token?.credential_present
+        )
+      )
+    },
+    [settings]
+  )
+
+  useEffect(() => {
+    if (providerSelectorOpen || !providerSelectorWasOpenedRef.current) {
+      return
+    }
+    providerSelectorWasOpenedRef.current = false
+    if (providerSetupHandoffFrameRef.current !== null) {
+      window.cancelAnimationFrame(providerSetupHandoffFrameRef.current)
+    }
+    providerSetupHandoffFrameRef.current = window.requestAnimationFrame(() => {
+      providerSetupHandoffFrameRef.current = null
+      if (pendingProviderSetup) {
+        openIntegration(pendingProviderSetup)
+        setPendingProviderSetup(null)
+        return
+      }
+      addIntegrationButtonRef.current?.focus()
     })
-    setSetupSchemaValues(
-      Object.fromEntries(
-        (provider.setup_schema?.fields ?? []).map((field) => [
-          field.key,
-          setupFieldInitialValue(provider, field, settings),
-        ])
-      )
-    )
-    setBuyerInterestError(null)
-    setBuyerInterestResult(null)
-    setSellerOperationError(null)
-    setSellerOperationResult(null)
-    setSellerOperationExecution(null)
-    setSellerOperationWorking(null)
-    setListingLifecycleError(null)
-    setListingLifecycleResult(null)
-    setListingLifecycleExecution(null)
-    setListingLifecycleWorking(null)
-    setLandedCostError(null)
-    setLandedCostResult(null)
-    setLandedCostWorking(false)
-    setReplaceToken(
-      !(
-        provider.has_token ||
-        provider.auth_methods?.bot_token?.credential_present
-      )
-    )
+
+    return () => {
+      if (providerSetupHandoffFrameRef.current !== null) {
+        window.cancelAnimationFrame(providerSetupHandoffFrameRef.current)
+        providerSetupHandoffFrameRef.current = null
+      }
+    }
+  }, [openIntegration, pendingProviderSetup, providerSelectorOpen])
+
+  const selectProviderForSetup = (provider: ProviderRecord) => {
+    setPendingProviderSetup(provider)
+    setProviderSelectorOpen(false)
   }
 
   useEffect(() => {
     return () => {
       if (clickTimerRef.current !== null) {
         window.clearTimeout(clickTimerRef.current)
+      }
+      if (providerSetupHandoffFrameRef.current !== null) {
+        window.cancelAnimationFrame(providerSetupHandoffFrameRef.current)
       }
     }
   }, [])
@@ -1541,6 +1583,46 @@ export function Apps({
       summary: 'Provider credential field validation status from Integrations.',
     })
     window.setTimeout(() => tokenInputRef.current?.focus(), 0)
+  }
+
+  const upsertProviderIntegrationInstance = async (
+    profileID: string,
+    provider: ProviderRecord,
+    config: Record<string, string>
+  ) => {
+    const instancesResponse = await fetch(
+      `/api/profiles/${profileID}/integration-instances`
+    )
+    if (!instancesResponse.ok) {
+      throw new Error(`integration_instances_list_${instancesResponse.status}`)
+    }
+    const instancesPayload = (await instancesResponse.json()) as {
+      instances?: Array<{ id: string; provider_id: string }>
+    }
+    const existingInstance = instancesPayload.instances?.find(
+      (instance) => instance.provider_id === provider.provider_id
+    )
+    const instanceResponse = await fetch(
+      `/api/profiles/${profileID}/integration-instances`,
+      {
+        method: existingInstance ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(existingInstance
+            ? { id: existingInstance.id }
+            : { auth_state: 'configured', health_state: 'unknown' }),
+          provider_id: provider.provider_id,
+          display_name: provider.display_name,
+          enabled: true,
+          config,
+        }),
+      }
+    )
+    if (!instanceResponse.ok) {
+      throw new Error(
+        `integration_instance_save_failed_${instanceResponse.status}`
+      )
+    }
   }
 
   const saveIntegration = async () => {
@@ -1799,6 +1881,7 @@ export function Apps({
           }
           settingsPayload[field.key] = value
         }
+        const instanceConfig = { ...settingsPayload }
         settingsPayload[
           providerSettingsKeys(editingProvider.provider_id).enabledKey
         ] = 'true'
@@ -1813,6 +1896,11 @@ export function Apps({
         if (!settingsResponse.ok) {
           throw new Error(`save_failed_${settingsResponse.status}`)
         }
+        await upsertProviderIntegrationInstance(
+          activeProfileId,
+          editingProvider,
+          instanceConfig
+        )
         const payload = (await settingsResponse.json()) as {
           settings?: Record<string, string>
         }
@@ -2483,13 +2571,18 @@ export function Apps({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
+                ref={addIntegrationButtonRef}
                 type='button'
                 size='icon'
                 data-testid='integrations-header-add'
                 aria-label='Add integration'
                 title='Add integration'
                 disabled={!sortedProviders.length}
-                onClick={() => setProviderSelectorOpen(true)}
+                onClick={() => {
+                  setPendingProviderSetup(null)
+                  providerSelectorWasOpenedRef.current = true
+                  setProviderSelectorOpen(true)
+                }}
               >
                 <Plus className='size-4' aria-hidden='true' />
               </Button>
@@ -2601,7 +2694,7 @@ export function Apps({
 
         {!bootstrapError && activeProfileId ? (
           <section
-            className='rounded-md border bg-muted/20 p-4 text-sm'
+            className='max-h-36 shrink-0 overflow-y-auto rounded-md border bg-muted/20 p-4 text-sm'
             data-testid='browser-companion-security'
             aria-labelledby='browser-companion-security-title'
           >
@@ -3075,114 +3168,119 @@ export function Apps({
         ) : null}
       </Main>
 
-      <Dialog
-        open={providerSelectorOpen}
-        onOpenChange={setProviderSelectorOpen}
-      >
-        <DialogContent data-testid='integrations-provider-selector'>
-          <DialogHeader>
-            <DialogTitle>Add Integration</DialogTitle>
-            <DialogDescription>
-              Search registry providers and review setup requirements before
-              opening provider-specific setup.
-            </DialogDescription>
-          </DialogHeader>
-          <div className='grid gap-3'>
-            <div className='grid gap-2 sm:grid-cols-[1fr_12rem]'>
-              <div className='relative'>
-                <SearchCheck className='pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground' />
-                <Input
-                  className='pl-8'
-                  data-testid='integrations-provider-selector-search'
-                  placeholder='Search name, domain, capability, auth, or status'
-                  value={providerCatalogSearchTerm}
-                  onChange={(event) =>
-                    setProviderCatalogSearchTerm(event.target.value)
-                  }
-                />
-              </div>
-              <Select
-                value={providerCatalogCategory}
-                onValueChange={setProviderCatalogCategory}
-              >
-                <SelectTrigger data-testid='integrations-provider-selector-category'>
-                  <SelectValue placeholder='Category' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='all'>All categories</SelectItem>
-                  {providerCatalogCategories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className='grid max-h-[58vh] gap-2 overflow-y-auto pr-1'>
-              {filteredProviderCatalogProviders.length ? (
-                filteredProviderCatalogProviders.map((provider) => (
-                  <Button
-                    key={provider.provider_id}
-                    type='button'
-                    variant='outline'
-                    className='h-auto justify-start px-3 py-3 text-left'
-                    data-testid={`integrations-provider-selector-option-${provider.provider_id}`}
-                    onClick={() => {
-                      setProviderSelectorOpen(false)
-                      openIntegration(provider)
-                    }}
-                  >
-                    <span className='flex min-w-0 flex-1 flex-col items-start gap-2'>
-                      <span className='flex w-full min-w-0 flex-wrap items-start justify-between gap-2'>
-                        <span className='min-w-0'>
-                          <span className='block truncate font-medium'>
-                            {provider.display_name}
-                          </span>
-                          <span className='block truncate text-xs text-muted-foreground'>
-                            {provider.base_domain || provider.provider_id}
-                          </span>
-                        </span>
-                        <span
-                          className={`rounded px-2 py-0.5 text-xs ${providerCatalogStatusClassName(provider)}`}
-                          data-testid={`integrations-provider-selector-status-${provider.provider_id}`}
-                        >
-                          {provider.health?.state ??
-                            provider.health?.status ??
-                            provider.state}
-                        </span>
-                      </span>
-                      <span className='flex flex-wrap gap-1 text-xs text-muted-foreground'>
-                        <span className='rounded bg-muted px-2 py-0.5'>
-                          {provider.provider_category ??
-                            provider.provider_type ??
-                            'uncategorized'}
-                        </span>
-                        <span className='rounded bg-muted px-2 py-0.5'>
-                          {provider.auth_mode}
-                        </span>
-                        <span className='rounded bg-muted px-2 py-0.5'>
-                          {provider.integration_mode}
-                        </span>
-                      </span>
-                      <span className='line-clamp-2 text-xs text-muted-foreground'>
-                        {provider.setup_instructions ??
-                          'Review provider setup requirements before saving.'}
-                      </span>
-                    </span>
-                  </Button>
-                ))
-              ) : (
-                <div
-                  className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
-                  data-testid='integrations-provider-selector-empty'
-                >
-                  No registry providers match current Add Integration filters.
+      {providerSelectorOpen ? (
+        <Dialog open onOpenChange={setProviderSelectorOpen}>
+          <DialogContent
+            className='max-h-[90vh] overflow-hidden'
+            data-testid='integrations-provider-selector'
+          >
+            <DialogHeader>
+              <DialogTitle>Add Integration</DialogTitle>
+              <DialogDescription>
+                Search registry providers and review setup requirements before
+                opening provider-specific setup.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='grid min-h-0 min-w-0 gap-3'>
+              <div className='grid gap-2 sm:grid-cols-[1fr_12rem]'>
+                <div className='relative'>
+                  <SearchCheck className='pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground' />
+                  <Input
+                    className='pl-8'
+                    data-testid='integrations-provider-selector-search'
+                    placeholder='Search name, domain, capability, auth, or status'
+                    value={providerCatalogSearchTerm}
+                    onChange={(event) =>
+                      setProviderCatalogSearchTerm(event.target.value)
+                    }
+                  />
                 </div>
-              )}
+                <Select
+                  value={providerCatalogCategory}
+                  onValueChange={setProviderCatalogCategory}
+                >
+                  <SelectTrigger data-testid='integrations-provider-selector-category'>
+                    <SelectValue placeholder='Category' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='all'>All categories</SelectItem>
+                    {providerCatalogCategories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className='grid max-h-[58vh] min-h-0 min-w-0 gap-2 overflow-x-hidden overflow-y-auto pr-1'>
+                {filteredProviderCatalogProviders.length ? (
+                  filteredProviderCatalogProviders.map((provider) => (
+                    <Button
+                      key={provider.provider_id}
+                      type='button'
+                      variant='outline'
+                      className='h-auto w-full min-w-0 justify-start overflow-hidden px-3 py-3 text-left'
+                      data-testid={`integrations-provider-selector-option-${provider.provider_id}`}
+                      onClick={() => selectProviderForSetup(provider)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          selectProviderForSetup(provider)
+                        }
+                      }}
+                    >
+                      <span className='flex min-w-0 flex-1 flex-col items-start gap-2'>
+                        <span className='flex w-full min-w-0 flex-wrap items-start justify-between gap-2'>
+                          <span className='min-w-0'>
+                            <span className='block truncate font-medium'>
+                              {provider.display_name}
+                            </span>
+                            <span className='block truncate text-xs text-muted-foreground'>
+                              {provider.base_domain || provider.provider_id}
+                            </span>
+                          </span>
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs ${providerCatalogStatusClassName(provider)}`}
+                            data-testid={`integrations-provider-selector-status-${provider.provider_id}`}
+                          >
+                            {provider.health?.state ??
+                              provider.health?.status ??
+                              provider.state}
+                          </span>
+                        </span>
+                        <span className='flex flex-wrap gap-1 text-xs text-muted-foreground'>
+                          <span className='rounded bg-muted px-2 py-0.5'>
+                            {provider.provider_category ??
+                              provider.provider_type ??
+                              'uncategorized'}
+                          </span>
+                          <span className='rounded bg-muted px-2 py-0.5'>
+                            {provider.auth_mode}
+                          </span>
+                          <span className='rounded bg-muted px-2 py-0.5'>
+                            {provider.integration_mode}
+                          </span>
+                        </span>
+                        <span className='line-clamp-2 w-full min-w-0 text-left text-xs break-words text-muted-foreground'>
+                          {provider.setup_instructions ??
+                            'Review provider setup requirements before saving.'}
+                        </span>
+                      </span>
+                    </Button>
+                  ))
+                ) : (
+                  <div
+                    className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
+                    data-testid='integrations-provider-selector-empty'
+                  >
+                    No registry providers match current Add Integration filters.
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <Dialog
         open={editingProvider !== null}
@@ -3192,7 +3290,7 @@ export function Apps({
           }
         }}
       >
-        <DialogContent className='top-4 max-h-[90vh] translate-y-0 overflow-y-auto sm:max-w-2xl'>
+        <DialogContent className='top-4 max-h-[90vh] translate-y-0 scroll-py-12 overflow-y-auto sm:max-w-2xl'>
           <DialogHeader>
             <DialogTitle>
               {editingProvider?.display_name ?? 'Integration'}

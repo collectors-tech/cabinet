@@ -5,8 +5,20 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 
 const browsers = [
-  { name: 'Chrome', commands: ['google-chrome', 'google-chrome-stable'], rootVariable: 'CABINET_EXTENSION_CHROME_ROOT' },
-  { name: 'Edge', commands: ['microsoft-edge', 'microsoft-edge-stable'], rootVariable: 'CABINET_EXTENSION_EDGE_ROOT' },
+  {
+    name: 'Chrome',
+    commands: ['google-chrome', 'google-chrome-stable'],
+    rootVariable: 'CABINET_EXTENSION_CHROME_ROOT',
+    startupTimeoutMilliseconds: 30_000,
+    attempts: 1,
+  },
+  {
+    name: 'Edge',
+    commands: ['microsoft-edge', 'microsoft-edge-stable'],
+    rootVariable: 'CABINET_EXTENSION_EDGE_ROOT',
+    startupTimeoutMilliseconds: 90_000,
+    attempts: 2,
+  },
 ]
 
 const executable = (commands) => commands.find((command) =>
@@ -17,7 +29,7 @@ const pause = (milliseconds) => new Promise((resolvePause) => setTimeout(resolve
 
 let nextCommandID = 0
 
-const cdpCommand = (browserProcess, method, params) => new Promise((resolveCommand, rejectCommand) => {
+const cdpCommand = (browserProcess, method, params, timeoutMilliseconds = 30_000) => new Promise((resolveCommand, rejectCommand) => {
   const input = browserProcess.stdio[3]
   const output = browserProcess.stdio[4]
   const commandID = ++nextCommandID
@@ -25,7 +37,7 @@ const cdpCommand = (browserProcess, method, params) => new Promise((resolveComma
   const timeout = setTimeout(() => {
     output.removeListener('data', onData)
     rejectCommand(new Error(`cdp_timeout:${method}`))
-  }, 30_000)
+  }, timeoutMilliseconds)
   const onData = (chunk) => {
     buffered += chunk.toString()
     const messages = buffered.split('\0')
@@ -43,11 +55,7 @@ const cdpCommand = (browserProcess, method, params) => new Promise((resolveComma
   input.write(`${JSON.stringify({ id: commandID, method, params })}\0`)
 })
 
-const verify = async (browser) => {
-  const command = executable(browser.commands)
-  assert.ok(command, `${browser.name} is required for the Browser Companion load gate`)
-  const extensionRoot = resolve(process.env[browser.rootVariable] ?? 'browser-extension')
-  const manifest = JSON.parse(await readFile(resolve(extensionRoot, 'manifest.json'), 'utf8'))
+const tryVerify = async (browser, command, extensionRoot, manifest) => {
   const profile = await mkdtemp(`${tmpdir()}/cabinet-${browser.name.toLowerCase()}-`)
   const output = []
   const browserProcess = spawn(command, [
@@ -55,7 +63,10 @@ const verify = async (browser) => {
     '--no-sandbox',
     '--disable-gpu',
     '--disable-dev-shm-usage',
+    '--disable-background-networking',
+    '--disable-component-update',
     '--no-first-run',
+    '--no-default-browser-check',
     '--enable-unsafe-extension-debugging',
     '--remote-debugging-pipe',
     `--user-data-dir=${profile}`,
@@ -67,7 +78,7 @@ const verify = async (browser) => {
   let loaded
   let installedExtension
   try {
-    await cdpCommand(browserProcess, 'Browser.getVersion', {})
+    await cdpCommand(browserProcess, 'Browser.getVersion', {}, browser.startupTimeoutMilliseconds)
     loaded = await cdpCommand(browserProcess, 'Extensions.loadUnpacked', { path: extensionRoot })
     assert.match(loaded?.id ?? '', /^[a-p]{32}$/, `${browser.name} did not return a valid extension ID`)
 
@@ -78,7 +89,7 @@ const verify = async (browser) => {
     assert.equal(installedExtension?.version, manifest.version, `${browser.name} loaded the wrong extension version`)
     assert.equal(resolve(installedExtension?.path ?? ''), extensionRoot, `${browser.name} loaded the extension from the wrong path`)
   } catch (error) {
-    throw new Error(`${browser.name} DevTools load failed: ${error.message}\n${output.join('').slice(-4000)}`)
+    throw new Error(`${error.message}\n${output.join('').slice(-4000)}`)
   } finally {
     browserProcess.kill('SIGTERM')
     await Promise.race([
@@ -88,7 +99,31 @@ const verify = async (browser) => {
   }
 
   assert.ok(installedExtension, `${browser.name} did not report the unpacked extension after loading`)
-  return { browser: browser.name, extension_origin: `chrome-extension://${loaded.id}` }
+  return {
+    result: { browser: browser.name, extension_origin: `chrome-extension://${loaded.id}` },
+    output: output.join(''),
+  }
+}
+
+const verify = async (browser) => {
+  const command = executable(browser.commands)
+  assert.ok(command, `${browser.name} is required for the Browser Companion load gate`)
+  const extensionRoot = resolve(process.env[browser.rootVariable] ?? 'browser-extension')
+  const manifest = JSON.parse(await readFile(resolve(extensionRoot, 'manifest.json'), 'utf8'))
+
+  const errors = []
+  for (let attempt = 1; attempt <= browser.attempts; attempt += 1) {
+    try {
+      const { result } = await tryVerify(browser, command, extensionRoot, manifest)
+      return result
+    } catch (error) {
+      errors.push(error)
+      if (attempt < browser.attempts) await pause(2000)
+    }
+  }
+
+  const summary = errors.map((error, index) => `attempt ${index + 1}: ${error.message}`).join('\n\n')
+  throw new Error(`${browser.name} DevTools load failed after ${browser.attempts} attempt(s):\n${summary.slice(-4000)}`)
 }
 
 const results = []

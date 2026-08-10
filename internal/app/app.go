@@ -242,7 +242,7 @@ func New(cfg config.Config) (*App, error) {
 	mux := http.NewServeMux()
 	registerZitadelAuthRoutes(mux, zitadelAuth)
 	if isE2EHooksEnabled(cfg) {
-		registerE2ETestHooks(mux, conn, cfg)
+		registerE2ETestHooks(mux, conn, cfg, authService)
 	}
 	var previousClean string
 	_ = conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'clean_shutdown'`).Scan(&previousClean)
