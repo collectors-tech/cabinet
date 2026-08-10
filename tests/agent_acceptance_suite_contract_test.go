@@ -123,7 +123,7 @@ func TestAgentAcceptanceSuiteTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		}
 	}
 
-	specPath := filepath.Join("..", "openspec", "changes", "define-universal-agent-channel-contracts", "specs", "agent-universal-channels", "spec.md")
+	specPath := filepath.Join("..", "openspec", "specs", "agent-universal-channels", "spec.md")
 	specRaw, err := os.ReadFile(specPath)
 	if err != nil {
 		t.Fatalf("read universal Agent channel spec: %v", err)

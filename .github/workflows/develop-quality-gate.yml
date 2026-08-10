@@ -104,8 +104,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Run Go runtime package tests
-        run: go test ./internal/... ./cmd/...
+      - name: Run complete Go repository test suite
+        run: go test ./...
 
   openapi:
     name: OpenAPI parity and docs

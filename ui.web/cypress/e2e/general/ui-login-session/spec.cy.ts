@@ -37,6 +37,19 @@ describe("ui-login-session", () => {
     cy.contains("button", "Open local workspace").click();
 
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
+    cy.window().then((win) => {
+      const history = JSON.parse(
+        win.localStorage.getItem("cabinet.toastHistory.v1") ?? "[]"
+      ) as Array<Record<string, unknown>>;
+      const signInRecord = history.find((record) => record.id === "auth-sign-in");
+
+      expect(signInRecord).to.include({
+        level: "success",
+        title: "Local workspace opened",
+        source_label: "Auth sign-in",
+        category: "auth",
+      });
+    });
   });
 
   it("UI-LOGIN-SESSION-011 presents the Cabinet ZITADEL boundary without password fields", () => {

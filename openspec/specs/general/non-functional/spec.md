@@ -27,7 +27,7 @@ Cabinet SHALL run a required quality gate for pull requests targeting `develop` 
 #### Scenario: Develop pull request quality gate
 - **GIVEN** a pull request targets `develop`
 - **WHEN** GitHub Actions evaluates the repository workflows
-- **THEN** the Develop Quality Gate workflow SHALL run strict OpenSpec validation, UI production build, Go package tests, OpenAPI parity/lint/build, and the login/profile/runtime Cypress smoke gate
+- **THEN** the Develop Quality Gate workflow SHALL run strict OpenSpec validation, UI production build, the complete Go repository test suite including root contract tests, OpenAPI parity/lint/build, and the login/profile/runtime Cypress smoke gate
 - **AND** failing steps SHALL preserve useful workflow artifacts or command logs for review
 - **AND** the workflow SHALL not merge `develop` into `main`
 

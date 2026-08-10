@@ -33,7 +33,7 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 		"npm run build",
 		"node scripts/verify-browser-extension-load.mjs",
 		"fetch-depth: 0",
-		"go test ./internal/... ./cmd/...",
+		"go test ./...",
 		"Build runtime UI static bundle for OpenAPI tests",
 		"go run ./cmd/openapi-parity-gate",
 		"@redocly/cli@latest lint docs/api/openapi.yaml",
@@ -49,12 +49,42 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 
 	for _, forbidden := range []string{
 		"branches: [main]",
+		"go test ./internal/... ./cmd/...",
 		"git push",
 		"merge develop",
 	} {
 		if strings.Contains(content, forbidden) {
 			t.Fatalf("develop quality gate contains forbidden fragment %q", forbidden)
 		}
+	}
+}
+
+func TestReleaseWorkflowsRunCompleteGoRepositorySuite(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := resolveRepoRoot(t)
+	for _, relativePath := range []string{
+		filepath.Join(".github", "workflows", "develop-quality-gate.yml"),
+		filepath.Join(".github", "workflows", "beta-release-candidate.yml"),
+		filepath.Join(".github", "workflows", "release-installers.yml"),
+		filepath.Join(".github", "workflows", "main-gate.yml"),
+	} {
+		relativePath := relativePath
+		t.Run(relativePath, func(t *testing.T) {
+			t.Parallel()
+
+			raw, err := os.ReadFile(filepath.Join(repoRoot, relativePath))
+			if err != nil {
+				t.Fatalf("read %s: %v", relativePath, err)
+			}
+			content := string(raw)
+			if !strings.Contains(content, "go test ./...") {
+				t.Fatalf("%s does not run the complete Go repository suite", relativePath)
+			}
+			if strings.Contains(content, "go test ./internal/... ./cmd/...") {
+				t.Fatalf("%s still omits the root contract package", relativePath)
+			}
+		})
 	}
 }
 
