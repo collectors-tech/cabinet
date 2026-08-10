@@ -109,7 +109,7 @@ func TestWave2DiagnosticsSentryCompatibleEnvelopeWhenOptedIn(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/diagnostics/event",
-		strings.NewReader(`{"type":"error","category":"provider","message":"ebay timeout","session_id":"sess-wave2"}`),
+		strings.NewReader(`{"type":"error","category":"provider","message":"ebay timeout Authorization: Bearer raw-message-token","session_id":"sess-wave2","details":{"password":"raw-password","headers":{"Cookie":"sid=raw-cookie","Authorization":"Bearer raw-header-token"},"events":[{"api-key":"raw-api-key"}],"path":"C:\\Users\\Max\\Cabinet\\private.db","page_content":"private page text"}}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if send.Code != http.StatusOK {
@@ -132,6 +132,25 @@ func TestWave2DiagnosticsSentryCompatibleEnvelopeWhenOptedIn(t *testing.T) {
 	for _, required := range []string{"event_id", "timestamp", "message", "level"} {
 		if _, ok := envelope[required]; !ok {
 			t.Fatalf("missing sentry-compatible field %q in envelope: %+v", required, envelope)
+		}
+	}
+	for _, leaked := range []string{
+		"raw-message-token",
+		"sess-wave2",
+		"raw-password",
+		"raw-cookie",
+		"raw-header-token",
+		"raw-api-key",
+		`C:\Users\Max\Cabinet\private.db`,
+		"private page text",
+	} {
+		if strings.Contains(string(payload), leaked) {
+			t.Fatalf("remote diagnostics leaked %q: %s", leaked, string(payload))
+		}
+	}
+	for _, expected := range []string{"[REDACTED]", "[REDACTED_SESSION]", "[REDACTED_CONTENT]"} {
+		if !strings.Contains(string(payload), expected) {
+			t.Fatalf("remote diagnostics missing %q redaction marker: %s", expected, string(payload))
 		}
 	}
 }

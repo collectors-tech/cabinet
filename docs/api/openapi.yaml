@@ -1364,7 +1364,7 @@ paths:
     get:
       operationId: getApiLogsExport
       tags: [Logs]
-      summary: Export logs bundle
+      summary: Export recursively redacted logs bundle
       responses:
         "200":
           description: Logs JSON bundle
@@ -4759,7 +4759,7 @@ paths:
     post:
       tags: [Diagnostics]
       operationId: postApiDiagnosticsEvent
-      summary: Create or run diagnostics event
+      summary: Create local diagnostics event and optionally send redacted remote envelope
       security:
         - CabinetLocalSession: []
         - CabinetOIDCSession: []

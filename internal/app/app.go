@@ -8490,20 +8490,23 @@ func buildSentryCompatibleEnvelope(eventType, category, message, sessionID strin
 		level = "error"
 	}
 	eventID, _ := randomToken(12)
+	redactedDetails, _ := logging.RedactValue(details).(map[string]any)
+	sessionContext := map[string]any{}
+	if strings.TrimSpace(sessionID) != "" {
+		sessionContext["id"] = "[REDACTED_SESSION]"
+	}
 	return map[string]any{
 		"event_id":  eventID,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"level":     level,
-		"message":   strings.TrimSpace(message),
+		"message":   logging.RedactSensitive(strings.TrimSpace(message)),
 		"tags": map[string]any{
 			"category": strings.TrimSpace(strings.ToLower(category)),
 			"type":     strings.TrimSpace(strings.ToLower(eventType)),
 		},
 		"contexts": map[string]any{
-			"session": map[string]any{
-				"id": strings.TrimSpace(sessionID),
-			},
-			"diagnostics": details,
+			"session":     sessionContext,
+			"diagnostics": redactedDetails,
 		},
 	}
 }
