@@ -307,6 +307,9 @@ func TestScannerRunsEndpointListsPersistedRunHistory(t *testing.T) {
 	if _, err := a.db.Exec(`INSERT INTO scanner_runs(id, profile_id, query_set_id, provider, trigger_type, started_at, finished_at, status, result_count, new_result_count, error_category, error_message, retry_guidance) VALUES ('run-history-1', ?, 'run-history-q', 'ebay', 'manual', '2026-06-29T00:01:00Z', '2026-06-29T00:02:00Z', 'failed', 0, 0, 'auth', 'Provider credentials expired', 'Reconnect eBay before retrying.')`, p.ID); err != nil {
 		t.Fatalf("seed scanner run: %v", err)
 	}
+	if _, err := a.db.Exec(`INSERT INTO scanner_runs(id, profile_id, query_set_id, provider, trigger_type, started_at, finished_at, status, result_count, new_result_count) VALUES ('run-history-companion', ?, 'run-history-q', 'frontlinehobbies', 'browser_companion', '2026-06-29T00:03:00Z', '2026-06-29T00:04:00Z', 'completed', 2, 2)`, p.ID); err != nil {
+		t.Fatalf("seed historical companion run: %v", err)
+	}
 
 	resp := doRequest(t, a, http.MethodGet, "/api/scanner/runs?query_set_id=run-history-q", nil, nil)
 	if resp.Code != http.StatusOK {
@@ -318,10 +321,23 @@ func TestScannerRunsEndpointListsPersistedRunHistory(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode scanner runs payload: %v", err)
 	}
-	if len(payload.Runs) != 1 {
-		t.Fatalf("expected one run history record, got %+v", payload)
+	if len(payload.Runs) != 2 {
+		t.Fatalf("expected two run history records, got %+v", payload)
 	}
-	run := payload.Runs[0]
+	companionRun := payload.Runs[0]
+	for key, expected := range map[string]any{
+		"id":               "run-history-companion",
+		"provider":         "frontlinehobbies",
+		"trigger_type":     "browser_companion",
+		"status":           "succeeded",
+		"result_count":     float64(2),
+		"new_result_count": float64(2),
+	} {
+		if got := companionRun[key]; got != expected {
+			t.Fatalf("expected historical companion run %s=%v, got %v in %+v", key, expected, got, companionRun)
+		}
+	}
+	run := payload.Runs[1]
 	for key, expected := range map[string]any{
 		"id":               "run-history-1",
 		"provider":         "ebay",

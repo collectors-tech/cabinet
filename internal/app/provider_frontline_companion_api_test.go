@@ -153,6 +153,28 @@ func TestFrontlineCompanionCandidateCanBeConfirmedIntoWishlist(t *testing.T) {
 		Scan(&candidateID, &querySetID, &listingID, &title, &price, &listingURL, &sourceResultURL); err != nil {
 		t.Fatalf("load Frontline companion candidate: %v", err)
 	}
+	runs := doRequest(t, a, http.MethodGet, "/api/scanner/runs?query_set_id="+querySetID, nil, nil)
+	if runs.Code != http.StatusOK {
+		t.Fatalf("Frontline companion run history status=%d body=%s", runs.Code, runs.Body.String())
+	}
+	var runHistory struct {
+		Runs []struct {
+			Provider    string `json:"provider"`
+			TriggerType string `json:"trigger_type"`
+			Status      string `json:"status"`
+			ResultCount int    `json:"result_count"`
+		} `json:"runs"`
+	}
+	if err := json.NewDecoder(runs.Body).Decode(&runHistory); err != nil {
+		t.Fatalf("decode Frontline companion run history: %v", err)
+	}
+	if len(runHistory.Runs) != 1 {
+		t.Fatalf("Frontline companion run history got %+v", runHistory.Runs)
+	}
+	run := runHistory.Runs[0]
+	if run.Provider != "frontlinehobbies" || run.TriggerType != "browser_companion" || run.Status != "succeeded" || run.ResultCount <= 0 {
+		t.Fatalf("Frontline companion run history lost canonical success evidence: %+v", run)
+	}
 	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title)
 		VALUES ('frontline-handoff-item', ?, 'AFX', 'Slot Cars', ?, ?)`, created.ID, listingID, title); err != nil {
 		t.Fatalf("seed confirmed Frontline item match: %v", err)

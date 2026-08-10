@@ -144,6 +144,14 @@ Cabinet SHALL commit each validated versioned capture envelope before acknowledg
 - **AND** it MUST dispatch provider observations to Market Watch/Discoveries or purchases to the review inbox without directly creating inventory
 - **AND** replay of the same digest/key MUST not duplicate observations while reuse of the key with another digest MUST fail.
 
+#### Scenario: Report a successful provider capture in Market Watch run history
+- **GIVEN** a complete Browser Companion provider search dispatches one or more normalized candidates
+- **WHEN** the collector reads `GET /api/scanner/runs?query_set_id=<captured-query-set>`
+- **THEN** the persisted run MUST retain the canonical provider scope and `trigger_type=browser_companion`
+- **AND** its terminal status MUST be `succeeded` with a positive `result_count`
+- **AND** a historical Browser Companion row persisted as `completed` MUST be reported as `succeeded` after upgrade
+- **AND** failed provider runs MUST retain their failure state and recovery evidence.
+
 #### Scenario: Preserve partial and interrupted synchronisation
 - **GIVEN** a partial page range or a job interrupted while Cabinet or the MV3 worker restarts
 - **WHEN** processing resumes
