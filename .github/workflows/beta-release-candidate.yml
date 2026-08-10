@@ -7,10 +7,10 @@ on:
         description: Exact commit SHA to validate as the Cabinet beta release candidate
         required: true
         type: string
-      cypress_spec:
-        description: Cypress release pack spec glob
+      cypress_specs_override:
+        description: Optional exact comma-separated beta core Cypress pack override; empty uses release/beta-core-cypress-pack.json
         required: false
-        default: cypress/e2e/general/ui-login-session/spec.cy.ts
+        default: ""
         type: string
 
 permissions:
@@ -66,6 +66,19 @@ jobs:
         shell: pwsh
         run: npm --prefix ui.web ci
 
+      - name: Validate fixed beta core Cypress acceptance pack
+        id: cypress_pack
+        shell: pwsh
+        run: |
+          $specs = node scripts/validate-beta-core-cypress-pack.mjs --manifest release/beta-core-cypress-pack.json --spec-override "${{ inputs.cypress_specs_override }}" --output .logs/release-candidate/cypress-pack.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Fixed beta core Cypress pack validation failed."
+          }
+          if ([string]::IsNullOrWhiteSpace($specs)) {
+            throw "Fixed beta core Cypress pack resolved no specs."
+          }
+          "specs=$specs" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Strict OpenSpec validation
         shell: pwsh
         run: openspec validate --all --strict --no-interactive *>&1 | Tee-Object .logs/release-candidate/openspec.log
@@ -106,7 +119,7 @@ jobs:
           CABINET_E2E_MODE: "1"
           CABINET_OPEN_BROWSER: "0"
         run: |
-          pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec "${{ inputs.cypress_spec }}" -Browser chrome -RequireE2EHooks *>&1 | Tee-Object .logs/release-candidate/cypress.log
+          pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec "${{ steps.cypress_pack.outputs.specs }}" -Browser chrome -RequireE2EHooks *>&1 | Tee-Object .logs/release-candidate/cypress.log
 
       - name: Write release-candidate validation summary
         if: always()
@@ -117,7 +130,9 @@ jobs:
             "",
             "Commit SHA: ${{ steps.commit.outputs.sha }}",
             "Workflow run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
-            "Cypress spec: ${{ inputs.cypress_spec }}",
+            "Cypress pack manifest: release/beta-core-cypress-pack.json",
+            "Cypress specs: ${{ steps.cypress_pack.outputs.specs }}",
+            "Cypress pack evidence: .logs/release-candidate/cypress-pack.json",
             "",
             "Packaging runs only in the dependent job after every validation step passes.",
             "This workflow validates the exact checkout only and does not merge develop into main."

@@ -79,6 +79,28 @@ func TestCypressScriptFailsOnStaleRuntimeAppVersion(t *testing.T) {
 	}
 }
 
+func TestCypressScriptSupportsFixedPackSpecLists(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "cypress.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read cypress script: %v", err)
+	}
+	content := string(raw)
+	for _, snippet := range []string{
+		"Resolve-CypressSpecArgument",
+		"$specValue -split \",\"",
+		"Resolve-Path $candidate",
+		"$resolvedSpecs -join \",\"",
+		"Missing Cypress spec: no spec paths were provided.",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected cypress script to support comma-separated fixed pack specs with snippet %q", snippet)
+		}
+	}
+}
+
 func TestCypressScriptResetsManagedRuntimeDataDir(t *testing.T) {
 	t.Parallel()
 

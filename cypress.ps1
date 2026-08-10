@@ -247,6 +247,25 @@ function Test-CypressDependencyReady([string]$uiRoot) {
   return (Test-Path $cypressPackage) -and ((Test-Path $cypressCmd) -or (Test-Path $cypressBin))
 }
 
+function Resolve-CypressSpecArgument([string]$uiRoot, [string]$specValue) {
+  $resolvedSpecs = @()
+  foreach ($entry in ($specValue -split ",")) {
+    $trimmed = $entry.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+      continue
+    }
+    $candidate = if ([System.IO.Path]::IsPathRooted($trimmed)) { $trimmed } else { Join-Path $uiRoot $trimmed }
+    if (-not (Test-Path $candidate)) {
+      throw "Missing Cypress spec: $candidate"
+    }
+    $resolvedSpecs += (Resolve-Path $candidate).Path
+  }
+  if ($resolvedSpecs.Count -eq 0) {
+    throw "Missing Cypress spec: no spec paths were provided."
+  }
+  return ($resolvedSpecs -join ",")
+}
+
 function Start-ProcessWithEnvironment([string]$filePath, [string[]]$argumentList, [string]$workingDirectory, [hashtable]$environment) {
   $originalValues = @{}
   foreach ($key in $environment.Keys) {
@@ -461,7 +480,7 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $uiRoot = Join-Path $repoRoot "ui.web"
 $defaultRuntimeExecutable = Join-Path $repoRoot "bin/cabinet.exe"
 $configPath = Join-Path $uiRoot "cypress.config.runtime.cjs"
-$specPath = if ([System.IO.Path]::IsPathRooted($Spec)) { $Spec } else { Join-Path $uiRoot $Spec }
+$specPath = Resolve-CypressSpecArgument $uiRoot $Spec
 $baseUri = [Uri]$BaseUrl
 $runtimePort = $baseUri.Port
 $e2eDataDir = Join-Path $repoRoot ".tmp\cypress-runtime-$runtimePort"
@@ -545,9 +564,6 @@ Write-Step "Lane isolation: port=$runtimePort data_dir=$e2eDataDir profile=$e2eP
 
 if (-not (Test-Path $configPath)) {
   throw "Missing Cypress config: $configPath"
-}
-if (-not (Test-Path $specPath)) {
-  throw "Missing Cypress spec: $specPath"
 }
 if (-not $SkipDependencyPrep) {
   Ensure-UiDependencies $repoRoot $uiRoot
