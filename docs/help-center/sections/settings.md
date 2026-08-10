@@ -8,6 +8,7 @@
 ## Storage section
 - Configure media path
 - Run diagnostics/maintenance actions (where enabled)
+- Export diagnostics logs as a recursively redacted snapshot; credentials, cookies, authorization headers, tokens, raw session identifiers, sensitive local paths, and private page content are removed before local export or opt-in remote diagnostics send.
 
 ## Categories and taxonomy
 - Open **Categories** to manage profile-scoped item types, item type condition scales, and packaging grade values.

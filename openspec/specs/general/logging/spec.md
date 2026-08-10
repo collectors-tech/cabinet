@@ -28,10 +28,11 @@ Cabinet SHALL support debug-level logging toggle and diagnostics export bundle g
 - **THEN** Cabinet SHALL generate export bundle containing activity and error logs
 
 ### Requirement LOGGING-004: Sensitive data SHALL be redacted in logs
-Cabinet SHALL redact tokens, API keys, credentials, and secrets from persisted and exported logs.
+Cabinet SHALL redact tokens, API keys, credentials, passwords, cookies, authorization headers, session identifiers, sensitive local paths, and private page content from persisted and exported logs.
 
 #### Scenario: Log redaction
 - **GIVEN** sensitive values are present in event context
 - **WHEN** log record is written or exported
-- **THEN** sensitive fields SHALL be redacted before storage/output
+- **THEN** sensitive fields SHALL be redacted recursively before storage/output
+- **AND** redaction SHALL cover structured maps/lists and free-text credential patterns without mutating caller-owned input values
 
