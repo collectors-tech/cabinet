@@ -81,6 +81,18 @@ Cabinet SHALL publish an external beta prerelease only through an explicit appro
 - **AND** a successful `main` workflow MUST NOT create or update a release automatically
 - **AND** the publication workflow MUST NOT merge `develop` into `main`.
 
+### Requirement RUNTIME-CORE-023: Beta capability disclosure SHALL have one governed source
+Cabinet SHALL maintain one versioned private-beta capability and limitation disclosure that is projected into the authenticated product UI and generated release notes.
+
+#### Scenario: Project governed disclosure into UI and release notes
+- **GIVEN** Cabinet is preparing a private beta candidate
+- **WHEN** the package lane generates release notes and the authenticated Help Center renders beta guidance
+- **THEN** both surfaces SHALL use the same governed disclosure source
+- **AND** the disclosure SHALL distinguish supported, preview, browser-assisted, action-required, unavailable, packaged-unproven, excluded and limited states
+- **AND** the disclosure SHALL cover Windows portable packaging, signing/installer limits, Browser Companion target and update limits, provider readiness for Voglers, Hobbytech, Frontline and Bonza, local/ZITADEL auth modes, preview Assistant/Agent features, Telegram live-channel limits, post-beta exclusions, and data export/recovery ownership
+- **AND** package verification SHALL fail when release notes omit a governed release-note disclosure statement
+- **AND** user-facing disclosure text SHALL avoid internal paths, secret values, fixture claims, stale issue wording and mutable latest-channel claims.
+
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
 

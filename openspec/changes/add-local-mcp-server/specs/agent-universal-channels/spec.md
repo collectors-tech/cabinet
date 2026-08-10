@@ -24,3 +24,11 @@ requested work.
   clarification-required guidance instead of guessed
 - **AND** side-panel Chat SHALL remain available while non-mutating navigation or
   highlighting changes the main app route
+
+#### Scenario: Explain available work before execution
+
+- **GIVEN** Agent is opened from a supported surface
+- **WHEN** the user asks what Agent can do
+- **THEN** Agent SHALL explain available skills and capabilities for the current context
+- **AND** it SHALL distinguish read-only, preview-only, confirm-required, external-write, blocked, and unavailable work
+- **AND** unavailable or unsupported work SHALL include the next safe user action rather than silent omission or hallucinated capability

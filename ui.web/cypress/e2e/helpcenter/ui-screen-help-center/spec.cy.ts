@@ -1,9 +1,15 @@
 describe('ui-screen-help-center', () => {
   function signInToHelpCenter(targetPath = '/help-center/') {
     cy.visit(`/sign-in?redirect=${encodeURIComponent(targetPath)}`)
-    cy.get('input[name="email"]').clear().type('e2e-help@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.get('body').then(($body) => {
+      if ($body.find('input[name="email"]').length > 0) {
+        cy.get('input[name="email"]').clear().type('e2e-help@example.com')
+        cy.get('input[name="password"]').clear().type('password123')
+        cy.contains('button', 'Sign in').click()
+        return
+      }
+      cy.contains('button', 'Open local workspace').click()
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/help-center\/?$/)
   }
 
@@ -19,6 +25,7 @@ describe('ui-screen-help-center', () => {
     cy.get('[data-testid="help-center-article-library"]').should('be.visible')
     cy.get('[data-testid="help-center-library-summary"]').should('contain.text', 'Articles available')
     cy.get('[data-testid="help-center-article-link-getting-started-login-database-setup"]').should('be.visible')
+    cy.get('[data-testid="help-center-article-link-cabinet-private-beta-disclosure"]').should('be.visible')
     cy.get('[data-testid="help-center-article-link-section-inventory"]').should('be.visible')
     cy.contains('Oops! Something went wrong').should('not.exist')
   })
@@ -40,7 +47,7 @@ describe('ui-screen-help-center', () => {
     cy.contains('span', /toggle theme/i).should('exist')
     cy.get('[data-slot="sidebar-trigger"]').should('be.visible').click()
     cy.get('[data-slot="sidebar-trigger"]').should('be.visible')
-    cy.contains(/ACC001|Local Admin/i).should('be.visible')
+    cy.contains(/ACC001|LOCALA001|Local Admin|Local Workspace/i).should('be.visible')
   })
 
   it('UI-SCREEN-HELP-CENTER-004 filters article library by search query and empty state', () => {
@@ -78,5 +85,22 @@ describe('ui-screen-help-center', () => {
       '[data-testid="help-center-article-link-getting-started-login-database-setup"]'
     ).should('not.exist')
     cy.get('[data-testid="help-center-selected-article-title"]').should('contain.text', 'Generic UI Elements')
+  })
+
+  it('UI-SCREEN-HELP-CENTER-007 exposes governed Cabinet private beta disclosure', () => {
+    signInToHelpCenter('/help-center/?article=cabinet-private-beta-disclosure')
+
+    cy.get('[data-testid="help-center-selected-article-title"]').should(
+      'contain.text',
+      'Cabinet 0.1 Private Beta Disclosure'
+    )
+    cy.get('[data-testid="help-center-article-content-cabinet-private-beta-disclosure"]')
+      .should('contain.text', 'Windows portable ZIP')
+      .and('contain.text', 'not an installer')
+      .and('contain.text', 'browser-assisted and action-required')
+      .and('contain.text', 'not trapped behind a paid gate')
+
+    cy.get('[data-testid="help-center-article-search"]').clear().type('beta disclosure')
+    cy.get('[data-testid="help-center-article-link-cabinet-private-beta-disclosure"]').should('be.visible')
   })
 })
