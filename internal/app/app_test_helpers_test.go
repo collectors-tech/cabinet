@@ -9,8 +9,10 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/config"
@@ -55,6 +57,9 @@ func doRequest(t *testing.T, a *App, method, path string, body io.Reader, header
 	t.Helper()
 
 	req := httptest.NewRequest(method, path, body)
+	if origin, err := url.Parse(strings.TrimSpace(a.cfg.WebAuthnOrigin)); err == nil && origin.Host != "" {
+		req.Host = origin.Host
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}

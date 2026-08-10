@@ -24,8 +24,14 @@ Cabinet SHALL expose an authenticated module registry and payload sync endpoint 
 - **THEN** the response MUST report `sync_mode=passive_capture` and `remote_write=false`
 - **AND** the response MUST include non-secret audit evidence naming the module, session, protocol version and passive sync mode.
 
-### Requirement INTEGRATION-067: Pairing MUST require explicit approval inside unlocked Cabinet
-One extension installation SHALL establish trust through a short-lived request, visible six-digit code, explicit profile-scoped approval and one-time exchange.
+### Requirement INTEGRATION-067: Pairing MUST require explicit approval inside Cabinet's configured authentication boundary
+One extension installation SHALL establish trust through a short-lived request, visible six-digit code, explicit profile-scoped approval and one-time exchange. Credential-free local-device mode SHALL permit same-origin loopback management for an active profile only while no passkey is registered; LAN, ZITADEL and registered-passkey modes SHALL require their configured authenticated or unlocked session.
+
+#### Scenario: Pairing management matches the configured Cabinet boundary
+- **GIVEN** a same-origin loopback Cabinet UI with an active profile
+- **WHEN** local-device mode is explicitly credential-free and the profile has no registered passkey
+- **THEN** the collector MUST be able to list and approve Browser Companion pairing requests without a simulated server credential
+- **AND** LAN mode, ZITADEL mode, and a registered-but-locked local profile MUST reject the same management request without a valid session.
 
 #### Scenario: Exchange before approval fails closed
 - **GIVEN** an extension-origin-bound pairing request created through `POST /api/companion/pairing/requests`

@@ -464,22 +464,10 @@ func New(cfg config.Config) (*App, error) {
 			"profile_key":    payload.Instance.Profile,
 			"config_path":    runtimeSetupConfigPath(cfg),
 			"auth_mode":      payload.Auth.Mode,
-			"local_login_username": func() string {
-				if payload.Auth.Mode != "local" {
-					return ""
-				}
-				return "admin@cabinet.local"
-			}(),
-			"local_login_password": func() string {
-				if payload.Auth.Mode != "local" {
-					return ""
-				}
-				return "password123"
-			}(),
-			"data_dir":     payload.Storage.DataDir,
-			"media_dir":    payload.Storage.MediaDir,
-			"runtime_url":  payload.Runtime.ResolvedURL,
-			"runtime_port": portFromResolvedURL(payload.Runtime.ResolvedURL),
+			"data_dir":       payload.Storage.DataDir,
+			"media_dir":      payload.Storage.MediaDir,
+			"runtime_url":    payload.Runtime.ResolvedURL,
+			"runtime_port":   portFromResolvedURL(payload.Runtime.ResolvedURL),
 		})
 	})
 	mux.HandleFunc("/api/runtime/setup-import", func(w http.ResponseWriter, r *http.Request) {
@@ -2587,7 +2575,8 @@ func New(cfg config.Config) (*App, error) {
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
 		})
 	})
-	registerCompanionRoutes(mux, companionSvc, profiles, authService, mediaService)
+	allowCredentialFreeLocalCompanion := credentialFreeLocalCompanionManagementAllowed(cfg, zitadelAuth)
+	registerCompanionRoutes(mux, companionSvc, profiles, authService, mediaService, allowCredentialFreeLocalCompanion)
 	mux.HandleFunc("/api/providers/ebay/buyer-interest/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -7433,6 +7422,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		if rejectLegacyCloudBootstrapInZitadel(w, zitadelAuth) {
+			return
+		}
 		var req struct {
 			Provider string `json:"provider"`
 			Token    string `json:"token"`
@@ -7686,12 +7678,16 @@ func New(cfg config.Config) (*App, error) {
 			mux.ServeHTTP(w, r)
 			return
 		}
-		if !requiresUnlockedSession(r) {
+		if !requiresUnlockedSession(cfg, r) {
 			mux.ServeHTTP(w, r)
 			return
 		}
 		active, err := profiles.GetActiveProfile(r.Context())
 		if err != nil {
+			if strings.EqualFold(cfg.BindMode, "lan") {
+				writeAuthenticationRequired(w)
+				return
+			}
 			mux.ServeHTTP(w, r)
 			return
 		}
@@ -7701,12 +7697,20 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if registrationRequired {
+			if strings.EqualFold(cfg.BindMode, "lan") {
+				writeAuthenticationRequired(w)
+				return
+			}
 			mux.ServeHTTP(w, r)
 			return
 		}
 		token := sessionTokenFromRequest(r)
 		if token != "" {
 			if err := authService.ValidateUnlockedSession(token); err != nil {
+				if strings.EqualFold(cfg.BindMode, "lan") {
+					writeAuthenticationRequired(w)
+					return
+				}
 				http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
 				return
 			}
@@ -7715,6 +7719,10 @@ func New(cfg config.Config) (*App, error) {
 		}
 		if authService.HasUnlockedSession(active.ID) {
 			mux.ServeHTTP(w, r)
+			return
+		}
+		if strings.EqualFold(cfg.BindMode, "lan") {
+			writeAuthenticationRequired(w)
 			return
 		}
 		http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
@@ -7728,7 +7736,7 @@ func New(cfg config.Config) (*App, error) {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           runtimeLogs.wrapHandler(protectedMux),
+		Handler:           runtimeLogs.wrapHandler(requestBoundaryHandler(cfg, protectedMux)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ErrorLog:          log.New(runtimeLogs.errorWriter(), "", 0),
 	}
@@ -8313,9 +8321,12 @@ func loadOpenAPISpec(cfg config.Config) []byte {
 	return nil
 }
 
-func requiresUnlockedSession(r *http.Request) bool {
+func requiresUnlockedSession(cfg config.Config, r *http.Request) bool {
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
 		return false
+	}
+	if strings.EqualFold(cfg.BindMode, "lan") {
+		return !isPublicAPIRequest(r)
 	}
 	switch r.Method {
 	case http.MethodPost, http.MethodPut, http.MethodDelete:
@@ -8335,6 +8346,112 @@ func requiresUnlockedSession(r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func isPublicAPIRequest(r *http.Request) bool {
+	if r == nil || !strings.HasPrefix(r.URL.Path, "/api/") {
+		return false
+	}
+	if companionSelfAuthenticatedPath(r.URL.Path) {
+		return true
+	}
+	switch r.URL.Path {
+	case "/api/runtime", "/api/runtime/setup-status", "/api/openapi.yaml", "/api/auth/provider-options":
+		return r.Method == http.MethodGet
+	case "/api/auth/webauthn/login/begin", "/api/auth/webauthn/login/finish",
+		"/api/auth/session/validate", "/api/auth/session/lock",
+		"/api/auth/recovery/reset/begin":
+		return r.Method == http.MethodPost
+	case "/api/auth/requirements":
+		return r.Method == http.MethodGet
+	case "/api/auth/zitadel/login", "/api/auth/zitadel/callback", "/api/auth/zitadel/session":
+		return r.Method == http.MethodGet
+	case "/api/auth/zitadel/refresh", "/api/auth/zitadel/logout":
+		return r.Method == http.MethodPost
+	default:
+		return false
+	}
+}
+
+func writeAuthenticationRequired(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	http.Error(w, `{"error":"authentication_required"}`, http.StatusUnauthorized)
+}
+
+func requestBoundaryHandler(cfg config.Config, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/api/companion/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !requestHostAllowed(cfg, r.Host) {
+			http.Error(w, `{"error":"untrusted_host"}`, http.StatusForbidden)
+			return
+		}
+		fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+		if fetchSite == "cross-site" {
+			http.Error(w, `{"error":"cross_site_request_blocked"}`, http.StatusForbidden)
+			return
+		}
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" && !requestOriginMatchesHost(origin, r.Host) {
+			http.Error(w, `{"error":"untrusted_origin"}`, http.StatusForbidden)
+			return
+		}
+		if origin != "" && isStateChangingMethod(r.Method) && strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "text/plain") {
+			http.Error(w, `{"error":"unsupported_content_type"}`, http.StatusUnsupportedMediaType)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func requestHostAllowed(cfg config.Config, rawHost string) bool {
+	host := strings.TrimSpace(strings.ToLower(rawHost))
+	if host == "" {
+		return false
+	}
+	for _, rawOrigin := range []string{cfg.WebAuthnOrigin, os.Getenv("CABINET_PUBLIC_ORIGIN")} {
+		parsed, err := url.Parse(strings.TrimSpace(rawOrigin))
+		if err == nil && strings.EqualFold(parsed.Host, host) {
+			return true
+		}
+	}
+	hostname := host
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		hostname = strings.Trim(parsedHost, "[]")
+	}
+	if strings.EqualFold(hostname, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(hostname)
+	if ip == nil {
+		return false
+	}
+	if strings.EqualFold(cfg.BindMode, "lan") {
+		return true
+	}
+	return ip.IsLoopback()
+}
+
+func requestOriginMatchesHost(rawOrigin, rawHost string) bool {
+	origin, err := url.Parse(strings.TrimSpace(rawOrigin))
+	if err != nil || origin.Scheme == "" || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" {
+		return false
+	}
+	if origin.Scheme != "http" && origin.Scheme != "https" {
+		return false
+	}
+	return strings.EqualFold(origin.Host, strings.TrimSpace(rawHost))
+}
+
+func isStateChangingMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 func companionSelfAuthenticatedPath(path string) bool {
@@ -8600,6 +8717,19 @@ func parseCloudAuthClaims(token string) (map[string]any, error) {
 		return nil, fmt.Errorf("strict cloud auth verification enabled but CABINET_CLOUD_AUTH_HS256_SECRET missing")
 	}
 	return parseVerifiedHS256JWTPayload(token, secret)
+}
+
+func rejectLegacyCloudBootstrapInZitadel(w http.ResponseWriter, boundary *zitadelAuthBoundary) bool {
+	if boundary == nil || !boundary.enabled() {
+		return false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	http.Error(w, `{"error":"legacy_cloud_bootstrap_disabled"}`, http.StatusGone)
+	return true
+}
+
+func credentialFreeLocalCompanionManagementAllowed(cfg config.Config, boundary *zitadelAuthBoundary) bool {
+	return !strings.EqualFold(cfg.BindMode, "lan") && (boundary == nil || !boundary.enabled())
 }
 
 func parseVerifiedHS256JWTPayload(token, secret string) (map[string]any, error) {

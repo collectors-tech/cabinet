@@ -52,11 +52,11 @@ func TestRuntimeSetupStatusAndCompleteContract(t *testing.T) {
 	if completePayload["ok"] != true {
 		t.Fatalf("expected ok=true in setup-complete payload")
 	}
-	if asString(completePayload["local_login_username"]) != "admin@cabinet.local" {
-		t.Fatalf("expected local_login_username admin@cabinet.local, got %v", completePayload["local_login_username"])
+	if _, ok := completePayload["local_login_username"]; ok {
+		t.Fatalf("setup completion must not expose a simulated local username: %+v", completePayload)
 	}
-	if asString(completePayload["local_login_password"]) != "password123" {
-		t.Fatalf("expected local_login_password password123, got %v", completePayload["local_login_password"])
+	if _, ok := completePayload["local_login_password"]; ok {
+		t.Fatalf("setup completion must not expose a simulated local password: %+v", completePayload)
 	}
 	if strings.TrimSpace(asString(completePayload["config_path"])) == "" {
 		t.Fatalf("expected config_path in setup-complete payload")

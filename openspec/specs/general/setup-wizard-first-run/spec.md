@@ -304,20 +304,21 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 - **WHEN** user activates open-config-folder action
 - **THEN** UI MUST show deterministic success feedback tied to config path context
 
-### Requirement SETUP-WIZ-021: Local auth completion MUST show generated login credentials
-When setup completes in local auth mode, the completion screen MUST show the initial local login credentials before the user is expected to sign in.
+### Requirement SETUP-WIZ-021: Setup completion MUST not simulate local credentials
+When setup completes, the runtime and UI MUST describe the selected authentication mode truthfully and MUST NOT invent a local username, password, or passkey claim.
 
-#### Scenario: Local completion credentials
+#### Scenario: Local completion is credential-free
 - **GIVEN** setup wizard auth mode is `local`
 - **WHEN** setup completion succeeds
-- **THEN** completion UI MUST show generated local username and password values
-- **AND** completion UI MUST clearly tell the user to write the credentials down before continuing
-- **AND** the displayed credentials MUST work for the first local sign-in flow
+- **THEN** setup response and completion UI MUST omit simulated username and password values
+- **AND** completion UI MUST state that local-device mode does not verify a password or passkey
+- **AND** completion may show runtime, storage, config-path, and launch details without implying an account was provisioned
 
-#### Scenario: ZITADEL completion omits local credentials
+#### Scenario: ZITADEL completion uses provider session
 - **GIVEN** setup wizard auth mode is `zitadel`
 - **WHEN** setup completion succeeds
 - **THEN** completion UI MUST NOT show local login credential values
+- **AND** the next authentication step MUST use the configured ZITADEL authorization-code flow
 
 #### Initial `cabinet.json` schema (v1)
 ```json

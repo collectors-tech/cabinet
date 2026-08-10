@@ -29,7 +29,7 @@ const (
 	companionMediaBodyLimit = 8 << 20
 )
 
-func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profiles *profile.Repository, authService *auth.Service, mediaService *media.Service) {
+func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profiles *profile.Repository, authService *auth.Service, mediaService *media.Service, allowCredentialFreeLocalManagement bool) {
 	mux.HandleFunc("/api/companion/pairing/requests", func(w http.ResponseWriter, r *http.Request) {
 		metadata, ok := prepareCompanionRequest(w, r, r.Method == http.MethodPost || r.Method == http.MethodOptions)
 		if !ok {
@@ -53,7 +53,7 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(receipt)
 		case http.MethodGet:
-			profileID, authorised := companionManagementProfile(w, r, profiles, authService)
+			profileID, authorised := companionManagementProfile(w, r, profiles, authService, allowCredentialFreeLocalManagement)
 			if !authorised || profileID == "" {
 				return
 			}
@@ -64,7 +64,7 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"requests": requests})
 		case http.MethodDelete:
-			profileID, authorised := companionManagementProfile(w, r, profiles, authService)
+			profileID, authorised := companionManagementProfile(w, r, profiles, authService, allowCredentialFreeLocalManagement)
 			if !authorised {
 				return
 			}
@@ -87,7 +87,7 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 			writeCompanionMethodNotAllowed(w)
 			return
 		}
-		profileID, authorised := companionManagementProfile(w, r, profiles, authService)
+		profileID, authorised := companionManagementProfile(w, r, profiles, authService, allowCredentialFreeLocalManagement)
 		if !authorised {
 			return
 		}
@@ -188,7 +188,7 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 		if !ok {
 			return
 		}
-		profileID, authorised := companionManagementProfile(w, r, profiles, authService)
+		profileID, authorised := companionManagementProfile(w, r, profiles, authService, allowCredentialFreeLocalManagement)
 		if !authorised {
 			return
 		}
@@ -380,11 +380,17 @@ func registerCompanionRoutes(mux *http.ServeMux, svc *companion.Service, profile
 	})
 }
 
-func companionManagementProfile(w http.ResponseWriter, r *http.Request, profiles *profile.Repository, authService *auth.Service) (string, bool) {
+func companionManagementProfile(w http.ResponseWriter, r *http.Request, profiles *profile.Repository, authService *auth.Service, allowCredentialFreeLocalManagement bool) (string, bool) {
 	active, err := profiles.GetActiveProfile(r.Context())
 	if err != nil || strings.TrimSpace(active.ID) == "" {
 		writeCompanionCode(w, http.StatusUnauthorized, "companion_cabinet_auth_required")
 		return "", false
+	}
+	if allowCredentialFreeLocalManagement {
+		registrationRequired, registrationErr := authService.RequiresRegistration(r.Context(), active.ID)
+		if registrationErr == nil && registrationRequired {
+			return active.ID, true
+		}
 	}
 	token := sessionTokenFromRequest(r)
 	if token != "" {

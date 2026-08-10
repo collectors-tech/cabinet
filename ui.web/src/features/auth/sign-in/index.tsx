@@ -29,8 +29,6 @@ type RuntimeSetupCompletePayload = {
   profile_key?: string
   config_path?: string
   auth_mode?: 'local' | 'zitadel'
-  local_login_username?: string
-  local_login_password?: string
   data_dir?: string
   media_dir?: string
   runtime_url?: string
