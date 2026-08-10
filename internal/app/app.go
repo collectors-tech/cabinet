@@ -77,6 +77,43 @@ func startupMigrationTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+const defaultProviderHTTPTimeout = 12 * time.Second
+
+var sharedProviderHTTPClient = newProviderHTTPClient(defaultProviderHTTPTimeout)
+
+func newProviderHTTPClient(timeout time.Duration) *http.Client {
+	if timeout <= 0 {
+		timeout = defaultProviderHTTPTimeout
+	}
+	dialTimeout := timeout / 3
+	if dialTimeout < time.Second {
+		dialTimeout = timeout
+	}
+	headerTimeout := timeout / 2
+	if headerTimeout < time.Second {
+		headerTimeout = timeout
+	}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   dialTimeout,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          32,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   dialTimeout,
+			ResponseHeaderTimeout: headerTimeout,
+		},
+	}
+}
+
+func providerHTTPClient() *http.Client {
+	return sharedProviderHTTPClient
+}
+
 func startupSampleDataSeedEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("CABINET_SEED_SAMPLE_DATA"))) {
 	case "1", "true", "yes", "on":
@@ -2718,7 +2755,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"missing_provider_url"}`, http.StatusBadRequest)
 			return
 		}
-		family, confidence, evidence, domain, err := detectProviderFamily(r.Context(), http.DefaultClient, providerURL, req.HTML)
+		family, confidence, evidence, domain, err := detectProviderFamily(r.Context(), providerHTTPClient(), providerURL, req.HTML)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_detect_provider_family"}`, http.StatusBadRequest)
 			return
@@ -2995,7 +3032,7 @@ func New(cfg config.Config) (*App, error) {
 		if requested > 36 {
 			requested = 36
 		}
-		searchResult, err := runBonzaSearch(r.Context(), http.DefaultClient, baseURL, qs, requested)
+		searchResult, err := runBonzaSearch(r.Context(), providerHTTPClient(), baseURL, qs, requested)
 		if err != nil {
 			scannerSvc.RecordProviderHealth(r.Context(), "bonzaslotcars", "failed", err.Error())
 			scannerSvc.RecordProviderHealth(r.Context(), "au-webshop-bonzaslotcars-com-au", "failed", err.Error())
@@ -3114,7 +3151,7 @@ func New(cfg config.Config) (*App, error) {
 		if baseURL == "" {
 			baseURL = "https://bonzaslotcars.com.au"
 		}
-		draft, err := ingestBonzaProductURL(r.Context(), http.DefaultClient, baseURL, route)
+		draft, err := ingestBonzaProductURL(r.Context(), providerHTTPClient(), baseURL, route)
 		if err != nil {
 			if errors.Is(err, errBonzaBrowserActionRequired) {
 				w.WriteHeader(http.StatusConflict)
@@ -3193,7 +3230,7 @@ func New(cfg config.Config) (*App, error) {
 		config, fallbackUsed, warning, err := discoverFrontlineAlgoliaConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			req.AssetURL,
 			req.FallbackAssetURLs,
 		)
@@ -3259,7 +3296,7 @@ func New(cfg config.Config) (*App, error) {
 		cfg, fallbackUsed, warning, err := discoverFrontlineAlgoliaConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			discoveryAssetURL,
 			req.FallbackDiscoveryAssetURLs,
 		)
@@ -3280,7 +3317,7 @@ func New(cfg config.Config) (*App, error) {
 		if searchURL == "" {
 			searchURL = defaultFrontlineAlgoliaSearchURL(cfg)
 		}
-		candidates, total, runErr := runFrontlineAlgoliaSearch(r.Context(), http.DefaultClient, searchURL, qs, cfg, baseURL, itemsPerPage)
+		candidates, total, runErr := runFrontlineAlgoliaSearch(r.Context(), providerHTTPClient(), searchURL, qs, cfg, baseURL, itemsPerPage)
 		if runErr != nil {
 			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-frontlinehobbies-com-au", "frontlinehobbies.com.au", "market_watch.run", "check_provider_health_and_retry", runErr.Error(), map[string]any{
 				"query_set_id":        qs.ID,
@@ -3355,7 +3392,7 @@ func New(cfg config.Config) (*App, error) {
 		config, fallbackUsed, warning, err := discoverDoofinderConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			req.AssetURL,
 			req.FallbackAssetURLs,
 		)
@@ -3424,7 +3461,7 @@ func New(cfg config.Config) (*App, error) {
 		config, fallbackUsed, warning, err := discoverDoofinderConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			discoveryAssetURL,
 			req.FallbackAssetURLs,
 		)
@@ -3465,7 +3502,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		candidates, total, runErr := runDoofinderSearch(
 			r.Context(),
-			http.DefaultClient,
+			providerHTTPClient(),
 			searchURL,
 			query,
 			page,
@@ -3614,7 +3651,7 @@ func New(cfg config.Config) (*App, error) {
 			if graphURL == "" {
 				graphURL = "https://" + providerDomain + "/graphql"
 			}
-			out, runErr := runBigCommerceTokenSearch(r.Context(), http.DefaultClient, graphURL, token, query, providerDomain)
+			out, runErr := runBigCommerceTokenSearch(r.Context(), providerHTTPClient(), graphURL, token, query, providerDomain)
 			if runErr != nil {
 				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
 				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
@@ -3631,7 +3668,7 @@ func New(cfg config.Config) (*App, error) {
 			if searchURL == "" {
 				searchURL = "https://" + providerDomain + "/products/search"
 			}
-			out, runErr := runBigCommerceStorefrontSearch(r.Context(), http.DefaultClient, searchURL, query, page, pageSize, providerDomain)
+			out, runErr := runBigCommerceStorefrontSearch(r.Context(), providerHTTPClient(), searchURL, query, page, pageSize, providerDomain)
 			if runErr != nil {
 				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
 				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
@@ -3744,7 +3781,7 @@ func New(cfg config.Config) (*App, error) {
 			searchURL = "https://" + providerDomain + "/products.json"
 		}
 
-		candidates, runErr := runShopifyStorefrontSearch(r.Context(), http.DefaultClient, searchURL, query, providerDomain)
+		candidates, runErr := runShopifyStorefrontSearch(r.Context(), providerHTTPClient(), searchURL, query, providerDomain)
 		if runErr != nil {
 			scannerSvc.RecordProviderHealth(r.Context(), providerScope, "failed", runErr.Error())
 			scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
@@ -3856,7 +3893,7 @@ func New(cfg config.Config) (*App, error) {
 		cfg, discoveryFallbackUsed, discoveryWarning, err := discoverHobbytechBoostConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			discoveryAssetURL,
 			req.FallbackDiscoveryAssetURLs,
 			searchURL,
@@ -3868,7 +3905,7 @@ func New(cfg config.Config) (*App, error) {
 		driftRecovered := false
 		warning := discoveryWarning
 		if err != nil {
-			candidates, pageCount, runErr = runHobbytechShopifySuggestSearch(r.Context(), http.DefaultClient, baseURL, qs, itemsPerPage)
+			candidates, pageCount, runErr = runHobbytechShopifySuggestSearch(r.Context(), providerHTTPClient(), baseURL, qs, itemsPerPage)
 			if runErr != nil {
 				http.Error(w, `{"error":"failed_to_discover_hobbytech_config"}`, http.StatusBadRequest)
 				return
@@ -3876,7 +3913,7 @@ func New(cfg config.Config) (*App, error) {
 			dataDepthSource = "shopify_search_suggest_json"
 			warning = "hobbytech Boost discovery unavailable; used public Shopify search suggest fallback"
 		} else {
-			candidates, pageCount, runErr = runHobbytechSearch(r.Context(), http.DefaultClient, qs, cfg, itemsPerPage)
+			candidates, pageCount, runErr = runHobbytechSearch(r.Context(), providerHTTPClient(), qs, cfg, itemsPerPage)
 		}
 		if runErr != nil && dataDepthSource == "boost_mybcapps_search" {
 			recoveryAssetURL := discoveryAssetURL
@@ -3888,13 +3925,13 @@ func New(cfg config.Config) (*App, error) {
 			recoveredCfg, fallbackUsed, fallbackWarning, fallbackErr := discoverHobbytechBoostConfig(
 				r.Context(),
 				conn,
-				http.DefaultClient,
+				providerHTTPClient(),
 				recoveryAssetURL,
 				recoveryFallbackAssets,
 				searchURL,
 			)
 			if fallbackErr == nil {
-				candidates, pageCount, runErr = runHobbytechSearch(r.Context(), http.DefaultClient, qs, recoveredCfg, itemsPerPage)
+				candidates, pageCount, runErr = runHobbytechSearch(r.Context(), providerHTTPClient(), qs, recoveredCfg, itemsPerPage)
 				if runErr == nil {
 					driftRecovered = true
 					if strings.TrimSpace(fallbackWarning) != "" {
@@ -3908,7 +3945,7 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		if runErr != nil && dataDepthSource == "boost_mybcapps_search" {
-			fallbackCandidates, fallbackPageCount, fallbackErr := runHobbytechShopifySuggestSearch(r.Context(), http.DefaultClient, baseURL, qs, itemsPerPage)
+			fallbackCandidates, fallbackPageCount, fallbackErr := runHobbytechShopifySuggestSearch(r.Context(), providerHTTPClient(), baseURL, qs, itemsPerPage)
 			if fallbackErr == nil {
 				candidates = fallbackCandidates
 				pageCount = fallbackPageCount
@@ -11415,7 +11452,7 @@ func discoverFrontlineAlgoliaConfig(
 	fallbackAssetURLs []string,
 ) (frontlineAlgoliaConfig, bool, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
 	candidates = append(candidates, strings.TrimSpace(assetURL))
@@ -11573,7 +11610,7 @@ func runFrontlineAlgoliaSearch(
 	itemsPerPage int,
 ) ([]map[string]any, int, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(searchURL) == "" {
 		return nil, 0, fmt.Errorf("frontline search url is required")
@@ -11678,7 +11715,7 @@ func discoverDoofinderConfig(
 	fallbackAssetURLs []string,
 ) (doofinderConfig, bool, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
 	candidates = append(candidates, strings.TrimSpace(assetURL))
@@ -11792,7 +11829,7 @@ func runDoofinderSearch(
 	hashID, baseURL, providerDomain string,
 ) ([]map[string]any, int, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(searchURL) == "" {
 		return nil, 0, fmt.Errorf("doofinder search url is required")
@@ -11882,7 +11919,7 @@ func runBigCommerceStorefrontSearch(
 	providerDomain string,
 ) ([]map[string]any, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(searchURL) == "" {
 		return nil, fmt.Errorf("bigcommerce storefront search url is required")
@@ -11991,7 +12028,7 @@ func runLightspeedStorefrontSearch(
 	searchURL, query, providerDomain string,
 ) ([]map[string]any, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(searchURL) == "" {
 		return nil, fmt.Errorf("lightspeed storefront search url is required")
@@ -12089,7 +12126,7 @@ func runShopifyStorefrontSearch(
 	searchURL, query, providerDomain string,
 ) ([]map[string]any, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(searchURL) == "" {
 		return nil, fmt.Errorf("shopify storefront search url is required")
@@ -12179,7 +12216,7 @@ func runShopifyStorefrontSearch(
 
 func runGenericStructuredStorefrontProduct(ctx context.Context, client *http.Client, productURL, providerDomain string) ([]map[string]any, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(productURL) == "" {
 		return nil, fmt.Errorf("generic structured storefront product url is required")
@@ -12424,7 +12461,7 @@ func runBigCommerceTokenSearch(
 	graphURL, token, query, providerDomain string,
 ) ([]map[string]any, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(graphURL) == "" {
 		return nil, fmt.Errorf("bigcommerce graphql url is required")
@@ -12510,7 +12547,7 @@ func discoverHobbytechBoostConfig(
 	searchURL string,
 ) (hobbytechBoostConfig, bool, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
 	candidates = append(candidates, strings.TrimSpace(assetURL))
@@ -12636,7 +12673,7 @@ func runHobbytechSearch(
 	itemsPerPage int,
 ) ([]map[string]any, int, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(config.SearchURL) == "" {
 		return nil, 0, fmt.Errorf("hobbytech search endpoint missing")
@@ -12749,7 +12786,7 @@ func runHobbytechShopifySuggestSearch(
 	itemsPerPage int,
 ) ([]map[string]any, int, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
@@ -12855,7 +12892,7 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 		return bonzaSearchResult{}, fmt.Errorf("bonza base_url is required")
 	}
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if itemsPerPage <= 0 {
 		itemsPerPage = 36
@@ -13082,7 +13119,7 @@ func providerURLManualReviewTitle(rawURL string) string {
 
 func ingestBonzaProductURL(ctx context.Context, client *http.Client, baseURL string, route providerProductURLRoute) (providerProductDraft, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	search := strings.ReplaceAll(strings.TrimSpace(route.Slug), "-", " ")
 	requestURL := fmt.Sprintf("%s/wp-json/wc/store/v1/products?search=%s&per_page=5",
@@ -13104,7 +13141,7 @@ func ingestBonzaProductURL(ctx context.Context, client *http.Client, baseURL str
 
 func fetchBonzaProductURLProducts(ctx context.Context, client *http.Client, requestURL string) ([]bonzaProductResponse, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	requestClient := *client
 	requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -13688,7 +13725,7 @@ func loadProviderFamilyOverrides(ctx context.Context, conn *sql.DB) (map[string]
 
 func detectProviderFamily(ctx context.Context, client *http.Client, providerURL, htmlInput string) (string, float64, []string, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	providerURL = strings.TrimSpace(providerURL)
 	if providerURL == "" {

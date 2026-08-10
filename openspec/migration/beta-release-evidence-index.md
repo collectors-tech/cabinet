@@ -41,8 +41,8 @@ This is the single repository-side release sequence and evidence hand-off for
 | #2033 secure companion pairing | Complete and merged | Pair/reconnect/rotate/revoke in #1869 |
 | #2035 shared MV3 host/config/readiness | Complete and merged | Install and verify browser/Cabinet/provider states in #1869 |
 | #2032 item/image observation persistence | Source implementation complete | Commit-before-ack, fixtures, replay, media, restart, safe export and relocated restore are automated; exact packaged proof remains in #1869/#1867 |
-| Frontline (#1944) | Exact-origin module, fail-closed fixtures, persistence and confirmed hand-off implemented; external user-present live proof pending | Exact packaged journey in #1869 |
-| Bonza (#1945) | Decoder/retry removed; exact-origin module, fail-closed fixtures and canonical persistence implemented; external user-present live proof pending | Exact packaged journey in #1869 |
+| Frontline (#1944) | Exact-origin module, fail-closed fixtures, persistence and confirmed hand-off implemented; #2054 bounded-timeout source contract required; external user-present live proof pending | Exact packaged journey and stalled/unavailable timeout proof in #1869 |
+| Bonza (#1945) | Decoder/retry removed; exact-origin module, fail-closed fixtures and canonical persistence implemented; #2054 bounded-timeout source contract required; external user-present live proof pending | Exact packaged journey and stalled/unavailable timeout proof in #1869 |
 | #2034 Chrome/Edge packaging | Deterministic target packages, release manifest, checksums, verifier, immutable-version preflight and manual recovery guidance implemented; exact candidate files pending #1868 | Nominate and install/pair the same files/checksums in #1868/#1869 |
 
 #1929 may record a provider as source/live ready for packaging while its focused
@@ -61,6 +61,7 @@ for #1868; completion of every source-ready checklist row is.
 | #1936/#1937 canonical media | Merged implementation and migration evidence | Source complete; packaged rerun pending |
 | #1943 Hobbytech | PR #1955 plus live provider-run proof | Source/live ready; packaged rerun pending |
 | #2037 truthful OpenAPI gate | PR #2038; Develop Quality Gate `31018831485` green | Done |
+| #2054 bounded provider HTTP behavior | Shared commerce-provider timeout, cancellation, partial-response and same-client recovery contract tests | Source gate required before candidate; Frontline/Bonza packaged timeout proof remains in #1869 |
 | #2033/#2035/#2032/#1944/#1945/#2034 | Browser Companion release programme | Packaging source implemented; external Frontline/Bonza and exact-candidate evidence pending |
 | #1868 exact internal candidate | Exact-clean Cabinet manifest/verifier, combined Cabinet/companion manifest, validate-before-package workflow and approval-evidenced prerelease source implemented | Run only after Frontline/Bonza source/live gate and freeze; retain exact candidate run/artifacts |
 | #1869 packaged acceptance | Stable checklist exists | Execute after #1868 internal candidate |

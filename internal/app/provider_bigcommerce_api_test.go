@@ -180,6 +180,79 @@ func TestBigCommerceRunStorefrontModePersistsCandidatesAndSnapshot(t *testing.T)
 	}
 }
 
+func TestBigCommerceRunPartialProviderResponseFailsWithoutPersistenceOrFalseSuccess(t *testing.T) {
+	t.Parallel()
+
+	partialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"products":[{"id":"partial"`))
+	}))
+	defer partialServer.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BigCommercePartialResponseProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"AFX partial","keywords":["AFX"],"provider_scope":["voglers.com.au"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	run := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/providers/bigcommerce/run",
+		strings.NewReader(fmt.Sprintf(`{"query_set_id":"%s","provider_domain":"voglers.com.au","search_url":"%s/products/search"}`, qs.ID, partialServer.URL)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("partial provider run status=%d body=%s", run.Code, run.Body.String())
+	}
+	if !strings.Contains(run.Body.String(), `"error":"failed_to_run_bigcommerce_storefront_mode"`) {
+		t.Fatalf("partial provider run returned untruthful error body=%s", run.Body.String())
+	}
+
+	var candidateCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM scanner_candidates WHERE query_set_id = ?`, qs.ID).Scan(&candidateCount); err != nil {
+		t.Fatalf("count partial-response candidates: %v", err)
+	}
+	if candidateCount != 0 {
+		t.Fatalf("partial provider response persisted %d candidates", candidateCount)
+	}
+	var runCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE query_set_id = ?`, qs.ID).Scan(&runCount); err != nil {
+		t.Fatalf("count partial-response runs: %v", err)
+	}
+	if runCount != 0 {
+		t.Fatalf("partial provider response persisted %d successful runs", runCount)
+	}
+	var healthStatus, healthMessage string
+	if err := a.db.QueryRow(`SELECT status, message FROM provider_health WHERE provider = 'voglers.com.au'`).Scan(&healthStatus, &healthMessage); err != nil {
+		t.Fatalf("load partial-response provider health: %v", err)
+	}
+	if healthStatus != "failed" || strings.TrimSpace(healthMessage) == "" {
+		t.Fatalf("partial provider response must record failed health, got status=%q message=%q", healthStatus, healthMessage)
+	}
+}
+
 func TestBigCommerceRunStorefrontHTMLModeRecordsLiveProof(t *testing.T) {
 	t.Parallel()
 

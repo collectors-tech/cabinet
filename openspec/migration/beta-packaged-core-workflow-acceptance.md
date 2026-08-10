@@ -47,6 +47,8 @@ The final approval follows packaged acceptance and #1867 data-safety evidence.
 - [ ] A real saved Market Watch and Discovery hand-off pass independently for Hobbytech.
 - [ ] A user-present real search, persisted observation and Discovery hand-off pass independently for Frontline.
 - [ ] A user-present real search after normal browser interaction, persisted observation and Discovery hand-off pass independently for Bonza.
+- [ ] A stalled or unavailable Frontline request returns within the bounded provider timeout, records no candidates or false success, and leaves the next provider run usable.
+- [ ] A stalled or unavailable Bonza request returns within the bounded provider timeout, records no candidates or false success, and leaves the next provider run usable.
 - [ ] Failure of one provider does not prevent, mutate or corrupt another provider's watches or observations.
 - [ ] Replaying one capture proves item and media idempotency with transport/module/schema provenance.
 - [ ] One durable protected-provider image uses the canonical asset manifest/layout and survives restart, backup, relocation and restore.
@@ -75,3 +77,9 @@ The final approval follows packaged acceptance and #1867 data-safety evidence.
 - [ ] Final packaged acceptance does not require test-only hooks.
 - [ ] Final packaged acceptance does not rely on a dirty worktree or unpublished local changes.
 - [ ] Final packaged acceptance does not merge `develop` into `main` or publish a release without #1864 approval.
+
+The source precondition for the two timeout rows is #2054 / `PROVIDER-FAMILY-011`:
+the shared commerce-provider client must pass the stalled-header, partial-body,
+request-cancellation, full-bounds and same-client recovery contract tests before
+an exact candidate is nominated. Packaged evidence remains required; source tests
+alone do not check either row.

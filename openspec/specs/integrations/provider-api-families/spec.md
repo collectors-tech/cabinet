@@ -142,6 +142,21 @@ Shopify-backed source-matching providers SHALL use public storefront catalogue e
 - **AND** the query-set latest-run snapshot MUST hydrate after reload with succeeded status and candidate count
 - **AND** provider health MUST record public storefront proof for the provider id and market-watch scope without claiming private API, login, cart, checkout, payment, or admin API support
 
+### Requirement PROVIDER-FAMILY-011: Provider HTTP calls SHALL be bounded and fail closed
+Every direct commerce provider, family-detection, discovery, and storefront request SHALL use one shared explicit bounded HTTP client with connect, response-header, and full-exchange timeout limits.
+
+#### Scenario: Stalled provider request fails closed
+- **GIVEN** a provider accepts a connection but stalls response headers or body delivery
+- **WHEN** Cabinet executes provider discovery, product ingestion, or Market Watch retrieval
+- **THEN** runtime MUST return a deterministic recoverable timeout/unavailable error instead of waiting indefinitely
+- **AND** request-context cancellation MUST propagate promptly
+- **AND** runtime MUST NOT persist partial candidates or report a live-success state for that provider run, including when a response stalls after a partial body
+
+#### Scenario: One provider timeout does not poison another run
+- **GIVEN** one provider request times out
+- **WHEN** a subsequent independent provider run is executed
+- **THEN** the shared bounded client MUST remain usable by the second run without inheriting partial state or cancellation from the timed-out provider
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -154,3 +169,4 @@ Shopify-backed source-matching providers SHALL use public storefront catalogue e
 | UC-PF-07 | BigCommerce storefront-access mode | Provider run works with storefront-accessible data paths, declares limits, persists provider-domain candidates, and hydrates latest-run snapshots | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-storefront-mode` |
 | UC-PF-08 | BigCommerce token-enabled mode | Provider uses token-enabled API paths for deeper stock/catalog fields, returns persisted candidate rows, and hydrates latest-run snapshots | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-token-enabled-mode` |
 | UC-PF-09 | Doofinder hashid search | Provider executes Doofinder search with discovered hashid and origin-aware headers | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `doofinder-hashid-search-contract` |
+| UC-PF-10 | Bounded provider timeout | Stalled, cancelled, and partial-body provider HTTP calls fail closed without partial persistence or cross-provider poisoning | `internal/app/shopping_provider_fixture_contract_test.go` `TestProviderHTTPClientFailsClosedOnStalledResponseHeaders`; `TestProviderHTTPClientFailsClosedOnPartialBody`; `TestProviderHTTPClientPropagatesRequestCancellation`; `TestProviderTimeoutDoesNotPoisonNextProviderRun`; `TestProviderHTTPClientIsSharedAndFullyBounded`; `internal/app/provider_bigcommerce_api_test.go` `TestBigCommerceRunPartialProviderResponseFailsWithoutPersistenceOrFalseSuccess` |
