@@ -1994,6 +1994,32 @@ describe('ui-screen-integrations', () => {
         },
       })
     }).as('saveSettings')
+    cy.intercept('GET', '/api/profiles/*/integration-instances', {
+      statusCode: 200,
+      body: { instances: [] },
+    }).as('listIntegrationInstances')
+    cy.intercept('POST', '/api/profiles/*/integration-instances', (req) => {
+      expect(req.body).to.include({
+        provider_id: 'ebay',
+        display_name: 'eBay',
+        enabled: true,
+        auth_state: 'configured',
+      })
+      expect(req.body.config).to.include({
+        ebay_base_url: 'https://api.ebay.com',
+        ebay_marketplace: 'EBAY-AU',
+      })
+      req.reply({
+        statusCode: 201,
+        body: {
+          instance: {
+            id: 'inst-ebay-e2e',
+            provider_id: 'ebay',
+            enabled: true,
+          },
+        },
+      })
+    }).as('saveIntegrationInstance')
 
     signIn()
 
@@ -2028,6 +2054,8 @@ describe('ui-screen-integrations', () => {
     cy.contains('button', 'Save Integration').click()
     cy.wait('@saveSecret')
     cy.wait('@saveSettings')
+    cy.wait('@listIntegrationInstances')
+    cy.wait('@saveIntegrationInstance')
     cy.contains('Provider schema configuration saved.')
       .scrollIntoView()
       .should('be.visible')

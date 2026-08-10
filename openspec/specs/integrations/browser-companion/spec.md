@@ -61,6 +61,12 @@ Every session SHALL be bound to one Cabinet instance, profile, extension origin,
 - **AND** rotation MUST atomically revoke the previous credential
 - **AND** the Integrations UI MUST list redacted sessions and support revoke-one and revoke-all without showing bearer material.
 
+#### Scenario: Pairing and revocation controls remain reachable at constrained viewport height
+- **GIVEN** pending pairing requests and active sessions are visible in the Integrations UI at a 200% zoom-equivalent viewport
+- **WHEN** the pairing and session content exceeds the available panel height
+- **THEN** the security panel MUST scroll independently without growing or clipping the page
+- **AND** approve, reject, revoke-one and revoke-all controls MUST remain visible and keyboard focusable.
+
 ### Requirement INTEGRATION-069: Module discovery MUST expose only safe enabled profile configuration
 Authenticated module discovery SHALL project only browser-capable modules backed by enabled integration instances in the paired profile.
 

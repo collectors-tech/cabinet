@@ -114,4 +114,40 @@ describe('Browser Companion pairing security', () => {
     cy.contains('button', 'Revoke all').click()
     cy.wait('@revokeAll')
   })
+
+  it('keeps pairing and revocation actions reachable at a 200% zoom-equivalent viewport', () => {
+    cy.viewport(500, 330)
+
+    cy.get('[data-testid="browser-companion-security"]')
+      .should('be.visible')
+      .then(($panel) => {
+        expect($panel[0].scrollHeight).to.be.greaterThan($panel[0].clientHeight)
+      })
+
+    cy.get('[data-testid="browser-companion-pairing-pairing-1"]')
+      .contains('button', 'Approve')
+      .scrollIntoView()
+      .focus()
+      .should('be.visible')
+      .and('be.focused')
+
+    cy.press(Cypress.Keyboard.Keys.TAB)
+    cy.get('[data-testid="browser-companion-pairing-pairing-1"]')
+      .contains('button', 'Reject')
+      .should('be.visible')
+      .and('be.focused')
+
+    cy.get('[data-testid="browser-companion-session-session-1"]')
+      .contains('button', 'Revoke')
+      .scrollIntoView()
+      .focus()
+      .should('be.visible')
+      .and('be.focused')
+
+    cy.contains('button', 'Revoke all')
+      .scrollIntoView()
+      .focus()
+      .should('be.visible')
+      .and('be.focused')
+  })
 })

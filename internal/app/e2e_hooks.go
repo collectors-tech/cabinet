@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/auth"
 	"github.com/collectors-tech/cabinet/internal/config"
 )
 
@@ -23,11 +24,12 @@ type e2eBootstrapRequest struct {
 }
 
 type e2eBootstrapResponse struct {
-	ProfileID   string   `json:"profile_id"`
-	ProfileName string   `json:"profile_name"`
-	ItemIDs     []string `json:"item_ids"`
-	QuerySetID  string   `json:"query_set_id"`
-	ThreadID    string   `json:"thread_id"`
+	ProfileID    string   `json:"profile_id"`
+	ProfileName  string   `json:"profile_name"`
+	SessionToken string   `json:"session_token"`
+	ItemIDs      []string `json:"item_ids"`
+	QuerySetID   string   `json:"query_set_id"`
+	ThreadID     string   `json:"thread_id"`
 }
 
 type e2eScaleBootstrapRequest struct {
@@ -44,7 +46,7 @@ type e2eScaleBootstrapResponse struct {
 	Counts      map[string]int `json:"counts"`
 }
 
-func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
+func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config, authService *auth.Service) {
 	mux.HandleFunc("/api/test/reset", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -76,6 +78,11 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 		out, err := bootstrapE2EFixtures(r.Context(), conn, cfg, req)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_bootstrap_e2e_state"}`, http.StatusInternalServerError)
+			return
+		}
+		out.SessionToken, err = authService.CreateUnlockedSession(out.ProfileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_unlock_e2e_profile"}`, http.StatusInternalServerError)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(out)

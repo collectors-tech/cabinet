@@ -5,6 +5,7 @@ type E2EBootstrapOptions = {
 type E2EBootstrapState = {
   profile_id: string;
   profile_name: string;
+  session_token: string;
   item_ids: string[];
   query_set_id: string;
   thread_id: string;
