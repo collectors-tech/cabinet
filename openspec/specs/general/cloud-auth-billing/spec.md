@@ -8,14 +8,14 @@ Cabinet SHALL support cloud-account ownership mode alongside local-first authent
 #### Scenario: Cloud mode enabled
 - **GIVEN** cloud auth provider configuration is present and billing integration is enabled for deployment
 - **WHEN** required cloud auth configuration is present
-- **THEN** Cabinet SHALL allow cloud session bootstrap and entitlement resolution
+- **THEN** Cabinet SHALL allow verified ZITADEL authorization-code session establishment and entitlement resolution
 
-### Requirement CLOUD-AUTH-BILLING-002: Frontend cloud session bootstrap SHALL resolve plan and feature entitlements
-Frontend SHALL post cloud session token to bootstrap endpoint and SHALL receive plan + feature flags used for UI gating.
+### Requirement CLOUD-AUTH-BILLING-002: Verified cloud sessions SHALL resolve plan and feature entitlements
+Frontend SHALL use the server-managed ZITADEL session and SHALL receive plan + feature flags used for UI gating without submitting caller-controlled identity claims.
 
-#### Scenario: Bootstrap entitlement response
-- **GIVEN** frontend has valid cloud session token and target profile is resolved
-- **WHEN** frontend calls cloud bootstrap endpoint with valid session token
+#### Scenario: Effective entitlement response
+- **GIVEN** frontend has a valid verified ZITADEL session and target profile is resolved
+- **WHEN** frontend requests effective cloud session context
 - **THEN** runtime SHALL return `200` with current `plan`, enabled `features` set, and `entitlement_source` (`billing|override|trial`)
 
 ### Requirement CLOUD-AUTH-BILLING-003: Billing webhook SHALL update entitlement state with signature verification
@@ -38,9 +38,10 @@ Cabinet SHALL gate pro features (AI assist, price tracking, scanner automation) 
 Production cloud auth mode SHALL not rely on unsigned/unchecked token claim parsing for entitlement trust decisions.
 
 #### Scenario: Invalid token presented
-- **GIVEN** bootstrap request contains malformed, expired, or unverifiable cloud token
-- **WHEN** bootstrap receives invalid or unverifiable cloud token
-- **THEN** runtime SHALL reject request with auth failure (`401`/`403`) and MUST NOT apply entitlement changes
+- **GIVEN** ZITADEL mode is enabled and a caller submits a legacy bootstrap token containing caller-controlled plan or role claims
+- **WHEN** the legacy bootstrap route is requested with or without a valid Cabinet session
+- **THEN** runtime SHALL reject the request with authentication failure or an explicit retired-route response
+- **AND** runtime MUST NOT parse the submitted claims or apply entitlement or role changes
 
 ## Acceptance Criteria
 1. In-scope decision is explicit: cloud auth billing is optional but supported capability.

@@ -82,7 +82,7 @@ Verification target:
 ## When to use ZITADEL instead
 Use **ZITADEL auth mode** only when the task explicitly needs:
 - ZITADEL application login or callback coverage (`/api/auth/zitadel/*`)
-- cloud token/session bootstrap behavior
+- verified server-managed cloud session and effective entitlement behavior
 - billing/plan/permissions verification
 - provider-specific auth UX, role, cookie, or error handling
 

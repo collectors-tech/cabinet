@@ -353,6 +353,41 @@ func prepareCompanionAPIProfile(t *testing.T, a *App) string {
 	return created.ID
 }
 
+func TestCompanionManagementMatchesCredentialFreeLocalBoundary(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profiles := profile.NewRepository(a.db)
+	created, err := profiles.Create(context.Background(), "Credential-free local companion")
+	if err != nil {
+		t.Fatalf("create local companion profile: %v", err)
+	}
+	if err := profiles.SetActiveProfile(context.Background(), created.ID); err != nil {
+		t.Fatalf("activate local companion profile: %v", err)
+	}
+
+	credentialFree := doCompanionManagementRequest(t, a, http.MethodGet, "/api/companion/pairing/requests", nil, nil)
+	if credentialFree.Code != http.StatusOK {
+		t.Fatalf("credential-free local companion management status=%d body=%s", credentialFree.Code, credentialFree.Body.String())
+	}
+
+	if _, err := a.db.Exec(`INSERT INTO webauthn_credentials(id, profile_id, credential_json) VALUES('cred-local-companion', ?, '{}')`, created.ID); err != nil {
+		t.Fatalf("seed local companion passkey: %v", err)
+	}
+	locked := doCompanionManagementRequest(t, a, http.MethodGet, "/api/companion/pairing/requests", nil, nil)
+	if locked.Code != http.StatusUnauthorized {
+		t.Fatalf("registered locked local companion management status=%d body=%s", locked.Code, locked.Body.String())
+	}
+
+	if _, err := a.authService.CreateUnlockedSession(created.ID); err != nil {
+		t.Fatalf("unlock registered local companion profile: %v", err)
+	}
+	unlocked := doCompanionManagementRequest(t, a, http.MethodGet, "/api/companion/pairing/requests", nil, nil)
+	if unlocked.Code != http.StatusOK {
+		t.Fatalf("unlocked local companion management status=%d body=%s", unlocked.Code, unlocked.Body.String())
+	}
+}
+
 func requestCompanionPairing(t *testing.T, a *App, capabilities []string) companionPairingReceipt {
 	t.Helper()
 	rawCapabilities, _ := json.Marshal(capabilities)
