@@ -520,7 +520,7 @@ func dispatchProviderItems(ctx context.Context, tx *sql.Tx, captureID string, in
 	runID := deterministicID("companion-run", captureID)
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO scanner_runs(id, profile_id, query_set_id, provider, trigger_type, started_at, finished_at, status, result_count, new_result_count)
-		VALUES(?, ?, ?, ?, 'browser_companion', ?, ?, 'completed', ?, ?)
+		VALUES(?, ?, ?, ?, 'browser_companion', ?, ?, 'succeeded', ?, ?)
 	`, runID, in.ProfileID, querySetID, providerScope, now, now, len(items), len(items)); err != nil {
 		return 0, 0, err
 	}

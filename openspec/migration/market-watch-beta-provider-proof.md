@@ -34,6 +34,7 @@ Live evidence artifacts must be non-secret. Acceptable evidence includes:
 - exact source commit, module/fixture version and granted exact origins
 - a redacted screenshot or recording showing the user-opened Bonza result page and Ready-to-sync state
 - normalized result count and provider provenance
+- the persisted Market Watch run ID, query-set ID, canonical provider scope, `trigger_type=browser_companion`, `status=succeeded` and positive result count
 - one or more redacted result samples with title, URL host/path, price/currency where available, stock state where available, and observed time
 - Cabinet capture/provider-health evidence and registry status after the run
 
@@ -46,9 +47,10 @@ The release proof target is:
 2. enable `au-webshop-bonzaslotcars-com-au`, pair the companion and grant only the exact Bonza origins
 3. open a real Bonza search as the user, complete any normal site interaction and sync a complete rendered result page
 4. persist candidates with Bonza integration/module/schema and `bonzaslotcars` scope provenance
-5. record `browser_companion` provider health for `bonzaslotcars`
-6. show `/api/providers/registry` as `available_live_validated` with `live_evidence_state=validated`
-7. attach non-secret external proof to #1945 and #1929; repeat the exact packaged journey in #1869
+5. show the persisted Market Watch run as provider `bonzaslotcars`, trigger `browser_companion`, status `succeeded` and a positive result count
+6. record `browser_companion` provider health for `bonzaslotcars`
+7. show `/api/providers/registry` as `available_live_validated` with `live_evidence_state=validated`
+8. attach non-secret external proof to #1945 and #1929; repeat the exact packaged journey in #1869
 
 The fallback Voglers release proof target is:
 1. create a Voglers-scoped saved Market Watch query

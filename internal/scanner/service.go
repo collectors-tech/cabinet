@@ -393,7 +393,7 @@ func (s *Service) populateQuerySetRunSnapshot(ctx context.Context, profileID str
 
 func normalizeRunStatus(status string) string {
 	switch strings.TrimSpace(strings.ToLower(status)) {
-	case "succeeded":
+	case "succeeded", "completed":
 		return "succeeded"
 	case "failed":
 		return "failed"
