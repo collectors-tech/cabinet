@@ -133,6 +133,14 @@ export function UserAuthForm({
       exp: Date.now() + 24 * 60 * 60 * 1000,
     }
 
+    recordNotificationHistory({
+      id: 'auth-sign-in',
+      level: 'success',
+      title: 'Local workspace opened',
+      summary: 'Opened Cabinet in local-device mode.',
+      source_label: 'Auth sign-in',
+      category: 'auth',
+    })
     auth.setUser(localUser)
     auth.setAccessToken(LOCAL_DEVICE_SESSION_TOKEN)
     const targetPath = redirectTo || '/dashboard'

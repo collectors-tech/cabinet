@@ -64,7 +64,7 @@ function Resolve-Specs([string]$repoRoot, [string]$glob) {
       Resolve-Path -Relative $_.FullName
     } |
     ForEach-Object {
-      $_.TrimStart(".\").Replace("/", "\")
+      $_.TrimStart([char[]]@('.', '\', '/')).Replace("/", "\")
     } |
     Where-Object {
       $_ -match $regex

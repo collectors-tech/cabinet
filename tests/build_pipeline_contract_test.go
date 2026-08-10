@@ -53,7 +53,7 @@ func TestReadmeBuildEntrypointDoesNotDocumentSkipUIBuild(t *testing.T) {
 	}
 }
 
-func TestPackageInstallersBuildsUIBeforeCrossPlatformLoop(t *testing.T) {
+func TestPackageInstallersBuildsUIBeforeWindowsPortableBinaries(t *testing.T) {
 	t.Parallel()
 
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -70,17 +70,29 @@ func TestPackageInstallersBuildsUIBeforeCrossPlatformLoop(t *testing.T) {
 	content := string(data)
 
 	uiBuildIndex := strings.Index(content, "build-ui-static.ps1")
-	targetsIndex := strings.Index(content, "$targets = @(")
+	windowsTargetIndex := strings.Index(content, `$env:GOOS = "windows"`)
 	if uiBuildIndex < 0 {
 		t.Fatalf("package script must invoke ui build")
 	}
-	if targetsIndex < 0 {
-		t.Fatalf("package script must define cross-platform target loop")
+	if windowsTargetIndex < 0 {
+		t.Fatalf("package script must build the governed Windows target")
 	}
-	if uiBuildIndex > targetsIndex {
-		t.Fatalf("package script must build ui before target build loop")
+	if uiBuildIndex > windowsTargetIndex {
+		t.Fatalf("package script must build ui before Windows runtime binaries")
 	}
 	if !strings.Contains(content, "throw \"ui.web build failed") {
 		t.Fatalf("package script must fail fast on ui build failure")
+	}
+	for _, required := range []string{
+		`$env:GOARCH = "amd64"`,
+		`windows-amd64-portable.zip`,
+		`This script creates a truthful Windows portable package, not an installer.`,
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("package script missing Windows portable contract %q", required)
+		}
+	}
+	if strings.Contains(content, "$targets = @(") {
+		t.Fatalf("package script must not reintroduce the superseded cross-platform target loop")
 	}
 }
