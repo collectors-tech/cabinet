@@ -8,6 +8,7 @@ import test from 'node:test'
 import { writeStoreZip } from './lib/browser-companion-package.mjs'
 import { createBetaCandidateBundle } from './lib/beta-candidate-bundle.mjs'
 import { verifyCabinetReleasePackage } from './lib/cabinet-release-verify.mjs'
+import { loadBetaDisclosure, renderBetaDisclosureMarkdown } from './render-beta-disclosure.mjs'
 
 const sourceCommit = 'c'.repeat(40)
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
@@ -25,9 +26,11 @@ const cabinetFixture = async () => {
   ])
   const archive = writeStoreZip(packageEntries, 1_786_000_000)
   const checksum = sha256(archive)
+  const disclosure = await loadBetaDisclosure(resolve('release/cabinet-beta-disclosure.json'))
+  const disclosureNotes = renderBetaDisclosureMarkdown(disclosure, { format: 'release-notes' })
   await writeFile(join(directory, filename), archive)
   await writeFile(join(directory, checksumFilename), `${checksum}  ${filename}\n`)
-  await writeFile(join(directory, notesFilename), `# Cabinet 0.1.0-beta.1\n\nCommit: ${sourceCommit}\n\nWindows portable package; not an installer.\n`)
+  await writeFile(join(directory, notesFilename), `# Cabinet 0.1.0-beta.1\n\nCommit: ${sourceCommit}\n\nWindows portable package; not an installer.\n\n${disclosureNotes}`)
   const manifest = {
     schema_version: 1,
     product: 'Cabinet',

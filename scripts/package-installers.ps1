@@ -59,6 +59,7 @@ $packagePath = Join-Path $out $packageName
 $checksumPath = "$packagePath.sha256"
 $notesPath = Join-Path $out "cabinet-$resolvedVersion-release-notes.md"
 $manifestPath = Join-Path $out "cabinet-release-manifest.json"
+$disclosurePath = Join-Path $root "release\cabinet-beta-disclosure.json"
 
 Write-CabinetBanner -Command "package-installers" -Summary "Build the Windows portable beta package."
 Write-CabinetKeyValue -Key "Version" -Value $resolvedVersion
@@ -112,6 +113,11 @@ finally {
 Copy-Item -Path (Join-Path $root "README.md") -Destination (Join-Path $stage "README.md") -Force
 Copy-Item -Path (Join-Path $root "openspec\migration\windows-portable-beta.md") -Destination (Join-Path $stage "WINDOWS-PORTABLE-BETA.md") -Force
 
+$disclosureNotes = & node (Join-Path $root "scripts\render-beta-disclosure.mjs") --format release-notes --source $disclosurePath
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to render governed Cabinet beta disclosure."
+}
+
 @"
 # Cabinet $resolvedVersion private beta
 
@@ -123,6 +129,8 @@ Channel: private beta
 This artefact is a Windows portable package. It is not an installer. Code signing and installer claims are intentionally out of scope until signed installer evidence exists.
 
 Release remains gated on #1864 approval and must not be promoted to ``main`` without explicit approval.
+
+$disclosureNotes
 "@ | Set-Content -LiteralPath $notesPath -Encoding utf8
 
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $packagePath

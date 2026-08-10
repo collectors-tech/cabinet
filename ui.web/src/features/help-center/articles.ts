@@ -1,5 +1,6 @@
 import helpCenterReadme from '../../../../docs/help-center/README.md?raw'
 import gettingStartedGuide from '../../../../docs/help-center/getting-started/login-and-database-setup.md?raw'
+import betaDisclosureGuide from '../../../../docs/help-center/reference/cabinet-private-beta-disclosure.md?raw'
 import chatsGuide from '../../../../docs/help-center/sections/chats.md?raw'
 import collectionsGuide from '../../../../docs/help-center/sections/collections.md?raw'
 import integrationsGuide from '../../../../docs/help-center/sections/integrations.md?raw'
@@ -25,6 +26,14 @@ export const helpCenterArticles: HelpCenterArticle[] = [
       'Sign in, switch profiles, and confirm you are working in the right Cabinet data context.',
     category: 'Getting Started',
     content: gettingStartedGuide,
+  },
+  {
+    id: 'cabinet-private-beta-disclosure',
+    title: 'Cabinet 0.1 Private Beta Disclosure',
+    summary:
+      'Review supported beta capabilities, limitations, release gates, and recovery pointers.',
+    category: 'Getting Started',
+    content: betaDisclosureGuide,
   },
   {
     id: 'section-inventory',

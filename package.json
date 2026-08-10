@@ -7,7 +7,7 @@
     "test:infra": "node --test scripts/deployment-infrastructure-contract.test.mjs",
     "test:auth-infra": "node --test scripts/zitadel-auth-contract.test.mjs",
     "test:companion-package": "node --test scripts/browser-companion-package.test.mjs",
-    "test:release-package": "node --test scripts/package-installers.test.mjs scripts/cabinet-release-package.test.mjs",
+    "test:release-package": "node --test scripts/package-installers.test.mjs scripts/cabinet-release-package.test.mjs scripts/beta-disclosure-contract.test.mjs",
     "package:companion": "node scripts/package-browser-companion.mjs",
     "verify:companion-package": "node scripts/verify-browser-companion-package.mjs",
     "verify:cabinet-package": "node scripts/verify-cabinet-release-package.mjs",

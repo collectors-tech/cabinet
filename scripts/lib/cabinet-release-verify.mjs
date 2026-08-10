@@ -86,6 +86,7 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
   if (!notes.includes(release.version) || !notes.includes(release.source_commit) || !/portable package/i.test(notes) || !/not an installer/i.test(notes)) {
     throw new Error('cabinet_release_notes_identity_invalid')
   }
+  await verifyCabinetReleaseDisclosure(notes, repositoryRoot)
 
   if (!Array.isArray(release.package_files) || release.package_files.length < 4) throw new Error('cabinet_package_file_inventory_invalid')
   const paths = new Set()
@@ -112,4 +113,20 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
   // Keep an independently computed helper call in this module for auditability.
   if (await sha256File(archivePath) !== actualHash) throw new Error('cabinet_artifact_checksum_race')
   return release
+}
+
+export const verifyCabinetReleaseDisclosure = async (notes, repositoryRoot = resolve('.')) => {
+  const disclosure = JSON.parse(await readFile(join(repositoryRoot, 'release', 'cabinet-beta-disclosure.json'), 'utf8'))
+  if (disclosure.schema_version !== 1 || disclosure.release_channel !== 'private-beta') {
+    throw new Error('cabinet_release_disclosure_identity_invalid')
+  }
+  for (const statement of disclosure.statements ?? []) {
+    if (statement.release_note !== true) continue
+    if (!notes.includes(statement.title) || !notes.includes(statement.user_facing)) {
+      throw new Error(`cabinet_release_disclosure_missing:${statement.id}`)
+    }
+  }
+  for (const pointer of disclosure.support_pointers ?? []) {
+    if (!notes.includes(pointer)) throw new Error('cabinet_release_disclosure_support_pointer_missing')
+  }
 }
