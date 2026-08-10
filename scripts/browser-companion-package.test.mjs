@@ -118,6 +118,8 @@ test('packaged browser loader reads target roots without shadowing the Node proc
   const loader = await readFile(join(repositoryRoot, 'scripts', 'verify-browser-extension-load.mjs'), 'utf8')
   assert.match(loader, /process\.env\[browser\.rootVariable\]/)
   assert.match(loader, /const browserProcess = spawn\(/)
+  assert.match(loader, /startupTimeoutMilliseconds/)
+  assert.match(loader, /attempts/)
   assert.doesNotMatch(loader, /const process = spawn\(/)
 })
 
