@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,6 +113,11 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		"go test ./...",
 		"@redocly/cli@latest lint docs/api/openapi.yaml",
 		"@redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html",
+		"cypress_specs_override:",
+		"Validate fixed beta core Cypress acceptance pack",
+		"node scripts/validate-beta-core-cypress-pack.mjs --manifest release/beta-core-cypress-pack.json",
+		".logs/release-candidate/cypress-pack.json",
+		"${{ steps.cypress_pack.outputs.specs }}",
 		"./cypress.ps1 -Spec",
 		"Upload release-candidate logs",
 		"does not merge develop into main",
@@ -128,6 +134,90 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 	} {
 		if strings.Contains(content, forbidden) {
 			t.Fatalf("release-candidate gate contains forbidden fragment %q", forbidden)
+		}
+	}
+}
+
+func TestBetaCoreCypressPackManifestContract(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := resolveRepoRoot(t)
+	manifestPath := filepath.Join(repoRoot, "release", "beta-core-cypress-pack.json")
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read beta core Cypress pack manifest: %v", err)
+	}
+
+	var manifest struct {
+		Version            int      `json:"version"`
+		Issue              int      `json:"issue"`
+		RequiredCategories []string `json:"required_categories"`
+		Specs              []struct {
+			Category string `json:"category"`
+			Path     string `json:"path"`
+		} `json:"specs"`
+		ManualPackagedSteps []string `json:"manual_packaged_steps"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatalf("parse beta core Cypress pack manifest: %v", err)
+	}
+	if manifest.Version < 1 {
+		t.Fatalf("manifest version must be positive, got %d", manifest.Version)
+	}
+	if manifest.Issue != 2055 {
+		t.Fatalf("manifest should stay bound to #2055, got #%d", manifest.Issue)
+	}
+
+	required := map[string]bool{
+		"login_profile":    false,
+		"inventory":        false,
+		"wishlist":         false,
+		"collections":      false,
+		"media":            false,
+		"recovery":         false,
+		"provider_handoff": false,
+	}
+	declared := map[string]bool{}
+	for _, category := range manifest.RequiredCategories {
+		declared[category] = true
+	}
+	for category := range required {
+		if !declared[category] {
+			t.Fatalf("manifest does not declare required category %s", category)
+		}
+	}
+
+	seen := map[string]bool{}
+	for _, spec := range manifest.Specs {
+		if _, ok := required[spec.Category]; ok {
+			required[spec.Category] = true
+		}
+		if seen[spec.Path] {
+			t.Fatalf("duplicate Cypress spec in beta pack: %s", spec.Path)
+		}
+		seen[spec.Path] = true
+		if !strings.HasPrefix(spec.Path, "cypress/e2e/") || !strings.HasSuffix(spec.Path, ".cy.ts") {
+			t.Fatalf("spec path is not a Cypress e2e TypeScript spec: %s", spec.Path)
+		}
+		if _, err := os.Stat(filepath.Join(repoRoot, "ui.web", filepath.FromSlash(spec.Path))); err != nil {
+			t.Fatalf("manifest spec %s is not present under ui.web: %v", spec.Path, err)
+		}
+	}
+	for category, covered := range required {
+		if !covered {
+			t.Fatalf("beta core Cypress pack does not cover required category %s", category)
+		}
+	}
+	for _, requiredStep := range []string{"#1869", "#1944", "#1945"} {
+		found := false
+		for _, step := range manifest.ManualPackagedSteps {
+			if strings.Contains(step, requiredStep) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("manifest does not keep manual packaged/live step %s explicit", requiredStep)
 		}
 	}
 }

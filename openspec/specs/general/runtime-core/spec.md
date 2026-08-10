@@ -93,6 +93,18 @@ Cabinet SHALL maintain one versioned private-beta capability and limitation disc
 - **AND** package verification SHALL fail when release notes omit a governed release-note disclosure statement
 - **AND** user-facing disclosure text SHALL avoid internal paths, secret values, fixture claims, stale issue wording and mutable latest-channel claims.
 
+### Requirement RUNTIME-CORE-024: Beta candidate validation SHALL run a fixed core Cypress pack
+Cabinet SHALL bind beta release-candidate validation to one repository-owned, versioned Cypress acceptance pack so candidate evidence cannot silently validate only a login or smoke subset.
+
+#### Scenario: Fixed beta core Cypress pack
+- **GIVEN** a full commit SHA is nominated for the Beta Release Candidate Gate
+- **WHEN** the candidate workflow resolves the Cypress release pack
+- **THEN** it MUST validate `release/beta-core-cypress-pack.json` before running Cypress
+- **AND** the pack MUST include login/profile, inventory, wishlist, collections, media, recovery, and provider handoff coverage
+- **AND** empty, missing, duplicate, extra, or under-scoped overrides MUST fail before Cypress starts
+- **AND** candidate evidence MUST record the exact manifest version, spec count, spec list, commit, and Cypress output
+- **AND** human Frontline, Bonza, packaged Windows acceptance, and final publication steps MUST remain separate and not be auto-passed by the source Cypress pack.
+
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
 

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "issue": 2055,
+  "name": "Cabinet 0.1 beta core Cypress acceptance pack",
+  "required_categories": [
+    "login_profile",
+    "inventory",
+    "wishlist",
+    "collections",
+    "media",
+    "recovery",
+    "provider_handoff"
+  ],
+  "specs": [
+    {
+      "category": "login_profile",
+      "path": "cypress/e2e/general/ui-login-session/spec.cy.ts"
+    },
+    {
+      "category": "inventory",
+      "path": "cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts"
+    },
+    {
+      "category": "wishlist",
+      "path": "cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts"
+    },
+    {
+      "category": "collections",
+      "path": "cypress/e2e/collections/ui-screen-collections/spec.cy.ts"
+    },
+    {
+      "category": "media",
+      "path": "cypress/e2e/media/ui-screen-media/spec.cy.ts"
+    },
+    {
+      "category": "recovery",
+      "path": "cypress/e2e/general/profile-context-recovery/spec.cy.ts"
+    },
+    {
+      "category": "provider_handoff",
+      "path": "cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts"
+    },
+    {
+      "category": "provider_handoff",
+      "path": "cypress/e2e/integrations/browser-companion-pairing/spec.cy.ts"
+    }
+  ],
+  "manual_packaged_steps": [
+    "#1869 packaged Windows acceptance",
+    "#1944 Frontline user-present live provider proof",
+    "#1945 Bonza user-present browser-assisted proof"
+  ]
+}
