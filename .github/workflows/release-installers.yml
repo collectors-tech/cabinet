@@ -50,6 +50,9 @@ jobs:
       - name: Install ui.web dependencies
         run: npm --prefix ui.web ci
 
+      - name: Enforce production dependency security
+        run: npm run security:dependencies
+
       - name: Run tests before packaging
         shell: pwsh
         run: |

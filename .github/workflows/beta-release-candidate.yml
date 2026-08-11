@@ -66,6 +66,14 @@ jobs:
         shell: pwsh
         run: npm --prefix ui.web ci
 
+      - name: Enforce production dependency security
+        shell: pwsh
+        run: |
+          npm run security:dependencies *>&1 | Tee-Object .logs/release-candidate/dependency-security.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "Production dependency security gate failed."
+          }
+
       - name: Validate fixed beta core Cypress acceptance pack
         id: cypress_pack
         shell: pwsh
