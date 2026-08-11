@@ -117,6 +117,7 @@ $disclosureNotes = & node (Join-Path $root "scripts\render-beta-disclosure.mjs")
 if ($LASTEXITCODE -ne 0) {
   throw "Failed to render governed Cabinet beta disclosure."
 }
+$guidanceBaseURL = "https://github.com/collectors-tech/cabinet/blob/$buildRevision"
 
 @"
 # Cabinet $resolvedVersion private beta
@@ -131,6 +132,20 @@ This artefact is a Windows portable package. It is not an installer. Code signin
 Release remains gated on #1864 approval and must not be promoted to ``main`` without explicit approval.
 
 $disclosureNotes
+
+## Guidance supplied with this candidate
+
+- Extract ``$packageName`` and open ``README.md`` in the package root for startup, data-path, privacy, support, and development boundaries.
+- Open ``WINDOWS-PORTABLE-BETA.md`` in the package root for install, backup, upgrade, rollback, and removal steps.
+- After Cabinet starts, open **Help Center > Integrations** for Browser Companion install, pairing, provider capture, revocation, and recovery guidance. Use any separately supplied companion target release notes and manifest with it.
+
+## Exact-source online references
+
+These links require access to the source repository. The supplied package guidance above remains usable without repository access.
+
+- [Cabinet README]($guidanceBaseURL/README.md)
+- [Windows portable install, upgrade, rollback, and removal]($guidanceBaseURL/openspec/migration/windows-portable-beta.md)
+- [Browser Companion, provider capture, and recovery]($guidanceBaseURL/docs/help-center/sections/integrations.md)
 "@ | Set-Content -LiteralPath $notesPath -Encoding utf8
 
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $packagePath

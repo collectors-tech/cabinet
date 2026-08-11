@@ -10,15 +10,19 @@ Cabinet `0.1.0-beta.1` is packaged as a Windows portable ZIP until a signed inst
 
 ## Data Location
 
-Cabinet stores local data under the configured runtime data directory. For default Windows runs, use the Settings storage screen and `/api/runtime` to verify the active `data_dir` before upgrade, backup, restore, or removal.
+For a normal portable launch, Cabinet creates a `data` directory beside `cabinet.exe`. This executable-local directory is the default runtime root and normally contains the database, runtime configuration, media, backups, and logs.
+
+`CABINET_DATA_DIR` can override the runtime root before startup, `CABINET_DB_PATH` can override the database file, and first-run setup can record another writable storage location. The `data_dir` reported by `/api/runtime` is authoritative for the running process. Check it before upgrade, backup, restore, relocation, rollback, or removal instead of assuming the default path.
 
 ## Backup and Upgrade
 
-Before replacing an existing beta build, run a backup from Settings Storage and keep the generated ZIP outside the extracted Cabinet folder. Start the new portable build against the same data directory only after recording the package checksum and commit.
+Before replacing an existing beta build, run a backup from Settings Storage and keep the generated ZIP outside the extracted Cabinet folder. Start the new portable build against the same confirmed data directory only after recording the package checksum and commit. Confirm the active profile and representative Inventory, Wishlist, Collection, and saved-view data after restart.
 
 ## Uninstall or Rollback
 
-Close Cabinet, keep or move the data directory as needed, and delete the extracted portable folder. To roll back, extract the prior portable package and restore from the saved backup if the data directory was changed during validation.
+Close Cabinet before moving or deleting files. With the executable-local layout, deleting the whole extracted folder also deletes the default `data` directory inside it; deleting only `cabinet.exe` does not reliably remove data from an overridden or custom location. Keep or move the confirmed data directory as needed.
+
+To roll back, extract the prior portable package into a separate writable folder and start it only with a compatible confirmed data directory. Restore from the saved backup if the data directory was changed during validation.
 
 ## Signing and Release Gate
 
