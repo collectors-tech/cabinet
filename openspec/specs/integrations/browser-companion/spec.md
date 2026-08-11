@@ -242,3 +242,25 @@ Cabinet SHALL produce separate Chrome and Edge private-beta packages from one ex
 - **WHEN** a private/internal candidate is created under #1868
 - **THEN** clean Chrome and Edge install/pair/sync/recovery proof MUST remain pending until #1869 tests the exact package files
 - **AND** no external release or immutable tag MAY be published before #1864 approval.
+
+### Requirement INTEGRATION-080: Provider captures MUST remain reviewable through Wishlist hand-off
+Cabinet SHALL dispatch each accepted Browser Companion provider result through the canonical discovery review boundary and persist an idempotent linked Wishlist entry only after the collector chooses the Wishlist action.
+
+#### Scenario: Review a fresh provider capture into Wishlist
+- **GIVEN** a paired Frontline or Bonza module submits a valid real-shaped search capture for a fresh profile
+- **WHEN** Cabinet commits its candidates
+- **THEN** every candidate MUST have one `not_in_collection` match with truthful provider, query, listing/part-number, confidence, review and source-URL provenance
+- **AND** `GET /api/discovery/not-in-collection` MUST expose it for collector review without pre-seeded canonical items or matches.
+
+#### Scenario: Persist one Wishlist link without claiming ownership
+- **GIVEN** the collector reviews a Companion discovery and chooses `add_to_wishlist`
+- **WHEN** Cabinet applies the discovery action once or replays it
+- **THEN** Cabinet MUST create or reuse one profile-scoped canonical item, link the candidate match, and persist exactly one linked Wishlist row
+- **AND** the hand-off MUST retain provider provenance and MUST NOT mark the item owned, purchased or delivered
+- **AND** `create_item` MUST continue to require the existing explicit owned/purchased confirmation boundary.
+
+#### Scenario: Keep fixture proof separate from release acceptance
+- **GIVEN** the Frontline and Bonza API contract tests pass with real-shaped fixtures
+- **WHEN** #1944 and #1945 collect source-ready evidence
+- **THEN** those tests MAY prove the ingestion and hand-off implementation
+- **AND** they MUST NOT replace the external user-present and exact packaged-candidate proof required by #1869.

@@ -47,8 +47,8 @@ The #2062 real-runtime Cypress preflight proves that both unconfigured providers
 - [ ] Cabinet/provider open-focus and ready, login-required, action-required, partial, selector-drift and disconnected states are truthful.
 - [ ] A real saved Market Watch and Discovery hand-off pass independently for Voglers.
 - [ ] A real saved Market Watch and Discovery hand-off pass independently for Hobbytech.
-- [ ] A user-present real search, persisted observation and Discovery hand-off pass independently for Frontline.
-- [ ] A user-present real search after normal browser interaction, persisted observation and Discovery hand-off pass independently for Bonza.
+- [ ] A user-present real Frontline search persists an observation, appears through `GET /api/discovery/not-in-collection`, accepts reviewed `add_to_wishlist`, and persists exactly one linked Wishlist row visible through `GET /api/wishlist`.
+- [ ] A user-present real Bonza search after normal browser interaction persists an observation, appears through `GET /api/discovery/not-in-collection`, accepts reviewed `add_to_wishlist`, and persists exactly one linked Wishlist row visible through `GET /api/wishlist`.
 - [ ] A stalled or unavailable Frontline request returns within the bounded provider timeout, records no candidates or false success, and leaves the next provider run usable.
 - [ ] A stalled or unavailable Bonza request returns within the bounded provider timeout, records no candidates or false success, and leaves the next provider run usable.
 - [ ] Failure of one provider does not prevent, mutate or corrupt another provider's watches or observations.
