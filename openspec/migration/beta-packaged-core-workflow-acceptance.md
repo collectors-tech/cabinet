@@ -9,6 +9,41 @@ source-ready gate. Internal candidate creation does not require final #1864 appr
 Final #1864 approval is required before external prerelease publication or `develop` to `main` promotion.
 The final approval follows packaged acceptance and #1867 data-safety evidence.
 
+## Resumable evidence recorder
+
+Use `scripts/record-beta-acceptance.mjs` (or `npm run acceptance:record --`) to
+create the repository-owned JSON and Markdown evidence pack. `init` verifies the
+three exact candidate manifests, the Cabinet archive, both Chrome and Edge
+Browser Companion archives, and every separate `.sha256` file before it reads or
+resumes prior evidence. The generated candidate fingerprint binds the manifests,
+source commit, versions, package filenames, package bytes, candidate-gate run and
+artifact name. A stale candidate is archived under a fingerprinted filename and
+all 51 rows restart as `not_run`; an in-place checksum mismatch fails closed.
+
+Each stable row below is represented exactly once as `not_run`, `blocked`, `pass`, or `fail`.
+Use `record --row <stable-id>` to update one row. `pass` and `fail` require one or
+more non-secret `--evidence` references plus operator `--notes`. `blocked` requires an exact `--unblock`
+condition. A human workflow can reach `pass` only with `--operator-confirmed`;
+the recorder never operates the browser, provider or packaged UI and therefore
+cannot auto-pass Frontline, Bonza, install, UI or recovery evidence.
+
+The recorder redacts credentials, bearer/cookie material, explicitly marked
+private page content and sensitive local paths. The raw isolated data-directory
+path is represented by a redacted display value plus SHA-256 identity. Run
+`validate` before attaching the deterministic JSON and Markdown outputs to
+#1869, #1867 and #1864. The CLI has no release, branch-promotion, provider
+interaction or browser-automation operation.
+Overall output is exactly `not_run`, `fail_with_blockers`, or `pass`; the
+per-row state preserves whether the blocker was `blocked` or `fail`.
+
+```text
+node scripts/record-beta-acceptance.mjs --help
+node scripts/record-beta-acceptance.mjs init <candidate and environment options>
+node scripts/record-beta-acceptance.mjs record --json <state.json> --markdown <summary.md> --row <id> --status <status> <evidence options>
+node scripts/record-beta-acceptance.mjs validate --json <state.json>
+node scripts/record-beta-acceptance.mjs render --json <state.json> --markdown <summary.md>
+```
+
 ## Candidate Identity
 
 - [ ] OS version and host profile are recorded.
