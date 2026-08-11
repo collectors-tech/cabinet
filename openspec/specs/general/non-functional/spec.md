@@ -38,3 +38,26 @@ Cabinet SHALL run a required quality gate for pull requests targeting `develop` 
 - **AND** the working tree SHALL be clean before validation starts
 - **AND** strict OpenSpec validation, `go test ./...`, UI production build, OpenAPI lint/build, and the configured Cypress release pack SHALL run against that exact checkout
 - **AND** the workflow SHALL upload logs and a summary that identify the commit SHA and workflow run without merging `develop` into `main`
+
+### Requirement NON-FUNCTIONAL-004: Protected release branches SHALL enforce review and approval boundaries
+Cabinet's GitHub repository SHALL protect `develop` and `main` with required GitHub Actions checks, current-head review and fail-closed promotion controls that are independently verifiable without changing repository settings.
+
+#### Scenario: Develop protection drifts
+- **GIVEN** `develop` is the default integration branch
+- **WHEN** branch protection is missing, a required Develop Quality Gate check is absent or not bound to GitHub Actions, or an administrator/workflow can bypass pull-request review
+- **THEN** the read-only protection verifier SHALL exit nonzero with non-secret drift evidence
+- **AND** merge SHALL remain prohibited until strict current-head checks, pull-request enforcement, administrator enforcement, linear history and conversation resolution are restored
+
+#### Scenario: Main promotion requires exact release approval
+- **GIVEN** an exact `develop` commit has completed candidate and packaged acceptance
+- **WHEN** that commit is proposed for promotion to `main`
+- **THEN** all Main Gate checks and the read-only exact-approval check SHALL be required
+- **AND** the release owner SHALL record explicit exact-commit #1864 approval before the promotion check can pass
+- **AND** workflows and GitHub Apps SHALL have no branch or pull-request bypass allowance
+
+#### Scenario: Emergency protection change is exceptional and audited
+- **GIVEN** a confirmed P0 incident cannot use the normal protected path in time
+- **WHEN** the release owner temporarily changes protection
+- **THEN** there SHALL be no persistent bypass actor
+- **AND** the P0 issue SHALL record actor, exact commit, reason, checks, UTC interval, before/after verifier state and GitHub audit evidence
+- **AND** emergency authority SHALL NOT authorize external publication or `develop` to `main` promotion without explicit exact-commit #1864 approval

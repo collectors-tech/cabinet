@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "repository": "collectors-tech/cabinet",
+  "required_check_app_id": 15368,
+  "repository_settings": {
+    "allow_auto_merge": false
+  },
+  "branches": {
+    "develop": {
+      "required_checks": [
+        "Workflow contract",
+        "OpenSpec strict validation",
+        "UI production build",
+        "Go runtime package tests",
+        "OpenAPI parity and docs",
+        "Cypress login/profile/runtime smoke",
+        "Windows portable package verification"
+      ],
+      "required_approving_review_count": 0,
+      "dismiss_stale_reviews": true,
+      "require_code_owner_reviews": false,
+      "enforce_admins": true,
+      "required_linear_history": true,
+      "required_conversation_resolution": true,
+      "allow_force_pushes": false,
+      "allow_deletions": false
+    },
+    "main": {
+      "required_checks": [
+        "Go CI (ubuntu-latest)",
+        "Go CI (windows-latest)",
+        "Go CI (macos-latest)",
+        "OpenAPI",
+        "UI Build",
+        "Cypress",
+        "Windows portable package verification",
+        "Exact #1864 promotion approval"
+      ],
+      "required_approving_review_count": 0,
+      "dismiss_stale_reviews": true,
+      "require_code_owner_reviews": false,
+      "enforce_admins": true,
+      "required_linear_history": true,
+      "required_conversation_resolution": true,
+      "allow_force_pushes": false,
+      "allow_deletions": false
+    }
+  },
+  "release_approval": {
+    "issue": 1864,
+    "authority": "wildone",
+    "marker": "APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>",
+    "main_source_branch": "develop",
+    "approval_is_commit_exact": true
+  },
+  "emergency_bypass": {
+    "persistent_bypass_actors": [],
+    "authority": "wildone",
+    "requires_p0_issue": true,
+    "requires_before_and_after_state": true,
+    "requires_actor_commit_reason_and_checks": true,
+    "does_not_authorize_release_publication_or_main_promotion": true
+  }
+}
