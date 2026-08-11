@@ -1,7 +1,7 @@
 # TASK_LIST
 
 Reconciled on 2026-08-11 AEST from exact `origin/develop`
-`e113bff87ebe1ca764b86833f865b190c91ced46`, live GitHub issues, GitHub
+`f7853669e4586e6f50a2316cb8ca7082e019ce79`, live GitHub issues, GitHub
 Project 2, OpenSpec, and isolated prepared-worktree evidence.
 
 This file is the high-level Cabinet 0.1 private-beta execution summary.
@@ -11,17 +11,19 @@ this snapshot and GitHub differ.
 
 ## Ship Verdict
 
-**Not yet shippable.** The merged source baseline contains the request-boundary,
-Browser Companion critical-path, dependency-security, and branch-protection
-source work and has recovered its core release gates. The remaining
-product-documentation and acceptance-recorder patches are local and unmerged. No
-exact Cabinet plus Browser Companion candidate exists, and user-present provider
-proof, packaged acceptance, same-candidate data safety, owner/legal decisions,
-and final approval remain incomplete.
+**Not yet shippable.** The merged source baseline now contains the
+request-boundary, Browser Companion critical-path, dependency-security,
+branch-protection, product-documentation, and packaged-acceptance-recorder
+source work. The active Project 2 queue has no Ready cards; every remaining
+release child is either Done or Blocked, while #1864 stays In progress as the
+final evidence and approval parent. No exact Cabinet plus Browser Companion
+candidate exists, and user-present provider proof, packaged acceptance,
+same-candidate data safety, owner/legal decisions, and final approval remain
+incomplete.
 
-An integrated dirty-worktree rehearsal is useful compatibility evidence only.
-It is not a reviewed commit, hosted result, release freeze, exact candidate, or
-approval record.
+Earlier integrated dirty-worktree rehearsals remain compatibility evidence only.
+They are not reviewed commits, hosted results, a release freeze, exact
+candidates, or approval records.
 
 ## Completed Merged Evidence
 
@@ -42,46 +44,45 @@ approval record.
 - #2056 [DONE]: branch-protection policy, read-only verifier, and exact #1864
   promotion approval guard merged; repository settings were later applied and
   verified compliant.
+- #2057 [SOURCE MERGED / BLOCKED]: README, privacy, terms, Help Center, and
+  generated release-note guidance are aligned with the private-beta product
+  surface; owner/legal decisions and exact-candidate verification remain open.
+- #2048 [DONE]: 51-row resumable packaged-acceptance evidence recorder merged.
 - #2062 [DONE]: Add Integration hand-off, persistence, hosted Edge loading, and
   compact pairing accessibility merged.
 - #2064 [DONE]: canonical Browser Companion capture-run success status merged.
 - #2065 [DONE]: captured discovery review and Wishlist hand-off persistence
   merged.
+- #2066 [DONE]: prior task-list reconciliation merged; this document is now the
+  follow-up #1864 reconciliation from current `develop`.
 
 These are evidence inputs, not executable READY work.
 
-## Gate A - Land Remaining Source and Governance Work
+## Gate A - Source and Governance Work
 
 The status below matches the live issue and Project state at reconciliation.
 "Staged-only" means an explicitly authorized index exists but there is no
 commit, push, PR, merge, or hosted result. "Local unstaged" means isolated
 worktree evidence only. Neither state proves a merge or hosted gate.
 
-| Issue | Project state | Current truth and remaining work                                                                                                                                                                               |
-| ----- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #2057 | In progress   | The local unstaged product-documentation patch is green on this baseline. Owner/legal decisions and exact-candidate guidance verification remain open and are not implied by local copy alignment.              |
-| #2048 | In progress   | The local acceptance recorder remains unmerged. Reconcile its final inventory after the preceding source changes, then land it last among candidate acceptance controls.                                    |
-| #2066 | In progress   | This local unstaged execution-summary reconciliation is current for the recorded commit. Refresh it after intervening source landings and before release freeze rather than treating this snapshot as authority. |
+| Issue | Project state | Current truth and remaining work |
+| ----- | ------------- | -------------------------------- |
+| #2057 | Blocked | Source/docs PR #2075 merged at `f7853669e4586e6f50a2316cb8ca7082e019ce79`. Owner/legal decisions and exact-candidate release-note/package verification remain open. |
+| #2048 | Done | PR #2074 merged at `edbacd78c3bdf8469aeba43ce1d2a9d786ac0ace`; recorder source is available for #1869 but does not run or satisfy packaged acceptance by itself. |
+| #2066 | Done | PR #2073 merged at `94311bd6be42fc5f23ab6e942588fa9b7ff4a66b`; this #1864 update supersedes that snapshot for the current baseline. |
 
-Dependency-safe landing order for the prepared patches:
-
-`#2057 -> #2048 -> refresh #2066`
-
-For each remaining issue: rebase or reprepare from the then-current `develop`,
-preserve shared workflow/checklist changes, review the exact manifest, land
-through its own PR, and require the relevant hosted gates. Project Order remains
-the queue view; the sequence above is the dependency/shared-file landing order.
-
-Gate A exits only when the source is merged on one clean `develop`, hosted
-checks pass there, default-branch dependency findings are reconciled, and no
-candidate-blocking security, reliability, or data-loss issue remains.
+Gate A source landing is complete for the currently merged pre-candidate source
+set, but the release programme is still blocked until the human/legal and
+candidate-bound rows below are satisfied. Any new P0 release blocker or evidence
+correction must land through its own focused issue and hosted checks before
+candidate nomination.
 
 ## Gate B - User-Present Live Provider Proof
 
-- #1944 [READY]: run a genuine Frontline user-present live proof through the
+- #1944 [BLOCKED]: run a genuine Frontline user-present live proof through the
   Browser Companion and persist source/module/schema provenance, review state,
   and confirmed hand-off.
-- #1945 [READY]: run the equivalent genuine Bonza user-present live proof after
+- #1945 [BLOCKED]: run the equivalent genuine Bonza user-present live proof after
   normal browser interaction, including truthful Sucuri/challenge handling.
 - #1929 [BLOCKED]: complete the four-provider source/live checklist only after
   both live child issues pass.
@@ -155,8 +156,10 @@ Until operator-present work is available, the development agent can:
    those gates passed.
 
 The dev agent cannot substitute for #1944/#1945 user-present live proof, #1869
-packaged acceptance, #1867 same-candidate recovery proof, branch settings or
-legal decisions requiring owner authority, or #1864 approval.
+packaged acceptance, #1867 same-candidate recovery proof, legal decisions
+requiring owner authority, or #1864 approval. Branch-protection source and
+settings evidence is complete as of #2056, but future drift must still be
+verified before final promotion.
 
 ## Validation Expectations
 

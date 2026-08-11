@@ -1,7 +1,8 @@
 # Cabinet 0.1 beta release evidence index
 
 Issue: #1864 `epic(beta): ship Cabinet 0.1 private beta`
-Reconciled: 2026-08-06 AEST under #2036
+Reconciled: 2026-08-11 AEST under #1864 from `develop`
+`f7853669e4586e6f50a2316cb8ca7082e019ce79`
 
 This is the single repository-side release sequence and evidence hand-off for
 #1864. It does not approve, publish or promote a release.
@@ -61,10 +62,16 @@ for #1868; completion of every source-ready checklist row is.
 | #1936/#1937 canonical media | Merged implementation and migration evidence | Source complete; packaged rerun pending |
 | #1943 Hobbytech | PR #1955 plus live provider-run proof | Source/live ready; packaged rerun pending |
 | #2037 truthful OpenAPI gate | PR #2038; Develop Quality Gate `31018831485` green | Done |
-| #2054 bounded provider HTTP behavior | Shared commerce-provider timeout, cancellation, partial-response and same-client recovery contract tests | Source gate required before candidate; Frontline/Bonza packaged timeout proof remains in #1869 |
-| #2033/#2035/#2032/#1944/#1945/#2034 | Browser Companion release programme | Packaging source implemented; external Frontline/Bonza and exact-candidate evidence pending |
+| #2051 dependency security | PR #2071 merged; default-branch critical/high Dependabot reconciliation complete | Done |
+| #2052 request boundaries | PR #2068 merged | Done |
+| #2054 bounded provider HTTP behavior | PR #2063 merged; shared commerce-provider timeout, cancellation, partial-response and same-client recovery contract tests | Source done; Frontline/Bonza packaged timeout proof remains in #1869 |
+| #2056 branch protection | PR #2072 merged; repository settings applied; read-only verifier returned compliant | Done |
+| #2048 packaged-acceptance recorder | PR #2074 merged; 51-row evidence-only recorder available | Source done; real #1869 acceptance still pending exact candidate |
+| #2057 beta product guidance | PR #2075 merged | Source done; owner/legal decisions and exact-candidate release-note/package verification remain blocked |
+| #2062/#2064/#2065 companion critical path | PRs #2069/#2067/#2070 merged | Source done; user-present provider proof remains pending |
+| #1944/#1945 Frontline/Bonza live proof | Genuine user-present evidence not yet captured | Blocked; fixtures/screenshots/dirty rehearsals do not qualify |
 | #1868 exact internal candidate | Exact-clean Cabinet manifest/verifier, combined Cabinet/companion manifest, validate-before-package workflow and approval-evidenced prerelease source implemented | Run only after Frontline/Bonza source/live gate and freeze; retain exact candidate run/artifacts |
-| #1869 packaged acceptance | Stable checklist exists | Execute after #1868 internal candidate |
+| #1869 packaged acceptance | Stable 51-row checklist and recorder exist | Execute after #1868 internal candidate |
 
 ## Evidence commands and artefacts
 
