@@ -105,6 +105,19 @@ Cabinet SHALL bind beta release-candidate validation to one repository-owned, ve
 - **AND** candidate evidence MUST record the exact manifest version, spec count, spec list, commit, and Cypress output
 - **AND** human Frontline, Bonza, packaged Windows acceptance, and final publication steps MUST remain separate and not be auto-passed by the source Cypress pack.
 
+### Requirement RUNTIME-CORE-025: Beta release lanes SHALL reject critical and high production dependency vulnerabilities
+Cabinet SHALL validate the exact `ui.web` lockfile before develop, main, beta candidate, or private package work can advance.
+
+#### Scenario: Fail-closed production dependency validation
+- **GIVEN** `npm ci` installed the exact committed `ui.web/package-lock.json`
+- **WHEN** a governed release lane validates production dependencies
+- **THEN** the dependency tree MUST reject missing, invalid, or undeclared extraneous packages
+- **AND** lock-owned optional bundled packages MAY be accepted only when their lockfile entry is explicitly marked optional
+- **AND** `npm audit --omit=dev` MUST report zero unresolved critical and high findings
+- **AND** missing or invalid audit output MUST fail the lane rather than being treated as clean
+- **AND** the develop, main, exact candidate, and private package workflows MUST invoke the same repository-owned gate
+- **AND** dependency evidence MUST identify the exact lockfile state without publishing a release or promoting `develop` to `main`.
+
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
 
