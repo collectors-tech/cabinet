@@ -1,235 +1,87 @@
 # Cabinet
 
-Desktop-first collector intelligence app.
+Cabinet is a desktop-first collector workspace. Cabinet 0.1 is currently a private beta for invited validation, with local collection data, inventory and wishlist workflows, provider-assisted discovery, backup/export, and optional Assistant/Agent surfaces.
 
-## 🚧 Current Delivery Mode
+The governed **Cabinet 0.1 Private Beta Disclosure** in the in-app Help Center is the source for supported, preview, limited, browser-assisted, action-required, packaged-unproven, and excluded capability claims.
 
-This repo is currently worked **direct/manual**.
+## Private-beta distribution
 
-### Current source of truth
-- GitHub issue backlog + project board decide what gets worked next
-- OpenSpec + traceability define the required behavior
-- Validation evidence is mandatory before completion claims
-- Branch/deploy workflow is enforced through repo rules
+- Cabinet is distributed as an unsigned Windows portable ZIP. It is not an installer, Microsoft Store package, or automatic-update channel.
+- Verify the supplied SHA-256 file, extract the ZIP into a writable, stable folder, and run `cabinet.exe`.
+- The candidate includes `cabinet-mcp.exe`, this README, and `WINDOWS-PORTABLE-BETA.md`.
+- Browser Companion candidates are separate Chrome and Edge ZIPs loaded through developer mode. They are not browser-store releases and do not update automatically.
+- A package is identified by its version, exact source commit, release manifest, and checksum. Do not substitute a mutable branch download for an accepted candidate.
 
-### How work flows now
-1. Pick the next real backlog issue.
-2. Claim the issue with a comment and durable backlog/project state.
-3. Bind or update the relevant spec/governance requirement(s).
-4. Implement the issue on **one focused issue branch**.
-5. Validate with the required checks for the touched scope.
-6. Commit with an issue-prefixed message.
-7. Push and update the issue with evidence.
-8. Open a PR from the issue branch into `develop`.
-9. Manually run the local pipeline on the local dev instance, deploy locally, and run the full regression suite.
-10. Comment in the PR with the validation/deploy report and upload the report artifact there.
-11. Merge the PR into `develop`.
-12. Pull/update local `develop` and deploy demo/review lanes from `develop`.
-13. Merge `develop` into `main` only after Max explicitly approves.
+See [Windows portable install, upgrade, rollback, and removal](WINDOWS-PORTABLE-BETA.md), which is supplied at the top level of the extracted package. After Cabinet starts, open **Help Center > Integrations** for Browser Companion install, pairing, provider capture, revocation, and recovery guidance. The companion candidate may also be supplied with separate target-specific release notes and a manifest.
 
-### Workflow policy (enforced)
-- Issue -> Spec -> Validate -> Commit
-- One focused branch per issue/fix whenever possible
-- UI checks must verify control intent outcomes, form-field behavior, dialog/layering behavior, and persistence/data outcomes where relevant
-- OpenSpec validation gate required for implementation work
-- No “done” claims without command/test evidence
-- Do the active work directly in-repo using the current manual delivery flow
+## Start Cabinet on Windows
 
-## Current Status
-- Runtime scaffold implemented (issue `#1` in GitHub):
-- Go entrypoint and graceful shutdown
-- Embedded UI hosting
-- SQLite initialization + baseline migrations
-- Config system with update channel support
-- Signed update signature verification primitives
-- Installer packaging workflow for Windows and macOS artifacts (`.github/workflows/release-installers.yml`)
+1. Verify and extract the supplied portable ZIP.
+2. Run `cabinet.exe` from the extracted folder.
+3. Open the printed URL if Cabinet does not open it automatically. The normal loopback URL is `http://127.0.0.1:17880/`.
+4. Complete first-run setup and select local mode, or use ZITADEL only when the beta deployment was configured for that authority.
+5. Back up from Settings before replacing a build or reusing an existing data directory.
 
-## Run Locally
-1. Install Go 1.24+.
-2. Optional: copy `.env.example` to `.env` and adjust runtime URL/port.
-3. Build local binary (includes `ui.web` build -> `internal/ui/static`):
+### Data paths
+
+For a normal portable launch, Cabinet creates a `data` directory beside `cabinet.exe`. This executable-local directory is the default runtime root and normally contains `cabinet.db`, `cabinet.json`, media, backups, and runtime logs.
+
+`CABINET_DATA_DIR` can override the runtime root before startup, and `CABINET_DB_PATH` can override the database file. First-run custom storage can also record another writable storage location. The `data_dir` returned by `/api/runtime` is authoritative for the running process; inspect it before backup, upgrade, rollback, or deletion instead of assuming a path.
+
+Deleting only `cabinet.exe` does not reliably remove workspace data. With the default portable layout, deleting the whole extracted folder also deletes its `data` subdirectory. Keep a verified backup outside that folder before upgrade, relocation, or removal.
+
+## Product and data boundaries
+
+- Local mode keeps Cabinet identity and workspace operations on the local runtime. ZITADEL mode is available only when its issuer, client, audience, and redirect configuration are supplied by the deployment operator.
+- Provider integrations run only when configured or invoked. Direct provider calls disclose the request and normal network metadata to that provider under its own terms.
+- The optional Browser Companion uses paired, profile-scoped loopback access. It captures supported page observations from a user-present Chrome or Edge tab, does not export cookies or tokens, does not bypass challenges, and does not perform provider writes.
+- Remote diagnostics are disabled by default. Local diagnostics remain in the Cabinet data directory; an explicitly configured remote diagnostics endpoint is contacted only after opt-in, using the runtime redaction boundary.
+- Settings exposes profile data JSON/CSV exports, backup/restore, and redacted diagnostic-log export. Review exported files before sharing them.
+
+Read the in-app Privacy Policy, Terms of Service, Help Center, and the canonical beta disclosure before using external providers or Browser Companion.
+
+## Support for this beta
+
+Use the beta coordinator who supplied the candidate as the support route. Include the Cabinet version, exact source commit, package checksum, the failing action, and a redacted diagnostics export when useful. Do not send passwords, provider credentials, Browser Companion credentials, cookies, authorization headers, raw private page content, or an unreviewed database/backup.
+
+This private beta has no support service-level commitment. Provider availability, ZITADEL operation, and optional remote diagnostics endpoints may be controlled by separate deployment operators or third parties.
+
+## Developer quick start
+
+Requirements: Go 1.24+, Node.js/npm, and PowerShell on Windows.
 
 ```powershell
 ./scripts/build-cabinet.ps1
-```
-
-4. Run:
-
-```powershell
 ./bin/cabinet.exe
 ```
 
-5. Open:
-- `http://127.0.0.1:17880/`
+`scripts/build-cabinet.ps1` builds `ui.web`, refreshes the embedded output in `internal/ui/static`, and builds the Go runtime. Useful runtime endpoints are:
+
 - `http://127.0.0.1:17880/healthz`
 - `http://127.0.0.1:17880/api/runtime`
+- `http://127.0.0.1:17880/apidocs`
+- `http://127.0.0.1:17880/api/openapi.yaml`
 
-### Isolated demo / helper instance
-- Runbook: `references/demo-instance-plan.md`
-- One-command helper launcher: `./scripts/runtime/start-demo2.ps1`
-
-### Docker Compose and Coolify
-
-- Deployment runbook: `infra/deployments/README.md`
-- Local Docker Compose:
-  `infra/deployments/local/developer-machine/docker-compose/compose.yaml`
-- Self-hosted demo:
-  `infra/deployments/demo/selfhost-server/coolify/compose.yaml`
-- Self-hosted production:
-  `infra/deployments/production/selfhost-server/coolify/compose.yaml`
-
-Local, demo and production use separate profiles, instance names and persistent
-volumes. Coolify deployments run one replica, consume isolated applications
-from the shared ZITADEL foundation and retain an approved access gate as
-defence in depth.
-
-## Branch / Demo Promotion Workflow
-- Create one focused branch per issue/fix.
-- Validate on that issue branch first.
-- Merge validated issue branches into `develop`.
-- Deploy demo/review lanes from `develop`, not from ad hoc branch heads or dirty working trees.
-- Every demo checkpoint should state the deployed branch and commit hash.
-- Merge `develop` into `main` only after Max explicitly says testing is complete and approves the merge.
-
-## Frontend Development
-- Frontend source: `ui.web/` (shadcn-admin aligned)
-- Embedded output served by Go: `internal/ui/static/`
-
-Build commands:
+For UI-only work:
 
 ```powershell
 cd ui.web
 npm install
 npm run build
-npm run e2e:foundation
 ```
 
-Then run Cabinet again:
+## Engineering sources of truth
+
+- GitHub issues and the project board define tracked delivery work.
+- `openspec/specs/` and `openspec/traceability.md` define required behavior and evidence.
+- `docs/api/openapi.yaml` is the API contract; validate it with `./scripts/validate-openapi.ps1` and `go run ./cmd/openapi-parity-gate`.
+- `docs/help-center/` is published user-facing guidance embedded in the app.
+- `release/cabinet-beta-disclosure.json` is the governed capability disclosure rendered into Help Center content and release notes.
+
+Validate OpenSpec changes with:
 
 ```powershell
-./scripts/build-cabinet.ps1
-./bin/cabinet.exe
+openspec validate --all --strict --no-interactive
 ```
 
-Notes:
-- `./scripts/build-cabinet.ps1` always builds `ui.web` and refreshes `internal/ui/static` before `go build`.
-- Use `./scripts/build-ui-static.ps1` only for explicit UI-only rebuild workflows.
-
-## Product Documentation
-- Top-level feature map / product overview: `docs/PRODUCT-OVERVIEW.md`
-- Archived product planning notes: `openspec/migration/product-planning/`
-- Help Center section drafts: `docs/help-center/`
-
-## API Documentation
-- OpenAPI source: `docs/api/openapi.yaml`
-- Runtime docs UI: `http://127.0.0.1:17880/apidocs`
-- Runtime OpenAPI spec: `http://127.0.0.1:17880/api/openapi.yaml`
-- Generated static docs output: `docs/api/index.html`
-- Validate spec: `./scripts/validate-openapi.ps1`
-- Generate static docs: `./scripts/generate-api-docs.ps1`
-- Verify runtime route/method parity and reject a zero-test result: `go run ./cmd/openapi-parity-gate`
-
-The OpenAPI contract distinguishes unlocked local Cabinet sessions (`X-Cabinet-Session`),
-ZITADEL application sessions (`cabinet_oidc_session`), and profile-scoped Browser Companion
-bearer credentials. `/healthz`, runtime discovery, the OpenAPI source, and the local companion
-module registry remain explicitly public; companion payload ingestion and provider/integration
-mutations declare their required security alternatives per operation.
-
-## OpenSpec (Spec-First Workflow)
-- OpenSpec workspace: `openspec/`
-- Workflow guide: `openspec/WORKFLOW.md`
-- Validate active changes:
-
-```powershell
-openspec validate --changes --strict --no-interactive
-```
-
-## API (Current Scaffold)
-- `GET /api/profiles`
-- `POST /api/profiles` with `{ "name": "Default" }`
-- `GET /api/profiles/active`
-- `PUT /api/profiles/active` with `{ "profile_id": "<id>" }`
-- `GET /api/profiles/{profileID}/settings`
-- `PUT /api/profiles/{profileID}/settings` with `{ "settings": { "theme": "dark" } }`
-- `GET /api/profiles/{profileID}/saved-filters`
-- `POST /api/profiles/{profileID}/saved-filters` with `{ "name": "...", "query": {...} }`
-- `PUT /api/profiles/{profileID}/saved-filters` with `{ "id": "...", "name": "...", "query": {...} }`
-- `DELETE /api/profiles/{profileID}/saved-filters?id=<filterID>`
-- `GET /api/profiles/{profileID}/storage`
-- `PUT /api/profiles/{profileID}/secrets` with `{ "key": "...", "value": "..." }`
-- `GET /api/profiles/{profileID}/secrets?key=<key>`
-- `DELETE /api/profiles/{profileID}/secrets?key=<key>`
-- `PUT /api/profiles/{profileID}/license` with `{ "license_json": "{...}" }`
-- `GET /api/profiles/{profileID}/license`
-- `GET /api/items`
-- `POST /api/items` with canonical item payload
-- `GET /api/items/{itemID}/instances`
-- `POST /api/items/{itemID}/instances` with instance payload
-- `GET /api/items/{itemID}/barcodes`
-- `POST /api/items/{itemID}/barcodes` with `{ "barcode": "..." }`
-- `GET /api/barcodes/{barcode}` for local matches
-- `GET /api/search/items?q=...&brand=...&category=...&condition=...&status=...&tags=...&scale=...&sort=...&limit=...`
-- `GET /api/scanner/query-sets`
-- `POST /api/scanner/query-sets` with query set payload
-- `POST /api/scanner/run` with `{ "query_set_id": "<id>" }`
-- `POST /api/scanner/run/scheduled`
-- `GET /api/scanner/candidates?query_set_id=<id>`
-- `GET /api/scanner/failures`
-- `GET /api/provider/health?provider=ebay`
-- `POST /api/matching/run`
-- `GET /api/matching/results`
-- `GET /api/data/export/json`
-- `GET /api/data/export/csv/items`
-- `POST /api/data/import/json/dry-run` with `{ "snapshot": {...} }`
-- `POST /api/data/import/json/apply` with `{ "snapshot": {...}, "options": { "default_action": "merge|create|skip", "overrides": { "PART": "merge|create|skip" } } }`
-- `POST /api/data/import/csv/dry-run` with `{ "csv": "....", "mapping": { "part_number": "pn_column" } }`
-- `POST /api/data/import/csv/apply` with `{ "csv_import": { "csv": "....", "mapping": {...} }, "options": {...} }`
-- `POST /api/data/reindex`
-- `POST /api/data/repair`
-- `POST /api/backup/run`
-- `GET /api/backup/list`
-- `POST /api/backup/restore` with `{ "backup_path": "..." }`
-- `GET /api/items/{itemID}/photos`
-- `POST /api/items/{itemID}/photos` multipart form field `file`
-- `DELETE /api/items/{itemID}/photos/{photoID}`
-- `PUT /api/items/{itemID}/photos/{photoID}/primary`
-- `POST /api/items/{itemID}/photos-rebuild`
-- `POST /api/auth/webauthn/register/begin` with `{ "profile_id": "<id>" }`
-- `POST /api/auth/webauthn/register/finish` with `{ "session_id": "...", "credential": {...} }`
-- `GET /api/auth/requirements?profile_id=<id>`
-- `POST /api/auth/webauthn/login/begin` with `{ "profile_id": "<id>" }`
-- `POST /api/auth/webauthn/login/finish` with `{ "session_id": "...", "credential": {...} }` returns session token
-- `POST /api/auth/recovery/passphrase` with `{ "profile_id": "<id>", "passphrase": "..." }`
-- `POST /api/auth/recovery/reset/begin` with `{ "profile_id": "<id>", "passphrase": "..." }`
-- `POST /api/auth/session/validate` with `{ "session_token": "..." }`
-- `POST /api/auth/session/lock` with `{ "session_token": "..." }`
-- `POST /api/auth/cloud/session/bootstrap` with `{ "provider": "zitadel", "token": "<jwt>" }`
-- `POST /api/onboarding/sample-data`
-
-## Environment Variables
-- `.env` in repo root is loaded automatically when present.
-- Process env vars override `.env` values.
-- `CABINET_ADDR` default: `127.0.0.1:17880`
-- `CABINET_DATA_DIR` default:
-  - Windows: `%LOCALAPPDATA%\\Cabinet`
-  - macOS/Linux: `$HOME/.cabinet`
-- `CABINET_DB_PATH` default: `${CABINET_DATA_DIR}/cabinet.db`
-- `CABINET_UPDATE_CHANNEL` values: `stable`, `beta` (default `stable`)
-- `CABINET_UPDATE_PUBLIC_KEY` base64 ed25519 public key for update signature validation
-- `CABINET_WEBAUTHN_RP_ID` default: `127.0.0.1`
-- `CABINET_WEBAUTHN_ORIGIN` default: `http://127.0.0.1:17880`
-- `CABINET_WEBAUTHN_RP_NAME` default: `Cabinet`
-- `CABINET_BACKUP_INTERVAL_MINUTES` default: `60`
-- `CABINET_AUTH_IDENTITY_MODE` values: `local`, `zitadel` (default `local`)
-- `CABINET_ZITADEL_ISSUER`, `CABINET_ZITADEL_CLIENT_ID`, and `CABINET_ZITADEL_AUDIENCE` enable the ZITADEL-backed application login when `CABINET_AUTH_IDENTITY_MODE=zitadel`
-- `CABINET_ZITADEL_WEBHOOK_SECRET` verifies cloud billing entitlement webhook requests at `/api/auth/cloud/zitadel/webhook`
-
-Exploratory auth setup guide:
-- `docs/auth/exploration-auth-setup.md`
-- preferred local exploration launcher: `scripts/runtime/start-exploration-local.ps1`
-- ZITADEL exploration uses the normal runtime with `CABINET_AUTH_IDENTITY_MODE=zitadel` and the required `CABINET_ZITADEL_*` environment values
-
-eBay provider settings are stored per profile via `PUT /api/profiles/{profileID}/settings`:
-- `ebay_bearer_token`
-- `ebay_marketplace` (example: `EBAY_US`)
-- `ebay_base_url` (optional override)
+Release branches are validated into `develop`. Promotion from `develop` to `main`, external publication, or an immutable release requires explicit approval under the repository release workflow.

@@ -100,10 +100,10 @@ export const helpCenterArticles: HelpCenterArticle[] = [
     content: uiElementsGuide,
   },
   {
-    id: 'help-center-docs-plan',
-    title: 'Help Center Docs Plan',
+    id: 'about-help-center',
+    title: 'About the Help Center',
     summary:
-      'See how Help Center content is organized and how section guides are structured.',
+      'Find published beta guidance and learn how to report a documentation correction safely.',
     category: 'Reference',
     content: helpCenterReadme,
   },
