@@ -61,6 +61,71 @@ func TestBetaReleaseTrackersUseOneAcyclicGateModel(t *testing.T) {
 	}
 }
 
+func TestTaskListNamesTheCurrentPrivateBetaCriticalPathTruthfully(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := resolveRepoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "TASK_LIST.md"))
+	if err != nil {
+		t.Fatalf("read TASK_LIST.md: %v", err)
+	}
+	content := string(raw)
+
+	for _, fragment := range []string{
+		"#2050 [DONE]",
+		"#2051 [DONE]",
+		"#2052 [DONE]",
+		"#2053 [DONE]",
+		"#2054 [DONE]",
+		"#2055 [DONE]",
+		"#2056 [DONE]",
+		"#2062 [DONE]",
+		"#2064 [DONE]",
+		"#2065 [DONE]",
+		"#2057 -> #2048 -> refresh #2066",
+		"repository settings were later applied",
+		"verified compliant",
+		"local unstaged product-documentation",
+		"local acceptance recorder",
+		"user-present live proof",
+		"do not satisfy #1944 or #1945",
+		"exact private/internal candidate",
+		"exact packaged Windows acceptance",
+		"same-candidate data safety",
+		"owner/legal decisions",
+		"explicit #1864 approval",
+	} {
+		if !strings.Contains(content, fragment) {
+			t.Errorf("TASK_LIST.md missing current release-path contract %q", fragment)
+		}
+	}
+
+	for _, stale := range []string{
+		"#2050 [READY]",
+		"#2053 [READY]",
+		"#2054 [READY]",
+		"#2055 [READY]",
+		"#2051 [READY]",
+		"#2056 [IN PROGRESS]",
+		"#2051 -> #2052 -> #2056 -> #2057 -> #2062 -> #2064 -> #2065 -> #2048",
+		"#2051 -> #2056 -> #2057 -> #2048 -> refresh #2066",
+		"staged-only dependency/security patch",
+		"local unstaged branch-protection",
+		"| #2052 | In progress",
+		"| #2056 | In progress",
+		"| #2062 | In progress",
+		"| #2064 | In progress",
+		"| #2065 | In progress",
+		"remaining source patches are locally prepared and unmerged",
+		"1 critical and 6 high production package families",
+		"develop` is 1,766 commits ahead",
+	} {
+		if strings.Contains(content, stale) {
+			t.Errorf("TASK_LIST.md retains stale release-path claim %q", stale)
+		}
+	}
+}
+
 func TestBetaReleaseApprovalCannotBlockCandidateAcceptance(t *testing.T) {
 	t.Parallel()
 
