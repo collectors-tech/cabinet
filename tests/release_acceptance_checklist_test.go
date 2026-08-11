@@ -84,3 +84,45 @@ func TestPackagedAcceptanceTraceabilityStaysBoundToOpenSpec(t *testing.T) {
 		}
 	}
 }
+
+func TestPackagedAcceptanceRecorderIsResumableFailClosedAndNonPublishing(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := resolveRepoRoot(t)
+	for relativePath, required := range map[string][]string{
+		filepath.Join("openspec", "migration", "beta-packaged-core-workflow-acceptance.md"): {
+			"scripts/record-beta-acceptance.mjs",
+			"not_run`, `blocked`, `pass`, or `fail`",
+			"candidate fingerprint",
+			"stale candidate",
+			"operator-confirmed",
+			"JSON and Markdown",
+		},
+		filepath.Join("openspec", "specs", "general", "runtime-core", "spec.md"): {
+			"resumable evidence recorder",
+			"exact-candidate fingerprint",
+			"MUST NOT auto-pass",
+			"redact credentials, bearer and cookie material, private page content, and sensitive local paths",
+		},
+		filepath.Join("openspec", "traceability.md"): {
+			"#2048",
+			"acceptance-evidence-recorder.test.mjs",
+			"TestPackagedAcceptanceRecorderIsResumableFailClosedAndNonPublishing",
+		},
+		"package.json": {
+			"acceptance:record",
+			"scripts/record-beta-acceptance.mjs",
+		},
+	} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		content := string(raw)
+		for _, fragment := range required {
+			if !strings.Contains(content, fragment) {
+				t.Errorf("%s missing acceptance-recorder contract %q", relativePath, fragment)
+			}
+		}
+	}
+}

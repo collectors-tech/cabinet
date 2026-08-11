@@ -54,6 +54,12 @@ Cabinet beta release acceptance SHALL be encoded as a stable checklist before pa
 - **AND** the checklist SHALL cover onboarding, inventory, media, wishlist-to-inventory, collections, export, backup, restore, Market Watch, Discovery handoff, failed-provider recovery, invalid import/restore recovery, restart persistence, profile isolation, and version visibility
 - **AND** every failure SHALL create or link a focused issue before rerun
 - **AND** the final packaged journey SHALL use the packaged binary without test-only hooks, dirty worktree state, unapproved release publication, or `develop` to `main` promotion
+- **AND** a resumable evidence recorder SHALL bind all checklist rows to one exact-candidate fingerprint covering the Cabinet manifest/package/checksum, both Browser Companion target packages/checksums, the combined manifest, source commit, versions and candidate-gate identity
+- **AND** the recorder SHALL preserve one result per stable row across same-candidate resume, archive stale-candidate evidence, and reset every row when any bound candidate identity changes
+- **AND** every row SHALL remain one of `not_run`, `blocked`, `pass` or `fail`; pass/fail SHALL require non-secret evidence references and operator notes, and blocked SHALL require an exact unblock condition
+- **AND** human Frontline, Bonza, packaged install, UI and recovery steps MUST NOT auto-pass and SHALL require explicit operator confirmation
+- **AND** deterministic JSON and Markdown evidence SHALL record the candidate, isolated environment, per-row state and overall result while the recorder SHALL redact credentials, bearer and cookie material, private page content, and sensitive local paths
+- **AND** the recorder MUST NOT publish a release, promote a branch, solve provider challenges or operate the browser on the operator's behalf
 
 ### Requirement RUNTIME-CORE-021: Beta release gates SHALL remain acyclic
 Cabinet SHALL separate source/live readiness, internal candidate creation, packaged acceptance, final approval and external publication into ordered release gates.
