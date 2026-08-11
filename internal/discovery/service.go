@@ -355,54 +355,8 @@ func (s *Service) ApplyActionWithResult(ctx context.Context, a Action) (ActionRe
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "wishlisted", reviewerNotes); err != nil {
 			return ActionResult{}, err
 		}
-		var itemID string
-		if err := s.db.QueryRowContext(ctx, `SELECT item_id FROM scanner_matches WHERE candidate_id = ?`, a.CandidateID).Scan(&itemID); err == nil && strings.TrimSpace(itemID) != "" {
-			var profileID, listingURL, seller, stockSignal, sourceProvider, querySetID, queryName, providerScopeJSON, observedCurrency string
-			var observedPrice float64
-			scanErr := s.db.QueryRowContext(ctx, `
-				SELECT c.profile_id, COALESCE(NULLIF(c.source_result_url, ''), c.url), c.seller, c.stock_state, c.price, c.observed_currency, c.source, c.query_set_id, COALESCE(q.name, ''), COALESCE(q.provider_scope_json, '[]')
-				FROM scanner_candidates c
-				LEFT JOIN scanner_query_sets q ON q.id = c.query_set_id
-				WHERE c.id = ?
-			`, a.CandidateID).Scan(&profileID, &listingURL, &seller, &stockSignal, &observedPrice, &observedCurrency, &sourceProvider, &querySetID, &queryName, &providerScopeJSON)
-			if scanErr != nil {
-				_ = s.db.QueryRowContext(ctx, `
-					SELECT COALESCE(NULLIF(source_result_url, ''), url), seller, stock_state, price, source, query_set_id
-					FROM scanner_candidates
-					WHERE id = ?
-				`, a.CandidateID).Scan(&listingURL, &seller, &stockSignal, &observedPrice, &sourceProvider, &querySetID)
-			}
-			profileID = strings.TrimSpace(profileID)
-			if profileID == "" {
-				_ = s.db.QueryRowContext(ctx, `SELECT profile_id FROM canonical_items WHERE id = ?`, itemID).Scan(&profileID)
-				profileID = strings.TrimSpace(profileID)
-			}
-			metadata := buildDiscoveryMetadataNote(listingURL, seller, stockSignal, observedPrice, observedCurrency, sourceProvider, querySetID, queryName, decodeStringArray(providerScopeJSON))
-			var existingID, existingNotes string
-			if err := s.db.QueryRowContext(ctx, `SELECT id, notes FROM wishlist_entries WHERE item_id = ? AND (? = '' OR profile_id = ?)`, itemID, profileID, profileID).Scan(&existingID, &existingNotes); err == nil {
-				mergedNotes := mergeDiscoveryMetadataNotes(existingNotes, metadata)
-				_, _ = s.db.ExecContext(ctx, `
-					UPDATE wishlist_entries
-					SET notes = ?, highlight_hit = 1, updated_at = CURRENT_TIMESTAMP
-					WHERE id = ?
-				`, mergedNotes, existingID)
-				_, _ = s.db.ExecContext(ctx, `
-					UPDATE canonical_items
-					SET status = 'wishlist', updated_at = CURRENT_TIMESTAMP, updated_by = 'discovery.service'
-					WHERE id = ? AND (? = '' OR profile_id = ?)
-				`, itemID, profileID, profileID)
-				break
-			}
-			_, _ = s.db.ExecContext(ctx, `
-				INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
-				VALUES (?, ?, ?, ?, 'medium', ?, 1)
-				ON CONFLICT(item_id) DO UPDATE SET notes = excluded.notes, highlight_hit = 1, updated_at = CURRENT_TIMESTAMP
-			`, uuid.NewString(), profileID, itemID, 0.0, metadata)
-			_, _ = s.db.ExecContext(ctx, `
-				UPDATE canonical_items
-				SET status = 'wishlist', priority = 'medium', updated_at = CURRENT_TIMESTAMP, updated_by = 'discovery.service'
-				WHERE id = ? AND (? = '' OR profile_id = ?)
-			`, itemID, profileID, profileID)
+		if err := s.applyWishlistHandoff(ctx, a.CandidateID); err != nil {
+			return ActionResult{}, err
 		}
 	case ActionCreateItem:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "inventory_candidate", reviewerNotes); err != nil {
@@ -500,9 +454,65 @@ func (s *Service) ensureCandidateItem(ctx context.Context, data candidateHandoff
 		VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, 'discovery.service', 'discovery.service')
 	`, itemID, strings.TrimSpace(data.ProfileID), "Unknown", "Unknown", partNumber, strings.TrimSpace(data.Title), metadata, string(sourceURLs))
 	if err != nil {
-		return "", fmt.Errorf("create purchase handoff item: %w", err)
+		return "", fmt.Errorf("create candidate handoff item: %w", err)
 	}
 	return itemID, nil
+}
+
+func (s *Service) applyWishlistHandoff(ctx context.Context, candidateID string) error {
+	data, err := s.loadCandidateHandoffContext(ctx, candidateID)
+	if err != nil {
+		return err
+	}
+	itemID, err := s.ensureCandidateItem(ctx, data)
+	if err != nil {
+		return err
+	}
+	if data.ItemID == "" {
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE scanner_matches
+			SET item_id = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE candidate_id = ? AND item_id = ''
+		`, itemID, data.CandidateID); err != nil {
+			return fmt.Errorf("link candidate handoff item: %w", err)
+		}
+	}
+
+	metadata := buildDiscoveryMetadataNote(data.ListingURL, data.Seller, data.StockSignal, data.ObservedPrice, data.ObservedCurrency,
+		data.SourceProvider, data.QuerySetID, data.QueryName, decodeStringArray(data.ProviderScopeJSON))
+	var existingID, existingNotes string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT id, notes
+		FROM wishlist_entries
+		WHERE item_id = ? AND profile_id = ?
+	`, itemID, data.ProfileID).Scan(&existingID, &existingNotes)
+	if err == nil {
+		metadata = mergeDiscoveryMetadataNotes(existingNotes, metadata)
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE wishlist_entries
+			SET notes = ?, highlight_hit = 1, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND profile_id = ?
+		`, metadata, existingID, data.ProfileID); err != nil {
+			return fmt.Errorf("update candidate Wishlist handoff: %w", err)
+		}
+	} else if err == sql.ErrNoRows {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
+			VALUES (?, ?, ?, 0, 'medium', ?, 1)
+		`, uuid.NewString(), data.ProfileID, itemID, metadata); err != nil {
+			return fmt.Errorf("create candidate Wishlist handoff: %w", err)
+		}
+	} else {
+		return fmt.Errorf("find candidate Wishlist handoff: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE canonical_items
+		SET status = 'wishlist', priority = 'medium', updated_at = CURRENT_TIMESTAMP, updated_by = 'discovery.service'
+		WHERE id = ? AND profile_id = ?
+	`, itemID, data.ProfileID); err != nil {
+		return fmt.Errorf("update candidate Wishlist item: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) applyPurchaseHandoff(ctx context.Context, candidateID string, payload map[string]any) error {

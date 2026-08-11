@@ -516,6 +516,13 @@ func dispatchProviderItems(ctx context.Context, tx *sql.Tx, captureID string, in
 			providerScope, item.Currency, sanitiseCaptureURL(in.URL), stockState, stockCount); err != nil {
 			return 0, 0, err
 		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+			VALUES (?, '', 'not_in_collection', 0, 1, ?, ?)
+			ON CONFLICT(candidate_id) DO NOTHING
+		`, candidateID, listingKey, now); err != nil {
+			return 0, 0, err
+		}
 	}
 	runID := deterministicID("companion-run", captureID)
 	if _, err := tx.ExecContext(ctx, `

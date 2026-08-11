@@ -175,16 +175,8 @@ func TestFrontlineCompanionCandidateCanBeConfirmedIntoWishlist(t *testing.T) {
 	if run.Provider != "frontlinehobbies" || run.TriggerType != "browser_companion" || run.Status != "succeeded" || run.ResultCount <= 0 {
 		t.Fatalf("Frontline companion run history lost canonical success evidence: %+v", run)
 	}
-	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title)
-		VALUES ('frontline-handoff-item', ?, 'AFX', 'Slot Cars', ?, ?)`, created.ID, listingID, title); err != nil {
-		t.Fatalf("seed confirmed Frontline item match: %v", err)
-	}
-	if _, err := a.db.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
-		VALUES (?, 'frontline-handoff-item', 'not_in_collection', 0.95, 0, ?, CURRENT_TIMESTAMP)`, candidateID, listingID); err != nil {
-		t.Fatalf("seed Frontline candidate match: %v", err)
-	}
 	action := doRequest(t, a, http.MethodPost, "/api/discovery/action", strings.NewReader(
-		`{"candidate_id":"`+candidateID+`","type":"add_to_wishlist","payload":{"source":"browser_companion","query_set_id":"`+querySetID+`"}}`,
+		`{"candidate_id":"`+candidateID+`","type":"add_to_wishlist","payload":{"source":"browser_companion","query_set_id":"`+querySetID+`","reviewer_notes":"Reviewed Frontline capture"}}`,
 	), map[string]string{"Content-Type": "application/json"})
 	if action.Code != http.StatusOK {
 		t.Fatalf("Frontline Wishlist hand-off status=%d body=%s", action.Code, action.Body.String())
@@ -202,7 +194,9 @@ func TestFrontlineCompanionCandidateCanBeConfirmedIntoWishlist(t *testing.T) {
 	}
 	var wishlistCount int
 	if err := a.db.QueryRow(`SELECT COUNT(*) FROM wishlist_entries w JOIN canonical_items i ON i.id = w.item_id
-		WHERE w.profile_id = ? AND i.id = 'frontline-handoff-item'`, created.ID).Scan(&wishlistCount); err != nil || wishlistCount != 1 {
+		JOIN scanner_matches m ON m.item_id = i.id
+		WHERE w.profile_id = ? AND i.profile_id = ? AND m.candidate_id = ? AND i.part_number = ? AND w.owned = 0`,
+		created.ID, created.ID, candidateID, listingID).Scan(&wishlistCount); err != nil || wishlistCount != 1 {
 		t.Fatalf("Frontline Wishlist hand-off count=%d err=%v price=%v", wishlistCount, err, price)
 	}
 }
