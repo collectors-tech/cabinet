@@ -47,7 +47,8 @@ jobs:
             })
             const trusted = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
             const marker = `APPROVE CABINET 0.1 PRIVATE BETA ${sha}`
-            if (!comment.issue_url.endsWith('/issues/1864') || !trusted.has(comment.author_association) || !comment.body.includes(marker)) {
+            const hasExactMarker = comment.body.split(/\r?\n/).some((line) => line.trim() === marker)
+            if (!comment.issue_url.endsWith('/issues/1864') || comment.user?.login !== 'wildone' || !trusted.has(comment.author_association) || !hasExactMarker) {
               throw new Error(`Comment ${commentId} is not trusted exact #1864 approval for ${sha}`)
             }
 

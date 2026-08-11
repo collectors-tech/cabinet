@@ -10,6 +10,8 @@
     "security:dependencies": "node scripts/check-production-dependencies.mjs",
     "test:companion-package": "node --test scripts/browser-companion-package.test.mjs",
     "test:release-package": "node --test scripts/package-installers.test.mjs scripts/cabinet-release-package.test.mjs scripts/beta-disclosure-contract.test.mjs scripts/dependency-security.test.mjs",
+    "test:branch-protection": "node --test scripts/branch-protection-contract.test.mjs",
+    "verify:branch-protection": "node scripts/verify-branch-protection.mjs",
     "package:companion": "node scripts/package-browser-companion.mjs",
     "verify:companion-package": "node scripts/verify-browser-companion-package.mjs",
     "verify:cabinet-package": "node scripts/verify-cabinet-release-package.mjs",
