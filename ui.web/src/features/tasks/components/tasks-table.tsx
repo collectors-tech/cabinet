@@ -47,7 +47,8 @@ import { useProfileSettings } from '@/features/settings/use-profile-settings'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { WishlistThumbnail, getTasksColumns } from './tasks-columns'
+import { getTasksColumns } from './tasks-columns'
+import { WishlistThumbnail } from './wishlist-thumbnail'
 
 type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 

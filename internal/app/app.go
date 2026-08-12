@@ -8325,6 +8325,9 @@ func requiresUnlockedSession(cfg config.Config, r *http.Request) bool {
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
 		return false
 	}
+	if cfg.EnableE2EHooks {
+		return false
+	}
 	if strings.EqualFold(cfg.BindMode, "lan") {
 		return !isPublicAPIRequest(r)
 	}

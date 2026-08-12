@@ -1,60 +1,15 @@
 import {
   ComposerPrimitive,
   ThreadPrimitive,
-  type AppendMessage,
   type MessageState,
-  type ThreadMessageLike,
 } from '@assistant-ui/react'
 import { Bot, Send, UserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-
-export type CabinetAssistantUiMessage = {
-  id: string
-  role: string
-  content: string
-  context?: {
-    route?: { pathname?: string; search?: string }
-    profile?: { id?: string }
-    assistant?: { provider?: string; model?: string }
-    app_control?: unknown
-  }
-}
-
-export type CabinetAssistantUiComposerState = {
-  disabled: boolean
-  sending: boolean
-}
-
-export function cabinetMessageToAssistantUi(
-  message: CabinetAssistantUiMessage
-): ThreadMessageLike {
-  const role =
-    message.role === 'assistant' || message.role === 'system'
-      ? message.role
-      : 'user'
-  return {
-    id: message.id,
-    role,
-    content: message.content,
-    metadata: {
-      custom: {
-        cabinet_message_id: message.id,
-        cabinet_route: message.context?.route,
-        cabinet_profile: message.context?.profile,
-        cabinet_assistant: message.context?.assistant,
-      },
-    },
-  }
-}
-
-export function assistantAppendMessageText(message: AppendMessage) {
-  return message.content
-    .filter((part) => part.type === 'text')
-    .map((part) => part.text)
-    .join('\n')
-    .trim()
-}
+import {
+  type CabinetAssistantUiComposerState,
+  type CabinetAssistantUiMessage,
+} from './assistant-ui-adapter-utils'
 
 function assistantUiMessageText(message: MessageState) {
   return message.content

@@ -28,7 +28,7 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { recordNotificationHistory } from '@/lib/toast-history'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {

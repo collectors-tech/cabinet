@@ -1,40 +1,11 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
-
-export type ShellWorkspace = 'navigation' | 'search' | 'assistant' | 'inbox'
-
-type ShellWorkspaceContextValue = {
-  activeWorkspace: ShellWorkspace
-  setActiveWorkspace: (workspace: ShellWorkspace) => void
-  toggleAssistantWorkspace: () => void
-  activeProfileId: string
-}
-
-const ShellWorkspaceContext = createContext<ShellWorkspaceContextValue | null>(
-  null
-)
-
-function normalizeWorkspace(value: string | null | undefined): ShellWorkspace {
-  switch (value) {
-    case 'search':
-    case 'assistant':
-    case 'inbox':
-      return value
-    default:
-      return 'navigation'
-  }
-}
-
-function storageKey(profileId: string) {
-  return `cabinet.shell.workspace.active.${profileId || 'local'}`
-}
+  ShellWorkspaceContext,
+  type ShellWorkspace,
+  type ShellWorkspaceContextValue,
+  normalizeWorkspace,
+  shellWorkspaceStorageKey,
+} from './shell-workspace-context'
 
 type ShellWorkspaceProviderProps = {
   children: React.ReactNode
@@ -65,7 +36,9 @@ export function ShellWorkspaceProvider({
         const savedWorkspace = (() => {
           try {
             return normalizeWorkspace(
-              window.localStorage.getItem(storageKey(nextProfileId))
+              window.localStorage.getItem(
+                shellWorkspaceStorageKey(nextProfileId)
+              )
             )
           } catch {
             return 'navigation'
@@ -77,7 +50,7 @@ export function ShellWorkspaceProvider({
           setActiveWorkspaceState(userSelectedWorkspace)
           try {
             window.localStorage.setItem(
-              storageKey(nextProfileId),
+              shellWorkspaceStorageKey(nextProfileId),
               userSelectedWorkspace
             )
           } catch {
@@ -105,7 +78,10 @@ export function ShellWorkspaceProvider({
       userSelectedWorkspaceRef.current = workspace
       setActiveWorkspaceState(workspace)
       try {
-        window.localStorage.setItem(storageKey(activeProfileId), workspace)
+        window.localStorage.setItem(
+          shellWorkspaceStorageKey(activeProfileId),
+          workspace
+        )
       } catch {
         // Ignore storage failures and keep in-memory state.
       }
@@ -139,14 +115,4 @@ export function ShellWorkspaceProvider({
       {children}
     </ShellWorkspaceContext.Provider>
   )
-}
-
-export function useShellWorkspace() {
-  const context = useContext(ShellWorkspaceContext)
-  if (!context) {
-    throw new Error(
-      'useShellWorkspace must be used within a ShellWorkspaceProvider'
-    )
-  }
-  return context
 }

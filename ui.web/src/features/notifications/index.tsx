@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { loadToastHistory, type ToastHistoryRecord } from '@/lib/toast-history'
 import { cn } from '@/lib/utils'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-context'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

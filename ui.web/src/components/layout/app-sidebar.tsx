@@ -17,7 +17,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useLayout } from '@/context/layout-provider'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-context'
 import {
   Sidebar,
   SidebarContent,
