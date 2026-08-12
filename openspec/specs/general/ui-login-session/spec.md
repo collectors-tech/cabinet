@@ -93,3 +93,13 @@ Cabinet SHALL preserve protected deep-link path and query state through unauthen
 - **WHEN** route guards redirect the user to sign-in and the user signs in successfully
 - **THEN** the post-login route MUST return to `/inventory`
 - **AND** the query state MUST remain available after session bootstrap
+
+### Requirement UI-LOGIN-SESSION-012: Local Agent requests SHALL carry a server-bound session credential
+Cabinet SHALL obtain an opaque server-issued local session for the active profile in local-device mode and use it only for same-origin protected Cabinet Chat and Agent requests.
+
+#### Scenario: Local Agent request carries memory-only server session
+- **GIVEN** a same-origin loopback local-device session opens a protected workspace route for the active profile
+- **WHEN** the user sends or previews a protected Chat or Agent action
+- **THEN** the request MUST include the server-issued `X-Cabinet-Session` credential bound to the active profile
+- **AND** missing, stale, wrong-profile, LAN-mode, ZITADEL-mode, or registered-passkey bootstrap attempts MUST fail closed
+- **AND** outside the one-time bootstrap response, the credential MUST NOT be persisted in cookies, browser storage, URLs, rendered DOM, Chat messages, workflow evidence, logs, or response bodies

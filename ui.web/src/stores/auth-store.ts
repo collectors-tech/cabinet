@@ -6,6 +6,7 @@ const AUTH_USER = 'cabinet_auth_user'
 const REJECTED_LEGACY_TOKENS = new Set([
   'mock-access-token',
   'mock-passkey-access-token',
+  'cabinet-local-device-session-v1',
 ])
 
 interface AuthUser {
@@ -22,7 +23,11 @@ interface AuthState {
     setRemoteUser: (user: AuthUser) => void
     remoteSession: boolean
     accessToken: string
+    localSessionProfileID: string
+    localSessionToken: string
     setAccessToken: (accessToken: string) => void
+    setLocalSession: (profileID: string, token: string) => void
+    clearLocalSession: () => void
     resetAccessToken: () => void
     reset: () => void
   }
@@ -77,11 +82,31 @@ export const useAuthStore = create<AuthState>()((set) => {
         }),
       remoteSession: false,
       accessToken: initToken,
+      localSessionProfileID: '',
+      localSessionToken: '',
       setAccessToken: (accessToken) =>
         set((state) => {
           setCookie(ACCESS_TOKEN, JSON.stringify(accessToken))
           return { ...state, auth: { ...state.auth, accessToken } }
         }),
+      setLocalSession: (profileID, token) =>
+        set((state) => ({
+          ...state,
+          auth: {
+            ...state.auth,
+            localSessionProfileID: profileID,
+            localSessionToken: token,
+          },
+        })),
+      clearLocalSession: () =>
+        set((state) => ({
+          ...state,
+          auth: {
+            ...state.auth,
+            localSessionProfileID: '',
+            localSessionToken: '',
+          },
+        })),
       resetAccessToken: () =>
         set((state) => {
           removeCookie(ACCESS_TOKEN)
@@ -97,6 +122,8 @@ export const useAuthStore = create<AuthState>()((set) => {
               ...state.auth,
               user: null,
               accessToken: '',
+              localSessionProfileID: '',
+              localSessionToken: '',
               remoteSession: false,
             },
           }

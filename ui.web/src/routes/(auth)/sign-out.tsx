@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
+import { lockLocalServerSession } from '@/lib/cabinet-session'
 
 const searchSchema = z.object({
   redirect: z.string().optional(),
@@ -10,6 +11,7 @@ export const Route = createFileRoute('/(auth)/sign-out')({
   validateSearch: searchSchema,
   beforeLoad: async ({ search }) => {
     let providerLogoutURL = ''
+    await lockLocalServerSession()
     try {
       const response = await fetch('/api/auth/zitadel/logout', {
         method: 'POST',

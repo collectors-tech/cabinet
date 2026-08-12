@@ -7,6 +7,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -135,8 +136,9 @@ export function SettingsSkills() {
       }
       setProfileID(nextProfileID)
 
-      const skillsResp = await fetch(
-        `/api/agent/skills?profile_id=${encodeURIComponent(nextProfileID)}`
+      const skillsResp = await cabinetProtectedFetch(
+        `/api/agent/skills?profile_id=${encodeURIComponent(nextProfileID)}`,
+        nextProfileID
       )
       if (!skillsResp.ok) {
         throw new Error('skills_unavailable')
@@ -196,14 +198,18 @@ export function SettingsSkills() {
     setImportError(null)
     setImportResult(null)
     try {
-      const response = await fetch('/api/agent/skills/import', {
+      const response = await cabinetProtectedFetch(
+        '/api/agent/skills/import',
+        profileID,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           profile_id: profileID,
           path: sourcePath,
         }),
-      })
+        }
+      )
       const payload = (await response.json()) as ImportResponse
       const result = payload.result ?? payload
       if (!response.ok) {
@@ -244,7 +250,10 @@ export function SettingsSkills() {
     setStatePendingSkillID(skill.id)
     setStateError(null)
     try {
-      const response = await fetch('/api/agent/skills/state', {
+      const response = await cabinetProtectedFetch(
+        '/api/agent/skills/state',
+        profileID,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -253,7 +262,8 @@ export function SettingsSkills() {
           enabled,
           confirm: needsStrongConfirmation,
         }),
-      })
+        }
+      )
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as
           | { error?: string }

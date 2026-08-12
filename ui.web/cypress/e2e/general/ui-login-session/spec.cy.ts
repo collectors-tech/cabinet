@@ -75,6 +75,15 @@ describe("ui-login-session", () => {
   it("UI-LOGIN-SESSION-003 switches active profile after login and uses selected profile scope for subsequent API calls", () => {
     let activeProfile = { id: "p1", name: "Default" };
 
+    cy.intercept("POST", "/api/auth/local/session", {
+      statusCode: 200,
+      body: {
+        ok: true,
+        session_token:
+          "test-only-opaque-profile-bound-session-credential-000000000001",
+      },
+    }).as("localServerSession");
+
     cy.intercept("GET", "/api/profiles", {
       statusCode: 200,
       body: {

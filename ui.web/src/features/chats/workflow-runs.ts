@@ -1,3 +1,5 @@
+import { cabinetProtectedFetch } from '@/lib/cabinet-session'
+
 export type ChatWorkflowRun = {
   id: string
   workflow_id: string
@@ -24,8 +26,9 @@ export async function fetchChatWorkflowRuns(
   if (!profileId || !threadId) {
     return []
   }
-  const response = await fetch(
-    `/api/chat/workflow-runs?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(threadId)}`
+  const response = await cabinetProtectedFetch(
+    `/api/chat/workflow-runs?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(threadId)}`,
+    profileId
   )
   if (!response.ok) {
     throw new Error(`chat_workflow_runs_${response.status}`)

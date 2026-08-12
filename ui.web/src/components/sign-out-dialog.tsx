@@ -1,5 +1,6 @@
 import { useLocation } from '@tanstack/react-router'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { lockLocalServerSession } from '@/lib/cabinet-session'
 
 interface SignOutDialogProps {
   open: boolean
@@ -9,7 +10,8 @@ interface SignOutDialogProps {
 export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
   const location = useLocation()
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await lockLocalServerSession()
     // Preserve current location for optional post-login return after a clean sign-out.
     const currentPath = encodeURIComponent(location.href)
     window.location.replace(`/sign-out?redirect=${currentPath}`)

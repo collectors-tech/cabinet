@@ -28,6 +28,7 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { recordNotificationHistory } from '@/lib/toast-history'
+import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import { useShellWorkspace } from '@/context/shell-workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -702,7 +703,10 @@ export function Media() {
       setAnalysisLoading(true)
       setAssignmentSuccess(null)
       try {
-        const response = await fetch('/api/chat/workflow-runs', {
+        const response = await cabinetProtectedFetch(
+          '/api/chat/workflow-runs',
+          activeProfileId,
+          {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -721,7 +725,8 @@ export function Media() {
               media_access: 'read',
             },
           }),
-        })
+          }
+        )
         if (!response.ok) {
           throw new Error(`media_analysis_${response.status}`)
         }
