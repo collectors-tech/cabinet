@@ -11,9 +11,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { RecordActionMenu } from './record-action-menu'
-import { RecordDestructiveConfirmDialog } from './record-destructive-confirm-dialog'
+import {
+  RecordDestructiveConfirmDialog,
+  type RecordDestructiveAction,
+} from './record-destructive-confirm-dialog'
 import { RecordEditDialog } from './record-edit-dialog'
-import type { RecordDestructiveAction } from './record-destructive-confirm-dialog'
 
 const demoRecord = {
   id: 'demo-charizard',

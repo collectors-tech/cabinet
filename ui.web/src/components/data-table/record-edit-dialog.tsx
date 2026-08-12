@@ -1,6 +1,6 @@
-import { X } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { X, type LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
 
 type RecordEditDialogProps = {
   open: boolean

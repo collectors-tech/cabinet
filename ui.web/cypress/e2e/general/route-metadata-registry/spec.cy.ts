@@ -138,9 +138,12 @@ describe('route metadata registry', () => {
         title,
         documentTitle,
       })
-      expect(metadata?.description, `${path} description`).to.be.a('string').and
-        .not.be.empty
-      expect(metadata?.icon, `${path} icon`).to.exist
+      expect(metadata?.description, `${path} description`).to.be.a('string')
+      expect(
+        metadata?.description.trim().length,
+        `${path} non-empty description`
+      ).to.be.greaterThan(0)
+      expect(metadata?.icon, `${path} icon`).to.not.equal(undefined)
       expect(metadata?.navigationGroup, `${path} navigation group`).to.be.oneOf([
         'General',
         'Settings',
