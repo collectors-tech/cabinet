@@ -136,3 +136,20 @@ The shell Assistant side-panel Agent Skill card MUST support governed skill exec
 - **THEN** the preview request MUST include the active profile, thread, `source_channel=in-app`, `source_surface=purchases.inbox.capture`, purchase source, item ID, and source URL
 - **AND** the apply request MUST repeat that same source context with `confirm=true`
 - **AND** the side-panel MUST show preview and result state without applying an unconfirmed mutation
+
+### Requirement ASSISTANT-WORKSPACE-016: Assistant thread bootstrap SHALL remain lint-clean without stale context
+The shell Assistant side-panel MUST keep React Hook dependency semantics explicit so route context, selected record context, provider/model defaults, and thread bootstrap logic remain stable without duplicate thread creation or stale provider/model state.
+
+#### Scenario: Bootstrap uses stable assistant thread callbacks
+- **GIVEN** the shell Assistant side-panel opens for an active profile with stored or default provider/model settings
+- **WHEN** React effects bootstrap the assistant thread and load messages
+- **THEN** the bootstrap effect MUST use stable callback dependencies
+- **AND** it MUST NOT create duplicate assistant workspace threads for the same active profile/defaults
+- **AND** loaded thread metadata MUST continue to set the visible provider and model.
+
+#### Scenario: Default provider sync observes provider/model metadata explicitly
+- **GIVEN** an active assistant workspace thread uses `assistant_workspace_session` semantics
+- **WHEN** integration-level assistant defaults change from the stored provider/model
+- **THEN** the side-panel default sync MUST compare the current visible provider/model and the thread metadata provider/model explicitly
+- **AND** it MUST update local storage and visible provider/model only for assistant workspace session threads
+- **AND** route/search/message re-renders MUST NOT cause unrelated context recomputation or thread reset.

@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/config"
 )
 
 func TestLocalRequestBoundaryRejectsCrossSiteSimpleMutation(t *testing.T) {
@@ -99,5 +101,25 @@ func TestPublicAPIAllowlistIsMinimalAndMethodAware(t *testing.T) {
 				t.Fatalf("isPublicAPIRequest(%s %s)=%v want=%v", tc.method, tc.path, got, tc.public)
 			}
 		})
+	}
+}
+
+func TestE2EModeBypassesLocalUnlockOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	resetReq := httptest.NewRequest(http.MethodPost, "/api/test/reset", nil)
+	if got := requiresUnlockedSession(config.Config{}, resetReq); !got {
+		t.Fatalf("E2E hook should remain locked when E2E hooks are disabled")
+	}
+	if got := requiresUnlockedSession(config.Config{EnableE2EHooks: true}, resetReq); got {
+		t.Fatalf("E2E hook should bypass local unlock when E2E hooks are enabled")
+	}
+
+	itemReq := httptest.NewRequest(http.MethodPost, "/api/items", nil)
+	if got := requiresUnlockedSession(config.Config{}, itemReq); !got {
+		t.Fatalf("normal mutation should require local unlock when E2E hooks are disabled")
+	}
+	if got := requiresUnlockedSession(config.Config{EnableE2EHooks: true}, itemReq); got {
+		t.Fatalf("E2E mode should bypass local unlock for fixture-driven API mutations")
 	}
 }

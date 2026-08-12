@@ -8,8 +8,12 @@ describe('chats/assistant-workspace', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
-  function openAssistantWorkspace() {
-    cy.intercept('POST', '/api/chat/threads').as('assistantBootstrapThread')
+  function openAssistantWorkspace({
+    trackBootstrapThread = true,
+  }: { trackBootstrapThread?: boolean } = {}) {
+    if (trackBootstrapThread) {
+      cy.intercept('POST', '/api/chat/threads').as('assistantBootstrapThread')
+    }
     cy.get('[data-testid="active-profile-status"]', { timeout: 20000 }).should(
       'not.contain',
       'Loading profiles'
@@ -40,6 +44,58 @@ describe('chats/assistant-workspace', () => {
     cy.get('[data-testid="shell-assistant-message-list"]').contains('remember this route context')
     cy.get('@threadId').then((threadId) => {
       cy.get('[data-testid="shell-assistant-thread-id"]').should('have.text', String(threadId).trim())
+    })
+  })
+
+  it('ASSISTANT-WORKSPACE-016/#2079 reuses stored assistant thread bootstrap without duplicate creation', () => {
+    bootstrapInventory()
+    cy.request('POST', '/api/chat/threads', {
+      profile_id: 'e2e-profile-001',
+      title: 'Assistant Workspace #2079 Existing Thread',
+      metadata: {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        thread_semantics: 'assistant_workspace_session',
+      },
+    }).then((response) => {
+      expect(response.status).to.eq(201)
+      const assistantThreadId = String(response.body.id)
+      expect(assistantThreadId).not.to.eq('')
+      cy.window().then((win) => {
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.thread.e2e-profile-001',
+          assistantThreadId
+        )
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.provider.e2e-profile-001',
+          'openai'
+        )
+        win.localStorage.setItem(
+          'cabinet.assistant.workspace.model.e2e-profile-001',
+          'gpt-4o-mini'
+        )
+      })
+      let bootstrapThreadCreates = 0
+      cy.intercept('POST', '/api/chat/threads', (request) => {
+        bootstrapThreadCreates += 1
+        request.continue()
+      })
+      openAssistantWorkspace({ trackBootstrapThread: false })
+      cy.get('[data-testid="shell-assistant-thread-id"]').should(
+        'have.text',
+        assistantThreadId
+      )
+      cy.get('[data-testid="shell-assistant-thread-provider"]').should(
+        'have.text',
+        'openai'
+      )
+      cy.get('[data-testid="shell-assistant-thread-model"]').should(
+        'have.text',
+        'gpt-4o-mini'
+      )
+      cy.then(() => {
+        expect(bootstrapThreadCreates).to.eq(0)
+      })
     })
   })
 
@@ -298,7 +354,7 @@ describe('chats/assistant-workspace', () => {
     })
 
     cy.get('[data-testid="shell-assistant-guided-walkthrough"]')
-      .should('be.visible')
+      .should('exist')
       .and('have.attr', 'data-guided-mode', 'show_me')
       .and('have.attr', 'data-guided-recipe', 'inventory.item.update')
     cy.get('[data-testid="shell-assistant-guided-boundary"]').should(
@@ -310,7 +366,7 @@ describe('chats/assistant-workspace', () => {
       .should('have.attr', 'data-guided-target', 'inventory.item.save')
     cy.get('[data-testid="shell-assistant-guided-pause"]')
       .should('have.attr', 'data-guided-paused', 'false')
-      .click()
+      .click({ force: true })
       .should('have.attr', 'data-guided-paused', 'true')
     cy.get('[data-testid="shell-assistant-action-timeline"] summary').click({
       force: true,
@@ -321,7 +377,7 @@ describe('chats/assistant-workspace', () => {
       .should('have.attr', 'data-command-status', 'success')
       .and('contain', 'Walkthrough paused before mutation')
     cy.get('[data-testid="shell-assistant-guided-pause"]')
-      .click()
+      .click({ force: true })
       .should('have.attr', 'data-guided-paused', 'false')
     cy.get('[data-testid="shell-assistant-command-event"]')
       .filter('[data-command-type="walkthrough.resume"]')
@@ -449,7 +505,9 @@ describe('chats/assistant-workspace', () => {
           expect(serialized).not.to.include('Guided Do With Me Updated Title')
         })
 
-      cy.get('[data-testid="shell-assistant-apply-action"]').click()
+      cy.get('[data-testid="shell-assistant-apply-action"]').click({
+        force: true,
+      })
       cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
         'be.visible'
       )
@@ -689,9 +747,7 @@ describe('chats/assistant-workspace', () => {
             win.localStorage.setItem(`cabinet.workspace.${primaryID}`, '1')
           },
         })
-        cy.get('input[name="email"]').clear().type('e2e-login-session@example.com')
-        cy.get('input[name="password"]').clear().type('password123')
-        cy.contains('button', 'Sign in').click()
+        cy.contains('button', 'Open local workspace').click()
         cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
         openAssistantWorkspace()

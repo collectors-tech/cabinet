@@ -30,7 +30,7 @@ import {
   type ShellCommandEvent,
   type ShellCommandType,
 } from '@/lib/shell-command-bus'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-context'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,11 +46,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
-  assistantAppendMessageText,
   CabinetAssistantUiComposer,
   CabinetAssistantUiMessageList,
-  cabinetMessageToAssistantUi,
 } from '@/features/chats/assistant-ui-adapter'
+import {
+  assistantAppendMessageText,
+  cabinetMessageToAssistantUi,
+} from '@/features/chats/assistant-ui-adapter-utils'
 import {
   fetchChatWorkflowRuns,
   type ChatWorkflowRun,
@@ -746,14 +748,14 @@ export function AssistantWorkspacePanel() {
     } catch {
       return 'All Items'
     }
-  }, [profileScope, messages.length, location.pathname, location.search])
+  }, [profileScope])
   const selectedAgentRecordContext = useMemo(
     () => loadAgentSelectedRecord(activeProfileId, routeContext.pathname),
-    [activeProfileId, messages.length, routeContext.pathname, location.search]
+    [activeProfileId, routeContext.pathname]
   )
   const inboxAgentContext = useMemo(
     () => loadInboxAgentContext(activeProfileId, threadId),
-    [activeProfileId, threadId, messages.length]
+    [activeProfileId, threadId]
   )
   const agentContextEnvelope = useMemo(
     () => ({
@@ -841,12 +843,12 @@ export function AssistantWorkspacePanel() {
     return null
   }
 
-  async function createAssistantThread(
+  const createAssistantThread = useCallback(async (
     profileId: string,
     nextProvider: string,
     nextModel: string,
     options?: { semantics?: string; forkedFromThreadId?: string }
-  ) {
+  ) => {
     const semantics =
       options?.semantics?.trim() || 'assistant_workspace_session'
     const forkedFromThreadId = options?.forkedFromThreadId?.trim() || ''
@@ -885,13 +887,13 @@ export function AssistantWorkspacePanel() {
       // ignore storage issues
     }
     return created.id
-  }
+  }, [])
 
-  async function ensureThread(
+  const ensureThread = useCallback(async (
     profileId: string,
     nextProvider: string,
     nextModel: string
-  ) {
+  ) => {
     const storageKey = assistantThreadKey(profileId)
     let nextThreadID = ''
     try {
@@ -910,9 +912,12 @@ export function AssistantWorkspacePanel() {
 
     setThreadId(nextThreadID)
     return nextThreadID
-  }
+  }, [createAssistantThread])
 
-  async function loadMessages(profileId: string, targetThreadId: string) {
+  const loadMessages = useCallback(async (
+    profileId: string,
+    targetThreadId: string
+  ) => {
     setWorkflowRunsLoading(true)
     try {
       const [resp, runs] = await Promise.all([
@@ -937,9 +942,9 @@ export function AssistantWorkspacePanel() {
     } finally {
       setWorkflowRunsLoading(false)
     }
-  }
+  }, [])
 
-  async function loadThreads(profileId: string) {
+  const loadThreads = useCallback(async (profileId: string) => {
     const resp = await fetch(
       `/api/chat/threads?profile_id=${encodeURIComponent(profileId)}`
     )
@@ -950,7 +955,7 @@ export function AssistantWorkspacePanel() {
     const nextThreads = payload.threads ?? []
     setThreads(nextThreads)
     return nextThreads
-  }
+  }, [])
 
   useEffect(() => {
     const preview = appControl?.preview
@@ -1062,7 +1067,7 @@ export function AssistantWorkspacePanel() {
     return () => {
       cancelled = true
     }
-  }, [activeProfileId])
+  }, [activeProfileId, ensureThread, loadMessages, loadThreads])
 
   useEffect(() => {
     let cancelled = false
@@ -1121,10 +1126,10 @@ export function AssistantWorkspacePanel() {
   }, [
     activeProfileId,
     loading,
-    location.pathname,
-    location.search,
     provider,
     model,
+    threadMetadata.model,
+    threadMetadata.provider,
     threadMetadata.thread_semantics,
   ])
 
@@ -1262,6 +1267,7 @@ export function AssistantWorkspacePanel() {
       activeProfileId,
       agentContextEnvelope,
       attachments,
+      loadMessages,
       model,
       provider,
       routeContext,
@@ -1993,7 +1999,7 @@ export function AssistantWorkspacePanel() {
             align='start'
             sideOffset={8}
             collisionPadding={12}
-            className='z-[100] flex h-[min(46rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
+            className='z-[1000] flex h-[min(46rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
             data-testid='shell-assistant-modal-content'
           >
             <section

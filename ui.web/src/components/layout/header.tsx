@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-context'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
