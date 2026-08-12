@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { Archive, RotateCcw, Trash2 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { Archive, RotateCcw, Trash2, type LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -11,7 +11,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 
 export type RecordDestructiveAction =
   | 'archive'
@@ -132,9 +131,7 @@ export function RecordDestructiveConfirmDialog({
             <span
               className={cn(
                 'mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted',
-                copy.destructive
-                  ? 'text-destructive'
-                  : 'text-muted-foreground'
+                copy.destructive ? 'text-destructive' : 'text-muted-foreground'
               )}
               data-testid={`${testId}-icon`}
               aria-hidden='true'
