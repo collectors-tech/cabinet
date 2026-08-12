@@ -5,7 +5,42 @@ import test from "node:test";
 import {
   evaluateAuditReport,
   evaluateDependencyTree,
+  evaluateKnownHighAdvisoryGraph,
 } from "./check-production-dependencies.mjs";
+
+test("known high advisory graph rejects only vulnerable nanoid and js-yaml lines", () => {
+  assert.throws(
+    () =>
+      evaluateKnownHighAdvisoryGraph({
+        packages: {
+          "node_modules/nanoid": { version: "3.3.16" },
+          "node_modules/tool/node_modules/nanoid": { version: "5.1.15" },
+          "node_modules/js-yaml": { version: "4.3.0", dev: true },
+        },
+      }),
+    /nanoid.*3\.3\.16.*GHSA-2v37-7h3g-55p8[\s\S]*nanoid.*5\.1\.15.*GHSA-28wg-ghj8-5hjv[\s\S]*js-yaml.*4\.3\.0.*GHSA-5p4m-2wfm-xmqj/,
+  );
+
+  assert.deepEqual(
+    evaluateKnownHighAdvisoryGraph({
+      packages: {
+        "node_modules/nanoid": { version: "3.3.17" },
+        "node_modules/tool/node_modules/nanoid": { version: "5.1.16" },
+        "node_modules/js-yaml": { version: "4.3.1", dev: true },
+      },
+    }),
+    { nanoid: 2, "js-yaml": 1 },
+  );
+});
+
+test("current lock graph is above the #56, #57 and #58 patched floors", async () => {
+  const packageLock = JSON.parse(
+    await readFile("ui.web/package-lock.json", "utf8"),
+  );
+  const counts = evaluateKnownHighAdvisoryGraph(packageLock);
+  assert.ok(counts.nanoid > 0, "the nanoid advisory contract must exercise a lock path");
+  assert.ok(counts["js-yaml"] > 0, "the js-yaml advisory contract must exercise a lock path");
+});
 
 test("production dependency audit rejects unresolved critical and high findings", () => {
   assert.throws(
