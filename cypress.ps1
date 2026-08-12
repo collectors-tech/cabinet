@@ -337,6 +337,14 @@ function Get-LogTail([string[]]$paths, [int]$lineCount) {
   return $lines
 }
 
+function Resolve-CypressRunnerCommand {
+  if ($IsWindows) {
+    return "npx.cmd"
+  }
+
+  return "npx"
+}
+
 function Invoke-CypressProcessWithTimeout([string]$uiRoot, [string[]]$arguments, [int]$timeoutSeconds) {
   if ($timeoutSeconds -le 0) {
     throw "ExecutionTimeoutSec must be greater than zero."
@@ -346,10 +354,11 @@ function Invoke-CypressProcessWithTimeout([string]$uiRoot, [string[]]$arguments,
   $stderrPath = Join-Path $env:TEMP ("cabinet-cypress-{0}-stderr.log" -f ([guid]::NewGuid().ToString("N")))
   $startedAt = Get-Date
   $script:CypressRunnerPhase = "cypress_process_started"
+  $cypressCommand = Resolve-CypressRunnerCommand
 
-  $process = Start-Process -FilePath "npx" -ArgumentList $arguments -WorkingDirectory $uiRoot -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru
+  $process = Start-Process -FilePath $cypressCommand -ArgumentList $arguments -WorkingDirectory $uiRoot -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru
   $script:CypressChildPids = @($process.Id)
-  Write-Step "Cypress child process started: pid=$($process.Id) timeout_sec=$timeoutSeconds"
+  Write-Step "Cypress child process started: command=$cypressCommand pid=$($process.Id) timeout_sec=$timeoutSeconds"
 
   $completed = $process.WaitForExit($timeoutSeconds * 1000)
   $script:CypressElapsedMs = [int64][Math]::Max(0, [Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds))

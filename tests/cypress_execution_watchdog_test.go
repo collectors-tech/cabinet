@@ -10,6 +10,29 @@ import (
 	"testing"
 )
 
+func TestCypressExecutionWatchdogUsesWindowsCommandShim(t *testing.T) {
+	scriptPath := filepath.Join("..", "cypress.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read cypress script: %v", err)
+	}
+	content := string(raw)
+	for _, snippet := range []string{
+		"Resolve-CypressRunnerCommand",
+		`if ($IsWindows) {`,
+		`return "npx.cmd"`,
+		`$cypressCommand = Resolve-CypressRunnerCommand`,
+		`Start-Process -FilePath $cypressCommand`,
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected cypress script to resolve the Windows npx.cmd command shim with snippet %q", snippet)
+		}
+	}
+	if strings.Contains(content, `Start-Process -FilePath "npx"`) {
+		t.Fatalf("cypress watchdog still launches extensionless npx, which resolves to a POSIX shim on some Windows hosts")
+	}
+}
+
 func TestCypressExecutionWatchdogFailsClosedOnHungRunner(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("cypress.ps1 watchdog execution contract is Windows PowerShell-specific")
