@@ -3293,6 +3293,42 @@ paths:
                 type: object
         "400":
           $ref: "#/components/responses/Error"
+  /api/auth/local/session:
+    post:
+      operationId: postApiAuthLocalSession
+      tags: [Auth]
+      summary: Open a profile-bound local Agent session
+      description: Available only to a same-origin browser on a loopback local-mode Cabinet whose active profile has no registered passkey.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties:
+                profile_id:
+                  type: string
+      responses:
+        "200":
+          description: Opaque memory-only local session credential
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, session_token]
+                properties:
+                  ok:
+                    type: boolean
+                  session_token:
+                    type: string
+                    writeOnly: true
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
   /api/auth/session/validate:
     post:
       operationId: postApiAuthSessionValidate
@@ -3312,6 +3348,14 @@ paths:
       operationId: postApiAuthSessionLock
       tags: [Auth]
       summary: Lock auth session
+      parameters:
+        - name: X-Cabinet-Session
+          in: header
+          required: false
+          description: Opaque local session credential. Preferred over placing the credential in a JSON body.
+          schema:
+            type: string
+            writeOnly: true
       responses:
         "200":
           description: Session lock result

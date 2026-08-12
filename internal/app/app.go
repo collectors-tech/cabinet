@@ -7381,6 +7381,44 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "session_token": sessionToken})
 	})
+	mux.HandleFunc("/api/auth/local/session", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !localSessionBootstrapAllowed(cfg, zitadelAuth, r) {
+			http.Error(w, `{"error":"local_session_bootstrap_forbidden"}`, http.StatusForbidden)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(req.ProfileID) == "" || strings.TrimSpace(active.ID) != strings.TrimSpace(req.ProfileID) {
+			http.Error(w, `{"error":"local_session_profile_forbidden"}`, http.StatusForbidden)
+			return
+		}
+		registrationRequired, err := authService.RequiresRegistration(r.Context(), active.ID)
+		if err != nil {
+			http.Error(w, `{"error":"local_session_unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+		if !registrationRequired {
+			http.Error(w, `{"error":"passkey_authentication_required"}`, http.StatusConflict)
+			return
+		}
+		sessionToken, err := authService.CreateUnlockedSession(active.ID)
+		if err != nil {
+			http.Error(w, `{"error":"local_session_unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "session_token": sessionToken})
+	})
 	mux.HandleFunc("/api/auth/session/validate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -7411,6 +7449,13 @@ func New(cfg config.Config) (*App, error) {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.SessionToken) == "" {
+			req.SessionToken = strings.TrimSpace(r.Header.Get("X-Cabinet-Session"))
+		}
+		if strings.TrimSpace(req.SessionToken) == "" {
+			http.Error(w, `{"error":"session_token_required"}`, http.StatusBadRequest)
 			return
 		}
 		authService.LockUnlockedSession(req.SessionToken)
@@ -7706,7 +7751,8 @@ func New(cfg config.Config) (*App, error) {
 		}
 		token := sessionTokenFromRequest(r)
 		if token != "" {
-			if err := authService.ValidateUnlockedSession(token); err != nil {
+			boundProfileID, err := authService.ValidateUnlockedSessionProfile(token)
+			if err != nil || strings.TrimSpace(boundProfileID) != strings.TrimSpace(active.ID) {
 				if strings.EqualFold(cfg.BindMode, "lan") {
 					writeAuthenticationRequired(w)
 					return
@@ -8361,7 +8407,7 @@ func isPublicAPIRequest(r *http.Request) bool {
 	switch r.URL.Path {
 	case "/api/runtime", "/api/runtime/setup-status", "/api/openapi.yaml", "/api/auth/provider-options":
 		return r.Method == http.MethodGet
-	case "/api/auth/webauthn/login/begin", "/api/auth/webauthn/login/finish",
+	case "/api/auth/webauthn/login/begin", "/api/auth/webauthn/login/finish", "/api/auth/local/session",
 		"/api/auth/session/validate", "/api/auth/session/lock",
 		"/api/auth/recovery/reset/begin":
 		return r.Method == http.MethodPost
@@ -8374,6 +8420,25 @@ func isPublicAPIRequest(r *http.Request) bool {
 	default:
 		return false
 	}
+}
+
+func localSessionBootstrapAllowed(cfg config.Config, boundary *zitadelAuthBoundary, r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost || strings.EqualFold(cfg.BindMode, "lan") || (boundary != nil && boundary.enabled()) {
+		return false
+	}
+	host := strings.TrimSpace(r.Host)
+	hostname := host
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		hostname = strings.Trim(parsedHost, "[]")
+	}
+	if !strings.EqualFold(hostname, "localhost") {
+		ip := net.ParseIP(hostname)
+		if ip == nil || !ip.IsLoopback() {
+			return false
+		}
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	return origin != "" && requestOriginMatchesHost(origin, r.Host) && strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")), "same-origin")
 }
 
 func writeAuthenticationRequired(w http.ResponseWriter) {

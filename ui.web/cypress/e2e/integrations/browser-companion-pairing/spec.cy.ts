@@ -33,6 +33,14 @@ describe('Browser Companion pairing security', () => {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
     }).as('activeProfile')
+    cy.intercept('POST', '/api/auth/local/session', {
+      statusCode: 200,
+      body: {
+        ok: true,
+        session_token:
+          'test-only-opaque-profile-bound-session-credential-000000000002',
+      },
+    }).as('localServerSession')
     cy.intercept('GET', '/api/providers/registry', {
       statusCode: 200,
       body: { providers: [] },
@@ -52,6 +60,7 @@ describe('Browser Companion pairing security', () => {
 
     cy.visit('/sign-in?redirect=%2Fintegrations%2F')
     cy.contains('button', 'Open local workspace').click()
+    cy.wait('@localServerSession')
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/integrations\/?$/

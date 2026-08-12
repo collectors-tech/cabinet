@@ -14,6 +14,7 @@ import {
 } from '@/assets/brand-icons'
 import { useAuthStore } from '@/stores/auth-store'
 import { recordNotificationHistory } from '@/lib/toast-history'
+import { bootstrapLocalServerSessionForActiveProfile } from '@/lib/cabinet-session'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -59,8 +60,6 @@ const providerIcons: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
   apple: IconApple,
   microsoft: IconMicrosoft,
 }
-
-const LOCAL_DEVICE_SESSION_TOKEN = 'cabinet-local-device-session-v1'
 
 function normalizePasskeyError(error: unknown) {
   const fallback = 'Passkey sign-in failed. Use password or provider sign-in.'
@@ -124,7 +123,7 @@ export function UserAuthForm({
     },
   })
 
-  function openLocalWorkspace() {
+  async function openLocalWorkspace() {
     setIsLoading(true)
     const localUser = {
       accountNo: 'LOCAL001',
@@ -133,24 +132,48 @@ export function UserAuthForm({
       exp: Date.now() + 24 * 60 * 60 * 1000,
     }
 
-    recordNotificationHistory({
-      id: 'auth-sign-in',
-      level: 'success',
-      title: 'Local workspace opened',
-      summary: 'Opened Cabinet in local-device mode.',
-      source_label: 'Auth sign-in',
-      category: 'auth',
-    })
-    auth.setUser(localUser)
-    auth.setAccessToken(LOCAL_DEVICE_SESSION_TOKEN)
-    const targetPath = redirectTo || '/dashboard'
-    navigate({ to: targetPath, replace: true })
-    setIsLoading(false)
+    try {
+      await bootstrapLocalServerSessionForActiveProfile()
+      recordNotificationHistory({
+        id: 'auth-sign-in',
+        level: 'success',
+        title: 'Local workspace opened',
+        summary: 'Opened Cabinet in local-device mode.',
+        source_label: 'Auth sign-in',
+        category: 'auth',
+      })
+      auth.setUser(localUser)
+      // This non-secret marker restores the local UI route after a reload. The
+      // server-issued Agent credential is held separately in memory only.
+      auth.setAccessToken('local-ui-session')
+      const targetPath = redirectTo || '/dashboard'
+      navigate({ to: targetPath, replace: true })
+    } catch {
+      const message =
+        'Cabinet could not open a protected local session. Use your passkey if this database is registered, or retry after the runtime is available.'
+      toast.error(message, {
+        ...authToastHistory(
+          'auth-local-session-unavailable',
+          'Local workspace unavailable',
+          message
+        ),
+      })
+      recordNotificationHistory({
+        id: 'auth-local-session-unavailable',
+        level: 'warning',
+        title: 'Local workspace unavailable',
+        summary: message,
+        source_label: 'Auth sign-in',
+        category: 'auth',
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   function onSubmit(data: z.infer<typeof formSchema>) {
     if (identityMode === 'local') {
-      openLocalWorkspace()
+      void openLocalWorkspace()
       return
     }
 
@@ -345,7 +368,7 @@ export function UserAuthForm({
           type='button'
           disabled={isLoading}
           data-testid='open-local-workspace'
-          onClick={openLocalWorkspace}
+          onClick={() => void openLocalWorkspace()}
         >
           {isLoading ? <Loader2 className='animate-spin' /> : <MonitorCheck />}
           Open local workspace

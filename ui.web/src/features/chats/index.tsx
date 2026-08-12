@@ -39,6 +39,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import {
   CabinetAssistantUiComposer,
   CabinetAssistantUiMessageList,
@@ -247,8 +248,9 @@ export function Chats() {
       setSendError(null)
       try {
         const [response, runs] = await Promise.all([
-          fetch(
-            `/api/chat/messages?profile_id=${encodeURIComponent(profileID)}&thread_id=${encodeURIComponent(threadID)}`
+          cabinetProtectedFetch(
+            `/api/chat/messages?profile_id=${encodeURIComponent(profileID)}&thread_id=${encodeURIComponent(threadID)}`,
+            profileID
           ),
           fetchChatWorkflowRuns(profileID, threadID),
         ])
@@ -394,8 +396,9 @@ export function Chats() {
     const controller = new AbortController()
     const loadReviewPreview = async () => {
       try {
-        const response = await fetch(
+        const response = await cabinetProtectedFetch(
           `/api/chat/actions/preview?profile_id=${encodeURIComponent(activeProfileId)}&preview_id=${encodeURIComponent(previewID)}`,
+          activeProfileId,
           { signal: controller.signal }
         )
         if (!response.ok) {
@@ -457,7 +460,10 @@ export function Chats() {
         return
       }
       setSendError(null)
-      const response = await fetch('/api/chat/messages', {
+      const response = await cabinetProtectedFetch(
+        '/api/chat/messages',
+        activeProfileId,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -482,7 +488,8 @@ export function Chats() {
             assistant: assistantDefaults,
           },
         }),
-      })
+        }
+      )
       if (!response.ok) {
         setSendError(`chat_message_create_${response.status}`)
         return
@@ -564,7 +571,10 @@ export function Chats() {
       return
     }
     setSendError(null)
-    const response = await fetch('/api/chat/actions/apply', {
+    const response = await cabinetProtectedFetch(
+      '/api/chat/actions/apply',
+      activeProfileId,
+      {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -573,7 +583,8 @@ export function Chats() {
         preview_id: actionPreview.id,
         confirm: true,
       }),
-    })
+      }
+    )
     if (!response.ok) {
       setSendError(`chat_action_apply_${response.status}`)
       setApplyResult(null)
@@ -595,7 +606,10 @@ export function Chats() {
       return
     }
     setSendError(null)
-    const response = await fetch('/api/chat/actions/cancel', {
+    const response = await cabinetProtectedFetch(
+      '/api/chat/actions/cancel',
+      activeProfileId,
+      {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -603,7 +617,8 @@ export function Chats() {
         thread_id: selectedThreadId,
         preview_id: actionPreview.id,
       }),
-    })
+      }
+    )
     if (!response.ok) {
       setSendError(`chat_action_cancel_${response.status}`)
       setApplyNotice('Action cancel failed; preview remains pending.')

@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import {
   dispatchShellCommand,
   type ShellCommandEvent,
@@ -921,8 +922,9 @@ export function AssistantWorkspacePanel() {
     setWorkflowRunsLoading(true)
     try {
       const [resp, runs] = await Promise.all([
-        fetch(
-          `/api/chat/messages?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(targetThreadId)}`
+        cabinetProtectedFetch(
+          `/api/chat/messages?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(targetThreadId)}`,
+          profileId
         ),
         fetchChatWorkflowRuns(profileId, targetThreadId),
       ])
@@ -1231,7 +1233,10 @@ export function AssistantWorkspacePanel() {
       setError('')
       setNavigationAction(null)
       try {
-        const response = await fetch('/api/chat/messages', {
+        const response = await cabinetProtectedFetch(
+          '/api/chat/messages',
+          activeProfileId,
+          {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1248,7 +1253,8 @@ export function AssistantWorkspacePanel() {
               assistant: { provider, model },
             },
           }),
-        })
+          }
+        )
         if (!response.ok) throw new Error('failed_to_send_assistant_message')
         setAttachments([])
         setNavigationAction(inferNavigationAction(normalizedDraft))
@@ -1477,7 +1483,10 @@ export function AssistantWorkspacePanel() {
       'Structured mutations are preview-only until you explicitly confirm apply.'
     )
     try {
-      const response = await fetch('/api/chat/actions/preview', {
+      const response = await cabinetProtectedFetch(
+        '/api/chat/actions/preview',
+        activeProfileId,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1491,7 +1500,8 @@ export function AssistantWorkspacePanel() {
             category: 'General',
           },
         }),
-      })
+        }
+      )
       if (!response.ok) throw new Error(`assistant_preview_${response.status}`)
       const preview = (await response.json()) as ActionPreview
       setActionPreview(preview)
@@ -1829,7 +1839,10 @@ export function AssistantWorkspacePanel() {
       'Agent Skill work is preview-first and keeps provider secrets out of result text.'
     )
     try {
-      const response = await fetch('/api/agent/skills/preview', {
+      const response = await cabinetProtectedFetch(
+        '/api/agent/skills/preview',
+        activeProfileId,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1842,7 +1855,8 @@ export function AssistantWorkspacePanel() {
           agent_context: agentContextEnvelope,
           parameters: agentSkillParameters(),
         }),
-      })
+        }
+      )
       if (!response.ok) {
         const payload = (await response
           .json()
@@ -1885,7 +1899,10 @@ export function AssistantWorkspacePanel() {
     setExecutionState('running')
     setError('')
     try {
-      const response = await fetch('/api/chat/actions/apply', {
+      const response = await cabinetProtectedFetch(
+        '/api/chat/actions/apply',
+        activeProfileId,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1894,7 +1911,8 @@ export function AssistantWorkspacePanel() {
           preview_id: actionPreview.id,
           confirm: true,
         }),
-      })
+        }
+      )
       if (!response.ok) throw new Error(`assistant_apply_${response.status}`)
       const result = (await response.json()) as ApplyActionResult
       setApplyResult(result)
@@ -1916,7 +1934,10 @@ export function AssistantWorkspacePanel() {
     setExecutionState('running')
     setError('')
     try {
-      const response = await fetch('/api/agent/skills/apply', {
+      const response = await cabinetProtectedFetch(
+        '/api/agent/skills/apply',
+        activeProfileId,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1930,7 +1951,8 @@ export function AssistantWorkspacePanel() {
           agent_context: agentContextEnvelope,
           parameters: agentSkillParameters(),
         }),
-      })
+        }
+      )
       if (!response.ok) {
         const payload = (await response
           .json()

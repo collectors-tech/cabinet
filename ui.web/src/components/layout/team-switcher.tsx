@@ -17,6 +17,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { DatabaseProfileIcon } from '@/assets/database-profile-icon'
+import { lockLocalServerSession } from '@/lib/cabinet-session'
 
 type TeamSwitcherProps = {
   teams: {
@@ -146,6 +147,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
     if (!profileID) {
       return
     }
+    await lockLocalServerSession()
     const setActiveResp = await fetch('/api/profiles/active', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -193,6 +195,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
       return
     }
 
+    await lockLocalServerSession()
     const setActiveResp = await fetch('/api/profiles/active', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

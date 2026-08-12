@@ -1,13 +1,22 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { normalizeAuthRedirectTarget } from '@/lib/auth-redirect'
+import { bootstrapLocalServerSessionForActiveProfile } from '@/lib/cabinet-session'
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ location }) => {
     const current = useAuthStore.getState().auth
     if (current.accessToken) {
-      return
+      if (current.localSessionToken) {
+        return
+      }
+      try {
+        await bootstrapLocalServerSessionForActiveProfile()
+        return
+      } catch {
+        current.reset()
+      }
     }
 
     try {
