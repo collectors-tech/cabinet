@@ -127,7 +127,7 @@ jobs:
           CABINET_E2E_MODE: "1"
           CABINET_OPEN_BROWSER: "0"
         run: |
-          pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec "${{ steps.cypress_pack.outputs.specs }}" -Browser chrome -RequireE2EHooks *>&1 | Tee-Object .logs/release-candidate/cypress.log
+          pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec "${{ steps.cypress_pack.outputs.specs }}" -Browser chrome -RequireE2EHooks -ExecutionTimeoutSec 300 *>&1 | Tee-Object .logs/release-candidate/cypress.log
 
       - name: Write release-candidate validation summary
         if: always()

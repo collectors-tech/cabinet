@@ -101,6 +101,40 @@ func TestCypressScriptSupportsFixedPackSpecLists(t *testing.T) {
 	}
 }
 
+func TestCypressScriptFailsClosedOnHungRunnerProcess(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "cypress.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read cypress script: %v", err)
+	}
+	content := string(raw)
+	for _, snippet := range []string{
+		"[int]$ExecutionTimeoutSec = 900",
+		"Invoke-CypressProcessWithTimeout $uiRoot $args $ExecutionTimeoutSec",
+		"$process.WaitForExit($timeoutSeconds * 1000)",
+		"$script:CypressRunnerPhase = \"execution_timeout\"",
+		"$script:CypressRunnerPhase = \"completed\"",
+		"$script:CypressRunnerPhase = \"cypress_failed\"",
+		"Stop-OwnedProcessTree $process.Id",
+		"return 124",
+		"runner_phase",
+		"cypress_child_pids",
+		"cypress_elapsed_ms",
+		"cypress_last_output",
+		"cypress_cleanup_result",
+		"execution_timeout_sec",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected cypress fail-closed watchdog snippet %q", snippet)
+		}
+	}
+	if strings.Contains(content, "& npx @args") {
+		t.Fatalf("cypress script still invokes npx directly without the execution watchdog")
+	}
+}
+
 func TestCypressScriptResetsManagedRuntimeDataDir(t *testing.T) {
 	t.Parallel()
 
