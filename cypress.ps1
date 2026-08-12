@@ -14,6 +14,7 @@ param(
   [switch]$SkipRuntimeBuild,
   [string]$BaseUrl = "http://127.0.0.1:17880",
   [int]$StartupTimeoutSec = 45,
+  [int]$ExecutionTimeoutSec = 900,
   [string]$LogDir = ".work-agent\logs\cypress",
   [string]$LogName = ""
 )
@@ -21,6 +22,11 @@ param(
 $ErrorActionPreference = "Stop"
 $script:CypressStepEvents = @()
 $script:LastApiContractSmokeSummaryPath = ""
+$script:CypressRunnerPhase = "initializing"
+$script:CypressChildPids = @()
+$script:CypressElapsedMs = $null
+$script:CypressLastOutput = @()
+$script:CypressCleanupResult = ""
 
 function Write-Step([string]$msg) {
   $timestamp = (Get-Date).ToString("o")
@@ -283,6 +289,94 @@ function Start-ProcessWithEnvironment([string]$filePath, [string[]]$argumentList
   }
 }
 
+function Get-ChildProcessIds([int]$parentProcessId) {
+  $descendants = @()
+  $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $parentProcessId" -ErrorAction SilentlyContinue)
+  foreach ($child in $children) {
+    $childId = [int]$child.ProcessId
+    $descendants += $childId
+    $descendants += @(Get-ChildProcessIds $childId)
+  }
+  return $descendants
+}
+
+function Stop-OwnedProcessTree([int]$processId) {
+  $stopped = @()
+  $errors = @()
+  $processIds = @()
+  $processIds += @(Get-ChildProcessIds $processId)
+  $processIds += $processId
+  foreach ($ownedProcessId in ($processIds | Select-Object -Unique | Sort-Object -Descending)) {
+    try {
+      $process = Get-Process -Id $ownedProcessId -ErrorAction SilentlyContinue
+      if ($process) {
+        Stop-Process -Id $ownedProcessId -Force -ErrorAction Stop
+        $stopped += $ownedProcessId
+      }
+    }
+    catch {
+      $errors += "pid ${ownedProcessId}: $($_.Exception.Message)"
+    }
+  }
+  if ($errors.Count -gt 0) {
+    return "stopped_pids=$($stopped -join ','); errors=$($errors -join '; ')"
+  }
+  return "stopped_pids=$($stopped -join ',')"
+}
+
+function Get-LogTail([string[]]$paths, [int]$lineCount) {
+  $lines = @()
+  foreach ($path in $paths) {
+    if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path $path)) {
+      $lines += @(Get-Content -LiteralPath $path -Tail $lineCount -ErrorAction SilentlyContinue)
+    }
+  }
+  if ($lines.Count -gt $lineCount) {
+    return @($lines | Select-Object -Last $lineCount)
+  }
+  return $lines
+}
+
+function Invoke-CypressProcessWithTimeout([string]$uiRoot, [string[]]$arguments, [int]$timeoutSeconds) {
+  if ($timeoutSeconds -le 0) {
+    throw "ExecutionTimeoutSec must be greater than zero."
+  }
+
+  $stdoutPath = Join-Path $env:TEMP ("cabinet-cypress-{0}-stdout.log" -f ([guid]::NewGuid().ToString("N")))
+  $stderrPath = Join-Path $env:TEMP ("cabinet-cypress-{0}-stderr.log" -f ([guid]::NewGuid().ToString("N")))
+  $startedAt = Get-Date
+  $script:CypressRunnerPhase = "cypress_process_started"
+
+  $process = Start-Process -FilePath "npx" -ArgumentList $arguments -WorkingDirectory $uiRoot -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru
+  $script:CypressChildPids = @($process.Id)
+  Write-Step "Cypress child process started: pid=$($process.Id) timeout_sec=$timeoutSeconds"
+
+  $completed = $process.WaitForExit($timeoutSeconds * 1000)
+  $script:CypressElapsedMs = [int64][Math]::Max(0, [Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds))
+  $script:CypressChildPids = @($process.Id) + @(Get-ChildProcessIds $process.Id)
+  $script:CypressLastOutput = @(Get-LogTail @($stdoutPath, $stderrPath) 80)
+
+  foreach ($line in $script:CypressLastOutput) {
+    Write-Host $line
+  }
+
+  if (-not $completed) {
+    $script:CypressRunnerPhase = "execution_timeout"
+    $script:CypressCleanupResult = Stop-OwnedProcessTree $process.Id
+    Write-Step "Cypress timed out after $($script:CypressElapsedMs) ms; $script:CypressCleanupResult"
+    return 124
+  }
+
+  $process.Refresh()
+  if ($process.ExitCode -eq 0) {
+    $script:CypressRunnerPhase = "completed"
+  } else {
+    $script:CypressRunnerPhase = "cypress_failed"
+  }
+  $script:CypressCleanupResult = "not_required"
+  return [int]$process.ExitCode
+}
+
 function Get-ReusableNodeModulesPath([string]$repoRoot, [string]$uiRoot) {
   $candidates = @()
 
@@ -409,7 +503,13 @@ function Write-RunSummary(
   [string]$logPath,
   [string]$apiContractSmokeSummaryPath,
   [bool]$allowStaleRuntimeVersion,
-  [bool]$startedServer
+  [bool]$startedServer,
+  [string]$runnerPhase,
+  [int[]]$cypressChildPids,
+  [Nullable[int64]]$cypressElapsedMs,
+  [string[]]$cypressLastOutput,
+  [string]$cypressCleanupResult,
+  [int]$executionTimeoutSec
 ) {
   $runFinishedAt = Get-Date
   $apiContractSmokeStatus = ""
@@ -462,6 +562,12 @@ function Write-RunSummary(
     source_commit = $sourceCommit
     allow_stale_runtime_version = $allowStaleRuntimeVersion
     started_server = $startedServer
+    runner_phase = $runnerPhase
+    cypress_child_pids = $cypressChildPids
+    cypress_elapsed_ms = $cypressElapsedMs
+    cypress_last_output = $cypressLastOutput
+    cypress_cleanup_result = $cypressCleanupResult
+    execution_timeout_sec = $executionTimeoutSec
     log_path = $logPath
     api_contract_smoke_summary_path = $apiContractSmokeSummaryPath
     api_contract_smoke_status = $apiContractSmokeStatus
@@ -512,6 +618,8 @@ $runnerCommand = @(
   $BaseUrl,
   "-StartupTimeoutSec",
   "$StartupTimeoutSec",
+  "-ExecutionTimeoutSec",
+  "$ExecutionTimeoutSec",
   "-LogDir",
   $LogDir
 )
@@ -699,8 +807,7 @@ try {
       Write-Step "Temporarily clearing ELECTRON_RUN_AS_NODE for Cypress runtime compatibility."
     }
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-    & npx @args
-    $exitCode = $LASTEXITCODE
+    $exitCode = Invoke-CypressProcessWithTimeout $uiRoot $args $ExecutionTimeoutSec
     Write-Step "Cypress exited with code $exitCode."
   }
   finally {
@@ -746,7 +853,13 @@ finally {
     -logPath $logPath `
     -apiContractSmokeSummaryPath $apiContractSmokeSummaryPath `
     -allowStaleRuntimeVersion $AllowStaleRuntimeVersion.IsPresent `
-    -startedServer $startedServer
+    -startedServer $startedServer `
+    -runnerPhase $script:CypressRunnerPhase `
+    -cypressChildPids $script:CypressChildPids `
+    -cypressElapsedMs $script:CypressElapsedMs `
+    -cypressLastOutput $script:CypressLastOutput `
+    -cypressCleanupResult $script:CypressCleanupResult `
+    -executionTimeoutSec $ExecutionTimeoutSec
   Write-Step "Run summary written: $summaryPath"
   if ($transcriptStarted) {
     Stop-Transcript | Out-Null

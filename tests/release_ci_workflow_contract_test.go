@@ -119,6 +119,7 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		".logs/release-candidate/cypress-pack.json",
 		"${{ steps.cypress_pack.outputs.specs }}",
 		"./cypress.ps1 -Spec",
+		"-ExecutionTimeoutSec 300",
 		"Upload release-candidate logs",
 		"does not merge develop into main",
 	}
