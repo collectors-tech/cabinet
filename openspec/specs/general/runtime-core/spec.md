@@ -283,6 +283,15 @@ E2E-only reset hooks MUST clear supported runtime data without failing solely be
 - **THEN** reset MUST skip the absent table and continue clearing present reset tables
 - **AND** reset MUST still fail on real delete/query errors for tables that exist
 
+#### Scenario: Concurrent E2E reset remains bounded and safe
+- **GIVEN** release validation or isolated Cypress specs call `/api/test/reset` concurrently against one managed runtime database
+- **WHEN** the reset hook clears E2E state
+- **THEN** reset MUST serialize destructive reset attempts
+- **AND** reset MUST disable and restore SQLite foreign-key enforcement on the same dedicated connection used for the reset transaction
+- **AND** reset MAY retry recognized storage contention with a small bounded retry budget
+- **AND** reset MUST not retry arbitrary storage failures
+- **AND** reset diagnostics MUST log only allow-listed failure class and operation fields while the HTTP response remains generic
+
 ### Requirement RUNTIME-CORE-018: Cypress runner SHALL prepare dependencies and persist execution logs
 Cabinet Cypress execution scripts MUST perform required local preparation before invoking Cypress and MUST persist progress/output logs for traceability.
 
