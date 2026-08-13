@@ -23,6 +23,38 @@ type chatAppControlIntent struct {
 	GuidedWorkflow    map[string]any
 }
 
+func publicChatTrustedEvidenceKey(value any) (string, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, nested := range typed {
+			normalized := strings.ToLower(strings.TrimSpace(key))
+			switch normalized {
+			case "agent_planner",
+				"agent_capabilities",
+				"assistant_response",
+				"assistant_handoff",
+				"action_preview",
+				"preview",
+				"execution",
+				"authority",
+				"admin_session",
+				"success_evidence":
+				return key, true
+			}
+			if nestedKey, found := publicChatTrustedEvidenceKey(nested); found {
+				return nestedKey, true
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if nestedKey, found := publicChatTrustedEvidenceKey(nested); found {
+				return nestedKey, true
+			}
+		}
+	}
+	return "", false
+}
+
 func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, profileID, threadID, content string, envelope map[string]any, sourceMessageID string) (map[string]any, bool) {
 	intent, ok := planChatMessageAppControl(content, envelope)
 	if !ok {
