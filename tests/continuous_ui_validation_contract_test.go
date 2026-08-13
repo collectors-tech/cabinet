@@ -73,6 +73,11 @@ func TestHourlyUIValidationScriptContract(t *testing.T) {
 		"form_field_results",
 		"intent_pass_count",
 		"field_pass_count",
+		"-RequireE2EHooks",
+		"-ApiContractSmoke",
+		"api_contract_smoke",
+		"require_e2e_hooks",
+		"allow_stale_runtime_version",
 	}
 
 	for _, fragment := range requiredFragments {

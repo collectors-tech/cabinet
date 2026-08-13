@@ -167,3 +167,12 @@ Cabinet SHALL make each `cypress.ps1` run summary sufficient to prove the exact 
 - **GIVEN** `cypress.ps1` runs a focused Cypress spec against an isolated or fallback runtime
 - **WHEN** it writes the per-run Cypress summary JSON
 - **THEN** the summary MUST record `runner_command`, `started_at`, `finished_at`, and `duration_ms` alongside the existing spec, base URL, runtime port, data directory, profile, instance name, executable path, source commit, and log path evidence.
+
+### Requirement CONT-UI-CAB-012: Hourly validation SHALL reject stale runtime baselines before browser assertions
+Cabinet hourly UI validation SHALL run each selected Cypress spec through the project Cypress wrapper with API contract smoke and E2E hook preflight enabled so stale or non-test runtimes are reported as setup/freshness failures instead of broad product regressions.
+
+#### Scenario: Scheduled spec invocation records runtime freshness preflight
+- **GIVEN** hourly validation selects a Cypress spec for scheduled execution
+- **WHEN** it invokes `cypress.ps1`
+- **THEN** the invocation MUST include `-RequireE2EHooks` and `-ApiContractSmoke`
+- **AND** the hourly report MUST record `api_contract_smoke`, `require_e2e_hooks`, and `allow_stale_runtime_version` for the spec result.
