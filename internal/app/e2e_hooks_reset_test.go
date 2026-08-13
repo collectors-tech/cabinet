@@ -2,14 +2,117 @@ package app
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/update"
 )
+
+func TestResetE2EDatabaseSerializesConcurrentCalls(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+	a.db.SetMaxOpenConns(8)
+	a.db.SetMaxIdleConns(8)
+
+	const callers = 12
+	start := make(chan struct{})
+	errs := make(chan error, callers)
+	var ready sync.WaitGroup
+	ready.Add(callers)
+	for range callers {
+		go func() {
+			ready.Done()
+			<-start
+			errs <- resetE2EDatabase(context.Background(), a.db)
+		}()
+	}
+	ready.Wait()
+	close(start)
+
+	for range callers {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent reset failed: %v", err)
+		}
+	}
+
+	connections := make([]*sql.Conn, 0, 8)
+	defer func() {
+		for _, conn := range connections {
+			_ = conn.Close()
+		}
+	}()
+	for range 8 {
+		conn, err := a.db.Conn(context.Background())
+		if err != nil {
+			t.Fatalf("acquire pooled connection: %v", err)
+		}
+		connections = append(connections, conn)
+		var foreignKeys int
+		if err := conn.QueryRowContext(context.Background(), `PRAGMA foreign_keys`).Scan(&foreignKeys); err != nil {
+			t.Fatalf("read pooled foreign_keys state: %v", err)
+		}
+		if foreignKeys != 1 {
+			t.Fatalf("pooled connection returned with foreign_keys=%d", foreignKeys)
+		}
+	}
+}
+
+func TestE2EResetDiagnosticRedactsUnderlyingStorageError(t *testing.T) {
+	t.Parallel()
+
+	underlying := errors.New("private SQL and row data must not reach runtime logs")
+	failure := newE2EResetFailure("begin_transaction", underlying)
+	diagnostic := e2eResetDiagnostic(failure)
+
+	if diagnostic != "e2e reset failed: class=unexpected_storage operation=begin_transaction" {
+		t.Fatalf("unexpected safe diagnostic: %q", diagnostic)
+	}
+	if strings.Contains(diagnostic, underlying.Error()) {
+		t.Fatalf("diagnostic leaked underlying storage error: %q", diagnostic)
+	}
+}
+
+func TestRunE2EResetWithRetryIsBoundedToStorageContention(t *testing.T) {
+	t.Parallel()
+
+	contentionAttempts := 0
+	err := runE2EResetWithRetry(context.Background(), func() error {
+		contentionAttempts++
+		if contentionAttempts < e2eResetMaxAttempts {
+			return &e2eResetFailure{
+				class:     "storage_contention",
+				operation: "begin_transaction",
+				err:       errors.New("database contention"),
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("bounded contention retry failed: %v", err)
+	}
+	if contentionAttempts != e2eResetMaxAttempts {
+		t.Fatalf("contention attempts=%d want=%d", contentionAttempts, e2eResetMaxAttempts)
+	}
+
+	unexpectedAttempts := 0
+	err = runE2EResetWithRetry(context.Background(), func() error {
+		unexpectedAttempts++
+		return newE2EResetFailure("begin_transaction", errors.New("non-retryable storage failure"))
+	})
+	if err == nil {
+		t.Fatal("expected non-retryable storage failure")
+	}
+	if unexpectedAttempts != 1 {
+		t.Fatalf("unexpected storage failure attempts=%d want=1", unexpectedAttempts)
+	}
+}
 
 func TestResetE2EDatabaseSkipsMissingLegacyTables(t *testing.T) {
 	t.Parallel()

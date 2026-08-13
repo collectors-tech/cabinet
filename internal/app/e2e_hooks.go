@@ -6,17 +6,21 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/collectors-tech/cabinet/internal/auth"
 	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
 type e2eBootstrapRequest struct {
@@ -53,6 +57,7 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config, a
 			return
 		}
 		if err := resetE2EDatabase(r.Context(), conn); err != nil {
+			log.Print(e2eResetDiagnostic(err))
 			http.Error(w, `{"error":"failed_to_reset_e2e_state"}`, http.StatusInternalServerError)
 			return
 		}
@@ -109,6 +114,7 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config, a
 			req.Seed = 1
 		}
 		if err := resetE2EDatabase(r.Context(), conn); err != nil {
+			log.Print(e2eResetDiagnostic(err))
 			http.Error(w, `{"error":"failed_to_reset_e2e_state"}`, http.StatusInternalServerError)
 			return
 		}
@@ -257,15 +263,122 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config, a
 	})
 }
 
-func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
-	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return fmt.Errorf("disable foreign keys: %w", err)
+const (
+	e2eResetMaxAttempts = 3
+	e2eResetRetryDelay  = 25 * time.Millisecond
+)
+
+var e2eResetMu sync.Mutex
+
+type e2eResetFailure struct {
+	class     string
+	operation string
+	err       error
+}
+
+func (e *e2eResetFailure) Error() string {
+	return e.operation + ": " + e.err.Error()
+}
+
+func (e *e2eResetFailure) Unwrap() error {
+	return e.err
+}
+
+func newE2EResetFailure(operation string, err error) error {
+	class := "unexpected_storage"
+	if profile.IsStorageContention(err) {
+		class = "storage_contention"
 	}
-	defer func() { _, _ = conn.ExecContext(context.Background(), `PRAGMA foreign_keys = ON`) }()
+	return &e2eResetFailure{
+		class:     class,
+		operation: safeE2EResetOperation(operation),
+		err:       err,
+	}
+}
+
+func safeE2EResetOperation(operation string) string {
+	switch operation {
+	case "acquire_connection",
+		"disable_foreign_keys",
+		"begin_transaction",
+		"check_table",
+		"clear_table",
+		"commit_transaction",
+		"restore_foreign_keys",
+		"retry_wait":
+		return operation
+	default:
+		return "unknown"
+	}
+}
+
+func classifyE2EResetFailure(err error) (class, operation string) {
+	var failure *e2eResetFailure
+	if errors.As(err, &failure) {
+		return failure.class, failure.operation
+	}
+	if profile.IsStorageContention(err) {
+		return "storage_contention", "unknown"
+	}
+	return "unexpected_storage", "unknown"
+}
+
+func e2eResetDiagnostic(err error) string {
+	class, operation := classifyE2EResetFailure(err)
+	return "e2e reset failed: class=" + class + " operation=" + operation
+}
+
+func resetE2EDatabase(ctx context.Context, db *sql.DB) error {
+	e2eResetMu.Lock()
+	defer e2eResetMu.Unlock()
+
+	return runE2EResetWithRetry(ctx, func() error {
+		return resetE2EDatabaseAttempt(ctx, db)
+	})
+}
+
+func runE2EResetWithRetry(ctx context.Context, attemptReset func() error) error {
+	for attempt := 1; attempt <= e2eResetMaxAttempts; attempt++ {
+		err := attemptReset()
+		if err == nil {
+			return nil
+		}
+		class, _ := classifyE2EResetFailure(err)
+		if class != "storage_contention" || attempt == e2eResetMaxAttempts {
+			return err
+		}
+		timer := time.NewTimer(time.Duration(attempt) * e2eResetRetryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return newE2EResetFailure("retry_wait", ctx.Err())
+		case <-timer.C:
+		}
+	}
+	return nil
+}
+
+func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return newE2EResetFailure("acquire_connection", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return newE2EResetFailure("disable_foreign_keys", err)
+	}
+	defer func() {
+		restoreCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if _, err := conn.ExecContext(restoreCtx, `PRAGMA foreign_keys = ON`); err != nil && resultErr == nil {
+			resultErr = newE2EResetFailure("restore_foreign_keys", err)
+		}
+	}()
 
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin reset tx: %w", err)
+		return newE2EResetFailure("begin_transaction", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -313,22 +426,19 @@ func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
 	for _, table := range tables {
 		exists, err := resetTableExists(ctx, tx, table)
 		if err != nil {
-			return fmt.Errorf("check table %s: %w", table, err)
+			return newE2EResetFailure("check_table", err)
 		}
 		if !exists {
 			continue
 		}
 		query := "DELETE FROM " + table
 		if _, err := tx.ExecContext(ctx, query); err != nil {
-			return fmt.Errorf("clear table %s: %w", table, err)
+			return newE2EResetFailure("clear_table", err)
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-		return fmt.Errorf("enable foreign keys: %w", err)
-	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit reset tx: %w", err)
+		return newE2EResetFailure("commit_transaction", err)
 	}
 	return nil
 }
