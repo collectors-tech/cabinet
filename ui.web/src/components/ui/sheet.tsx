@@ -27,8 +27,11 @@ function SheetPortal({
 
 function SheetOverlay({
   className,
+  style,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+  const disablePointerEvents = className?.includes('pointer-events-none')
+
   return (
     <SheetPrimitive.Overlay
       data-slot='sheet-overlay'
@@ -36,6 +39,10 @@ function SheetOverlay({
         'fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
         className
       )}
+      style={{
+        ...style,
+        ...(disablePointerEvents ? { pointerEvents: 'none' } : {}),
+      }}
       {...props}
     />
   )
@@ -43,15 +50,19 @@ function SheetOverlay({
 
 function SheetContent({
   className,
+  hideOverlay = false,
+  overlayClassName,
   children,
   side = 'right',
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
+  hideOverlay?: boolean
+  overlayClassName?: string
   side?: 'top' | 'right' | 'bottom' | 'left'
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {hideOverlay ? null : <SheetOverlay className={overlayClassName} />}
       <SheetPrimitive.Content
         data-slot='sheet-content'
         className={cn(

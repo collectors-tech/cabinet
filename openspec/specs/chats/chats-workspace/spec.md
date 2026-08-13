@@ -113,3 +113,13 @@ Chats workspace and shell Assistant messages MUST produce a direct assistant res
 - **WHEN** `/api/chat/messages` accepts the message
 - **THEN** Cabinet MAY create an `assistant_handoff` Inbox item with thread metadata
 - **AND** Inbox triage status lifecycle MUST remain durable for that queued handoff
+
+### Requirement CHATS-WORKSPACE-012: Full Chat Agent controls SHALL avoid compact-layout overflow traps
+Full Chat MUST keep its message result, composer, attachment, Retry, Apply, and Cancel controls keyboard reachable through intended scrolling at compact desktop and 200-percent-zoom-equivalent layouts.
+
+#### Scenario: Operate a governed result at 200-percent-zoom equivalent
+- **GIVEN** full Chat is rendered at a 640 by 360 viewport with a selected thread
+- **WHEN** a governed Agent result exposes retry or preview actions
+- **THEN** the result and composer regions MUST use bounded independent scrolling without fixed minimum-height or fixed-width overflow
+- **AND** attachment, Retry, Apply, and Cancel controls MUST remain visible and keyboard focusable when applicable
+- **AND** focus MUST remain on the initiating action after a terminal dialog is canceled

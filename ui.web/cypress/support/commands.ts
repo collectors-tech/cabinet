@@ -26,6 +26,7 @@ declare global {
         profile_key?: string;
         runtime?: { mode?: "auto" | "fixed"; fixed_port?: number };
       }): Chainable<void>;
+      stubLocalServerSession(profileId: string): Chainable<void>;
       useBootstrappedProfile(
         profileId: string,
         profileName: string,
@@ -113,6 +114,20 @@ Cypress.Commands.add("e2eCompleteSetupHelper", (overrides = {}) => {
       expect(resp.status).to.eq(200);
       expect(resp.body.setup_required).to.eq(false);
     });
+});
+
+Cypress.Commands.add("stubLocalServerSession", (profileId: string) => {
+  cy.intercept("POST", "/api/auth/local/session", (request) => {
+    expect(request.body).to.deep.equal({ profile_id: profileId });
+    request.reply({
+      statusCode: 200,
+      body: {
+        ok: true,
+        session_token:
+          "test-only-opaque-profile-bound-session-credential-000000000001",
+      },
+    });
+  }).as("localServerSession");
 });
 
 Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: string, options?: {

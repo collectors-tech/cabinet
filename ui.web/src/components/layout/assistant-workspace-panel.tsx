@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import {
   AssistantModalPrimitive,
@@ -17,6 +24,7 @@ import {
   Paperclip,
   Pause,
   Play,
+  Send,
   ShieldAlert,
   Sparkles,
   SkipForward,
@@ -32,6 +40,7 @@ import {
   type ShellCommandType,
 } from '@/lib/shell-command-bus'
 import { useShellWorkspace } from '@/context/shell-workspace-context'
+import { useIsMobile } from '@/hooks/use-mobile'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -678,6 +687,7 @@ async function loadAssistantDefaultSettings(profileId: string) {
 
 export function AssistantWorkspacePanel() {
   const { activeProfileId, setActiveWorkspace } = useShellWorkspace()
+  const isMobile = useIsMobile()
   const navigate = useNavigate()
   const authUser = useAuthStore((state) => state.auth.user)
   const location = useRouterState({
@@ -844,107 +854,112 @@ export function AssistantWorkspacePanel() {
     return null
   }
 
-  const createAssistantThread = useCallback(async (
-    profileId: string,
-    nextProvider: string,
-    nextModel: string,
-    options?: { semantics?: string; forkedFromThreadId?: string }
-  ) => {
-    const semantics =
-      options?.semantics?.trim() || 'assistant_workspace_session'
-    const forkedFromThreadId = options?.forkedFromThreadId?.trim() || ''
-    const metadata: ThreadMetadata = {
-      provider: nextProvider,
-      model: nextModel,
-      thread_semantics: semantics,
-    }
-    if (forkedFromThreadId.trim()) {
-      metadata.forked_from_thread_id = forkedFromThreadId.trim()
-    }
-    const createResp = await fetch('/api/chat/threads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        profile_id: profileId,
-        title: `Assistant Workspace (${nextProvider} / ${nextModel})`,
-        metadata,
-      }),
-    })
-    if (!createResp.ok) {
-      throw new Error('failed_to_create_assistant_thread')
-    }
-    const created = (await createResp.json()) as Thread
-    setThreadId(created.id)
-    setThreadMetadata(created.metadata ?? metadata)
-    setThreads((current) => [
-      created,
-      ...current.filter((thread) => thread.id !== created.id),
-    ])
-    try {
-      window.localStorage.setItem(assistantThreadKey(profileId), created.id)
-      window.localStorage.setItem(assistantProviderKey(profileId), nextProvider)
-      window.localStorage.setItem(assistantModelKey(profileId), nextModel)
-    } catch {
-      // ignore storage issues
-    }
-    return created.id
-  }, [])
-
-  const ensureThread = useCallback(async (
-    profileId: string,
-    nextProvider: string,
-    nextModel: string
-  ) => {
-    const storageKey = assistantThreadKey(profileId)
-    let nextThreadID = ''
-    try {
-      nextThreadID = window.localStorage.getItem(storageKey) || ''
-    } catch {
-      nextThreadID = ''
-    }
-
-    if (!nextThreadID) {
-      nextThreadID = await createAssistantThread(
-        profileId,
-        nextProvider,
-        nextModel
-      )
-    }
-
-    setThreadId(nextThreadID)
-    return nextThreadID
-  }, [createAssistantThread])
-
-  const loadMessages = useCallback(async (
-    profileId: string,
-    targetThreadId: string
-  ) => {
-    setWorkflowRunsLoading(true)
-    try {
-      const [resp, runs] = await Promise.all([
-        cabinetProtectedFetch(
-          `/api/chat/messages?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(targetThreadId)}`,
-          profileId
-        ),
-        fetchChatWorkflowRuns(profileId, targetThreadId),
-      ])
-      if (!resp.ok) {
-        throw new Error('failed_to_load_assistant_messages')
+  const createAssistantThread = useCallback(
+    async (
+      profileId: string,
+      nextProvider: string,
+      nextModel: string,
+      options?: { semantics?: string; forkedFromThreadId?: string }
+    ) => {
+      const semantics =
+        options?.semantics?.trim() || 'assistant_workspace_session'
+      const forkedFromThreadId = options?.forkedFromThreadId?.trim() || ''
+      const metadata: ThreadMetadata = {
+        provider: nextProvider,
+        model: nextModel,
+        thread_semantics: semantics,
       }
-      const payload = (await resp.json()) as { messages?: Message[] }
-      setMessages(payload.messages ?? [])
-      setWorkflowRuns(runs)
-      setWorkflowRunsError('')
-    } catch (err) {
-      setWorkflowRuns([])
-      setWorkflowRunsError(
-        err instanceof Error ? err.message : 'failed_to_load_workflow_runs'
-      )
-      throw err
-    } finally {
-      setWorkflowRunsLoading(false)
-    }
-  }, [])
+      if (forkedFromThreadId.trim()) {
+        metadata.forked_from_thread_id = forkedFromThreadId.trim()
+      }
+      const createResp = await fetch('/api/chat/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: profileId,
+          title: `Assistant Workspace (${nextProvider} / ${nextModel})`,
+          metadata,
+        }),
+      })
+      if (!createResp.ok) {
+        throw new Error('failed_to_create_assistant_thread')
+      }
+      const created = (await createResp.json()) as Thread
+      setThreadId(created.id)
+      setThreadMetadata(created.metadata ?? metadata)
+      setThreads((current) => [
+        created,
+        ...current.filter((thread) => thread.id !== created.id),
+      ])
+      try {
+        window.localStorage.setItem(assistantThreadKey(profileId), created.id)
+        window.localStorage.setItem(
+          assistantProviderKey(profileId),
+          nextProvider
+        )
+        window.localStorage.setItem(assistantModelKey(profileId), nextModel)
+      } catch {
+        // ignore storage issues
+      }
+      return created.id
+    },
+    []
+  )
+
+  const ensureThread = useCallback(
+    async (profileId: string, nextProvider: string, nextModel: string) => {
+      const storageKey = assistantThreadKey(profileId)
+      let nextThreadID = ''
+      try {
+        nextThreadID = window.localStorage.getItem(storageKey) || ''
+      } catch {
+        nextThreadID = ''
+      }
+
+      if (!nextThreadID) {
+        nextThreadID = await createAssistantThread(
+          profileId,
+          nextProvider,
+          nextModel
+        )
+      }
+
+      setThreadId(nextThreadID)
+      return nextThreadID
+    },
+    [createAssistantThread]
+  )
+
+  const loadMessages = useCallback(
+    async (profileId: string, targetThreadId: string) => {
+      setWorkflowRunsLoading(true)
+      try {
+        const [resp, runs] = await Promise.all([
+          cabinetProtectedFetch(
+            `/api/chat/messages?profile_id=${encodeURIComponent(profileId)}&thread_id=${encodeURIComponent(targetThreadId)}`,
+            profileId
+          ),
+          fetchChatWorkflowRuns(profileId, targetThreadId),
+        ])
+        if (!resp.ok) {
+          throw new Error('failed_to_load_assistant_messages')
+        }
+        const payload = (await resp.json()) as { messages?: Message[] }
+        setMessages(payload.messages ?? [])
+        setWorkflowRuns(runs)
+        setWorkflowRunsError('')
+      } catch (err) {
+        setWorkflowRuns([])
+        setWorkflowRunsError(
+          err instanceof Error ? err.message : 'failed_to_load_workflow_runs'
+        )
+        throw err
+      } finally {
+        setWorkflowRunsLoading(false)
+      }
+    },
+    []
+  )
 
   const loadThreads = useCallback(async (profileId: string) => {
     const resp = await fetch(
@@ -1237,22 +1252,22 @@ export function AssistantWorkspacePanel() {
           '/api/chat/messages',
           activeProfileId,
           {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profile_id: activeProfileId,
-            thread_id: threadId,
-            role: 'user',
-            content: normalizedDraft,
-            attachment_ids: attachments.map((attachment) => attachment.id),
-            agent_context: agentContextEnvelope,
-            context: {
-              route: routeContext,
-              profile: { id: activeProfileId },
-              selection: { active_workspace_collection: selectionContext },
-              assistant: { provider, model },
-            },
-          }),
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              profile_id: activeProfileId,
+              thread_id: threadId,
+              role: 'user',
+              content: normalizedDraft,
+              attachment_ids: attachments.map((attachment) => attachment.id),
+              agent_context: agentContextEnvelope,
+              context: {
+                route: routeContext,
+                profile: { id: activeProfileId },
+                selection: { active_workspace_collection: selectionContext },
+                assistant: { provider, model },
+              },
+            }),
           }
         )
         if (!response.ok) throw new Error('failed_to_send_assistant_message')
@@ -1487,19 +1502,19 @@ export function AssistantWorkspacePanel() {
         '/api/chat/actions/preview',
         activeProfileId,
         {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          thread_id: threadId,
-          action: 'create_item_stub',
-          payload: {
-            part_number: actionPartNumber.trim(),
-            title: actionTitle.trim(),
-            brand: 'AFX',
-            category: 'General',
-          },
-        }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_id: activeProfileId,
+            thread_id: threadId,
+            action: 'create_item_stub',
+            payload: {
+              part_number: actionPartNumber.trim(),
+              title: actionTitle.trim(),
+              brand: 'AFX',
+              category: 'General',
+            },
+          }),
         }
       )
       if (!response.ok) throw new Error(`assistant_preview_${response.status}`)
@@ -1843,18 +1858,18 @@ export function AssistantWorkspacePanel() {
         '/api/agent/skills/preview',
         activeProfileId,
         {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          skill_id: agentSkillID,
-          source_surface: selectedAgentSkillOption.surface,
-          source_channel: 'in-app',
-          source_thread_id: threadId,
-          source_message_id: 'assistant-workspace-agent-skill',
-          agent_context: agentContextEnvelope,
-          parameters: agentSkillParameters(),
-        }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_id: activeProfileId,
+            skill_id: agentSkillID,
+            source_surface: selectedAgentSkillOption.surface,
+            source_channel: 'in-app',
+            source_thread_id: threadId,
+            source_message_id: 'assistant-workspace-agent-skill',
+            agent_context: agentContextEnvelope,
+            parameters: agentSkillParameters(),
+          }),
         }
       )
       if (!response.ok) {
@@ -1903,14 +1918,14 @@ export function AssistantWorkspacePanel() {
         '/api/chat/actions/apply',
         activeProfileId,
         {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          thread_id: threadId,
-          preview_id: actionPreview.id,
-          confirm: true,
-        }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_id: activeProfileId,
+            thread_id: threadId,
+            preview_id: actionPreview.id,
+            confirm: true,
+          }),
         }
       )
       if (!response.ok) throw new Error(`assistant_apply_${response.status}`)
@@ -1938,19 +1953,19 @@ export function AssistantWorkspacePanel() {
         '/api/agent/skills/apply',
         activeProfileId,
         {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          skill_id: agentSkillPreview.skill_id,
-          confirm: true,
-          source_surface: selectedAgentSkillOption.surface,
-          source_channel: 'in-app',
-          source_thread_id: threadId,
-          source_message_id: 'assistant-workspace-agent-skill',
-          agent_context: agentContextEnvelope,
-          parameters: agentSkillParameters(),
-        }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_id: activeProfileId,
+            skill_id: agentSkillPreview.skill_id,
+            confirm: true,
+            source_surface: selectedAgentSkillOption.surface,
+            source_channel: 'in-app',
+            source_thread_id: threadId,
+            source_message_id: 'assistant-workspace-agent-skill',
+            agent_context: agentContextEnvelope,
+            parameters: agentSkillParameters(),
+          }),
         }
       )
       if (!response.ok) {
@@ -1992,9 +2007,33 @@ export function AssistantWorkspacePanel() {
   }
 
   const applyLink = resultLink(applyResult)
+  const compactModalStyle = isMobile
+    ? ({
+        position: 'relative',
+        inset: 'auto',
+        transform: 'none',
+        width: '100%',
+        height: '100%',
+        maxHeight: '100%',
+      } satisfies CSSProperties)
+    : undefined
+
+  const openFullChat = () => {
+    if (!threadId) {
+      return
+    }
+    const search = new URLSearchParams({
+      thread_id: threadId,
+      focus: 'composer',
+    })
+    window.location.assign(`/chats/?${search.toString()}`)
+  }
 
   return (
-    <div className='px-2 py-2' data-testid='shell-assistant-workspace'>
+    <div
+      className='relative z-[1002] flex min-h-0 flex-1 px-2 py-2 max-md:fixed max-md:inset-2 max-md:p-0'
+      data-testid='shell-assistant-workspace'
+    >
       <AssistantRuntimeProvider runtime={assistantRuntime}>
         <AssistantModalPrimitive.Root
           defaultOpen
@@ -2021,11 +2060,12 @@ export function AssistantWorkspacePanel() {
             align='start'
             sideOffset={8}
             collisionPadding={12}
-            className='z-[1000] flex h-[min(46rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
+            className='z-[1000] flex h-[min(46rem,calc(100vh-6rem))] max-h-[calc(100vh-1rem)] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none max-md:!relative max-md:!inset-auto max-md:!h-full max-md:!max-h-full max-md:!w-full max-md:!translate-x-0 max-md:!translate-y-0 max-md:overflow-hidden'
+            style={compactModalStyle}
             data-testid='shell-assistant-modal-content'
           >
             <section
-              className='flex min-h-0 flex-1 flex-col overflow-hidden'
+              className='flex min-h-0 w-full flex-1 flex-col overflow-hidden max-md:h-full max-md:overflow-y-auto'
               data-testid='shell-assistant-codex-chat'
             >
               <div
@@ -2040,6 +2080,26 @@ export function AssistantWorkspacePanel() {
                     <span>Chat</span>
                   </h2>
                   <div className='flex items-center gap-1'>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      data-testid='shell-assistant-open-full-chat'
+                      aria-label='Open this thread in full Chat'
+                      title='Open this thread in full Chat'
+                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
+                      onClick={openFullChat}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') {
+                          return
+                        }
+                        event.preventDefault()
+                        openFullChat()
+                      }}
+                      disabled={!threadId || loading || sending}
+                    >
+                      <ExternalLink className='h-3.5 w-3.5' />
+                    </Button>
                     <Button
                       type='button'
                       variant='ghost'
@@ -2080,7 +2140,7 @@ export function AssistantWorkspacePanel() {
                 </div>
 
                 <div
-                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/70 p-3'
+                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/70 p-3 max-md:hidden'
                   data-testid='shell-assistant-identity-card'
                 >
                   <div className='flex items-start gap-2'>
@@ -2113,7 +2173,7 @@ export function AssistantWorkspacePanel() {
                   </div>
                 </div>
 
-                <label className='mt-3 block space-y-1 text-xs'>
+                <label className='mt-3 block space-y-1 text-xs max-md:hidden'>
                   <span className='font-medium text-slate-300'>
                     Conversation
                   </span>
@@ -2135,7 +2195,7 @@ export function AssistantWorkspacePanel() {
                   </select>
                 </label>
 
-                <div className='mt-3 flex flex-wrap gap-2 text-[11px]'>
+                <div className='mt-3 flex flex-wrap gap-2 text-[11px] max-md:hidden'>
                   <Badge
                     variant='outline'
                     data-testid='shell-assistant-context-chip'
@@ -2169,7 +2229,7 @@ export function AssistantWorkspacePanel() {
                   </Badge>
                 </div>
 
-                <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
+                <div className='mt-3 grid grid-cols-2 gap-2 text-xs max-md:hidden'>
                   <label className='space-y-1'>
                     <span className='font-medium text-slate-300'>Provider</span>
                     <select
@@ -2204,7 +2264,7 @@ export function AssistantWorkspacePanel() {
                   </label>
                 </div>
 
-                <div className='mt-3 grid gap-1 text-[11px] text-slate-400'>
+                <div className='mt-3 grid gap-1 text-[11px] text-slate-400 max-md:hidden'>
                   <span>
                     Profile:{' '}
                     <span data-testid='shell-assistant-profile-scope'>
@@ -2451,7 +2511,7 @@ export function AssistantWorkspacePanel() {
                 ) : null}
               </div>
 
-              <ScrollArea className='min-h-0 flex-1 bg-slate-950 p-3'>
+              <ScrollArea className='min-h-0 flex-1 bg-slate-950 p-3 max-md:hidden'>
                 <div
                   className='space-y-4 pb-2'
                   data-testid='shell-assistant-message-list'
@@ -2492,7 +2552,7 @@ export function AssistantWorkspacePanel() {
                     >
                       {displayedPermissionGuidance}
                     </p>
-                    <div className='mt-3 grid gap-2'>
+                    <div className='mt-3 grid gap-2 max-md:hidden'>
                       <Input
                         data-testid='shell-assistant-preview-part-number'
                         className='border-slate-700 bg-slate-950 text-slate-100'
@@ -2729,7 +2789,7 @@ export function AssistantWorkspacePanel() {
                 </p>
               ) : null}
 
-              <div className='border-t border-slate-800 bg-slate-950 p-3'>
+              <div className='max-h-[48vh] shrink-0 overflow-y-auto border-t border-slate-800 bg-slate-950 p-3 md:max-h-none md:overflow-visible'>
                 <div
                   className='mb-3 space-y-2 rounded-lg border border-slate-800 bg-slate-900/70 p-2 text-xs text-slate-300'
                   data-testid='shell-assistant-attachment-panel'
@@ -2820,9 +2880,37 @@ export function AssistantWorkspacePanel() {
                     disabled: !threadId || loading || sending,
                     sending,
                   }}
+                  classNames={{
+                    root: 'max-md:relative max-md:w-full max-md:pr-12',
+                    input: 'max-md:w-full',
+                    sendButton: 'max-md:absolute max-md:top-1 max-md:right-1',
+                  }}
+                  testIds={{
+                    sendButton: 'shell-assistant-send-button-primitive',
+                  }}
                 />
+                <Button
+                  type='button'
+                  size='icon'
+                  data-testid='shell-assistant-send-button'
+                  aria-label='Send assistant message'
+                  title='Send assistant message'
+                  className='mt-2 md:hidden'
+                  disabled={!threadId || loading || sending}
+                  onClick={() => {
+                    const draft =
+                      document
+                        .querySelector<HTMLTextAreaElement>(
+                          '[data-testid="shell-assistant-compose-input"]'
+                        )
+                        ?.value.trim() ?? ''
+                    void sendAssistantMessage(draft)
+                  }}
+                >
+                  <Send className='h-4 w-4' />
+                </Button>
                 <details
-                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300'
+                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300 max-md:hidden'
                   data-testid='shell-assistant-action-timeline'
                 >
                   <summary className='cursor-pointer list-none font-medium'>

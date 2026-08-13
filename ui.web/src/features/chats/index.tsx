@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   AssistantRuntimeProvider,
@@ -19,6 +19,7 @@ import {
   Share2,
   Sparkles,
 } from 'lucide-react'
+import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,7 +41,6 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import {
   CabinetAssistantUiComposer,
   CabinetAssistantUiMessageList,
@@ -207,6 +208,7 @@ export function Chats() {
   const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
   const [applyNotice, setApplyNotice] = useState('')
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
+  const applyActionButtonRef = useRef<HTMLButtonElement | null>(null)
   const [workflowRuns, setWorkflowRuns] = useState<ChatWorkflowRun[]>([])
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false)
   const [workflowRunsError, setWorkflowRunsError] = useState('')
@@ -363,6 +365,22 @@ export function Chats() {
   }, [loadBootstrap])
 
   useEffect(() => {
+    if (!selectedThreadId || typeof window === 'undefined') {
+      return
+    }
+    const search = new URLSearchParams(window.location.search)
+    if (search.get('focus') !== 'composer') {
+      return
+    }
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="chat-compose-input"]')
+        ?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [selectedThreadId])
+
+  useEffect(() => {
     setApplyResult(null)
     setApplyNotice('')
     setConfirmApplyOpen(false)
@@ -464,30 +482,30 @@ export function Chats() {
         '/api/chat/messages',
         activeProfileId,
         {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          thread_id: selectedThreadId,
-          role: 'user',
-          content,
-          attachment_ids: attachments.map((attachment) => attachment.id),
-          agent_context: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             profile_id: activeProfileId,
             thread_id: selectedThreadId,
-            route_id: '/chats/',
-            surface_id: 'chats.main',
-            source_channel: 'in-app',
-            permission_state: 'ask_before_local_changes',
-            setup_state: 'ready',
-            intent_text: content,
-          },
-          context: {
-            route: { pathname: '/chats/' },
-            profile: { id: activeProfileId },
-            assistant: assistantDefaults,
-          },
-        }),
+            role: 'user',
+            content,
+            attachment_ids: attachments.map((attachment) => attachment.id),
+            agent_context: {
+              profile_id: activeProfileId,
+              thread_id: selectedThreadId,
+              route_id: '/chats/',
+              surface_id: 'chats.main',
+              source_channel: 'in-app',
+              permission_state: 'ask_before_local_changes',
+              setup_state: 'ready',
+              intent_text: content,
+            },
+            context: {
+              route: { pathname: '/chats/' },
+              profile: { id: activeProfileId },
+              assistant: assistantDefaults,
+            },
+          }),
         }
       )
       if (!response.ok) {
@@ -575,14 +593,14 @@ export function Chats() {
       '/api/chat/actions/apply',
       activeProfileId,
       {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        profile_id: activeProfileId,
-        thread_id: selectedThreadId,
-        preview_id: actionPreview.id,
-        confirm: true,
-      }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          thread_id: selectedThreadId,
+          preview_id: actionPreview.id,
+          confirm: true,
+        }),
       }
     )
     if (!response.ok) {
@@ -610,13 +628,13 @@ export function Chats() {
       '/api/chat/actions/cancel',
       activeProfileId,
       {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        profile_id: activeProfileId,
-        thread_id: selectedThreadId,
-        preview_id: actionPreview.id,
-      }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          thread_id: selectedThreadId,
+          preview_id: actionPreview.id,
+        }),
       }
     )
     if (!response.ok) {
@@ -638,6 +656,13 @@ export function Chats() {
         : 'Action apply canceled; no mutation applied.'
     )
     await loadMessages(activeProfileId, selectedThreadId)
+  }
+
+  const closeApplyConfirmation = () => {
+    setConfirmApplyOpen(false)
+    window.requestAnimationFrame(() => {
+      applyActionButtonRef.current?.focus()
+    })
   }
 
   const applyResultSummary = (() => {
@@ -708,7 +733,7 @@ export function Chats() {
       : actionPreview.status
 
   return (
-    <>
+    <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}>
       <Header>
         <Search />
         <HeaderTitle
@@ -729,7 +754,7 @@ export function Chats() {
         </div>
       </Header>
 
-      <Main fixed className='overflow-hidden'>
+      <Main fixed className='min-h-0 overflow-hidden px-2 py-2 sm:px-4 sm:py-4'>
         <div className='sr-only'>
           <h1>Chats</h1>
           <p data-testid='chat-workspace-description'>
@@ -761,13 +786,12 @@ export function Chats() {
         ) : null}
 
         <section
-          className='grid h-full min-h-[620px] overflow-hidden border border-slate-800 bg-[#05060a] text-slate-100 shadow-2xl'
-          style={{ gridTemplateColumns: '300px minmax(0, 1fr)' }}
+          className='grid h-full min-h-0 grid-cols-1 overflow-hidden border border-slate-800 bg-[#05060a] text-slate-100 shadow-2xl lg:grid-cols-[300px_minmax(0,1fr)]'
           data-testid='chat-layout'
           data-visual-contract='assistant-ui-example'
         >
           <aside
-            className='flex min-h-0 flex-col border-b border-slate-800 bg-[#070910] p-3 lg:border-e lg:border-b-0'
+            className='hidden min-h-0 flex-col border-b border-slate-800 bg-[#070910] p-3 lg:flex lg:border-e lg:border-b-0'
             data-testid='chat-conversation-rail'
           >
             <div className='mb-4 flex items-center gap-3'>
@@ -907,7 +931,7 @@ export function Chats() {
             ) : (
               <>
                 <div
-                  className='flex min-h-[500px] flex-1 flex-col'
+                  className='flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
                   data-testid='chat-main-surface'
                 >
                   <div
@@ -957,7 +981,7 @@ export function Chats() {
                   </div>
                   <AssistantRuntimeProvider runtime={chatAssistantRuntime}>
                     <ScrollArea
-                      className='min-h-[360px] flex-1 rounded-none border-0 bg-transparent px-4 py-6'
+                      className='min-h-40 shrink-0 rounded-none border-0 bg-transparent px-3 py-3 lg:min-h-0 lg:flex-1 lg:shrink sm:px-4 sm:py-6'
                       data-testid='chat-main-canvas'
                     >
                       {messagesLoading ? (
@@ -969,7 +993,7 @@ export function Chats() {
                       selectedThread &&
                       messages.length === 0 ? (
                         <div
-                          className='flex h-full min-h-[320px] items-center justify-center'
+                          className='flex h-full min-h-0 items-center justify-center'
                           data-testid='chat-empty-thread-state'
                         >
                           <div className='text-center'>
@@ -1072,21 +1096,34 @@ export function Chats() {
                               </p>
                             </div>
                             <div className='flex flex-wrap gap-2'>
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant='outline'
-                                className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                                data-testid='chat-apply-action-button'
-                                onClick={() => setConfirmApplyOpen(true)}
-                                disabled={
-                                  !selectedThreadId ||
-                                  !actionPreview.id ||
-                                  actionPreviewStatusLabel !== 'pending'
-                                }
-                              >
-                                Apply
-                              </Button>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  ref={applyActionButtonRef}
+                                  type='button'
+                                  size='sm'
+                                  variant='outline'
+                                  className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                                  data-testid='chat-apply-action-button'
+                                  onClick={() => setConfirmApplyOpen(true)}
+                                  onKeyDown={(event) => {
+                                    if (
+                                      event.key !== 'Enter' &&
+                                      event.key !== ' '
+                                    ) {
+                                      return
+                                    }
+                                    event.preventDefault()
+                                    setConfirmApplyOpen(true)
+                                  }}
+                                  disabled={
+                                    !selectedThreadId ||
+                                    !actionPreview.id ||
+                                    actionPreviewStatusLabel !== 'pending'
+                                  }
+                                >
+                                  Apply
+                                </Button>
+                              </AlertDialogTrigger>
                               <Button
                                 type='button'
                                 size='sm'
@@ -1190,7 +1227,7 @@ export function Chats() {
                       </div>
                     </ScrollArea>
                     <div
-                      className='relative z-10 mx-auto mt-auto w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-950 p-3 shadow-xl'
+                      className='relative z-10 mx-auto mt-auto max-h-[55vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950 p-3 shadow-xl sm:max-h-none sm:overflow-visible'
                       data-testid='chat-composer-shell'
                       data-position='bottom-center'
                     >
@@ -1292,35 +1329,40 @@ export function Chats() {
         </section>
       </Main>
 
-      <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}>
-        <AlertDialogContent data-testid='chat-apply-confirm-dialog'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
-            <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
-              {actionPreview
-                ? `Apply ${actionPreview.action} with ${actionPreviewTargetSummary || `part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
-                : 'No action preview selected.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              data-testid='chat-apply-confirm-cancel'
-              onClick={() => void cancelPreviewApply()}
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              data-testid='chat-apply-confirm-submit'
-              onClick={(event) => {
-                event.preventDefault()
-                void applyPreviewAction()
-              }}
-            >
-              Confirm Apply
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+      <AlertDialogContent data-testid='chat-apply-confirm-dialog'>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
+          <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
+            {actionPreview
+              ? `Apply ${actionPreview.action} with ${actionPreviewTargetSummary || `part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
+              : 'No action preview selected.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            data-testid='chat-apply-confirm-cancel'
+            onClick={closeApplyConfirmation}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') {
+                return
+              }
+              event.preventDefault()
+              closeApplyConfirmation()
+            }}
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid='chat-apply-confirm-submit'
+            onClick={(event) => {
+              event.preventDefault()
+              void applyPreviewAction()
+            }}
+          >
+            Confirm Apply
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
