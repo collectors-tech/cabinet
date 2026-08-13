@@ -96,16 +96,25 @@ type CabinetAssistantUiComposerProps = {
     input?: string
     sendButton?: string
   }
+  classNames?: {
+    root?: string
+    input?: string
+    sendButton?: string
+  }
 }
 
 export function CabinetAssistantUiComposer({
   composer,
   placeholder = 'Ask Cabinet to update, find, or link records...',
   testIds,
+  classNames,
 }: CabinetAssistantUiComposerProps) {
   return (
     <ComposerPrimitive.Root
-      className='flex items-center gap-2 rounded-2xl border bg-muted/20 p-1'
+      className={cn(
+        'flex min-w-0 items-center gap-2 rounded-2xl border bg-muted/20 p-1',
+        classNames?.root
+      )}
       data-testid={testIds?.root ?? 'shell-assistant-ui-composer-primitive'}
       data-sending={composer.sending ? 'true' : 'false'}
     >
@@ -113,7 +122,10 @@ export function CabinetAssistantUiComposer({
         data-testid={testIds?.input ?? 'shell-assistant-compose-input'}
         placeholder={placeholder}
         disabled={composer.disabled}
-        className='max-h-32 min-h-9 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none focus-visible:ring-0'
+        className={cn(
+          'max-h-32 min-h-9 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none focus-visible:ring-0',
+          classNames?.input
+        )}
       />
       <ComposerPrimitive.Send asChild>
         <Button
@@ -123,6 +135,7 @@ export function CabinetAssistantUiComposer({
           aria-label='Send assistant message'
           title='Send assistant message'
           disabled={composer.disabled}
+          className={classNames?.sendButton}
         >
           <Send className='h-4 w-4' />
         </Button>

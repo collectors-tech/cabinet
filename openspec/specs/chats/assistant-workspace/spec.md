@@ -153,3 +153,14 @@ The shell Assistant side-panel MUST keep React Hook dependency semantics explici
 - **THEN** the side-panel default sync MUST compare the current visible provider/model and the thread metadata provider/model explicitly
 - **AND** it MUST update local storage and visible provider/model only for assistant workspace session threads
 - **AND** route/search/message re-renders MUST NOT cause unrelated context recomputation or thread reset.
+
+### Requirement ASSISTANT-WORKSPACE-017: Agent controls SHALL remain keyboard reachable at compact and zoom-equivalent layouts
+The shell Agent workspace MUST keep its native launcher, composer, attachments, results, and guarded action controls reachable without forced events at a 640 by 360 compact desktop or 200-percent-zoom-equivalent viewport, and MUST provide a thread-preserving handoff to full Chat.
+
+#### Scenario: Use contextual Agent and continue in full Chat with the keyboard
+- **GIVEN** an authenticated Cabinet route is rendered at a 640 by 360 viewport
+- **WHEN** the user activates the native Agent launcher with Enter, reaches contextual composer and attachment controls, and activates the full-Chat handoff with Space
+- **THEN** every operated control MUST be visible within the viewport or its intended scroll container
+- **AND** full Chat MUST open the same profile-scoped thread
+- **AND** keyboard focus MUST move to the full Chat composer
+- **AND** the flow MUST NOT require forced events, hidden controls, or test-only production behavior

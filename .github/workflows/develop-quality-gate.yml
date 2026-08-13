@@ -106,6 +106,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
       - name: Run complete Go repository test suite
         run: go test ./...
 

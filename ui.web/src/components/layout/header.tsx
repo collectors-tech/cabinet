@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { useShellWorkspace } from '@/context/shell-workspace-context'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { SidebarTrigger } from '@/components/ui/sidebar'
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
 
 type HeaderProps = React.HTMLAttributes<HTMLElement> & {
   fixed?: boolean
@@ -122,7 +122,25 @@ export function HeaderTitle({
 export function Header({ className, fixed, children, ...props }: HeaderProps) {
   const [offset, setOffset] = useState(0)
   const { activeWorkspace, toggleAssistantWorkspace } = useShellWorkspace()
+  const { isMobile, setOpenMobile } = useSidebar()
   const assistantActive = activeWorkspace === 'assistant'
+
+  const handleAssistantToggle = () => {
+    if (!assistantActive && isMobile) {
+      setOpenMobile(false)
+    }
+    toggleAssistantWorkspace()
+  }
+
+  const handleAssistantToggleKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+    event.preventDefault()
+    handleAssistantToggle()
+  }
 
   useEffect(() => {
     const onScroll = () => {
@@ -172,7 +190,8 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
               ? 'Return to navigation workspace'
               : 'Open assistant workspace'
           }
-          onClick={toggleAssistantWorkspace}
+          onClick={handleAssistantToggle}
+          onKeyDown={handleAssistantToggleKeyDown}
           className='shrink-0'
         >
           <MessageSquare className='h-4 w-4' />

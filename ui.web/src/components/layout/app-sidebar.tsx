@@ -76,7 +76,8 @@ export function AppSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { collapsible, variant } = useLayout()
-  const { state: sidebarState, isMobile, setOpen } = useSidebar()
+  const { state: sidebarState, isMobile, setOpen, setOpenMobile } =
+    useSidebar()
   const { t } = useTranslation('nav')
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const isCollapsedSidebar = sidebarState === 'collapsed' && !isMobile
@@ -407,8 +408,23 @@ export function AppSidebar() {
   const searchActive = !inboxActive && activeWorkspace === 'search'
   const assistantActive = !inboxActive && activeWorkspace === 'assistant'
 
+  useEffect(() => {
+    if (isMobile && assistantActive) {
+      setOpenMobile(false)
+    }
+  }, [assistantActive, isMobile, setOpenMobile])
+
   return (
-    <Sidebar collapsible={collapsible} variant={variant}>
+    <Sidebar
+      collapsible={collapsible}
+      variant={variant}
+      mobileSheetMode={assistantActive ? 'assistant' : 'default'}
+      className={
+        assistantActive
+          ? 'assistant-active-mobile-sheet max-md:w-[calc(100vw-1rem)] max-md:overflow-visible max-md:duration-0 max-md:data-[state=open]:animate-none'
+          : undefined
+      }
+    >
       <SidebarHeader>
         <TeamSwitcher teams={sidebarData.teams} />
         <div
@@ -515,7 +531,15 @@ export function AppSidebar() {
          /* if you want to use the normal app title instead of TeamSwitch dropdown */}
         {/* <AppTitle /> */}
       </SidebarHeader>
-      <SidebarContent className={navEditMode ? 'overflow-hidden' : undefined}>
+      <SidebarContent
+        className={
+          navEditMode || assistantActive
+            ? assistantActive
+              ? 'overflow-visible'
+              : 'overflow-hidden'
+            : undefined
+        }
+      >
         {navEditMode ? (
           <div
             className='flex min-h-full flex-col overflow-hidden px-2 py-2'
