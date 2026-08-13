@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/sidebar'
 import { DatabaseProfileIcon } from '@/assets/database-profile-icon'
 import { lockLocalServerSession } from '@/lib/cabinet-session'
+import { activateProfile } from '@/lib/profile-activation'
 
 type TeamSwitcherProps = {
   teams: {
@@ -147,15 +148,16 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
     if (!profileID) {
       return
     }
-    await lockLocalServerSession()
-    const setActiveResp = await fetch('/api/profiles/active', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profile_id: profileID }),
-    })
+    const setActiveResp = await activateProfile(profileID)
     if (!setActiveResp.ok) {
+      setLoadError(
+        setActiveResp.status === 503
+          ? 'Database is busy. Retry switching databases.'
+          : 'Profile unavailable. Retry loading databases.'
+      )
       return
     }
+    await lockLocalServerSession()
     const selectedWorkspace = availableWorkspaces.find(
       (workspace) => workspace.name === targetName
     )
@@ -195,16 +197,16 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
       return
     }
 
-    await lockLocalServerSession()
-    const setActiveResp = await fetch('/api/profiles/active', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profile_id: profileID }),
-    })
+    const setActiveResp = await activateProfile(profileID)
     if (!setActiveResp.ok) {
-      setLoadError('Profile unavailable. Retry loading databases.')
+      setLoadError(
+        setActiveResp.status === 503
+          ? 'Database is busy. Retry activating the new database.'
+          : 'Profile unavailable. Retry loading databases.'
+      )
       return
     }
+    await lockLocalServerSession()
 
     const selectedWorkspace = {
       name: created.name?.trim() || profileName,
