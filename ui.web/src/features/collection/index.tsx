@@ -2155,6 +2155,7 @@ export function Collection({
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [cameraSuccess, setCameraSuccess] = useState<string | null>(null)
   const [activeProfileID, setActiveProfileID] = useState('')
+  const [activeProfileResolved, setActiveProfileResolved] = useState(false)
   const [workspaceSnapshotReady, setWorkspaceSnapshotReady] = useState(false)
   const [selectedItemID, setSelectedItemID] = useState('')
   const [selectedItemLabel, setSelectedItemLabel] = useState('')
@@ -2227,6 +2228,7 @@ export function Collection({
   >(null)
   const inventoryPhotoRequestIDRef = useRef(0)
   const inventoryItemDetailRequestIDRef = useRef(0)
+  const inventoryLoadInFlightRef = useRef(false)
   const selectedItemIDRef = useRef('')
   const {
     workspaceCollections,
@@ -2489,8 +2491,11 @@ export function Collection({
         selectInventoryItem(null)
         return
       }
+      if (inventoryLoadInFlightRef.current) {
+        return
+      }
+      inventoryLoadInFlightRef.current = true
       setLoading(true)
-      setLoadError(null)
       try {
         const response = await fetch('/api/items')
         if (!response.ok) {
@@ -2561,6 +2566,7 @@ export function Collection({
         setInventoryItems(items)
         setTableData(mapped)
         selectInventoryItem(targetItem)
+        setLoadError(null)
       } catch {
         setLoadError(
           'Inventory failed to load. Retry and confirm runtime API availability.'
@@ -2569,6 +2575,7 @@ export function Collection({
         setTableData([])
         selectInventoryItem(null)
       } finally {
+        inventoryLoadInFlightRef.current = false
         setLoading(false)
       }
     },
@@ -2576,8 +2583,14 @@ export function Collection({
   )
 
   useEffect(() => {
+    if (
+      routePath === '/_authenticated/inventory/' &&
+      !activeProfileResolved
+    ) {
+      return
+    }
     void loadInventoryItems()
-  }, [loadInventoryItems])
+  }, [activeProfileResolved, loadInventoryItems, routePath])
 
   const saveDroppedInventoryImage = useCallback(
     async (file: File) => {
@@ -3949,10 +3962,12 @@ export function Collection({
   useEffect(() => {
     if (!isInventoryRoute) {
       setActiveProfileID('')
+      setActiveProfileResolved(false)
       setWorkspaceSnapshotReady(false)
       return
     }
     let cancelled = false
+    setActiveProfileResolved(false)
     const loadActiveProfile = async () => {
       try {
         const response = await fetch('/api/profiles/active')
@@ -3966,6 +3981,10 @@ export function Collection({
       } catch {
         if (!cancelled) {
           setActiveProfileID('')
+        }
+      } finally {
+        if (!cancelled) {
+          setActiveProfileResolved(true)
         }
       }
     }
@@ -5322,7 +5341,7 @@ export function Collection({
                   </strong>
                 </span>
               </p>
-              {loading ? (
+              {loading && !loadError ? (
                 <div
                   className='rounded-md border p-6 text-sm text-muted-foreground'
                   data-testid='inventory-loading'
@@ -5338,10 +5357,20 @@ export function Collection({
                   <p className='font-medium'>Inventory load failed</p>
                   <p className='mt-1 text-muted-foreground'>{loadError}</p>
                   <Button
+                    type='button'
                     className='mt-3'
                     variant='outline'
                     size='sm'
+                    data-testid='inventory-retry-action'
+                    disabled={loading}
+                    aria-busy={loading}
                     onClick={() => void loadInventoryItems()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        void loadInventoryItems()
+                      }
+                    }}
                   >
                     Retry
                   </Button>
