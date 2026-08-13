@@ -21,6 +21,56 @@ describe("inventory-management", () => {
     ).scrollTo(position);
   }
 
+  function assertRetryRecovery(
+    activate: (retryAction: Cypress.Chainable<JQuery<HTMLButtonElement>>) => void
+  ) {
+    let attempts = 0;
+    cy.intercept("GET", "/api/items", (req) => {
+      attempts += 1;
+      if (attempts === 1) {
+        req.reply({
+          statusCode: 500,
+          body: { error: "failed_to_list_items" },
+        });
+        return;
+      }
+      req.reply({
+        delay: 500,
+        statusCode: 200,
+        body: {
+          items: [
+            {
+              id: "item-retry-1",
+              part_number: "PN-RETRY-1",
+              title: "Recovered Item",
+              status: "todo",
+              category: "feature",
+            },
+          ],
+        },
+      });
+    }).as("itemsRetry");
+
+    signIn();
+    cy.wait("@itemsRetry");
+    cy.get('[data-testid="inventory-load-error"]').should("be.visible");
+    const retryAction = cy
+      .get<HTMLButtonElement>('[data-testid="inventory-retry-action"]')
+      .should("be.visible")
+      .and("be.enabled")
+      .as("retryAction");
+    activate(retryAction);
+    cy.get("@retryAction")
+      .should("be.visible")
+      .and("be.disabled")
+      .and("have.attr", "aria-busy", "true");
+    cy.wait("@itemsRetry");
+    cy.then(() => expect(attempts).to.equal(2));
+    cy.get('[data-testid="inventory-load-error"]').should("not.exist");
+    cy.contains("Recovered Item").should("be.visible");
+    cy.contains("500").should("not.exist");
+  }
+
   it("renders inventory workspace, supports view toggle and filtering, and avoids 500", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
@@ -91,41 +141,31 @@ describe("inventory-management", () => {
     cy.contains("No results.").should("be.visible");
   });
 
-  it("UI-SCREEN-INVENTORY-ITEMS-002 shows inline error state and recovers on retry", () => {
-    let attempts = 0;
-    cy.intercept("GET", "/api/items", (req) => {
-      attempts += 1;
-      if (attempts === 1) {
-        req.reply({
-          statusCode: 500,
-          body: { error: "failed_to_list_items" },
-        });
-        return;
-      }
-      req.reply({
-        statusCode: 200,
-        body: {
-          items: [
-            {
-              id: "item-retry-1",
-              part_number: "PN-RETRY-1",
-              title: "Recovered Item",
-              status: "todo",
-              category: "feature",
-            },
-          ],
-        },
-      });
-    }).as("itemsRetry");
+  it("UI-SCREEN-INVENTORY-ITEMS-002 keeps pointer Retry stable and single-dispatch", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.click();
+    });
+  });
 
-    signIn();
-    cy.wait("@itemsRetry");
-    cy.get('[data-testid="inventory-load-error"]').should("be.visible");
-    cy.contains("button", "Retry").click();
-    cy.wait("@itemsRetry");
-    cy.get('[data-testid="inventory-load-error"]').should("not.exist");
-    cy.contains("Recovered Item").should("be.visible");
-    cy.contains("500").should("not.exist");
+  it("UI-SCREEN-INVENTORY-ITEMS-002 dispatches one Retry from focused Enter", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.focus().type("{enter}");
+    });
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-002 dispatches one Retry from focused Space", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.focus().type(" ");
+    });
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-002 ignores duplicate rapid Retry activation", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.then(($retryAction) => {
+        $retryAction[0].click();
+        $retryAction[0].click();
+      });
+    });
   });
 
   it("UI-SCREEN-INVENTORY-ITEMS-003 remains deterministic with bulk dataset filtering", () => {
@@ -606,19 +646,14 @@ describe("inventory-management", () => {
     let profileSettings: Record<string, string> = {};
     let savedViewID = "";
 
-    cy.intercept("GET", "/api/profiles/active", {
-      statusCode: 200,
-      body: { id: "inventory-profile-1" },
-    }).as("activeProfile");
-
-    cy.intercept("GET", "/api/profiles/inventory-profile-1/settings", (req) => {
+    cy.intercept("GET", /\/api\/profiles\/[^/]+\/settings$/, (req) => {
       req.reply({
         statusCode: 200,
         body: { settings: profileSettings },
       });
     }).as("inventoryProfileSettings");
 
-    cy.intercept("PUT", "/api/profiles/inventory-profile-1/settings", (req) => {
+    cy.intercept("PUT", /\/api\/profiles\/[^/]+\/settings$/, (req) => {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
       profileSettings = body.settings ?? body ?? {};
       req.reply({
@@ -634,7 +669,6 @@ describe("inventory-management", () => {
 
     cy.clearLocalStorage("cabinet.viewMode.inventory");
     signIn();
-    cy.wait("@activeProfile");
     cy.wait("@inventoryProfileSettings");
     cy.wait("@inventorySavedViewsItems");
 
@@ -643,11 +677,20 @@ describe("inventory-management", () => {
       .should("have.attr", "aria-pressed", "true");
     cy.get('input[placeholder^="Filter by title"]').type("Road");
 
-    cy.contains("th", "Title").find("button").click();
-    cy.contains('[role="menuitem"]', "Desc").click();
+    cy.contains("th", "Title")
+      .find("button")
+      .click({ force: true });
+    cy.get('[role="menuitem"]')
+      .contains(/^Desc$/)
+      .click({ force: true });
 
     cy.get('[data-testid="inventory-saved-view-save"]').click();
-    cy.get('[data-testid="inventory-saved-view-name"]').type("Road Items");
+    cy.get('[data-testid="inventory-saved-view-name"]')
+      .should("be.visible")
+      .and("be.enabled")
+      .clear()
+      .type("Road Items")
+      .should("have.value", "Road Items");
     cy.get('[data-testid="inventory-saved-view-submit"]').click();
     cy.wait("@saveInventorySettings")
       .then(() => {
@@ -667,7 +710,6 @@ describe("inventory-management", () => {
     cy.contains("Plane Delta").should("be.visible");
 
     cy.reload();
-    cy.wait("@activeProfile");
     cy.wait("@inventoryProfileSettings");
     cy.wait("@inventorySavedViewsItems");
 

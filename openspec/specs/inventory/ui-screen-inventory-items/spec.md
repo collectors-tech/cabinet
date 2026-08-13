@@ -28,6 +28,9 @@ Inventory Items SHALL support loading, empty, error, and ready states.
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** items API fails
 - **THEN** screen SHALL render inline retry/error without fatal route failure
+- **AND** the Retry action SHALL remain mounted while a retry is in flight and expose its busy/disabled state
+- **AND** pointer click, focused Enter, or focused Space SHALL each dispatch exactly one retry request
+- **AND** duplicate rapid activation SHALL NOT dispatch a second concurrent retry request
 
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-003: Inventory Items SHALL support sample and bulk data usage
 The screen SHALL remain usable with both starter and stress datasets.
@@ -174,7 +177,7 @@ Inventory item creation from provider-ingested pasted URLs SHALL save source pro
 | --- | --- | --- | --- |
 | UC-INV-01 | Open inventory ready state | List/table data renders | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-ready` |
 | UC-INV-02 | Empty filtered results | Empty state appears | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `renders empty inventory state without global 500 fallback` |
-| UC-INV-03 | API failure on load | Error state + retry, no 500 route | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-002 shows inline error state and recovers on retry` |
+| UC-INV-03 | API failure on load | Stable error-state Retry supports pointer and keyboard recovery with one in-flight request and no 500 route | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` (`UI-SCREEN-INVENTORY-ITEMS-002 keeps pointer Retry stable and single-dispatch`; `UI-SCREEN-INVENTORY-ITEMS-002 dispatches one Retry from focused Enter`; `UI-SCREEN-INVENTORY-ITEMS-002 dispatches one Retry from focused Space`; `UI-SCREEN-INVENTORY-ITEMS-002 ignores duplicate rapid Retry activation`) |
 | UC-INV-04 | Row click open details | Details drawer opens selected item | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-row-opens-details` |
 | UC-INV-05 | Checkbox bulk select | Selection mode appears, no row-open side effect | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection` |
 | UC-INV-06 | Click Add Item | Create-item workflow opens from toolbar | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-add-item-opens-create-flow` |
