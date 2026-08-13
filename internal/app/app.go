@@ -6134,6 +6134,18 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
+			if strings.TrimSpace(strings.ToLower(req.Role)) != "user" {
+				http.Error(w, `{"error":"public_chat_messages_require_user_role"}`, http.StatusForbidden)
+				return
+			}
+			if key, found := publicChatTrustedEvidenceKey(req.Context); found {
+				http.Error(w, fmt.Sprintf(`{"error":"trusted_agent_evidence_rejected","key":%q}`, key), http.StatusBadRequest)
+				return
+			}
+			if key, found := publicChatTrustedEvidenceKey(req.AgentContext); found {
+				http.Error(w, fmt.Sprintf(`{"error":"trusted_agent_evidence_rejected","key":%q}`, key), http.StatusBadRequest)
+				return
+			}
 			messageContext := agentcontext.WithEnvelope(req.Context, agentcontext.NormalizeInput{
 				ProfileID:     req.ProfileID,
 				ThreadID:      req.ThreadID,

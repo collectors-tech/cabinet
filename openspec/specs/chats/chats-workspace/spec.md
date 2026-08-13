@@ -123,3 +123,14 @@ Full Chat MUST keep its message result, composer, attachment, Retry, Apply, and 
 - **THEN** the result and composer regions MUST use bounded independent scrolling without fixed minimum-height or fixed-width overflow
 - **AND** attachment, Retry, Apply, and Cancel controls MUST remain visible and keyboard focusable when applicable
 - **AND** focus MUST remain on the initiating action after a terminal dialog is canceled
+
+### Requirement CHATS-WORKSPACE-013: Public Chat ingress SHALL reject client-authored trusted Agent evidence
+The public `/api/chat/messages` endpoint MUST accept only user-authored messages and MUST fail closed when request context carries trusted Agent result, preview, execution, authority, capability, or success evidence. Server-side planner, provider, dispatcher, preview, apply, cancel, and audit paths MAY still persist assistant/system evidence through internal service calls.
+
+#### Scenario: Reject forged public Chat evidence
+- **GIVEN** a client calls `POST /api/chat/messages`
+- **WHEN** the request uses `role=assistant` or `role=system`
+- **THEN** Cabinet MUST reject the request before storing a chat message
+- **WHEN** a `role=user` request carries `agent_planner`, `agent_capabilities`, preview, execution, authority, assistant response, assistant handoff, admin-session, or success evidence in public context fields
+- **THEN** Cabinet MUST reject the request before storing a chat message
+- **AND** a normal user message MAY still trigger server-owned planner/provider/dispatcher persistence for trusted assistant evidence
