@@ -3,11 +3,29 @@ package profile
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"modernc.org/sqlite"
 )
+
+var ErrProfileNotFound = errors.New("profile not found")
+
+func IsStorageContention(err error) bool {
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) {
+		return false
+	}
+	// Extended SQLite result codes retain the primary result in the low byte.
+	switch sqliteErr.Code() & 0xff {
+	case 5, 6: // SQLITE_BUSY, SQLITE_LOCKED
+		return true
+	default:
+		return false
+	}
+}
 
 type Profile struct {
 	ID        string `json:"id"`
@@ -50,7 +68,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (Profile, error) {
 	err := r.db.QueryRowContext(ctx, `SELECT id, name, created_at FROM profiles WHERE id = ?`, id).Scan(&p.ID, &p.Name, &p.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return Profile{}, fmt.Errorf("profile not found")
+			return Profile{}, ErrProfileNotFound
 		}
 		return Profile{}, fmt.Errorf("get profile: %w", err)
 	}
