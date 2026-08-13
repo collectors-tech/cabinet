@@ -1,9 +1,12 @@
 describe('general/icon-only-navigation', () => {
   function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-icon-nav@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eSetSetupState('present')
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path })
+    })
   }
 
   beforeEach(() => {
@@ -19,14 +22,14 @@ describe('general/icon-only-navigation', () => {
       .should('have.attr', 'data-state', 'collapsed')
 
     const navLinks = [
-      ['dashboard', 'Dashboard'],
+      ['dashboard', 'Home'],
       ['inventory', 'Inventory'],
       ['media', 'Media'],
       ['collections', 'Collections'],
       ['wishlist', 'Wishlist'],
       ['discoveries', 'Discoveries'],
       ['market-watch', 'Market Watch'],
-      ['inbox', 'Inbox'],
+      ['inbox', 'Notification Inbox'],
       ['purchases', 'Purchases'],
       ['integrations', 'Integrations'],
       ['chats', 'Chats'],
@@ -61,14 +64,14 @@ describe('general/icon-only-navigation', () => {
       .should('have.attr', 'data-state', 'expanded')
 
     const navLinks = [
-      ['dashboard', 'Dashboard'],
+      ['dashboard', 'Home'],
       ['inventory', 'Inventory'],
       ['media', 'Media'],
       ['collections', 'Collections'],
       ['wishlist', 'Wishlist'],
       ['discoveries', 'Discoveries'],
       ['market-watch', 'Market Watch'],
-      ['inbox', 'Inbox'],
+      ['inbox', 'Notification Inbox'],
       ['purchases', 'Purchases'],
       ['integrations', 'Integrations'],
       ['chats', 'Chats'],
