@@ -4,6 +4,7 @@ param(
   [string]$BaseUrl = "http://127.0.0.1:17880",
   [int]$MaxSpecs = 0,
   [string]$SpecContains = "",
+  [switch]$AllowStaleRuntimeVersion,
   [switch]$SkipIssueCreate
 )
 
@@ -101,8 +102,23 @@ $hadFailures = $false
 foreach ($spec in $specFiles) {
   $relativeSpec = $spec.FullName.Substring((Join-Path $repoRoot "ui.web").Length).TrimStart('\').Replace('\', '/')
   Write-Step "Running spec: $relativeSpec"
-  $command = "pwsh -File ./cypress.ps1 -Spec $relativeSpec -Browser $Browser"
-  & pwsh -NoLogo -NoProfile -File (Join-Path $repoRoot "cypress.ps1") -Spec $relativeSpec -Browser $Browser
+  $cypressArgs = @(
+    "-NoLogo",
+    "-NoProfile",
+    "-File", (Join-Path $repoRoot "cypress.ps1"),
+    "-Spec", $relativeSpec,
+    "-Browser", $Browser,
+    "-BaseUrl", $BaseUrl,
+    "-RequireE2EHooks",
+    "-ApiContractSmoke"
+  )
+  if ($AllowStaleRuntimeVersion) {
+    $cypressArgs += "-AllowStaleRuntimeVersion"
+  }
+  $command = "pwsh " + (($cypressArgs | ForEach-Object {
+    if ($_ -match '\s') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ }
+  }) -join " ")
+  & pwsh @cypressArgs
   $exitCode = $LASTEXITCODE
 
   $entry = [ordered]@{
@@ -110,6 +126,9 @@ foreach ($spec in $specFiles) {
     command = $command
     exit_code = $exitCode
     status = if ($exitCode -eq 0) { "pass" } else { "fail" }
+    api_contract_smoke = $true
+    require_e2e_hooks = $true
+    allow_stale_runtime_version = $AllowStaleRuntimeVersion.IsPresent
   }
   $results += $entry
 
