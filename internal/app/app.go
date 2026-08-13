@@ -114,6 +114,52 @@ func providerHTTPClient() *http.Client {
 	return sharedProviderHTTPClient
 }
 
+type profileActivationFailure struct {
+	status            int
+	publicBody        string
+	retryAfterSeconds int
+	diagnosticClass   string
+}
+
+func classifyProfileActivationFailure(err error) profileActivationFailure {
+	switch {
+	case errors.Is(err, profile.ErrProfileNotFound):
+		return profileActivationFailure{
+			status:          http.StatusBadRequest,
+			publicBody:      `{"error":"invalid_profile_id"}`,
+			diagnosticClass: "invalid_profile_id",
+		}
+	case profile.IsStorageContention(err):
+		return profileActivationFailure{
+			status:            http.StatusServiceUnavailable,
+			publicBody:        `{"error":"profile_activation_unavailable","retryable":true,"retry_after_seconds":1}`,
+			retryAfterSeconds: 1,
+			diagnosticClass:   "storage_contention",
+		}
+	default:
+		return profileActivationFailure{
+			status:          http.StatusInternalServerError,
+			publicBody:      `{"error":"profile_activation_failed"}`,
+			diagnosticClass: "unexpected_storage",
+		}
+	}
+}
+
+func profileActivationDiagnostic(failure profileActivationFailure) string {
+	return "profile activation failed: class=" + failure.diagnosticClass
+}
+
+func writeProfileActivationError(w http.ResponseWriter, err error) {
+	failure := classifyProfileActivationFailure(err)
+	if failure.retryAfterSeconds > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(failure.retryAfterSeconds))
+	}
+	if failure.status >= http.StatusInternalServerError {
+		log.Print(profileActivationDiagnostic(failure))
+	}
+	http.Error(w, failure.publicBody, failure.status)
+}
+
 func startupSampleDataSeedEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("CABINET_SEED_SAMPLE_DATA"))) {
 	case "1", "true", "yes", "on":
@@ -775,7 +821,7 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			if err := profiles.SetActiveProfile(r.Context(), req.ProfileID); err != nil {
-				http.Error(w, `{"error":"invalid_profile_id"}`, http.StatusBadRequest)
+				writeProfileActivationError(w, err)
 				return
 			}
 			active, _ := profiles.GetActiveProfile(r.Context())

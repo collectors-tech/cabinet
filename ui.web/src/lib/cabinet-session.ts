@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth-store'
+import { activateProfile } from '@/lib/profile-activation'
 
 const protectedExactPaths = new Set([
   '/api/chat/messages',
@@ -74,15 +75,7 @@ export async function bootstrapLocalServerSessionForActiveProfile() {
     if (!createdProfileID) {
       throw new Error('cabinet_session_created_profile_missing_id')
     }
-    const activateResponse = await fetch('/api/profiles/active', {
-      method: 'PUT',
-      credentials: 'same-origin',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ profile_id: createdProfileID }),
-    })
+    const activateResponse = await activateProfile(createdProfileID)
     if (!activateResponse.ok) {
       throw new Error(`cabinet_session_activate_profile_${activateResponse.status}`)
     }

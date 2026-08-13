@@ -56,3 +56,21 @@ Showcase, demo, or sample-data profiles SHALL be visibly labelled as sample cont
 - **THEN** `Primary DB` SHALL be labelled as a normal database
 - **AND** `Showcase DB` SHALL be labelled as showcase sample data before and after selection
 - **AND** `Showcase DB` SHALL render the approved DB profile icon with accessible database-profile text and contrast-appropriate dark/light variants
+
+### Requirement PROFILES-007: Cabinet SHALL distinguish invalid profile activation from storage failure
+Profile activation SHALL preserve its stable validation response for a missing profile, expose SQLite busy or locked storage as a bounded retryable service condition, and fail closed for unexpected storage errors without leaking SQL, paths, profile identifiers, or other internal details.
+
+#### Scenario: Retry a contended profile activation without clearing session state
+- **GIVEN** a valid profile is selected while SQLite is busy or locked
+- **WHEN** the active-profile write cannot complete
+- **THEN** Cabinet SHALL return HTTP 503 with `profile_activation_unavailable`, `retryable=true`, and a bounded `Retry-After`
+- **AND** the shell MAY retry the same activation at most once only for that explicit retryable response
+- **AND** the current profile and local session state SHALL remain unchanged until activation succeeds
+- **AND** a failed retry SHALL expose actionable database-busy guidance without reloading or duplicating activation
+
+#### Scenario: Fail closed for validation and unexpected storage errors
+- **GIVEN** a missing profile identifier or an unexpected storage failure
+- **WHEN** profile activation is requested
+- **THEN** a missing profile SHALL remain HTTP 400 `invalid_profile_id`
+- **AND** an unexpected storage failure SHALL return HTTP 500 `profile_activation_failed`
+- **AND** logs and public responses SHALL include only a safe diagnostic class, not SQL, database paths, profile identifiers, or raw storage errors

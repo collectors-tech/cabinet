@@ -168,6 +168,21 @@ paths:
                 $ref: "#/components/schemas/Profile"
         "400":
           $ref: "#/components/responses/Error"
+        "500":
+          description: Profile activation failed because of an unexpected storage error. Storage and SQL details are not exposed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Profile activation is temporarily unavailable because storage is busy or locked. The client may retry once after the bounded Retry-After interval.
+          headers:
+            Retry-After:
+              schema: { type: integer, minimum: 1, maximum: 2 }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/profiles/{profileID}/settings:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
@@ -6348,6 +6363,12 @@ components:
       properties:
         error:
           type: string
+        retryable:
+          type: boolean
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+          maximum: 2
     ProviderAuthErrorResponse:
       type: object
       required: [error, error_code, provider, message, next_action, query_set_id]
