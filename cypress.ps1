@@ -24,6 +24,7 @@ $script:CypressStepEvents = @()
 $script:LastApiContractSmokeSummaryPath = ""
 $script:CypressRunnerPhase = "initializing"
 $script:CypressChildPids = @()
+$script:CypressProcessTree = @()
 $script:CypressElapsedMs = $null
 $script:CypressLastOutput = @()
 $script:CypressCleanupResult = ""
@@ -300,6 +301,51 @@ function Get-ChildProcessIds([int]$parentProcessId) {
   return $descendants
 }
 
+function ConvertTo-RedactedCommandLine([string]$commandLine) {
+  if ([string]::IsNullOrWhiteSpace($commandLine)) {
+    return ""
+  }
+
+  $redacted = $commandLine
+  $redacted = $redacted -replace '(?i)(token|secret|password|passwd|api[_-]?key)(=|\s+)[^\s"]+', '$1$2[REDACTED]'
+  $redacted = $redacted -replace '(?i)(--(?:token|secret|password|passwd|api[_-]?key)(?:=|\s+))[^\s"]+', '$1[REDACTED]'
+  if ($redacted.Length -gt 500) {
+    return $redacted.Substring(0, 500)
+  }
+  return $redacted
+}
+
+function Get-ProcessTreeSnapshot([int]$rootProcessId) {
+  $processIds = @()
+  $processIds += $rootProcessId
+  $processIds += @(Get-ChildProcessIds $rootProcessId)
+  $snapshot = @()
+
+  foreach ($processId in ($processIds | Select-Object -Unique)) {
+    try {
+      $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
+      if ($process) {
+        $snapshot += [pscustomobject]@{
+          pid = [int]$process.ProcessId
+          parent_pid = [int]$process.ParentProcessId
+          name = [string]$process.Name
+          command_line = ConvertTo-RedactedCommandLine ([string]$process.CommandLine)
+        }
+      }
+    }
+    catch {
+      $snapshot += [pscustomobject]@{
+        pid = $processId
+        parent_pid = $null
+        name = ""
+        command_line = "snapshot_error=$($_.Exception.Message)"
+      }
+    }
+  }
+
+  return $snapshot
+}
+
 function Stop-OwnedProcessTree([int]$processId) {
   $stopped = @()
   $errors = @()
@@ -363,6 +409,7 @@ function Invoke-CypressProcessWithTimeout([string]$uiRoot, [string[]]$arguments,
   $completed = $process.WaitForExit($timeoutSeconds * 1000)
   $script:CypressElapsedMs = [int64][Math]::Max(0, [Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds))
   $script:CypressChildPids = @($process.Id) + @(Get-ChildProcessIds $process.Id)
+  $script:CypressProcessTree = @(Get-ProcessTreeSnapshot $process.Id)
   $script:CypressLastOutput = @(Get-LogTail @($stdoutPath, $stderrPath) 80)
 
   foreach ($line in $script:CypressLastOutput) {
@@ -515,6 +562,7 @@ function Write-RunSummary(
   [bool]$startedServer,
   [string]$runnerPhase,
   [int[]]$cypressChildPids,
+  [object[]]$cypressProcessTree,
   [Nullable[int64]]$cypressElapsedMs,
   [string[]]$cypressLastOutput,
   [string]$cypressCleanupResult,
@@ -573,6 +621,7 @@ function Write-RunSummary(
     started_server = $startedServer
     runner_phase = $runnerPhase
     cypress_child_pids = $cypressChildPids
+    cypress_process_tree = $cypressProcessTree
     cypress_elapsed_ms = $cypressElapsedMs
     cypress_last_output = $cypressLastOutput
     cypress_cleanup_result = $cypressCleanupResult
@@ -865,6 +914,7 @@ finally {
     -startedServer $startedServer `
     -runnerPhase $script:CypressRunnerPhase `
     -cypressChildPids $script:CypressChildPids `
+    -cypressProcessTree $script:CypressProcessTree `
     -cypressElapsedMs $script:CypressElapsedMs `
     -cypressLastOutput $script:CypressLastOutput `
     -cypressCleanupResult $script:CypressCleanupResult `

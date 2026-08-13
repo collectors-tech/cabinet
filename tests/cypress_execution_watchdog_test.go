@@ -48,7 +48,7 @@ func TestCypressExecutionWatchdogFailsClosedOnHungRunner(t *testing.T) {
 	npxPath := filepath.Join(fakeBin, "npx.cmd")
 	npxScript := strings.Join([]string{
 		"@echo off",
-		"powershell -NoLogo -NoProfile -Command \"Write-Output 'fake Cypress process alive before run start'; Start-Sleep -Seconds 30\"",
+		"powershell -NoLogo -NoProfile -Command \"Write-Output 'fake Cypress process alive before run start'; Start-Sleep -Seconds 30 # secret=super-secret\"",
 		"",
 	}, "\r\n")
 	if err := os.WriteFile(npxPath, []byte(npxScript), 0o755); err != nil {
@@ -93,12 +93,18 @@ func TestCypressExecutionWatchdogFailsClosedOnHungRunner(t *testing.T) {
 		t.Fatalf("read summary: %v", err)
 	}
 	var summary struct {
-		ExitCode             int      `json:"exit_code"`
-		RunnerPhase          string   `json:"runner_phase"`
-		CypressElapsedMs     int64    `json:"cypress_elapsed_ms"`
-		CypressLastOutput    []string `json:"cypress_last_output"`
-		CypressCleanupResult string   `json:"cypress_cleanup_result"`
-		ExecutionTimeoutSec  int      `json:"execution_timeout_sec"`
+		ExitCode           int      `json:"exit_code"`
+		RunnerPhase        string   `json:"runner_phase"`
+		CypressElapsedMs   int64    `json:"cypress_elapsed_ms"`
+		CypressLastOutput  []string `json:"cypress_last_output"`
+		CypressProcessTree []struct {
+			PID         int    `json:"pid"`
+			ParentPID   int    `json:"parent_pid"`
+			Name        string `json:"name"`
+			CommandLine string `json:"command_line"`
+		} `json:"cypress_process_tree"`
+		CypressCleanupResult string `json:"cypress_cleanup_result"`
+		ExecutionTimeoutSec  int    `json:"execution_timeout_sec"`
 	}
 	if err := json.Unmarshal(raw, &summary); err != nil {
 		t.Fatalf("parse summary: %v\n%s", err, string(raw))
@@ -114,5 +120,23 @@ func TestCypressExecutionWatchdogFailsClosedOnHungRunner(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(summary.CypressLastOutput, "\n"), "Run Starting") {
 		t.Fatalf("hang fixture should not fake Cypress Run Starting output: %+v", summary.CypressLastOutput)
+	}
+	if len(summary.CypressProcessTree) == 0 {
+		t.Fatalf("expected process-tree diagnostics in timeout summary:\n%s", string(raw))
+	}
+	var sawRoot bool
+	for _, process := range summary.CypressProcessTree {
+		if process.PID <= 0 {
+			t.Fatalf("expected positive process id in process-tree diagnostics: %+v", process)
+		}
+		if strings.Contains(strings.ToLower(process.CommandLine), "secret=super-secret") {
+			t.Fatalf("expected command-line diagnostics to redact secrets: %+v", process)
+		}
+		if strings.Contains(process.CommandLine, "fake Cypress process alive before run start") {
+			sawRoot = true
+		}
+	}
+	if !sawRoot {
+		t.Fatalf("expected process-tree diagnostics to include the hung fake Cypress command, got %+v", summary.CypressProcessTree)
 	}
 }

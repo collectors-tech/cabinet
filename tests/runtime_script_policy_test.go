@@ -121,6 +121,7 @@ func TestCypressScriptFailsClosedOnHungRunnerProcess(t *testing.T) {
 		"return 124",
 		"runner_phase",
 		"cypress_child_pids",
+		"cypress_process_tree",
 		"cypress_elapsed_ms",
 		"cypress_last_output",
 		"cypress_cleanup_result",
