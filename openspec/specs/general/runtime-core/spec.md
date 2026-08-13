@@ -110,7 +110,7 @@ Cabinet SHALL bind beta release-candidate validation to one repository-owned, ve
 - **AND** empty, missing, duplicate, extra, or under-scoped overrides MUST fail before Cypress starts
 - **AND** candidate evidence MUST record the exact manifest version, spec count, spec list, commit, and Cypress output
 - **AND** Cypress execution MUST use a bounded per-run watchdog that fails closed with distinct timeout evidence when the child process remains alive without completing the requested spec
-- **AND** timeout evidence MUST include runner phase, owned child process IDs, elapsed time, spec, browser, runtime revision/port, last Cypress output, and cleanup result without secrets
+- **AND** timeout evidence MUST include runner phase, owned child process IDs, sanitized owned process-tree command lines, elapsed time, spec, browser, runtime revision/port, last Cypress output, and cleanup result without secrets
 - **AND** human Frontline, Bonza, packaged Windows acceptance, and final publication steps MUST remain separate and not be auto-passed by the source Cypress pack.
 
 ### Requirement RUNTIME-CORE-025: Beta release lanes SHALL reject critical and high production dependency vulnerabilities
