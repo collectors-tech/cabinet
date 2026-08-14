@@ -4,6 +4,8 @@ describe('chats/assistant-codex-chat-ui', () => {
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    cy.e2eEnsureSignedOut()
+    cy.stubLocalServerSession('e2e-profile-001')
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inventory/',
     })
@@ -27,9 +29,12 @@ describe('chats/assistant-codex-chat-ui', () => {
     cy.contains('[data-testid="shell-assistant-message-list"]', 'Ask Cabinet to update records').should('exist')
 
     cy.get('[data-testid="shell-assistant-compose-input"]').type('create a quick item and give me the link')
-    cy.get('[data-testid="shell-assistant-send-button"]').click()
+    cy.get('[data-testid="shell-assistant-send-button-primitive"]').click()
     cy.get('[data-testid="shell-assistant-message-bubble-user"]').should('contain', 'create a quick item and give me the link')
-    cy.get('[data-testid="shell-assistant-message-bubble-assistant"]').should('contain', 'Assistant handoff queued in Inbox.')
+    cy.get('[data-testid="shell-assistant-message-list"]').should(
+      'not.contain',
+      'Assistant handoff queued in Inbox.'
+    )
 
     cy.get('[data-testid="shell-assistant-preview-part-number"]').clear().type('CODEX-001')
     cy.get('[data-testid="shell-assistant-preview-title"]').clear().type('Codex Style Result Item')
@@ -40,7 +45,9 @@ describe('chats/assistant-codex-chat-ui', () => {
     cy.get('[data-testid="shell-assistant-apply-action"]').click()
     cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
     cy.wait('@assistantApply').its('response.statusCode').should('eq', 200)
-    cy.get('[data-testid="shell-assistant-apply-result"]').scrollIntoView().should('contain', 'Applied create_item_stub')
+    cy.get('[data-testid="shell-assistant-apply-result"]')
+      .scrollIntoView()
+      .should('contain', 'Applied create_inventory_item')
     cy.get('[data-testid="shell-assistant-result-link"]')
       .should('contain', 'Open item')
       .and('have.attr', 'href')
