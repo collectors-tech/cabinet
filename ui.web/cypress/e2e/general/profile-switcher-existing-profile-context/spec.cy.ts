@@ -1,9 +1,18 @@
 describe('general/profile-switcher-existing-profile-context', () => {
-  function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-profile-select@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+  function enterWithProfile(path: string, profileId: string, profileName: string) {
+    cy.e2eEnsureSignedOut()
+    cy.intercept('POST', '/api/auth/local/session', (request) => {
+      expect(request.body.profile_id).to.be.a('string')
+      request.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+          session_token:
+            'test-only-opaque-profile-bound-session-credential-000000000001',
+        },
+      })
+    }).as('localServerSession')
+    cy.useBootstrappedProfile(profileId, profileName, { path })
   }
 
   function expectSelectedProfileOn(
@@ -25,11 +34,12 @@ describe('general/profile-switcher-existing-profile-context', () => {
       .should('eq', expectedName)
   }
 
-  it('UI-FOUNDATION-SHELL-NAVIGATION-016 selects an existing database profile across app sections', () => {
+  it('PROFILES-005 selects an existing database profile across app sections', () => {
+    let primaryID = ''
     cy.request('POST', '/api/test/reset', {})
     cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
       expect(primaryResp.status).to.eq(201)
-      const primaryID = primaryResp.body.id as string
+      primaryID = primaryResp.body.id as string
 
       cy.request('POST', '/api/profiles', { name: 'Showcase DB' }).then((showcaseResp) => {
         expect(showcaseResp.status).to.eq(201)
@@ -39,7 +49,9 @@ describe('general/profile-switcher-existing-profile-context', () => {
       })
     })
 
-    signInTo('/inventory/')
+    cy.then(() => {
+      enterWithProfile('/inventory/', primaryID, 'Primary DB')
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.get('[data-testid="active-profile-name"]').should('contain', 'Primary DB')
 
