@@ -54,6 +54,8 @@ describe('collections-sorting-no-mutation', () => {
       'loadCollectionSettings'
     )
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
       cy.request('PUT', `/api/profiles/${profile_id}/settings`, {
         settings: {
           [collectionsSettingsKey]: JSON.stringify({
