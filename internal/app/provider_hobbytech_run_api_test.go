@@ -229,10 +229,10 @@ func TestHobbytechRunFallsBackToPublicShopifySuggestWhenBoostDiscoveryIsUnavaila
 							{
 								"id": 70615,
 								"title": "AFX Low Bridge Supports",
-								"url": "/products/afx-low-bridge-supports",
+								"url": "/products/afx-low-bridge-supports?_pos=2&_psq=AFX&_psid=session-looking-value&_ss=e#results",
 								"price": "12.95",
 								"available": true,
-								"image": "https://hobbytechtoys.com.au/cdn/afx-low-bridge.jpg"
+								"image": "https://hobbytechtoys.com.au/cdn/afx-low-bridge.jpg?v=70615"
 							}
 						]
 					}
@@ -295,6 +295,12 @@ func TestHobbytechRunFallsBackToPublicShopifySuggestWhenBoostDiscoveryIsUnavaila
 	candidate := payload.Candidates[0]
 	if source, _ := candidate["source"].(string); source != "hobbytechtoys" {
 		t.Fatalf("expected Hobbytech source from fallback, got %+v", candidate)
+	}
+	if productURL, _ := candidate["url"].(string); productURL != server.URL+"/products/afx-low-bridge-supports" {
+		t.Fatalf("expected canonical Hobbytech product URL without search tracking, got %+v", candidate)
+	}
+	if imageURL, _ := candidate["image"].(string); imageURL != "https://hobbytechtoys.com.au/cdn/afx-low-bridge.jpg?v=70615" {
+		t.Fatalf("expected Hobbytech image version query to remain intact, got %+v", candidate)
 	}
 	if method, _ := payload.RunSummary["data_depth_source"].(string); method != "shopify_search_suggest_json" {
 		t.Fatalf("expected Shopify suggest fallback run summary, got %+v", payload.RunSummary)

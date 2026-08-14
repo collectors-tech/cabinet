@@ -13556,7 +13556,7 @@ func runHobbytechShopifySuggestSearch(
 	for _, product := range payload.Resources.Results.Products {
 		id := strings.TrimSpace(fmt.Sprintf("%v", product.ID))
 		title := strings.TrimSpace(product.Title)
-		productURL := normalizeProviderProductURL(baseURL, product.URL)
+		productURL := normalizeHobbytechProductURL(baseURL, product.URL)
 		price := numericCurrencyValue(product.Price)
 		if id == "" || title == "" || productURL == "" || price <= 0 {
 			missingCoreFields++
@@ -14237,6 +14237,17 @@ func normalizeProviderProductURL(baseURL, raw string) string {
 		return raw
 	}
 	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(raw, "/")
+}
+
+func normalizeHobbytechProductURL(baseURL, raw string) string {
+	normalized := normalizeProviderProductURL(baseURL, raw)
+	parsed, err := url.Parse(normalized)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 func stockStateFromAvailability(raw string) string {
