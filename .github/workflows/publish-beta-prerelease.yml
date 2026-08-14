@@ -151,6 +151,7 @@ jobs:
             candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
             candidate/dist/cabinet/cabinet-*-release-notes.md
             candidate/dist/browser-companion/browser-companion-release-manifest.json
+            candidate/dist/browser-companion/browser-companion-candidate-summary.md
             candidate/dist/browser-companion/cabinet-browser-companion-*.zip
             candidate/dist/browser-companion/cabinet-browser-companion-*.zip.sha256
             candidate/dist/browser-companion/cabinet-browser-companion-*-release-notes.md
