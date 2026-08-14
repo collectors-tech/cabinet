@@ -26,7 +26,7 @@ describe('chats/chats-workspace', () => {
     cy.get('[data-testid="chat-workspace-boundary-note"]')
       .should(
         'contain.text',
-        'Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.'
+        'Cabinet Agent keeps the same governed conversation, context, and action reviews in this full workspace and the contextual panel.'
       )
     cy.get('[data-testid="chat-thread-list"]').should('be.visible')
     cy.contains('No chat threads yet.').should('be.visible')
@@ -47,12 +47,13 @@ describe('chats/chats-workspace', () => {
       .should('have.class', 'border-cyan-400/60')
   })
 
-  it('CHATS-WORKSPACE-003 states the Assistant versus Chats boundary explicitly', () => {
+  it('CHATS-WORKSPACE-003 states the unified contextual and full Agent boundary explicitly', () => {
     openChats()
 
     cy.get('[data-testid="chat-workspace-boundary-note"]')
-      .should('contain.text', 'Assistant')
-      .and('contain.text', 'Chats')
+      .should('contain.text', 'Cabinet Agent')
+      .and('contain.text', 'same governed conversation')
+      .and('contain.text', 'contextual panel')
     cy.get('[data-testid="shell-chat-toggle"]').should('be.visible')
     cy.location('pathname').should('match', /^\/chats\/?$/)
   })

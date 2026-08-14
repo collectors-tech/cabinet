@@ -29,14 +29,14 @@ type Thread struct {
 }
 
 type Message struct {
-	ID          string         `json:"id"`
-	ProfileID   string         `json:"profile_id"`
-	ThreadID    string         `json:"thread_id"`
-	Role        string         `json:"role"`
-	Content     string         `json:"content"`
-	Attachments string         `json:"attachments_json"`
-	Context     map[string]any `json:"context,omitempty"`
-	CreatedAt   string         `json:"created_at"`
+	ID          string              `json:"id"`
+	ProfileID   string              `json:"profile_id"`
+	ThreadID    string              `json:"thread_id"`
+	Role        string              `json:"role"`
+	Content     string              `json:"content"`
+	Attachments []MessageAttachment `json:"attachments_json"`
+	Context     map[string]any      `json:"context,omitempty"`
+	CreatedAt   string              `json:"created_at"`
 }
 
 type MessageAttachment struct {
@@ -253,6 +253,10 @@ func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, 
 }
 
 func (s *Service) CreateMessageWithAttachments(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any, attachmentIDs []string) (Message, error) {
+	return s.CreateMessageWithAttachmentProvenance(ctx, profileID, threadID, role, content, messageContext, attachmentIDs, "explicit_user_upload", "in_app_chat")
+}
+
+func (s *Service) CreateMessageWithAttachmentProvenance(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any, attachmentIDs []string, provenance, source string) (Message, error) {
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
 	role = strings.TrimSpace(strings.ToLower(role))
@@ -269,7 +273,7 @@ func (s *Service) CreateMessageWithAttachments(ctx context.Context, profileID, t
 	if _, err := s.GetThread(ctx, profileID, threadID); err != nil {
 		return Message{}, err
 	}
-	attachments, err := s.messageAttachments(ctx, profileID, threadID, attachmentIDs)
+	attachments, err := s.messageAttachments(ctx, profileID, threadID, attachmentIDs, provenance, source)
 	if err != nil {
 		return Message{}, err
 	}
@@ -289,7 +293,7 @@ func (s *Service) CreateMessageWithAttachments(ctx context.Context, profileID, t
 	return s.getMessage(ctx, profileID, id)
 }
 
-func (s *Service) messageAttachments(ctx context.Context, profileID, threadID string, attachmentIDs []string) ([]MessageAttachment, error) {
+func (s *Service) messageAttachments(ctx context.Context, profileID, threadID string, attachmentIDs []string, provenance, source string) ([]MessageAttachment, error) {
 	if len(attachmentIDs) == 0 {
 		return []MessageAttachment{}, nil
 	}
@@ -301,7 +305,7 @@ func (s *Service) messageAttachments(ctx context.Context, profileID, threadID st
 			return nil, fmt.Errorf("attachment_id is required")
 		}
 		if _, ok := seen[attachmentID]; ok {
-			continue
+			return nil, fmt.Errorf("duplicate attachment_id")
 		}
 		seen[attachmentID] = struct{}{}
 		attachment, err := s.getAttachment(ctx, profileID, attachmentID)
@@ -316,8 +320,8 @@ func (s *Service) messageAttachments(ctx context.Context, profileID, threadID st
 			Filename:   attachment.Filename,
 			MimeType:   attachment.MimeType,
 			SizeBytes:  attachment.SizeBytes,
-			Provenance: "explicit_user_upload",
-			Source:     "in_app_chat",
+			Provenance: strings.TrimSpace(provenance),
+			Source:     strings.TrimSpace(source),
 			CreatedAt:  attachment.CreatedAt,
 		})
 	}
@@ -340,10 +344,12 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 	var out []Message
 	for rows.Next() {
 		var m Message
+		var attachmentsJSON string
 		var contextJSON string
-		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &attachmentsJSON, &contextJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
+		m.Attachments = parseMessageAttachmentsJSON(attachmentsJSON)
 		m.Context = parseContextJSON(contextJSON)
 		out = append(out, m)
 	}
@@ -352,20 +358,30 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 
 func (s *Service) getMessage(ctx context.Context, profileID, messageID string) (Message, error) {
 	var m Message
+	var attachmentsJSON string
 	var contextJSON string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE id = ? AND profile_id = ?
-	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt)
+	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &attachmentsJSON, &contextJSON, &m.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Message{}, fmt.Errorf("message not found")
 		}
 		return Message{}, err
 	}
+	m.Attachments = parseMessageAttachmentsJSON(attachmentsJSON)
 	m.Context = parseContextJSON(contextJSON)
 	return m, nil
+}
+
+func parseMessageAttachmentsJSON(raw string) []MessageAttachment {
+	var out []MessageAttachment
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &out); err != nil || out == nil {
+		return []MessageAttachment{}
+	}
+	return out
 }
 
 func marshalContextJSON(messageContext map[string]any) string {
@@ -1143,6 +1159,8 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 		Result:            actionResultWorkflowPayload(result),
 		ConfirmationState: "confirmed",
 	})
+	agentResponse, _ := NewAgentResponse(AgentResponseApplied, applyActionMessage(result), "", result.Action, result.Action, "chats.main", "in-app")
+	agentResponse.Preview = &AgentResponsePreview{ID: result.PreviewID, Action: result.Action, Status: "applied"}
 	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", applyActionMessage(result), map[string]any{
 		"action_result": map[string]any{
 			"preview_id":       result.PreviewID,
@@ -1155,6 +1173,7 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 			"confirmation":     "confirmed",
 			"mutation_applied": result.Applied,
 		},
+		"agent_response": agentResponse,
 	})
 	return result, nil
 }
@@ -1195,6 +1214,8 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 		Result:            actionResultWorkflowPayload(result),
 		ConfirmationState: "cancelled",
 	})
+	agentResponse, _ := NewAgentResponse(AgentResponseCancelled, cancelActionMessage(result), "", result.Action, result.Action, "chats.main", "in-app")
+	agentResponse.Preview = &AgentResponsePreview{ID: result.PreviewID, Action: result.Action, Status: "cancelled"}
 	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", cancelActionMessage(result), map[string]any{
 		"action_result": map[string]any{
 			"preview_id":       result.PreviewID,
@@ -1206,6 +1227,7 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 			"confirmation":     "cancelled",
 			"mutation_applied": false,
 		},
+		"agent_response": agentResponse,
 	})
 	return result, nil
 }

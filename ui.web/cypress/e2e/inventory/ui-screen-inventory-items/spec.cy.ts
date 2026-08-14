@@ -275,6 +275,10 @@ describe("inventory-management", () => {
       req.reply({ statusCode: 200, body: { items } });
     }).as("itemsCreate");
     cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body).to.include({
+        part_number: "PN-CREATE-1",
+        title: "Inline Created Item",
+      });
       const created = {
         id: "item-inline-created",
         part_number: req.body.part_number,
@@ -288,17 +292,25 @@ describe("inventory-management", () => {
 
     signIn();
     cy.wait("@itemsCreate");
+    cy.get('[data-testid="inventory-loading"]').should("not.exist");
 
     cy.get('[data-testid="inventory-create-menu-trigger"]').click();
     cy.get('[data-testid="inventory-create-menu-item"]').click();
     cy.get('[data-testid="inventory-item-title"]').type("Inline Created Item");
+    cy.get('[data-testid="inventory-item-title"]').should(
+      "have.value",
+      "Inline Created Item",
+    );
     cy.get('[data-testid="inventory-item-part-number"]').type("PN-CREATE-1");
     cy.get('[data-testid="inventory-item-create-submit"]').click();
 
     cy.wait("@createToolbarItem");
     cy.wait("@itemsCreate");
     cy.get('[data-testid="inventory-item-create-dialog"]').should("not.exist");
-    cy.contains("Inline Created Item").should("be.visible");
+    cy.get('[data-testid="inventory-item-row-item-inline-created"]')
+      .should("be.visible")
+      .and("contain", "PN-CREATE-1")
+      .and("contain", "Inline Created Item");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
   });
 
@@ -671,6 +683,7 @@ describe("inventory-management", () => {
     signIn();
     cy.wait("@inventoryProfileSettings");
     cy.wait("@inventorySavedViewsItems");
+    cy.wait(["@saveInventorySettings", "@saveInventorySettings"]);
 
     cy.get('button[aria-label="Switch to rows view"]')
       .click({ force: true })

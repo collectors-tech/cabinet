@@ -1,5 +1,6 @@
 describe('settings/integrations MCP transport', () => {
   function signInToIntegrations() {
+    cy.stubLocalServerSession('profile-mcp-ui')
     cy.visit('/sign-in?redirect=%2Fsettings%2Fintegrations')
     cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(

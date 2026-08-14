@@ -95,6 +95,10 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 	if len(result.Attachments) != 1 {
 		t.Fatalf("expected 1 attachment, got %d", len(result.Attachments))
 	}
+	if len(result.Message.Attachments) != 1 || result.Message.Attachments[0].ID != result.Attachments[0].ID ||
+		result.Message.Attachments[0].Provenance != "telegram_media" || result.Message.Attachments[0].Source != "telegram" {
+		t.Fatalf("expected Telegram message attachment binding with safe provenance, got %+v", result.Message.Attachments)
+	}
 	if result.Attachments[0].Filename != "front.jpg" || result.Attachments[0].MimeType != "image/jpeg" || result.Attachments[0].SizeBytes == 0 {
 		t.Fatalf("attachment metadata not preserved: %+v", result.Attachments[0])
 	}
@@ -809,6 +813,9 @@ func (nilChatService) CreateThread(context.Context, string, string, map[string]a
 	return chat.Thread{}, nil
 }
 func (nilChatService) CreateMessage(context.Context, string, string, string, string, map[string]any) (chat.Message, error) {
+	return chat.Message{}, nil
+}
+func (nilChatService) CreateMessageWithAttachmentProvenance(context.Context, string, string, string, string, map[string]any, []string, string, string) (chat.Message, error) {
 	return chat.Message{}, nil
 }
 func (nilChatService) SaveAttachment(context.Context, string, string, string, string, io.Reader) (chat.Attachment, error) {

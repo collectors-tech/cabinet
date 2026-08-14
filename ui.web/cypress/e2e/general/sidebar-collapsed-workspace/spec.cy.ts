@@ -61,7 +61,7 @@ describe('sidebar-collapsed-workspace', () => {
       .and('have.attr', 'aria-label', 'Search workspace')
     cy.get('[data-testid="shell-workspace-assistant"]')
       .should('be.visible')
-      .and('have.attr', 'aria-label', 'Chat workspace')
+      .and('have.attr', 'aria-label', 'Cabinet Agent')
     cy.get('[data-testid="shell-workspace-bell"]')
       .should('be.visible')
       .and('have.attr', 'aria-label', 'Open notification inbox')

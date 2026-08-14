@@ -239,7 +239,8 @@ func (s *Service) ValidateUnlockedSession(token string) error {
 }
 
 // ValidateUnlockedSessionProfile validates an opaque local session and returns
-// the profile bound to it by the server at authentication time.
+// the profile that the server bound to it at authentication time. Callers must
+// never infer this profile from a request body or browser state.
 func (s *Service) ValidateUnlockedSessionProfile(token string) (string, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {

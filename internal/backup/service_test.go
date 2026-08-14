@@ -102,6 +102,53 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	}
 }
 
+func TestInspectBackupRequiresLifecycleSchemaAndExactProfile(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("open compatibility sqlite: %v", err)
+	}
+	if _, err := conn.Exec(`CREATE TABLE profiles(id TEXT PRIMARY KEY); INSERT INTO profiles(id) VALUES ('profile-a');`); err != nil {
+		t.Fatalf("seed profile-only sqlite: %v", err)
+	}
+	_ = conn.Close()
+
+	svc := NewService(dbPath, filepath.Join(base, "backups"), 1)
+	legacy, err := svc.CreateBackup(context.Background())
+	if err != nil {
+		t.Fatalf("create legacy-shape backup: %v", err)
+	}
+	if _, err := svc.InspectBackup(legacy.Path, "profile-a"); err == nil || !strings.Contains(err.Error(), "receipt preservation") {
+		t.Fatalf("backup without lifecycle schema must be incompatible, err=%v", err)
+	}
+
+	conn, err = sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("reopen compatibility sqlite: %v", err)
+	}
+	if _, err := conn.Exec(`CREATE TABLE agent_skill_previews(id TEXT PRIMARY KEY); CREATE TABLE agent_skill_strong_confirmations(id TEXT PRIMARY KEY);`); err != nil {
+		t.Fatalf("seed lifecycle schema: %v", err)
+	}
+	_ = conn.Close()
+	compatible, err := svc.CreateBackup(context.Background())
+	if err != nil {
+		t.Fatalf("create compatible backup: %v", err)
+	}
+	validation, err := svc.InspectBackup(compatible.Path, "profile-a")
+	if err != nil {
+		t.Fatalf("inspect compatible backup: %v", err)
+	}
+	if !validation.Compatible || !validation.LifecycleSchemaCompatible || !validation.ProfileIncluded {
+		t.Fatalf("expected exact-profile compatible backup, got %+v", validation)
+	}
+	if _, err := svc.InspectBackup(compatible.Path, "profile-b"); err == nil || !strings.Contains(err.Error(), "active profile") {
+		t.Fatalf("backup missing required profile must fail closed, err=%v", err)
+	}
+}
+
 func TestRestoreCopyRejectsActiveDatabaseAlias(t *testing.T) {
 	t.Parallel()
 

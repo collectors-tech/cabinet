@@ -2,141 +2,199 @@ package tests
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
-func TestCypressExecutionWatchdogUsesWindowsCommandShim(t *testing.T) {
-	scriptPath := filepath.Join("..", "cypress.ps1")
-	raw, err := os.ReadFile(scriptPath)
-	if err != nil {
-		t.Fatalf("read cypress script: %v", err)
+type cypressWatchdogResult struct {
+	TimedOut    bool   `json:"timed_out"`
+	ExitCode    int    `json:"exit_code"`
+	RunnerPhase string `json:"runner_phase"`
+	RootPID     int    `json:"root_pid"`
+	ChildPIDs   []int  `json:"child_pids"`
+	ProcessTree []struct {
+		PID         int    `json:"pid"`
+		ParentPID   int    `json:"parent_pid"`
+		Name        string `json:"name"`
+		CommandLine string `json:"command_line"`
+	} `json:"process_tree"`
+	ElapsedMS     int64    `json:"elapsed_ms"`
+	LastOutput    []string `json:"last_output"`
+	CleanupResult string   `json:"cleanup_result"`
+}
+
+func TestCypressExecutionWatchdogFailsClosedAndPreservesUnrelatedProcess(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows PowerShell workflow")
 	}
-	content := string(raw)
-	for _, snippet := range []string{
-		"Resolve-CypressRunnerCommand",
-		`if ($IsWindows) {`,
-		`return "npx.cmd"`,
-		`$cypressCommand = Resolve-CypressRunnerCommand`,
-		`Start-Process -FilePath $cypressCommand`,
-	} {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected cypress script to resolve the Windows npx.cmd command shim with snippet %q", snippet)
+	repoRoot := resolveRepoRoot(t)
+	watchdogPath := filepath.Join(repoRoot, "scripts", "lib", "cypress-process-watchdog.ps1")
+	tempDir := t.TempDir()
+	fixturePath := filepath.Join(tempDir, "hanging-cypress-fixture.cmd")
+	harnessPath := filepath.Join(tempDir, "watchdog-harness.ps1")
+	stdoutPath := filepath.Join(tempDir, "fixture.stdout.log")
+	stderrPath := filepath.Join(tempDir, "fixture.stderr.log")
+	fixture := "@echo off\r\nstart \"\" /b pwsh -NoLogo -NoProfile -Command \"Start-Sleep -Seconds 120\"\r\necho fixture-ready owned_child_started\r\necho token=super-secret-fixture-value\r\nping 127.0.0.1 -n 120 >nul\r\n"
+	if err := os.WriteFile(fixturePath, []byte(fixture), 0600); err != nil {
+		t.Fatal(err)
+	}
+	harness := fmt.Sprintf(". %q\n$result = Invoke-CypressOwnedProcess -FilePath \"cmd.exe\" -ArgumentList @(\"/d\", \"/s\", \"/c\", %q, \"--token=super-secret-command-line\") -WorkingDirectory %q -TimeoutSec 1 -StandardOutputPath %q -StandardErrorPath %q -OutputTailLineCount 20\n$result | ConvertTo-Json -Depth 6 -Compress\n", watchdogPath, fixturePath, tempDir, stdoutPath, stderrPath)
+	if err := os.WriteFile(harnessPath, []byte(harness), 0600); err != nil {
+		t.Fatal(err)
+	}
+	unrelated := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 120")
+	if err := unrelated.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = unrelated.Process.Kill(); _, _ = unrelated.Process.Wait() })
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", harnessPath)
+	output, err := runWatchdogCommand(cmd, 15*time.Second)
+	if err != nil {
+		t.Fatalf("watchdog harness: %v\n%s", err, output)
+	}
+	var result cypressWatchdogResult
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &result); err != nil {
+		t.Fatalf("parse: %v\n%s", err, output)
+	}
+	if !result.TimedOut || result.ExitCode != 124 || result.RunnerPhase != "execution_timeout" {
+		t.Fatalf("timeout outcome: %+v", result)
+	}
+	if result.RootPID <= 0 || len(result.ChildPIDs) == 0 {
+		t.Fatalf("owned tree missing: %+v", result)
+	}
+	if len(result.ProcessTree) == 0 {
+		t.Fatalf("process-tree diagnostics missing: %+v", result)
+	}
+	sawRedactedCommandLine := false
+	for _, process := range result.ProcessTree {
+		if process.PID <= 0 {
+			t.Fatalf("invalid process-tree diagnostics: %+v", process)
+		}
+		if strings.Contains(process.CommandLine, "super-secret-command-line") {
+			t.Fatalf("process-tree diagnostics leaked command-line secret: %+v", process)
+		}
+		if strings.Contains(process.CommandLine, "token=[REDACTED]") {
+			sawRedactedCommandLine = true
 		}
 	}
-	if strings.Contains(content, `Start-Process -FilePath "npx"`) {
-		t.Fatalf("cypress watchdog still launches extensionless npx, which resolves to a POSIX shim on some Windows hosts")
+	if !sawRedactedCommandLine {
+		t.Fatalf("process-tree diagnostics did not retain redacted command evidence: %+v", result.ProcessTree)
+	}
+	if result.ElapsedMS < 900 || result.ElapsedMS > 10000 {
+		t.Fatalf("elapsed outside bound: %+v", result)
+	}
+	tail := strings.Join(result.LastOutput, "\n")
+	if !strings.Contains(tail, "fixture-ready owned_child_started") || strings.Contains(tail, "super-secret-fixture-value") || !strings.Contains(tail, "token=[REDACTED]") {
+		t.Fatalf("unsafe output: %+v", result)
+	}
+	if !strings.Contains(result.CleanupResult, "owned_process_tree_stopped") {
+		t.Fatalf("cleanup: %+v", result)
+	}
+	source, err := os.ReadFile(watchdogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(source), "@($KnownChildProcessIds)") {
+		t.Fatal("cleanup targets historical PIDs")
+	}
+	for _, pid := range append([]int{result.RootPID}, result.ChildPIDs...) {
+		assertWatchdogProcessStopped(t, pid)
+	}
+	if unrelated.ProcessState != nil || !watchdogProcessExists(unrelated.Process.Pid) {
+		t.Fatalf("unrelated process %d stopped", unrelated.Process.Pid)
 	}
 }
 
-func TestCypressExecutionWatchdogFailsClosedOnHungRunner(t *testing.T) {
+func TestCypressExecutionWatchdogUsesSanitizedNodeShim(t *testing.T) {
 	if runtime.GOOS != "windows" {
-		t.Skip("cypress.ps1 watchdog execution contract is Windows PowerShell-specific")
+		t.Skip("Windows executable resolution contract")
 	}
 
 	repoRoot := resolveRepoRoot(t)
-	tempDir := t.TempDir()
-	logDir := filepath.Join(tempDir, "logs")
-	fakeBin := filepath.Join(tempDir, "bin")
-	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
-		t.Fatalf("create fake bin: %v", err)
-	}
-	npxPath := filepath.Join(fakeBin, "npx.cmd")
-	npxScript := strings.Join([]string{
-		"@echo off",
-		"powershell -NoLogo -NoProfile -Command \"Write-Output 'fake Cypress process alive before run start'; Start-Sleep -Seconds 30 # secret=super-secret\"",
-		"",
-	}, "\r\n")
-	if err := os.WriteFile(npxPath, []byte(npxScript), 0o755); err != nil {
-		t.Fatalf("write fake npx: %v", err)
-	}
-
-	cmd := exec.Command(
-		"pwsh",
-		"-NoLogo",
-		"-NoProfile",
-		"-File", filepath.Join(repoRoot, "cypress.ps1"),
-		"-Spec", "cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts",
-		"-Browser", "chrome",
-		"-NoServer",
-		"-SkipDependencyPrep",
-		"-SkipRuntimeBuild",
-		"-RuntimeExecutablePath", filepath.Join(repoRoot, "cypress.ps1"),
-		"-AllowTempRuntimePath",
-		"-ExecutionTimeoutSec", "2",
-		"-LogDir", logDir,
-		"-LogName", "watchdog-hang-fixture",
-	)
-	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), "PATH="+fakeBin+";"+os.Getenv("PATH"))
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected cypress watchdog command to fail closed, output:\n%s", string(output))
-	}
-	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 124 {
-		t.Fatalf("expected exit code 124, got err=%v output:\n%s", err, string(output))
-	}
-
-	matches, err := filepath.Glob(filepath.Join(logDir, "*watchdog-hang-fixture.summary.json"))
+	content, err := os.ReadFile(filepath.Join(repoRoot, "cypress.ps1"))
 	if err != nil {
-		t.Fatalf("glob summary: %v", err)
+		t.Fatalf("read cypress.ps1: %v", err)
 	}
-	if len(matches) != 1 {
-		t.Fatalf("expected one watchdog summary, got %d in %s; output:\n%s", len(matches), logDir, string(output))
+	script := string(content)
+	if !strings.Contains(script, `scripts\run-cypress.mjs`) {
+		t.Fatalf("cypress.ps1 must use the environment-sanitizing Cypress launcher")
 	}
-	raw, err := os.ReadFile(matches[0])
+	if !strings.Contains(script, `@($args | Select-Object -Skip 1)`) || !strings.Contains(script, `-FilePath $nodeCommand`) {
+		t.Fatalf("cypress.ps1 must pass CLI arguments after the Cypress subcommand through the owned Node process")
+	}
+	for _, required := range []string{`Join-Path $e2eDataDir "cypress-appdata"`, `$env:APPDATA = $cypressAppDataDir`, `$env:APPDATA = $originalAppData`} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("cypress.ps1 must isolate and restore Cypress application data with %q", required)
+		}
+	}
+}
+
+func TestCypressE2EHookProbeDoesNotMisclassifyBoundedResetWorkAsUnavailable(t *testing.T) {
+	repoRoot := resolveRepoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "cypress.ps1"))
 	if err != nil {
-		t.Fatalf("read summary: %v", err)
+		t.Fatalf("read cypress.ps1: %v", err)
 	}
-	var summary struct {
-		ExitCode           int      `json:"exit_code"`
-		RunnerPhase        string   `json:"runner_phase"`
-		CypressElapsedMs   int64    `json:"cypress_elapsed_ms"`
-		CypressLastOutput  []string `json:"cypress_last_output"`
-		CypressProcessTree []struct {
-			PID         int    `json:"pid"`
-			ParentPID   int    `json:"parent_pid"`
-			Name        string `json:"name"`
-			CommandLine string `json:"command_line"`
-		} `json:"cypress_process_tree"`
-		CypressCleanupResult string `json:"cypress_cleanup_result"`
-		ExecutionTimeoutSec  int    `json:"execution_timeout_sec"`
-	}
-	if err := json.Unmarshal(raw, &summary); err != nil {
-		t.Fatalf("parse summary: %v\n%s", err, string(raw))
-	}
-	if summary.ExitCode != 124 || summary.RunnerPhase != "execution_timeout" || summary.ExecutionTimeoutSec != 2 {
-		t.Fatalf("unexpected timeout summary: %+v", summary)
-	}
-	if summary.CypressElapsedMs < 1500 || summary.CypressElapsedMs > 10000 {
-		t.Fatalf("expected bounded elapsed time around the 2s timeout, got %d ms", summary.CypressElapsedMs)
-	}
-	if !strings.Contains(summary.CypressCleanupResult, "stopped_pids=") {
-		t.Fatalf("expected cleanup evidence, got %q", summary.CypressCleanupResult)
-	}
-	if strings.Contains(strings.Join(summary.CypressLastOutput, "\n"), "Run Starting") {
-		t.Fatalf("hang fixture should not fake Cypress Run Starting output: %+v", summary.CypressLastOutput)
-	}
-	if len(summary.CypressProcessTree) == 0 {
-		t.Fatalf("expected process-tree diagnostics in timeout summary:\n%s", string(raw))
-	}
-	var sawRoot bool
-	for _, process := range summary.CypressProcessTree {
-		if process.PID <= 0 {
-			t.Fatalf("expected positive process id in process-tree diagnostics: %+v", process)
-		}
-		if strings.Contains(strings.ToLower(process.CommandLine), "secret=super-secret") {
-			t.Fatalf("expected command-line diagnostics to redact secrets: %+v", process)
-		}
-		if strings.Contains(process.CommandLine, "fake Cypress process alive before run start") {
-			sawRoot = true
+	script := string(raw)
+	for _, required := range []string{
+		`[int]$StartupTimeoutSec = 90`,
+		`$e2eHooksProbeTimeoutSec = [Math]::Min([Math]::Max($StartupTimeoutSec, 3), 20)`,
+		`function Test-E2EHooks([string]$url, [int]$timeoutSec)`,
+		`-TimeoutSec $timeoutSec -SkipHttpErrorCheck`,
+		`$script:LastE2EHooksProbeDiagnostic`,
+		`timed out after $timeoutSec seconds`,
+		`HTTP $($res.StatusCode)`,
+		`Test-E2EHooks $BaseUrl $e2eHooksProbeTimeoutSec`,
+		`$script:LastE2EHooksProbeDiagnostic`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("cypress E2E hook probe is missing bounded reset diagnostic contract %q", required)
 		}
 	}
-	if !sawRoot {
-		t.Fatalf("expected process-tree diagnostics to include the hung fake Cypress command, got %+v", summary.CypressProcessTree)
+	if strings.Contains(script, `api/test/reset" -Method Post -Body "{}" -ContentType "application/json" -UseBasicParsing -TimeoutSec 2`) {
+		t.Fatal("E2E reset probe must not classify legitimate reset work over two seconds as unavailable")
 	}
+	if !strings.Contains(script, `), 20)`) {
+		t.Fatal("E2E reset probe budget must exceed the three-attempt SQLite contention envelope")
+	}
+}
+
+func runWatchdogCommand(cmd *exec.Cmd, timeout time.Duration) (string, error) {
+	var output strings.Builder
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	if err := cmd.Start(); err != nil {
+		return output.String(), err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return output.String(), err
+	case <-time.After(timeout):
+		_ = cmd.Process.Kill()
+		<-done
+		return output.String(), fmt.Errorf("command timed out after %s", timeout)
+	}
+}
+func assertWatchdogProcessStopped(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if !watchdogProcessExists(pid) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("owned process %d still exists", pid)
+}
+func watchdogProcessExists(pid int) bool {
+	return exec.Command("powershell", "-NoLogo", "-NoProfile", "-Command", "if (Get-Process -Id "+strconv.Itoa(pid)+" -ErrorAction SilentlyContinue) { exit 0 }; exit 1").Run() == nil
 }

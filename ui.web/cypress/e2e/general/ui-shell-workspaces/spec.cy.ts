@@ -38,8 +38,8 @@ describe('general/ui-shell-workspaces', () => {
           .should('have.attr', 'aria-label', 'Search workspace')
           .and('have.attr', 'title', 'Search workspace')
         cy.get('[data-testid="shell-workspace-assistant"]')
-          .should('have.attr', 'aria-label', 'Chat workspace')
-          .and('have.attr', 'title', 'Chat workspace')
+          .should('have.attr', 'aria-label', 'Cabinet Agent')
+          .and('have.attr', 'title', 'Cabinet Agent')
         cy.get('[data-testid="shell-workspace-bell"]')
           .should('have.attr', 'aria-label', 'Open notification inbox')
           .and('have.attr', 'title', 'Open notification inbox')
@@ -157,7 +157,7 @@ describe('general/ui-shell-workspaces', () => {
       'Persistent profile-scoped conversation threads backed by Cabinet runtime.'
     ).should('exist')
     cy.contains(
-      'Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.'
+      'Cabinet Agent keeps the same governed conversation, context, and action reviews in this full workspace and the contextual panel.'
     ).should('exist')
   })
 

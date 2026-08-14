@@ -26,6 +26,7 @@ type AuthorizedProfile struct {
 type ChatService interface {
 	CreateThread(ctx context.Context, profileID, title string, metadata map[string]any) (chat.Thread, error)
 	CreateMessage(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any) (chat.Message, error)
+	CreateMessageWithAttachmentProvenance(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any, attachmentIDs []string, provenance, source string) (chat.Message, error)
 	SaveAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (chat.Attachment, error)
 	PreviewAction(ctx context.Context, in chat.PreviewActionInput) (chat.ActionPreview, error)
 	GetActionPreview(ctx context.Context, profileID, previewID string) (chat.ActionPreview, error)
@@ -127,7 +128,8 @@ type WebhookUser struct {
 }
 
 type WebhookChat struct {
-	ID int64 `json:"id"`
+	ID   int64  `json:"id"`
+	Type string `json:"type,omitempty"`
 }
 
 type WebhookPhotoSize struct {
@@ -274,7 +276,11 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 	if lookup := lookupMetadata(draft); len(lookup) > 0 {
 		messageContext["lookup"] = lookup
 	}
-	message, err := s.chat.CreateMessage(ctx, profileID, thread.ID, "user", messageContent(in, draft), messageContext)
+	attachmentIDs := make([]string, 0, len(attachments))
+	for _, attachment := range attachments {
+		attachmentIDs = append(attachmentIDs, attachment.ID)
+	}
+	message, err := s.chat.CreateMessageWithAttachmentProvenance(ctx, profileID, thread.ID, "user", messageContent(in, draft), messageContext, attachmentIDs, "telegram_media", "telegram")
 	if err != nil {
 		return CaptureResult{}, err
 	}

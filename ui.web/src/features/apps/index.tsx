@@ -63,6 +63,17 @@ const route = getRouteApi('/_authenticated/integrations/')
 type AppType = 'all' | 'connected' | 'notConnected'
 type ViewMode = 'rows' | 'cards'
 
+type OpenAIBrowserAuthStatus = {
+  provider: 'openai'
+  auth_method: 'browser_auth'
+  state: string
+  authenticated: boolean
+  profile_connected: boolean
+  recommended: boolean
+  message: string
+  global_login_preserved?: boolean
+}
+
 type ProviderRecord = {
   provider_id: string
   display_name: string
@@ -228,15 +239,53 @@ type IntegrationForm = {
   itemsPerPage: string
   openAiModel: string
   openAiTestPrompt: string
-  telegramSenderId: string
-  telegramChatId: string
-  telegramWebhookConfigured: boolean
   buyerInterestPayload: string
   landedCostPayload: string
   listingLifecycleItemId: string
   listingLifecycleDraftId: string
   listingLifecycleListingId: string
   listingLifecycleTitle: string
+}
+
+type TelegramConnectionStatus = {
+  profile_id: string
+  status: string
+  state: string
+  code: string
+  message: string
+  next_action: string
+  transport: 'long_polling'
+  public_listener: false
+  bot_token_present: boolean
+  credential_returned: false
+  bot_username?: string
+  sender_id?: string
+  chat_id?: string
+  paired: boolean
+  paused: boolean
+  webhook_conflict: boolean
+  offset: number
+  last_success_at?: string
+  last_update_id?: string
+  last_error_code?: string
+  retry_after_seconds?: number
+}
+
+type TelegramConnectionTest = {
+  status: string
+  code: string
+  message: string
+  next_action: string
+  webhook_conflict: boolean
+  bot_token_present: boolean
+  credential_returned: false
+  bot?: { username?: string }
+}
+
+type TelegramPairingCode = {
+  profile_id: string
+  code: string
+  expires_at: string
 }
 
 type BuyerInterestSyncResult = {
@@ -583,11 +632,11 @@ function providerSettingsKeys(providerID: string) {
   }
   if (providerID === 'telegram') {
     return {
-      baseURLKey: 'integration.telegram.webhook_url',
+      baseURLKey: 'telegram.polling.transport',
       tokenKey: 'telegram_bot_token',
-      marketplaceKey: 'telegram.catalog_capture.chat_id',
+      marketplaceKey: 'telegram.bot_username',
       enabledKey: 'integration.telegram.enabled',
-      itemsPerPageKey: 'telegram.catalog_capture.sender_id',
+      itemsPerPageKey: 'telegram.polling.state',
     }
   }
   const slug = providerID.replace(/[^a-z0-9]+/gi, '_').toLowerCase()
@@ -746,6 +795,9 @@ function isConfiguredIntegration(
   provider: ProviderRecord,
   settings: Record<string, string>
 ) {
+  if (provider.provider_id === 'openai') {
+    return true
+  }
   if (provider.has_token || provider.active_auth_method) {
     return true
   }
@@ -854,6 +906,7 @@ export function Apps({
     type = 'all',
     sort: initSort = 'asc',
     view,
+    provider: requestedProviderID = '',
   } = route.useSearch()
   const navigate = route.useNavigate()
 
@@ -899,6 +952,19 @@ export function Apps({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [tokenFieldError, setTokenFieldError] = useState<string | null>(null)
   const [replaceToken, setReplaceToken] = useState(false)
+  const [openAIBrowserAuth, setOpenAIBrowserAuth] =
+    useState<OpenAIBrowserAuthStatus | null>(null)
+  const [openAIBrowserAuthWorking, setOpenAIBrowserAuthWorking] =
+    useState(false)
+  const [openAIBrowserAuthError, setOpenAIBrowserAuthError] = useState<
+    string | null
+  >(null)
+  const [telegramStatus, setTelegramStatus] =
+    useState<TelegramConnectionStatus | null>(null)
+  const [telegramPairing, setTelegramPairing] =
+    useState<TelegramPairingCode | null>(null)
+  const [telegramBotUsername, setTelegramBotUsername] = useState('')
+  const [telegramWorking, setTelegramWorking] = useState<string | null>(null)
   const [rowDetailsProviderID, setRowDetailsProviderID] = useState<
     string | null
   >(null)
@@ -911,18 +977,16 @@ export function Apps({
   const addIntegrationButtonRef = useRef<HTMLButtonElement | null>(null)
   const providerSelectorWasOpenedRef = useRef(false)
   const providerSetupHandoffFrameRef = useRef<number | null>(null)
+  const deepLinkedProviderRef = useRef('')
   const tokenInputRef = useRef<HTMLInputElement | null>(null)
   const [form, setForm] = useState<IntegrationForm>({
     baseURL: '',
     token: '',
     marketplace: '',
     itemsPerPage: '',
-    openAiModel: 'gpt-4o-mini',
+    openAiModel: 'gpt-5.6-luna',
     openAiTestPrompt:
       'Write one sentence confirming OpenAI is connected to Cabinet.',
-    telegramSenderId: '',
-    telegramChatId: '',
-    telegramWebhookConfigured: false,
     buyerInterestPayload: defaultBuyerInterestPayload,
     landedCostPayload: defaultLandedCostPayload,
     listingLifecycleItemId: 'item-local-1',
@@ -1386,15 +1450,11 @@ export function Apps({
         token: '',
         marketplace: settings[keys.marketplaceKey] ?? 'AU',
         itemsPerPage: settings[keys.itemsPerPageKey] ?? '24',
-        openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
+        openAiModel:
+          settings['assistant_default_model'] ??
+          (provider.provider_id === 'openai' ? 'gpt-5.6-luna' : 'gpt-4o-mini'),
         openAiTestPrompt:
           'Write one sentence confirming OpenAI is connected to Cabinet.',
-        telegramSenderId: settings['telegram.catalog_capture.sender_id'] ?? '',
-        telegramChatId: settings['telegram.catalog_capture.chat_id'] ?? '',
-        telegramWebhookConfigured:
-          settings['telegram.webhook_configured'] === 'true' ||
-          settings['telegram.webhook_url_set'] === 'true' ||
-          provider.auth_methods?.webhook?.connected === true,
         buyerInterestPayload: defaultBuyerInterestPayload,
         landedCostPayload: defaultLandedCostPayload,
         listingLifecycleItemId: 'item-local-1',
@@ -1423,6 +1483,9 @@ export function Apps({
       setLandedCostError(null)
       setLandedCostResult(null)
       setLandedCostWorking(false)
+      setOpenAIBrowserAuth(null)
+      setOpenAIBrowserAuthError(null)
+      setOpenAIBrowserAuthWorking(false)
       setReplaceToken(
         !(
           provider.has_token ||
@@ -1432,6 +1495,160 @@ export function Apps({
     },
     [settings]
   )
+
+  const loadOpenAIBrowserAuthStatus = useCallback(async () => {
+    if (!activeProfileId) {
+      return null
+    }
+    const response = await fetch(
+      `/api/providers/openai/browser-auth?profile_id=${encodeURIComponent(activeProfileId)}`
+    )
+    if (!response.ok) {
+      throw new Error(`openai_browser_auth_status_${response.status}`)
+    }
+    const status = (await response.json()) as OpenAIBrowserAuthStatus
+    setOpenAIBrowserAuth(status)
+    return status
+  }, [activeProfileId])
+
+  useEffect(() => {
+    if (editingProviderID !== 'openai' || !activeProfileId) {
+      return
+    }
+    setOpenAIBrowserAuthError(null)
+    void loadOpenAIBrowserAuthStatus().catch(() => {
+      setOpenAIBrowserAuthError(
+        'Cabinet could not check ChatGPT sign-in. Retry from this PC.'
+      )
+    })
+  }, [activeProfileId, editingProviderID, loadOpenAIBrowserAuthStatus])
+
+  const connectOpenAIBrowserAuth = useCallback(async () => {
+    if (!activeProfileId || openAIBrowserAuthWorking) {
+      return
+    }
+    setOpenAIBrowserAuthWorking(true)
+    setOpenAIBrowserAuthError(null)
+    try {
+      const response = await fetch('/api/providers/openai/browser-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      const status = (await response.json()) as OpenAIBrowserAuthStatus
+      setOpenAIBrowserAuth(status)
+      if (!response.ok && response.status !== 202) {
+        throw new Error(`openai_browser_auth_connect_${response.status}`)
+      }
+      if (status.profile_connected) {
+        setSettings((previous) => ({
+          ...previous,
+          'openai.active_auth_method': 'browser_auth',
+          openai_active_auth_method: 'browser_auth',
+          'openai.browser_auth_state': 'connected',
+          'openai.browser_auth_artifact_present': 'true',
+          'openai.browser_auth_provider_test_state': 'passed',
+          'integration.openai.enabled': 'true',
+          assistant_default_provider: 'openai',
+          assistant_default_model: 'gpt-5.6-luna',
+        }))
+        setForm((previous) => ({
+          ...previous,
+          openAiModel: 'gpt-5.6-luna',
+        }))
+        setActionMessage('ChatGPT is connected and ready for Cabinet Chat.')
+      }
+    } catch {
+      setOpenAIBrowserAuthError(
+        'ChatGPT sign-in did not complete. Retry, or use an API key under Advanced.'
+      )
+    } finally {
+      setOpenAIBrowserAuthWorking(false)
+    }
+  }, [activeProfileId, openAIBrowserAuthWorking])
+
+  useEffect(() => {
+    if (
+      editingProviderID !== 'openai' ||
+      openAIBrowserAuth?.state !== 'signing_in'
+    ) {
+      return
+    }
+    const interval = window.setInterval(() => {
+      void loadOpenAIBrowserAuthStatus()
+        .then((status) => {
+          if (status?.authenticated && !status.profile_connected) {
+            return connectOpenAIBrowserAuth()
+          }
+        })
+        .catch(() => undefined)
+    }, 1500)
+    return () => window.clearInterval(interval)
+  }, [
+    connectOpenAIBrowserAuth,
+    editingProviderID,
+    loadOpenAIBrowserAuthStatus,
+    openAIBrowserAuth?.state,
+  ])
+
+  const disconnectOpenAIBrowserAuth = useCallback(async () => {
+    if (!activeProfileId || openAIBrowserAuthWorking) {
+      return
+    }
+    setOpenAIBrowserAuthWorking(true)
+    setOpenAIBrowserAuthError(null)
+    try {
+      const response = await fetch(
+        `/api/providers/openai/browser-auth?profile_id=${encodeURIComponent(activeProfileId)}`,
+        { method: 'DELETE' }
+      )
+      if (!response.ok) {
+        throw new Error(`openai_browser_auth_disconnect_${response.status}`)
+      }
+      const status = (await response.json()) as OpenAIBrowserAuthStatus
+      setOpenAIBrowserAuth(status)
+      setSettings((previous) => ({
+        ...previous,
+        'openai.active_auth_method': editingProvider?.has_token
+          ? 'api_key'
+          : '',
+        openai_active_auth_method: editingProvider?.has_token ? 'api_key' : '',
+        'openai.browser_auth_state': 'disconnected',
+        'openai.browser_auth_artifact_present': 'false',
+        'openai.browser_auth_provider_test_state': 'not_run',
+      }))
+      setActionMessage(
+        'ChatGPT was disconnected from this Cabinet profile. Your Codex login was left unchanged.'
+      )
+    } catch {
+      setOpenAIBrowserAuthError(
+        'Could not disconnect ChatGPT from this profile.'
+      )
+    } finally {
+      setOpenAIBrowserAuthWorking(false)
+    }
+  }, [activeProfileId, editingProvider?.has_token, openAIBrowserAuthWorking])
+
+  useEffect(() => {
+    const providerID = requestedProviderID.trim()
+    if (!providerID) {
+      deepLinkedProviderRef.current = ''
+      return
+    }
+    if (loading || deepLinkedProviderRef.current === providerID) {
+      return
+    }
+    const requestedProvider = providerByID.get(providerID)
+    if (!requestedProvider) {
+      return
+    }
+    deepLinkedProviderRef.current = providerID
+    openIntegration(requestedProvider)
+    void navigate({
+      search: (previous) => ({ ...previous, provider: undefined }),
+      replace: true,
+    })
+  }, [loading, navigate, openIntegration, providerByID, requestedProviderID])
 
   useEffect(() => {
     if (providerSelectorOpen || !providerSelectorWasOpenedRef.current) {
@@ -1542,9 +1759,6 @@ export function Apps({
       openAiModel: 'gpt-4o-mini',
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
-      telegramSenderId: '',
-      telegramChatId: '',
-      telegramWebhookConfigured: false,
       buyerInterestPayload: defaultBuyerInterestPayload,
       landedCostPayload: defaultLandedCostPayload,
       listingLifecycleItemId: 'item-local-1',
@@ -1566,6 +1780,158 @@ export function Apps({
     setLandedCostError(null)
     setLandedCostResult(null)
     setLandedCostWorking(false)
+    setTelegramPairing(null)
+    setTelegramWorking(null)
+  }
+
+  const loadTelegramStatus = useCallback(async () => {
+    if (!activeProfileId) return
+    try {
+      const response = await fetch(
+        `/api/telegram/connection/status?profile_id=${encodeURIComponent(activeProfileId)}`
+      )
+      if (!response.ok) throw new Error(`telegram_status_${response.status}`)
+      const payload = (await response.json()) as TelegramConnectionStatus
+      setTelegramStatus(payload)
+      setTelegramBotUsername(payload.bot_username ?? '')
+    } catch {
+      setTelegramStatus(null)
+    }
+  }, [activeProfileId])
+
+  useEffect(() => {
+    if (editingProviderID === 'telegram') {
+      void loadTelegramStatus()
+    }
+  }, [editingProviderID, loadTelegramStatus])
+
+  const testTelegramConnection = async () => {
+    if (!activeProfileId) return
+    const token = form.token.trim()
+    if (!token && !telegramStatus?.bot_token_present) {
+      showTokenFieldError('Paste the BotFather token before testing Telegram.')
+      return
+    }
+    setTelegramWorking('test')
+    setSaveError(null)
+    try {
+      const response = await fetch('/api/telegram/connection/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId, bot_token: token }),
+      })
+      const payload = (await response.json()) as TelegramConnectionTest
+      setForm((previous) => ({ ...previous, token: '' }))
+      setTelegramBotUsername(payload.bot?.username ?? telegramBotUsername)
+      setActionMessage(payload.message)
+      if (!response.ok && response.status !== 409) {
+        throw new Error(payload.message || `telegram_test_${response.status}`)
+      }
+      await loadTelegramStatus()
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Telegram test failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const resolveTelegramWebhook = async () => {
+    if (!activeProfileId) return
+    setTelegramWorking('webhook')
+    setSaveError(null)
+    try {
+      const response = await fetch('/api/telegram/connection/resolve-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      const payload = (await response.json()) as TelegramConnectionTest
+      if (!response.ok) {
+        throw new Error(
+          payload.message || `telegram_webhook_${response.status}`
+        )
+      }
+      setActionMessage(payload.message)
+      await loadTelegramStatus()
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Webhook removal failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const createTelegramPairingCode = async () => {
+    if (!activeProfileId) return
+    setTelegramWorking('pair')
+    setSaveError(null)
+    try {
+      const response = await fetch('/api/telegram/pairing-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      if (!response.ok) {
+        throw new Error(`telegram_pairing_${response.status}`)
+      }
+      setTelegramPairing((await response.json()) as TelegramPairingCode)
+      setActionMessage(
+        'Pairing code created. Send the shown /start command to your bot in a private Telegram chat.'
+      )
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Pairing code failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const setTelegramPaused = async (paused: boolean) => {
+    if (!activeProfileId) return
+    setTelegramWorking(paused ? 'pause' : 'resume')
+    try {
+      const response = await fetch('/api/telegram/connection/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId, paused }),
+      })
+      if (!response.ok) throw new Error(`telegram_pause_${response.status}`)
+      setTelegramStatus((await response.json()) as TelegramConnectionStatus)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Pause failed.')
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const disconnectTelegram = async () => {
+    if (!activeProfileId) return
+    setTelegramWorking('disconnect')
+    try {
+      const response = await fetch('/api/telegram/connection/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      if (!response.ok) {
+        throw new Error(`telegram_disconnect_${response.status}`)
+      }
+      setTelegramStatus((await response.json()) as TelegramConnectionStatus)
+      setTelegramPairing(null)
+      setTelegramBotUsername('')
+      setReplaceToken(true)
+      setActionMessage('Telegram disconnected and its bot token removed.')
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Disconnect failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
   }
 
   useEffect(() => {
@@ -1716,123 +2082,6 @@ export function Apps({
           id: 'integrations-openai-save-success',
           title: message,
           summary: 'Provider configuration save status from Integrations.',
-        })
-        closeIntegration()
-        return
-      }
-      if (editingProvider.provider_id === 'telegram') {
-        const telegramSettings: Record<string, string> = {
-          'telegram.catalog_capture.sender_id': form.telegramSenderId.trim(),
-          'telegram.catalog_capture.chat_id': form.telegramChatId.trim(),
-          'telegram.webhook_configured': form.telegramWebhookConfigured
-            ? 'true'
-            : 'false',
-          'telegram.webhook_url_set': form.baseURL.trim() ? 'true' : 'false',
-          'integration.telegram.webhook_url': form.baseURL.trim(),
-          'integration.telegram.enabled':
-            form.telegramSenderId.trim() &&
-            form.telegramChatId.trim() &&
-            (editingProvider.auth_methods?.bot_token?.credential_present ||
-              editingProvider.setup_status?.bot_token_state === 'stored' ||
-              trimmedToken !== '')
-              ? 'true'
-              : 'false',
-        }
-        if (
-          editingProvider.auth_methods?.bot_token?.credential_present ||
-          editingProvider.setup_status?.bot_token_state === 'stored' ||
-          trimmedToken !== ''
-        ) {
-          telegramSettings['telegram.bot_token_secret_present'] = 'true'
-        }
-        if (trimmedToken !== '') {
-          const secretResponse = await fetch(
-            `/api/profiles/${activeProfileId}/secrets`,
-            {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                key: 'telegram_bot_token',
-                value: trimmedToken,
-              }),
-            }
-          )
-          if (!secretResponse.ok) {
-            throw new Error(`secret_save_failed_${secretResponse.status}`)
-          }
-        }
-        const settingsResponse = await fetch(
-          `/api/profiles/${activeProfileId}/settings`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings: telegramSettings }),
-          }
-        )
-        if (!settingsResponse.ok) {
-          throw new Error(`save_failed_${settingsResponse.status}`)
-        }
-        const payload = (await settingsResponse.json()) as {
-          settings?: Record<string, string>
-        }
-        setSettings(payload.settings ?? {})
-        setProviders((prev) =>
-          prev.map((provider) =>
-            provider.provider_id === 'telegram'
-              ? {
-                  ...provider,
-                  has_token: provider.has_token || trimmedToken !== '',
-                  auth_methods: {
-                    ...provider.auth_methods,
-                    sender_chat: {
-                      ...provider.auth_methods?.sender_chat,
-                      state:
-                        form.telegramSenderId.trim() &&
-                        form.telegramChatId.trim()
-                          ? 'authorized'
-                          : 'setup_needed',
-                      connected:
-                        Boolean(form.telegramSenderId.trim()) &&
-                        Boolean(form.telegramChatId.trim()),
-                      credential_present:
-                        Boolean(form.telegramSenderId.trim()) &&
-                        Boolean(form.telegramChatId.trim()),
-                    },
-                    bot_token: {
-                      ...provider.auth_methods?.bot_token,
-                      state:
-                        provider.auth_methods?.bot_token?.credential_present ||
-                        provider.setup_status?.bot_token_state === 'stored' ||
-                        trimmedToken !== ''
-                          ? 'stored'
-                          : 'setup_needed',
-                      connected:
-                        provider.auth_methods?.bot_token?.credential_present ||
-                        provider.setup_status?.bot_token_state === 'stored' ||
-                        trimmedToken !== '',
-                      credential_present:
-                        provider.auth_methods?.bot_token?.credential_present ||
-                        provider.setup_status?.bot_token_state === 'stored' ||
-                        trimmedToken !== '',
-                    },
-                    webhook: {
-                      ...provider.auth_methods?.webhook,
-                      state: form.telegramWebhookConfigured
-                        ? 'configured'
-                        : 'pending',
-                      connected: form.telegramWebhookConfigured,
-                    },
-                  },
-                }
-              : provider
-          )
-        )
-        const message = 'Telegram setup saved.'
-        setActionMessage(message)
-        recordIntegrationsStatusHistory({
-          id: 'integrations-telegram-save-success',
-          title: message,
-          summary: 'Telegram setup save status from Integrations.',
         })
         closeIntegration()
         return
@@ -2020,6 +2269,10 @@ export function Apps({
 
   const validateProvider = async () => {
     if (!editingProvider) {
+      return
+    }
+    if (editingProvider.provider_id === 'telegram') {
+      await testTelegramConnection()
       return
     }
     if (
@@ -3296,76 +3549,84 @@ export function Apps({
               {editingProvider?.display_name ?? 'Integration'}
             </DialogTitle>
             <DialogDescription>
-              Manage provider credentials, validation, and setup controls.
+              {editingProvider?.provider_id === 'openai'
+                ? 'Connect ChatGPT to power Cabinet Chat. Browser sign-in is recommended; API keys are optional.'
+                : 'Manage provider credentials, validation, and setup controls.'}
             </DialogDescription>
           </DialogHeader>
           {editingProvider ? (
             <div className='space-y-4'>
-              <div className='rounded-md border bg-muted/20 p-3 text-xs'>
-                <p>Mode: {editingProvider.integration_mode}</p>
-                <p data-testid='provider-detail-category'>
-                  Category:{' '}
-                  {editingProvider.provider_category ?? 'uncategorized'}
-                  {' / '}
-                  Type: {editingProvider.provider_type ?? 'unknown'}
-                </p>
-                <p data-testid='provider-detail-api-family'>
-                  API Family: {editingProvider.api_family ?? 'custom'}
-                </p>
-                <p data-testid='provider-detail-api-support-profile'>
-                  Support Profile:{' '}
-                  {editingProvider.api_support_profile ?? 'unknown'}
-                </p>
-                <p data-testid='provider-detail-config-schema'>
-                  Config Schema:{' '}
-                  {editingProvider.config_schema_ref ?? 'provider-specific'}
-                </p>
-                <p data-testid='provider-detail-workflows'>
-                  Workflows:{' '}
-                  {editingProvider.workflow_refs?.length
-                    ? editingProvider.workflow_refs.join(', ')
-                    : 'none'}
-                </p>
-                <p data-testid='provider-detail-manifest-actions'>
-                  Manifest Actions:{' '}
-                  {providerManifestActions(editingProvider).join(', ') ||
-                    'none'}
-                </p>
-                <p>
-                  Readiness:{' '}
-                  {editingProvider.health?.state ?? editingProvider.state}
-                </p>
-                <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
-                {editingProvider.health?.message ? (
-                  <p>Message: {editingProvider.health.message}</p>
-                ) : null}
-                {editingProvider.health?.last_error ? (
-                  <p>Last error: {editingProvider.health.last_error}</p>
-                ) : null}
-                {typeof editingProvider.health?.retry_after_seconds ===
-                'number' ? (
-                  <p>
-                    Retry after: {editingProvider.health.retry_after_seconds}{' '}
-                    seconds
-                  </p>
-                ) : null}
-                {editingProvider.health?.next_action ? (
-                  <p>Next action: {editingProvider.health.next_action}</p>
-                ) : null}
-                <p>Last run: {editingProvider.last_run?.status ?? 'never'}</p>
-                <p>
-                  Last checked:{' '}
-                  {editingProvider.health?.last_checked_at ??
-                    editingProvider.last_run?.finished_at ??
-                    'n/a'}
-                </p>
-                {actionMessage ? <p>{actionMessage}</p> : null}
-              </div>
+              {editingProvider.provider_id !== 'openai' ? (
+                <>
+                  <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                    <p>Mode: {editingProvider.integration_mode}</p>
+                    <p data-testid='provider-detail-category'>
+                      Category:{' '}
+                      {editingProvider.provider_category ?? 'uncategorized'}
+                      {' / '}
+                      Type: {editingProvider.provider_type ?? 'unknown'}
+                    </p>
+                    <p data-testid='provider-detail-api-family'>
+                      API Family: {editingProvider.api_family ?? 'custom'}
+                    </p>
+                    <p data-testid='provider-detail-api-support-profile'>
+                      Support Profile:{' '}
+                      {editingProvider.api_support_profile ?? 'unknown'}
+                    </p>
+                    <p data-testid='provider-detail-config-schema'>
+                      Config Schema:{' '}
+                      {editingProvider.config_schema_ref ?? 'provider-specific'}
+                    </p>
+                    <p data-testid='provider-detail-workflows'>
+                      Workflows:{' '}
+                      {editingProvider.workflow_refs?.length
+                        ? editingProvider.workflow_refs.join(', ')
+                        : 'none'}
+                    </p>
+                    <p data-testid='provider-detail-manifest-actions'>
+                      Manifest Actions:{' '}
+                      {providerManifestActions(editingProvider).join(', ') ||
+                        'none'}
+                    </p>
+                    <p>
+                      Readiness:{' '}
+                      {editingProvider.health?.state ?? editingProvider.state}
+                    </p>
+                    <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
+                    {editingProvider.health?.message ? (
+                      <p>Message: {editingProvider.health.message}</p>
+                    ) : null}
+                    {editingProvider.health?.last_error ? (
+                      <p>Last error: {editingProvider.health.last_error}</p>
+                    ) : null}
+                    {typeof editingProvider.health?.retry_after_seconds ===
+                    'number' ? (
+                      <p>
+                        Retry after:{' '}
+                        {editingProvider.health.retry_after_seconds} seconds
+                      </p>
+                    ) : null}
+                    {editingProvider.health?.next_action ? (
+                      <p>Next action: {editingProvider.health.next_action}</p>
+                    ) : null}
+                    <p>
+                      Last run: {editingProvider.last_run?.status ?? 'never'}
+                    </p>
+                    <p>
+                      Last checked:{' '}
+                      {editingProvider.health?.last_checked_at ??
+                        editingProvider.last_run?.finished_at ??
+                        'n/a'}
+                    </p>
+                    {actionMessage ? <p>{actionMessage}</p> : null}
+                  </div>
 
-              <div className='rounded-md border p-3 text-xs text-muted-foreground'>
-                {editingProvider.setup_instructions ??
-                  'Enter provider details, validate health, and save configuration.'}
-              </div>
+                  <div className='rounded-md border p-3 text-xs text-muted-foreground'>
+                    {editingProvider.setup_instructions ??
+                      'Enter provider details, validate health, and save configuration.'}
+                  </div>
+                </>
+              ) : null}
 
               {editingProvider.provider_id === 'telegram' ? (
                 <section
@@ -3374,10 +3635,12 @@ export function Apps({
                 >
                   <div className='flex flex-wrap items-start justify-between gap-3'>
                     <div>
-                      <p className='font-medium'>Telegram capture channel</p>
+                      <p className='font-medium'>
+                        Telegram Cabinet Agent channel
+                      </p>
                       <p className='text-muted-foreground'>
-                        Sender/chat authorization gates assistant capture intake
-                        before preview and confirmation.
+                        A validated bot and exact private-chat pairing gate
+                        Agent intake before preview and confirmation.
                       </p>
                     </div>
                     <span
@@ -3387,20 +3650,20 @@ export function Apps({
                       {editingProvider.health?.next_action ??
                         editingProvider.setup_status?.next_action ??
                         (editingProvider.auth_methods?.sender_chat?.connected
-                          ? 'run_live_channel_checklist'
-                          : 'authorize_sender_chat')}
+                          ? 'talk_to_cabinet'
+                          : 'test_connection')}
                     </span>
                   </div>
                   <div className='mt-3 grid gap-2 sm:grid-cols-2'>
                     <p data-testid='telegram-capture-auth-mode'>
-                      Auth method: sender/chat authorization
+                      Auth method: write-only bot token + private pairing
                     </p>
                     <p data-testid='telegram-capture-sender-chat-state'>
-                      Sender/chat state:{' '}
+                      Private chat state:{' '}
                       {editingProvider.auth_methods?.sender_chat?.state ??
                         (editingProvider.auth_methods?.sender_chat?.connected
-                          ? 'connected'
-                          : 'setup_needed')}
+                          ? 'paired'
+                          : 'pairing_required')}
                     </p>
                     <p data-testid='telegram-capture-api-family'>
                       API family:{' '}
@@ -3409,7 +3672,7 @@ export function Apps({
                     <p data-testid='telegram-capture-support-profile'>
                       Support profile:{' '}
                       {editingProvider.api_support_profile ??
-                        'bot_webhook_sender_chat_v1'}
+                        'bot_long_polling_private_pairing_v1'}
                     </p>
                     <p data-testid='telegram-capture-bot-token-state'>
                       Bot token state:{' '}
@@ -3417,11 +3680,8 @@ export function Apps({
                         editingProvider.setup_status?.bot_token_state ??
                         'setup_needed'}
                     </p>
-                    <p data-testid='telegram-capture-webhook-state'>
-                      Webhook state:{' '}
-                      {editingProvider.auth_methods?.webhook?.state ??
-                        editingProvider.setup_status?.webhook_state ??
-                        'pending'}
+                    <p data-testid='telegram-capture-polling-state'>
+                      Transport: outbound long polling / public listener: no
                     </p>
                     <p data-testid='telegram-capture-runtime-proof-state'>
                       Runtime proof:{' '}
@@ -3441,176 +3701,230 @@ export function Apps({
               {editingProvider.provider_id === 'openai' ? (
                 <div className='space-y-4' data-testid='openai-config-dialog'>
                   <section
-                    className='rounded-md border p-3'
+                    className='overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm'
                     data-testid='openai-browser-auth-section'
                   >
-                    <div className='flex items-center justify-between gap-3'>
-                      <div>
-                        <p className='font-medium'>Browser Auth</p>
-                        <p className='text-xs text-muted-foreground'>
-                          Use a verified OpenAI/Codex browser-auth artifact when
-                          available.
+                    <div className='space-y-4 p-5'>
+                      <div className='flex flex-wrap items-start justify-between gap-3'>
+                        <div className='space-y-1'>
+                          <div className='flex flex-wrap items-center gap-2'>
+                            <p className='text-base font-semibold'>
+                              Sign in with ChatGPT
+                            </p>
+                            <span className='rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground'>
+                              Recommended
+                            </span>
+                          </div>
+                          <p className='max-w-lg text-sm text-muted-foreground'>
+                            Use your ChatGPT account for Cabinet Chat. No API
+                            key required. Your password and browser session stay
+                            with OpenAI.
+                          </p>
+                        </div>
+                        <span
+                          className='rounded-full border bg-background px-3 py-1 text-xs font-medium'
+                          data-testid='openai-browser-auth-status'
+                        >
+                          {openAIBrowserAuth?.profile_connected
+                            ? 'Connected'
+                            : openAIBrowserAuth?.state === 'signing_in'
+                              ? 'Waiting for browser sign-in'
+                              : openAIBrowserAuth?.state ===
+                                    'runtime_missing' ||
+                                  openAIBrowserAuth?.state === 'unavailable'
+                                ? 'Codex runtime required'
+                                : 'Not connected'}
+                        </span>
+                      </div>
+                      <div className='rounded-lg border bg-background/80 p-3 text-sm'>
+                        <p className='font-medium'>What this enables</p>
+                        <p className='mt-1 text-muted-foreground'>
+                          Ask Cabinet Chat to find, organise, and prepare
+                          changes across your collection. Cabinet continues to
+                          require review and confirmation for governed actions.
                         </p>
                       </div>
-                      <span
-                        className='rounded bg-muted px-2 py-1 text-xs'
-                        data-testid='openai-browser-auth-status'
-                      >
-                        {settings['openai.browser_auth_state'] ??
-                          editingProvider.auth_methods?.browser_auth?.state ??
-                          'setup_needed'}
-                      </span>
-                    </div>
-                    <p
-                      className='mt-2 text-xs text-muted-foreground'
-                      data-testid='openai-browser-auth-setup-needed'
-                    >
-                      Browser Auth is setup-needed until Cabinet can verify an
-                      acquired callback/artifact. Navigation alone never marks
-                      OpenAI connected.
-                    </p>
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        disabled
-                        data-testid='openai-browser-auth-connect'
-                      >
-                        Only available on this PC
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid='openai-browser-auth-disconnect'
-                        onClick={() => {
-                          setSettings((prev) => ({
-                            ...prev,
-                            'openai.browser_auth_state': 'disconnected',
-                            'openai.active_auth_method':
-                              prev['openai.active_auth_method'] ===
-                              'browser_auth'
-                                ? ''
-                                : prev['openai.active_auth_method'],
-                          }))
-                        }}
-                      >
-                        Disconnect
-                      </Button>
+                      {openAIBrowserAuth?.message ? (
+                        <p
+                          className='text-sm text-muted-foreground'
+                          data-testid='openai-browser-auth-message'
+                        >
+                          {openAIBrowserAuth.message}
+                        </p>
+                      ) : null}
+                      {openAIBrowserAuth?.state === 'runtime_missing' ? (
+                        <p className='rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm'>
+                          Install OpenAI Codex or the ChatGPT IDE extension,
+                          then retry. Cabinet automatically detects either
+                          installation and opens the supported ChatGPT sign-in.
+                        </p>
+                      ) : null}
+                      {openAIBrowserAuthError ? (
+                        <p className='text-sm text-destructive' role='alert'>
+                          {openAIBrowserAuthError}
+                        </p>
+                      ) : null}
+                      {actionMessage ? (
+                        <p className='text-sm' role='status'>
+                          {actionMessage}
+                        </p>
+                      ) : null}
+                      <div className='flex flex-wrap gap-2'>
+                        <Button
+                          type='button'
+                          size='lg'
+                          disabled={
+                            !activeProfileId ||
+                            openAIBrowserAuthWorking ||
+                            openAIBrowserAuth?.profile_connected
+                          }
+                          data-testid='openai-browser-auth-connect'
+                          onClick={() => void connectOpenAIBrowserAuth()}
+                        >
+                          {openAIBrowserAuthWorking
+                            ? 'Checking ChatGPT sign-in...'
+                            : openAIBrowserAuth?.state === 'signing_in'
+                              ? 'Finish sign-in in your browser'
+                              : openAIBrowserAuth?.profile_connected
+                                ? 'ChatGPT connected'
+                                : 'Continue with ChatGPT'}
+                        </Button>
+                        {openAIBrowserAuth?.profile_connected ? (
+                          <Button
+                            type='button'
+                            size='lg'
+                            variant='outline'
+                            data-testid='openai-browser-auth-disconnect'
+                            onClick={() => void disconnectOpenAIBrowserAuth()}
+                            disabled={openAIBrowserAuthWorking}
+                          >
+                            Disconnect from this profile
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   </section>
 
-                  <section
-                    className='rounded-md border p-3'
-                    data-testid='openai-api-key-section'
-                  >
-                    <div className='flex items-center justify-between gap-3'>
-                      <div>
-                        <p className='font-medium'>API key</p>
-                        <p className='text-xs text-muted-foreground'>
-                          Validate and save an OpenAI API key for Cabinet
-                          assistant, image, and content workflows.
-                        </p>
+                  <details className='rounded-lg border bg-muted/10'>
+                    <summary
+                      className='cursor-pointer px-4 py-3 text-sm font-medium'
+                      data-testid='openai-api-key-advanced'
+                    >
+                      Advanced: use an API key
+                    </summary>
+                    <section
+                      className='space-y-3 border-t p-4'
+                      data-testid='openai-api-key-section'
+                    >
+                      <div className='flex items-start justify-between gap-3'>
+                        <div>
+                          <p className='font-medium'>OpenAI API key</p>
+                          <p className='text-xs text-muted-foreground'>
+                            Optional for usage-based API billing or service
+                            accounts. Most people should use ChatGPT sign-in.
+                          </p>
+                        </div>
+                        <span
+                          className='rounded bg-muted px-2 py-1 text-xs'
+                          data-testid='openai-api-key-status'
+                        >
+                          {editingProvider.has_token ||
+                          settings['openai.active_auth_method'] === 'api_key'
+                            ? 'connected'
+                            : 'setup_needed'}
+                        </span>
                       </div>
-                      <span
-                        className='rounded bg-muted px-2 py-1 text-xs'
-                        data-testid='openai-api-key-status'
-                      >
-                        {editingProvider.has_token ||
-                        settings['openai.active_auth_method'] === 'api_key'
-                          ? 'connected'
-                          : 'setup_needed'}
-                      </span>
-                    </div>
-                    {editingProvider.has_token && !replaceToken ? (
-                      <div className='mt-3 rounded-md border bg-muted/20 p-3 text-xs'>
-                        <p>API key on file.</p>
-                        <p className='text-muted-foreground'>
-                          Existing key is hidden. Replace it to update the
-                          active API-key method.
-                        </p>
+                      {editingProvider.has_token && !replaceToken ? (
+                        <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                          <p>API key on file.</p>
+                          <p className='text-muted-foreground'>
+                            The existing key is hidden.
+                          </p>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            className='mt-2'
+                            data-testid='replace-token'
+                            onClick={() => setReplaceToken(true)}
+                          >
+                            Replace API key
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className='space-y-2'>
+                          <Label htmlFor='provider-token'>OpenAI API key</Label>
+                          <Input
+                            ref={tokenInputRef}
+                            id='provider-token'
+                            type='password'
+                            data-testid='provider-token-input'
+                            placeholder='sk-...'
+                            value={form.token}
+                            aria-invalid={tokenFieldError ? 'true' : undefined}
+                            aria-describedby={
+                              tokenFieldError
+                                ? 'provider-token-error'
+                                : undefined
+                            }
+                            onChange={(e) => {
+                              setForm((prev) => ({
+                                ...prev,
+                                token: e.target.value,
+                              }))
+                              if (tokenFieldError) {
+                                setTokenFieldError(null)
+                              }
+                            }}
+                          />
+                          {tokenFieldError ? (
+                            <p
+                              id='provider-token-error'
+                              className='text-xs text-destructive'
+                            >
+                              {tokenFieldError}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                      <div className='flex flex-wrap gap-2'>
                         <Button
+                          type='button'
                           size='sm'
                           variant='outline'
-                          className='mt-2'
-                          data-testid='replace-token'
-                          onClick={() => setReplaceToken(true)}
+                          onClick={() => void validateProvider()}
+                          disabled={validating}
+                          data-testid='openai-api-key-validate'
                         >
-                          Replace API key
+                          {validating ? 'Validating...' : 'Validate'}
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          data-testid='openai-api-key-connect'
+                          onClick={() => void saveIntegration()}
+                          disabled={saving}
+                        >
+                          Connect API key
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid='openai-api-key-disconnect'
+                          onClick={() => void disconnectOpenAIApiKey()}
+                          disabled={saving}
+                        >
+                          Disconnect API key
                         </Button>
                       </div>
-                    ) : (
-                      <div className='mt-3 space-y-2'>
-                        <Label htmlFor='provider-token'>OpenAI API key</Label>
-                        <Input
-                          ref={tokenInputRef}
-                          id='provider-token'
-                          type='password'
-                          data-testid='provider-token-input'
-                          placeholder='OpenAI API key'
-                          value={form.token}
-                          aria-invalid={tokenFieldError ? 'true' : undefined}
-                          aria-describedby={
-                            tokenFieldError ? 'provider-token-error' : undefined
-                          }
-                          onChange={(e) => {
-                            setForm((prev) => ({
-                              ...prev,
-                              token: e.target.value,
-                            }))
-                            if (tokenFieldError) {
-                              setTokenFieldError(null)
-                            }
-                          }}
-                        />
-                        {tokenFieldError ? (
-                          <p
-                            id='provider-token-error'
-                            className='text-xs text-destructive'
-                          >
-                            {tokenFieldError}
-                          </p>
-                        ) : null}
-                      </div>
-                    )}
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        onClick={() => void validateProvider()}
-                        disabled={validating}
-                        data-testid='openai-api-key-validate'
-                      >
-                        {validating ? 'Validating...' : 'Validate'}
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        data-testid='openai-api-key-connect'
-                        onClick={() => void saveIntegration()}
-                        disabled={saving}
-                      >
-                        Connect
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid='openai-api-key-disconnect'
-                        onClick={() => void disconnectOpenAIApiKey()}
-                        disabled={saving}
-                      >
-                        Disconnect
-                      </Button>
-                    </div>
-                  </section>
+                    </section>
+                  </details>
 
                   <section
                     className='rounded-md border p-3'
                     data-testid='openai-test-section'
                   >
-                    <p className='font-medium'>Test OpenAI</p>
+                    <p className='font-medium'>Connection details</p>
                     <p className='text-xs text-muted-foreground'>
                       Uses the active connected method. If no method is
                       verified, Cabinet shows setup-needed instead of pretending
@@ -3703,114 +4017,203 @@ export function Apps({
                 </div>
               ) : editingProvider.provider_id === 'telegram' ? (
                 <section
-                  className='rounded-md border p-3'
-                  data-testid='telegram-setup-form'
+                  className='space-y-4 rounded-md border p-3'
+                  data-testid='telegram-local-polling-setup'
                 >
-                  <div className='grid gap-3 sm:grid-cols-2'>
-                    <div className='space-y-2'>
-                      <Label htmlFor='telegram-sender-id'>Sender ID</Label>
-                      <Input
-                        id='telegram-sender-id'
-                        data-testid='telegram-sender-id'
-                        placeholder='12345'
-                        value={form.telegramSenderId}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            telegramSenderId: e.target.value,
-                          }))
-                        }
-                      />
+                  <div>
+                    <p className='font-medium'>Connect Cabinet to Telegram</p>
+                    <ol className='mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground'>
+                      <li>
+                        Open @BotFather in Telegram and create a bot with
+                        /newbot.
+                      </li>
+                      <li>
+                        Paste the bot token below and test the connection.
+                      </li>
+                      <li>
+                        Create a short-lived pairing code, then send its /start
+                        command to your bot in a private chat.
+                      </li>
+                    </ol>
+                    <p className='mt-2 text-xs text-muted-foreground'>
+                      Outbound long polling only. No public webhook or listener
+                      is opened by Cabinet.
+                    </p>
+                  </div>
+
+                  <div className='space-y-2'>
+                    {telegramStatus?.bot_token_present && !replaceToken ? (
+                      <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                        <p>Bot token on file.</p>
+                        <p className='text-muted-foreground'>
+                          The existing token is write-only and cannot be read
+                          back from Cabinet.
+                        </p>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          className='mt-2'
+                          data-testid='telegram-replace-token'
+                          onClick={() => setReplaceToken(true)}
+                        >
+                          Rotate bot token
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Label htmlFor='telegram-bot-token'>Bot token</Label>
+                        <Input
+                          id='telegram-bot-token'
+                          type='password'
+                          autoComplete='new-password'
+                          data-testid='telegram-bot-token'
+                          placeholder='Paste BotFather token'
+                          value={form.token}
+                          onChange={(event) =>
+                            setForm((previous) => ({
+                              ...previous,
+                              token: event.target.value,
+                            }))
+                          }
+                        />
+                      </>
+                    )}
+                    <div className='flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        data-testid='telegram-test-connection'
+                        disabled={telegramWorking !== null}
+                        onClick={() => void testTelegramConnection()}
+                      >
+                        {telegramWorking === 'test'
+                          ? 'Testing...'
+                          : 'Test connection'}
+                      </Button>
+                      {telegramStatus?.webhook_conflict ? (
+                        <Button
+                          type='button'
+                          variant='outline'
+                          data-testid='telegram-resolve-webhook'
+                          disabled={telegramWorking !== null}
+                          onClick={() => void resolveTelegramWebhook()}
+                        >
+                          Remove existing webhook
+                        </Button>
+                      ) : null}
                     </div>
-                    <div className='space-y-2'>
-                      <Label htmlFor='telegram-chat-id'>Chat ID</Label>
-                      <Input
-                        id='telegram-chat-id'
-                        data-testid='telegram-chat-id'
-                        placeholder='-5235769556'
-                        value={form.telegramChatId}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            telegramChatId: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className='space-y-2 sm:col-span-2'>
-                      <Label htmlFor='telegram-webhook-url'>
-                        Webhook URL / routing proof
-                      </Label>
-                      <Input
-                        id='telegram-webhook-url'
-                        data-testid='telegram-webhook-url'
-                        placeholder='https://example.com/api/telegram/webhook/catalog-captures'
-                        value={form.baseURL}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            baseURL: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className='space-y-2 sm:col-span-2'>
-                      {editingProvider.auth_methods?.bot_token
-                        ?.credential_present && !replaceToken ? (
-                        <div className='rounded-md border bg-muted/20 p-3 text-xs'>
-                          <p>Bot token on file.</p>
-                          <p className='text-muted-foreground'>
-                            Existing token is hidden. Replace it to update the
-                            Telegram bot credential.
-                          </p>
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='outline'
-                            className='mt-2'
-                            data-testid='telegram-replace-token'
-                            onClick={() => setReplaceToken(true)}
-                          >
-                            Replace bot token
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <Label htmlFor='telegram-bot-token'>Bot token</Label>
-                          <Input
-                            id='telegram-bot-token'
-                            type='password'
-                            data-testid='telegram-bot-token'
-                            placeholder='Bot token'
-                            value={form.token}
-                            onChange={(e) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                token: e.target.value,
-                              }))
-                            }
-                          />
-                        </>
-                      )}
-                    </div>
-                    <label
-                      className='flex items-center gap-2 text-sm sm:col-span-2'
-                      htmlFor='telegram-webhook-configured'
+                    {telegramBotUsername ? (
+                      <p
+                        className='text-xs text-muted-foreground'
+                        data-testid='telegram-bot-identity'
+                      >
+                        Validated bot: @{telegramBotUsername}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className='rounded-md bg-muted/30 p-3 text-xs'>
+                    <p className='font-medium'>Private-chat pairing</p>
+                    <p className='mt-1 text-muted-foreground'>
+                      Cabinet learns the exact numeric user and private-chat IDs
+                      from Telegram. You do not enter or guess them manually.
+                    </p>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='mt-3'
+                      data-testid='telegram-create-pairing-code'
+                      disabled={
+                        telegramWorking !== null ||
+                        !telegramStatus?.bot_token_present ||
+                        telegramStatus.webhook_conflict
+                      }
+                      onClick={() => void createTelegramPairingCode()}
                     >
-                      <input
-                        id='telegram-webhook-configured'
-                        type='checkbox'
-                        data-testid='telegram-webhook-configured'
-                        checked={form.telegramWebhookConfigured}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            telegramWebhookConfigured: e.target.checked,
-                          }))
+                      {telegramStatus?.paired
+                        ? 'Re-pair chat'
+                        : 'Create pairing code'}
+                    </Button>
+                    {telegramPairing ? (
+                      <div className='mt-3 rounded border bg-background p-3'>
+                        <p data-testid='telegram-pairing-code'>
+                          /start {telegramPairing.code}
+                        </p>
+                        <p
+                          className='mt-1 text-muted-foreground'
+                          data-testid='telegram-pairing-expiry'
+                        >
+                          Single-use code expires{' '}
+                          {new Date(
+                            telegramPairing.expires_at
+                          ).toLocaleTimeString()}
+                          .
+                        </p>
+                      </div>
+                    ) : null}
+                    {telegramStatus?.paired ? (
+                      <p className='mt-3 text-muted-foreground'>
+                        Paired private chat ending in{' '}
+                        {telegramStatus.chat_id?.slice(-4)}.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className='grid gap-2 text-xs sm:grid-cols-2'>
+                    <p>State: {telegramStatus?.state ?? 'not connected'}</p>
+                    <p>Transport: outbound long polling</p>
+                    <p>
+                      Last success: {telegramStatus?.last_success_at ?? 'never'}
+                    </p>
+                    <p>
+                      Last update: {telegramStatus?.last_update_id ?? 'none'}
+                    </p>
+                    {telegramStatus?.last_error_code ? (
+                      <p className='sm:col-span-2'>
+                        Last error: {telegramStatus.last_error_code}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className='flex flex-wrap gap-2'>
+                    {telegramStatus?.paired ? (
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='telegram-pause-toggle'
+                        disabled={telegramWorking !== null}
+                        onClick={() =>
+                          void setTelegramPaused(!telegramStatus.paused)
                         }
-                      />
-                      Webhook routing proof is configured
-                    </label>
+                      >
+                        {telegramStatus.paused ? 'Resume' : 'Pause'}
+                      </Button>
+                    ) : null}
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      data-testid='telegram-refresh-status'
+                      disabled={telegramWorking !== null}
+                      onClick={() => void loadTelegramStatus()}
+                    >
+                      Refresh status
+                    </Button>
+                    {telegramStatus?.bot_token_present ? (
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='destructive'
+                        data-testid='telegram-disconnect'
+                        disabled={telegramWorking !== null}
+                        onClick={() => void disconnectTelegram()}
+                      >
+                        Disconnect
+                      </Button>
+                    ) : null}
                   </div>
                 </section>
               ) : editingProvider.setup_schema?.fields?.length ? (
@@ -4800,15 +5203,20 @@ export function Apps({
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => void saveIntegration()}
+                  onClick={() =>
+                    editingProvider.provider_id === 'telegram' ||
+                    editingProvider.provider_id === 'openai'
+                      ? closeIntegration()
+                      : void saveIntegration()
+                  }
                   disabled={saving}
                 >
                   {saving
                     ? 'Saving...'
                     : editingProvider.provider_id === 'openai'
-                      ? 'Save OpenAI'
+                      ? 'Done'
                       : editingProvider.provider_id === 'telegram'
-                        ? 'Save Telegram'
+                        ? 'Done'
                         : 'Save Integration'}
                 </Button>
               </div>

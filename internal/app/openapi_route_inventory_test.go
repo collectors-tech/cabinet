@@ -316,6 +316,7 @@ var runtimeRouteExclusions = map[string]string{
 	"/api/test/runtime/setup-config":        "E2E-only runtime setup fixture hook registered only when CABINET_E2E_MODE is enabled.",
 	"/api/test/runtime/setup-import-source": "E2E-only setup-import fixture hook registered only when CABINET_E2E_MODE is enabled.",
 	"/api/test/auth/provider-options":       "E2E-only authentication fixture hook registered only when CABINET_E2E_MODE is enabled.",
+	"/api/test/chat/agent-response-state":   "E2E-only Agent response-state fixture hook registered only when CABINET_E2E_MODE is enabled.",
 }
 
 var runtimeRouteFamilies = map[string][]runtimeRouteContract{

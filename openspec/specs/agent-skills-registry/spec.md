@@ -158,6 +158,45 @@ Agent Skills SHALL never bypass the existing governed assistant execution model.
 - **AND** preview responses SHALL keep `mutation_applied=false` until a confirmed apply request is accepted
 - **AND** confirmed apply responses SHALL retain the same source context while reporting whether the mutation was applied or blocked
 
+### Requirement: AGENT-SKILLS-REGISTRY-013 Users administration SHALL derive authority only from the server session
+Cabinet Agent SHALL bind Users/admin work to the authenticated server-side actor and active profile membership rather than caller-authored context.
+
+#### Scenario: Users administration derives authority only from the server session
+- **GIVEN** Cabinet Agent receives a Users/admin request through an in-app or future external entry point
+- **WHEN** Cabinet authorizes planner, read, preview, apply, cancel, replay, and audit access
+- **THEN** it SHALL derive the actor, role, and profile scope from a server-validated session and active profile membership
+- **AND** client-supplied `admin_session`, role, permission, or authority values SHALL never grant or expand access
+- **AND** a local session SHALL match the active profile and its protected owner/admin membership
+- **AND** a remote session SHALL carry the validated admin claim and match an active admin membership in that profile
+- **AND** missing, expired, wrong-profile, inactive, or non-admin authority SHALL fail closed before user lists, mutation targets, or admin workflow evidence are returned
+- **AND** every Users/admin mutation SHALL revalidate authority at execution time while protected owner safeguards remain enforced
+- **AND** responses and evidence SHALL omit the opaque session token, cookie, secrets, and client-asserted authority values while retaining non-secret server-derived actor and decision evidence
+
+### Requirement: AGENT-SKILLS-REGISTRY-014 Destructive Agent skills SHALL require action-specific strong confirmation
+Cabinet Agent SHALL require a fresh server-issued confirmation for each exact destructive target instead of accepting caller-authored booleans or freeform confirmation text.
+
+#### Scenario: Review and confirm one exact destructive action
+- **GIVEN** Chat has created a durable preview for user removal or backup restore
+- **WHEN** the authorized user requests the destructive impact review
+- **THEN** Cabinet SHALL revalidate the current server session, profile, skill, preview expiry, protected-owner rules, backup compatibility, and exact current target
+- **AND** the review SHALL show the action, exact non-secret target, impacts, recovery path, and expiry in both full and contextual Chat
+- **AND** Cabinet SHALL issue an action-specific, profile-scoped, five-minute, single-use token whose stored representation is hashed
+- **AND** only the dedicated visible confirmation control SHALL submit that token with the same opaque preview id
+
+#### Scenario: Destructive confirmation fails closed across lifecycle boundaries
+- **GIVEN** Cabinet issued a strong confirmation for an exact destructive preview and target
+- **WHEN** a caller supplies only `confirm=true`, replays or supersedes a token, changes the target, changes profile, cancels the preview, or waits past expiry
+- **THEN** Cabinet SHALL reject the mutation without applying it
+- **AND** protected or last-owner removal SHALL remain blocked before a confirmation can be issued
+- **AND** cancellation, expiry, confirmation issuance, and successful apply SHALL retain non-secret audit evidence without the bearer token or raw sensitive payload
+
+#### Scenario: Restore revalidates compatible backup identity and preserves recovery
+- **GIVEN** a destructive restore preview names a backup in Cabinet's managed backup directory
+- **WHEN** Cabinet issues and consumes strong confirmation
+- **THEN** it SHALL revalidate the archive format, backup format, database integrity, selected database hash, compatible schema, and active profile scope immediately before replacement
+- **AND** it SHALL create a pre-restore recovery backup before applying the selected backup
+- **AND** the terminal durable preview and used-confirmation receipt SHALL survive the restored database state without persisting the raw token
+
 ### Requirement: Marketplace behavior SHALL remain explicitly deferred
 Cabinet SHALL not treat local skill import support as a public marketplace implementation.
 
@@ -217,3 +256,26 @@ Cabinet SHALL maintain a durable per-surface Agent skill coverage matrix so broa
 - **AND** media attach SHALL require an explicit existing media asset and persist a profile-scoped inventory media link with provenance
 - **AND** collection assignment SHALL verify the item belongs to the active profile and persist the workspace collection membership
 - **AND** source surface, source channel, source thread id, and source message id SHALL remain visible in the preview/apply response when supplied by the invoking boundary
+
+### Requirement: Mutating Agent Skill previews SHALL use durable single-use confirmation tokens
+Cabinet SHALL represent each actionable confirmation-required Agent Skill preview as a server-owned, profile-scoped record identified by an opaque token rather than treating a client-carried apply payload as mutation authority.
+
+#### Scenario: Confirm a durable Agent Skill preview exactly once
+- **GIVEN** Cabinet has created an actionable mutating Agent Skill preview for a profile, skill, source surface, source channel, source thread, source message, and bounded target
+- **WHEN** the owning profile confirms the opaque preview id before expiry
+- **THEN** Cabinet SHALL reload the server-owned request, re-evaluate current Agent authority and target validity, atomically claim the pending preview, and execute the bound skill at most once
+- **AND** a duplicate confirmation, concurrent replay, cross-profile request, mismatched supplied source context, stale target, or changed authority SHALL fail closed without a second mutation
+- **AND** the applied response and Action Timeline evidence SHALL preserve the preview id, skill id, bounded source provenance, confirmation state, and non-secret result summary
+
+#### Scenario: Cancel or expire a durable Agent Skill preview
+- **GIVEN** a durable Agent Skill preview is pending
+- **WHEN** the owning profile cancels it or its expiry time passes before confirmation
+- **THEN** Cabinet SHALL transition it to a terminal cancelled or expired state and reject every later apply attempt
+- **AND** the rejection SHALL provide clear recoverable guidance to create a fresh preview without mutating Cabinet state
+
+#### Scenario: Pending preview secrets remain write-only
+- **GIVEN** a governed provider or settings preview contains credential parameters
+- **WHEN** Cabinet persists the durable preview
+- **THEN** the preview row, API response, logs, workflow evidence, and UI SHALL contain only redacted parameters, bounded target provenance, and an opaque secret reference
+- **AND** pending credential material SHALL use Cabinet's encrypted profile secret storage and SHALL be removed when the preview is applied, cancelled, expired, or fails after claim
+- **AND** legacy Inventory Chat action previews SHALL retain their established preview/apply API compatibility while generic Agent Skill consumers migrate to the durable token contract

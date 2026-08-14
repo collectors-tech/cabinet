@@ -38,7 +38,7 @@ Cabinet MUST define how integrations-level provider defaults interact with Assis
 - **AND** thread metadata MUST record the actual provider/model used for messages and executions
 
 ### Requirement PROVIDER-OPENAI-UX-005: OpenAI config SHALL use a clean card and method-aware dialog
-Cabinet MUST adapt the SCHA OpenAI setup pattern into a compact provider card plus a dialog-owned configuration flow. The provider card MUST avoid setup clutter, while the dialog MUST separately present Browser Auth, API key, and Test OpenAI sections.
+Cabinet MUST adapt the SCHA OpenAI setup pattern into a compact provider card plus a dialog-owned configuration flow. The provider card MUST avoid setup clutter, while the dialog MUST lead with friendly ChatGPT browser sign-in and keep API-key entry secondary under an Advanced disclosure.
 
 #### Scenario: Clean OpenAI card with dialog-owned setup
 - **GIVEN** user opens `/integrations`
@@ -46,20 +46,40 @@ Cabinet MUST adapt the SCHA OpenAI setup pattern into a compact provider card pl
 - **THEN** card-level setup controls MUST be limited to status and a primary connect/manage action
 - **AND** card-level Validate/Sync/Test/configuration clutter MUST be absent
 - **WHEN** user opens the OpenAI config dialog
-- **THEN** Browser Auth, API key, and Test OpenAI sections MUST be visible inside the dialog
+- **THEN** ChatGPT browser sign-in MUST be the prominent recommended action and state that no API key is required
+- **AND** API-key controls MUST remain hidden under an explicit Advanced disclosure until requested
 - **AND** duplicate method narration such as `OpenAI is using: Browser Auth` MUST NOT render
 - **AND** generic operational Sync controls MUST NOT render inside the setup-needed OpenAI dialog
 - **AND** API-key and test controls MUST have durable visible or programmatic labels rather than placeholder-only setup fields
 
-### Requirement PROVIDER-OPENAI-UX-006: Browser Auth SHALL require verifiable proof before connected readiness
-Cabinet MUST NOT mark OpenAI Browser Auth connected from navigation, a user return, or a provider tab launch alone. Connected readiness requires a verifiable callback/artifact/proof recorded by Cabinet.
+### Requirement PROVIDER-OPENAI-UX-006: Browser Auth SHALL use supported ChatGPT sign-in and require verifiable proof before connected readiness
+Cabinet MUST use the supported local Codex ChatGPT login flow rather than reading browser cookies, extension storage, or API keys. Cabinet MUST NOT mark OpenAI Browser Auth connected from navigation or a user return alone. Connected readiness requires authenticated runtime status plus a successful no-action provider test recorded for the active profile.
 
 #### Scenario: Browser Auth setup-needed until proof exists
 - **GIVEN** OpenAI Browser Auth has no verified callback/artifact/proof
 - **WHEN** the OpenAI dialog renders
 - **THEN** Browser Auth MUST show setup-needed or unavailable state
 - **AND** OpenAI MUST NOT be considered connected through Browser Auth
-- **AND** the UI MUST explain that navigation alone is not connected proof
+- **AND** the UI MUST let the user continue with ChatGPT without entering an API key
+
+#### Scenario: Connect an existing ChatGPT login
+- **GIVEN** the supported local Codex runtime reports an authenticated ChatGPT session
+- **WHEN** the user chooses Continue with ChatGPT
+- **THEN** Cabinet MUST run a bounded no-action provider verification turn
+- **AND** Cabinet MUST bind only non-secret readiness evidence to the selected profile
+- **AND** Cabinet Chat MUST use the verified browser-auth runtime without reading the profile API-key secret
+- **AND** disconnecting the Cabinet profile MUST preserve the user's global Codex login
+
+### Requirement PROVIDER-OPENAI-UX-011: Browser-authenticated Chat SHALL preserve Cabinet authority boundaries
+Cabinet MUST use ChatGPT browser authentication only as the language-provider transport. Provider execution MUST be isolated from Cabinet tools, files, browser control, integrations, plugins, and mutation authority.
+
+#### Scenario: Run a browser-authenticated Chat turn
+- **GIVEN** ChatGPT Browser Auth is verified for the active profile
+- **WHEN** Cabinet runs an assistant turn
+- **THEN** the provider runtime MUST receive bounded profile/thread conversation context
+- **AND** the provider runtime MUST run without Cabinet tool or mutation authority
+- **AND** Cabinet MUST continue to own preview, confirmation, apply, cancel, and audit behavior
+- **AND** provider errors MUST remain classified and redacted
 
 ### Requirement PROVIDER-OPENAI-UX-007: API key setup SHALL save secrets separately from profile settings
 Cabinet MUST keep OpenAI API-key entry write-only and store the key through the profile secrets API while storing non-secret OpenAI defaults in profile settings.

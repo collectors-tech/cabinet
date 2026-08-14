@@ -65,7 +65,17 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [app_version, build_revision, build_date]
                 properties:
+                  app_version:
+                    type: string
+                    description: Semantic release version when stamped, otherwise a revision-derived development version.
+                  build_revision:
+                    type: string
+                    pattern: "^(unknown|[0-9a-f]{40})$"
+                    description: Full lowercase source commit for stamped or VCS-aware builds; unknown only for unstamped builds.
+                  build_date:
+                    type: string
                   update_channel:
                     type: string
                   update_public_key_configured:
@@ -1517,6 +1527,89 @@ paths:
                 $ref: "#/components/schemas/ProviderRegistryResponse"
         "400":
           $ref: "#/components/responses/Error"
+  /api/providers/openai/browser-auth:
+    get:
+      operationId: getApiProvidersOpenAIBrowserAuth
+      tags: [Integrations]
+      summary: Read ChatGPT browser sign-in status
+      description: Returns non-secret local Codex ChatGPT login and active-profile binding status. Browser cookies, account credentials, and API keys are never returned.
+      parameters:
+        - in: query
+          name: profile_id
+          schema: { type: string }
+          description: Profile to inspect. Defaults to the active profile.
+      responses:
+        "200":
+          description: Browser sign-in status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "503":
+          description: The local Codex runtime or sign-in status is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+    post:
+      operationId: postApiProvidersOpenAIBrowserAuth
+      tags: [Integrations]
+      summary: Connect ChatGPT browser sign-in to a Cabinet profile
+      description: Opens the supported Codex ChatGPT browser-login flow when needed, verifies it with a no-action provider turn, and binds only non-secret readiness evidence to the selected Cabinet profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              additionalProperties: false
+              properties:
+                profile_id: { type: string }
+      responses:
+        "200":
+          description: ChatGPT sign-in verified and profile connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "202":
+          description: Browser sign-in started and awaits user completion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "503":
+          description: Codex runtime, browser sign-in, or verification is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+    delete:
+      operationId: deleteApiProvidersOpenAIBrowserAuth
+      tags: [Integrations]
+      summary: Disconnect ChatGPT from a Cabinet profile
+      description: Removes profile-scoped Browser Auth readiness while preserving the user's global Codex ChatGPT login.
+      parameters:
+        - in: query
+          name: profile_id
+          schema: { type: string }
+          description: Profile to disconnect. Defaults to the active profile.
+      responses:
+        "200":
+          description: Profile disconnected; global login preserved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/provider/health:
     get:
       operationId: getApiProviderHealth
@@ -2131,6 +2224,169 @@ paths:
           $ref: "#/components/responses/Error"
         "405":
           $ref: "#/components/responses/Error"
+  /api/telegram/connection/test:
+    post:
+      operationId: postApiTelegramConnectionTest
+      tags: [Telegram]
+      summary: Validate a write-only Telegram bot token for outbound polling
+      description: Calls Telegram getMe and getWebhookInfo. A webhook conflict is reported without deleting it; the bot token is never returned.
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties:
+                profile_id: { type: string }
+                bot_token: { type: string, writeOnly: true }
+      responses:
+        "200":
+          description: Bot identity validated and compatible with polling
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "409":
+          description: Bot validated but an existing webhook blocks polling
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "405": { $ref: "#/components/responses/Error" }
+  /api/telegram/connection/resolve-webhook:
+    post:
+      operationId: postApiTelegramConnectionResolveWebhook
+      tags: [Telegram]
+      summary: Explicitly remove a conflicting Telegram webhook
+      description: Calls deleteWebhook with pending-update preservation, then revalidates the bot for outbound polling.
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties:
+                profile_id: { type: string }
+      responses:
+        "200":
+          description: Webhook removed and bot revalidated
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "405": { $ref: "#/components/responses/Error" }
+  /api/telegram/pairing-codes:
+    post:
+      operationId: postApiTelegramPairingCodes
+      tags: [Telegram]
+      summary: Create a short-lived single-use private-chat pairing code
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties:
+                profile_id: { type: string }
+      responses:
+        "201":
+          description: Pairing code created; only a digest is persisted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profile_id, code, expires_at]
+                properties:
+                  profile_id: { type: string }
+                  code: { type: string, pattern: "^CAB-[A-Z0-9]{4}-[A-Z0-9]{4}$" }
+                  expires_at: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "405": { $ref: "#/components/responses/Error" }
+  /api/telegram/connection/status:
+    get:
+      operationId: getApiTelegramConnectionStatus
+      tags: [Telegram]
+      summary: Read non-secret Telegram polling and private-pairing status
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: query
+          name: profile_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Token-safe connector status; transport is outbound long polling and public_listener is false
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "405": { $ref: "#/components/responses/Error" }
+  /api/telegram/connection/pause:
+    post:
+      operationId: postApiTelegramConnectionPause
+      tags: [Telegram]
+      summary: Pause or resume Telegram outbound polling
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, paused]
+              properties:
+                profile_id: { type: string }
+                paused: { type: boolean }
+      responses:
+        "200":
+          description: Updated non-secret connector status
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "405": { $ref: "#/components/responses/Error" }
+  /api/telegram/connection/disconnect:
+    post:
+      operationId: postApiTelegramConnectionDisconnect
+      tags: [Telegram]
+      summary: Disconnect Telegram and remove its stored bot token and pairing mapping
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties:
+                profile_id: { type: string }
+      responses:
+        "200":
+          description: Disconnected non-secret connector status
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "405": { $ref: "#/components/responses/Error" }
+
   /api/telegram/catalog-captures:
     post:
       operationId: postApiTelegramCatalogCaptures
@@ -2651,6 +2907,7 @@ paths:
       operationId: getApiChatMessages
       tags: [Chat]
       summary: List messages for a thread
+      description: Agent users-administration evidence is omitted unless the caller has server-derived authority for the active profile.
       parameters:
         - in: query
           name: profile_id
@@ -2674,12 +2931,43 @@ paths:
                     type: array
                     items:
                       type: object
+                      properties:
+                        attachments_json:
+                          type: array
+                          description: Safe, persisted attachment metadata scoped to this message's profile and thread.
+                          items:
+                            type: object
+                            required: [id, filename, mime_type, size_bytes, provenance, source, created_at]
+                            properties:
+                              id:
+                                type: string
+                              filename:
+                                type: string
+                              mime_type:
+                                type: string
+                              size_bytes:
+                                type: integer
+                                format: int64
+                              provenance:
+                                type: string
+                                enum: [explicit_user_upload, telegram_media]
+                              source:
+                                type: string
+                                enum: [in_app_chat, telegram]
+                              created_at:
+                                type: string
         "400":
           $ref: "#/components/responses/Error"
     post:
       operationId: postApiChatMessages
       tags: [Chat]
-      summary: Create chat message
+      summary: Submit a user chat message for server-owned Agent dispatch
+      description: >-
+        Public clients may submit only role=user messages. Cabinet's in-process
+        planner, provider and dispatchers exclusively persist assistant/system
+        messages and trusted planner, capability, app-control, handoff or
+        assistant-response evidence. Users-administration dispatch also requires
+        server-derived authority for the active profile.
       requestBody:
         required: true
         content:
@@ -2694,8 +2982,29 @@ paths:
                   type: string
                 role:
                   type: string
+                  enum: [user]
                 content:
                   type: string
+                context:
+                  type: object
+                  description: >-
+                    Untrusted request context. Server-owned agent_planner,
+                    agent_capabilities, app_control, assistant_handoff,
+                    assistant_response, provider, execution, preview and
+                    workflow evidence is rejected.
+                  additionalProperties: true
+                agent_context:
+                  type: object
+                  description: >-
+                    Request context normalized to Cabinet's allowlisted Agent
+                    envelope; unknown client-supplied evidence is discarded.
+                  additionalProperties: true
+                attachment_ids:
+                  type: array
+                  description: Unique attachment IDs already owned by the same profile and thread; cross-scope or duplicate bindings fail closed.
+                  uniqueItems: true
+                  items:
+                    type: string
       responses:
         "201":
           description: Message created
@@ -3748,6 +4057,7 @@ paths:
       tags: [Agent]
       operationId: postApiAgentSkillsApply
       summary: Create or run agent skills apply
+      description: Users/admin Agent requests, including durable preview apply and replay, derive authority from the validated Cabinet session and active profile membership. Client-provided role, permission, authority, owner, or admin_session fields never grant access. Destructive skills reject direct boolean confirmation and require a durable preview plus an unexpired single-use token from the action-specific strong-confirmation endpoint for the same unchanged target.
       security:
         - CabinetLocalSession: []
         - CabinetOIDCSession: []
@@ -3767,6 +4077,104 @@ paths:
                 type: object
                 additionalProperties: true
         "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/agent/skills/confirm-destructive:
+    post:
+      tags: [Agent]
+      operationId: postApiAgentSkillsConfirmDestructive
+      summary: Issue an action-specific strong confirmation for a destructive Agent preview
+      description: Revalidates the authenticated profile, current server-derived administrator authority when applicable, preview expiry, destructive skill identity, and exact target fingerprint before issuing a five-minute single-use confirmation token. The token authorizes only the same profile, preview, skill, and unchanged target; it is never accepted as a substitute for a durable preview.
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, preview_id]
+              properties:
+                profile_id:
+                  type: string
+                preview_id:
+                  type: string
+                  pattern: ^asp_[a-f0-9]+$
+              additionalProperties: false
+      responses:
+        "200":
+          description: Action-specific destructive impact review and single-use confirmation token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [confirmation_token, expires_at, action, target, impact, recovery]
+                properties:
+                  confirmation_token:
+                    type: string
+                    description: Ephemeral single-use token held only by the active review surface.
+                  expires_at:
+                    type: string
+                    format: date-time
+                  action:
+                    type: string
+                    enum: [remove_user, restore_backup, destructive_action]
+                  target:
+                    type: object
+                    additionalProperties: true
+                  impact:
+                    type: array
+                    minItems: 1
+                    items: { type: string }
+                  recovery:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/agent/skills/cancel:
+    post:
+      tags: [Agent]
+      operationId: postApiAgentSkillsCancel
+      summary: Cancel a pending durable Agent Skill preview
+      description: Cancelling a Users/admin preview revalidates authority from the Cabinet session and active profile membership before making the opaque preview terminal; caller-authored authority is ignored.
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, preview_id]
+              properties:
+                profile_id:
+                  type: string
+                preview_id:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          description: Preview cancelled without applying a mutation
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
   /api/agent/skills/import:
     post:
@@ -3794,10 +4202,42 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
   /api/agent/skills/preview:
+    get:
+      tags: [Agent]
+      operationId: getApiAgentSkillsPreview
+      summary: Get a durable Agent Skill preview by opaque id
+      description: Reading a Users/admin durable preview requires current server-derived authority for the active profile and never returns an opaque session token or caller-authored authority.
+      security:
+        - CabinetLocalSession: []
+        - CabinetOIDCSession: []
+      parameters:
+        - in: query
+          name: profile_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: preview_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Durable preview state and bounded target summary
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Agent]
       operationId: postApiAgentSkillsPreview
       summary: Create or run agent skills preview
+      description: Users/admin Agent requests derive authority from the validated Cabinet session and active profile membership. Client-provided role, permission, authority, owner, or admin_session fields never grant access.
       security:
         - CabinetLocalSession: []
         - CabinetOIDCSession: []
@@ -3817,6 +4257,8 @@ paths:
                 type: object
                 additionalProperties: true
         "400":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
   /api/agent/skills/state:
     post:
@@ -4149,6 +4591,7 @@ paths:
       tags: [Chat]
       operationId: getApiChatWorkflowRuns
       summary: Get chat workflow-runs
+      description: Users-administration runs and authority evidence are omitted unless the caller has server-derived authority for the active profile.
       security:
         - CabinetLocalSession: []
         - CabinetOIDCSession: []
@@ -4166,6 +4609,7 @@ paths:
       tags: [Chat]
       operationId: postApiChatWorkflowRuns
       summary: Create or run chat workflow-runs
+      description: Users-administration workflow evidence requires server-derived authority, is sanitized, and receives non-secret server authority evidence.
       security:
         - CabinetLocalSession: []
         - CabinetOIDCSession: []
@@ -4191,6 +4635,7 @@ paths:
       tags: [Chat]
       operationId: getApiChatWorkflowRunsByRunID
       summary: Get chat workflow-runs runID
+      description: Reading a users-administration run requires server-derived authority for the active profile.
       security:
         - CabinetLocalSession: []
         - CabinetOIDCSession: []
@@ -4213,6 +4658,7 @@ paths:
       tags: [Chat]
       operationId: patchApiChatWorkflowRunsByRunID
       summary: Update chat workflow-runs runID
+      description: Updating or cancelling a users-administration run revalidates server-derived authority for the active profile before mutation.
       security:
         - CabinetLocalSession: []
         - CabinetOIDCSession: []
@@ -6120,20 +6566,39 @@ paths:
     post:
       tags: [Telegram]
       operationId: postApiTelegramAgentText
-      summary: Create or run telegram agent-text
-      security:
-        - CabinetLocalSession: []
-        - CabinetOIDCSession: []
+      summary: Route paired private Telegram natural language through Cabinet Agent
+      description: Internal connector handoff only. External HTTP requests are rejected even when they supply valid paired identifiers.
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              additionalProperties: false
+              required: [sender_id, chat_id, chat_type, message_id, text]
+              properties:
+                profile_id:
+                  type: string
+                  description: Optional claimed profile; when present it must match the server-authorized pairing.
+                sender_id:
+                  type: string
+                chat_id:
+                  type: string
+                chat_type:
+                  type: string
+                  enum: [private]
+                message_id:
+                  type: string
+                text:
+                  type: string
+                  description: Natural user text. Raw Agent Skill ids and key-value command grammar are rejected.
+                source_metadata:
+                  type: object
+                  additionalProperties: true
       responses:
-        "200":
-          description: Successful response
+        "201":
+          description: Natural text was recorded in the stable Telegram Cabinet thread and safely planned
           content:
             application/json:
               schema:
@@ -6141,21 +6606,39 @@ paths:
                 additionalProperties: true
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          description: Sender, chat, profile, group scope, or legacy command grammar was rejected
   /api/telegram/agent-text-callbacks:
     post:
       tags: [Telegram]
       operationId: postApiTelegramAgentTextCallbacks
-      summary: Create or run telegram agent-text-callbacks
-      security:
-        - CabinetLocalSession: []
-        - CabinetOIDCSession: []
+      summary: Apply or cancel one server-owned Telegram Agent preview
+      description: Internal connector handoff only. External HTTP requests are rejected even when they supply valid paired identifiers.
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              additionalProperties: false
+              required: [sender_id, chat_id, chat_type, message_id, callback_query_id, callback_data]
+              properties:
+                sender_id:
+                  type: string
+                chat_id:
+                  type: string
+                chat_type:
+                  type: string
+                  enum: [private]
+                message_id:
+                  type: string
+                callback_query_id:
+                  type: string
+                callback_data:
+                  type: string
+                  pattern: '^asp_[0-9a-f]{32}:(apply|cancel)$'
+                  description: Opaque single-use server preview token plus the bounded decision only.
       responses:
         "200":
           description: Successful response
@@ -6166,6 +6649,10 @@ paths:
                 additionalProperties: true
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          description: Callback sender, chat, profile, or preview scope was rejected
+        "409":
+          description: Preview is expired, stale, unavailable, or otherwise cannot transition
   /api/users:
     get:
       tags: [Users]
@@ -6316,7 +6803,7 @@ components:
       type: apiKey
       in: header
       name: X-Cabinet-Session
-      description: Opaque unlocked local Cabinet session for profile-scoped write operations.
+      description: Opaque unlocked local Cabinet session for profile-scoped protected operations, including Agent users administration. Authority is derived server-side from the session and active profile membership. Failures use agent_admin_authentication_required or agent_admin_profile_forbidden without exposing protected evidence.
     CabinetOIDCSession:
       type: apiKey
       in: cookie
@@ -6418,6 +6905,33 @@ components:
               health_state: ready
               next_action: run_ebay_query_sets_from_market_watch
               base_url_set: false
+    OpenAIBrowserAuthResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, auth_method, state, authenticated, profile_connected, recommended, message]
+      properties:
+        provider:
+          type: string
+          enum: [openai]
+        auth_method:
+          type: string
+          enum: [browser_auth]
+        state:
+          type: string
+          enum: [connected, signed_out, signing_in, runtime_missing, unavailable, verification_failed, disconnected]
+        authenticated:
+          type: boolean
+          description: Whether the supported local Codex runtime reports a valid ChatGPT login.
+        profile_connected:
+          type: boolean
+          description: Whether that login has passed a no-action provider test and is bound to the selected profile.
+        recommended:
+          type: boolean
+        message:
+          type: string
+        global_login_preserved:
+          type: boolean
+          description: True when profile disconnect deliberately leaves the user's global Codex login unchanged.
     ProviderRegistryEntry:
       type: object
       required: [provider_id, display_name, auth_mode, capabilities, state]

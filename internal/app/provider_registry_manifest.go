@@ -208,8 +208,8 @@ func integrationConfigSchemaDefinitions() map[string]integrationConfigSchemaDefi
 		"integrations/openai/auth": {
 			SchemaRef: "integrations/openai/auth", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
 			Fields: []integrationConfigSchemaField{
-				{Key: "openai.active_auth_method", Label: "Connection method", Type: "select", Required: true, Persistence: "profile_settings", Default: "api_key", Options: []integrationConfigSchemaOption{{Value: "api_key", Label: "API key"}, {Value: "browser_auth", Label: "Browser Auth"}}},
-				{Key: "assistant_default_model", Label: "Default assistant model", Type: "select", Required: true, Persistence: "profile_settings", Default: "gpt-4o-mini", Options: []integrationConfigSchemaOption{{Value: "gpt-4o-mini", Label: "GPT-4o mini"}, {Value: "gpt-4.1-mini", Label: "GPT-4.1 mini"}, {Value: "gpt-5.3-codex", Label: "GPT-5.3 Codex"}}},
+				{Key: "openai.active_auth_method", Label: "Connection method", Type: "select", Required: true, Persistence: "profile_settings", Default: "browser_auth", Options: []integrationConfigSchemaOption{{Value: "browser_auth", Label: "Sign in with ChatGPT (recommended)"}, {Value: "api_key", Label: "API key (advanced)"}}},
+				{Key: "assistant_default_model", Label: "Default assistant model", Type: "select", Required: true, Persistence: "profile_settings", Default: "gpt-5.6-luna", Options: []integrationConfigSchemaOption{{Value: "gpt-5.6-luna", Label: "GPT-5.6 Luna (ChatGPT)"}, {Value: "gpt-4o-mini", Label: "GPT-4o mini (API)"}, {Value: "gpt-4.1-mini", Label: "GPT-4.1 mini (API)"}}},
 				{Key: "openai_api_key", Label: "API key", Type: "secret", WriteOnly: true, Persistence: "profile_secrets", SecretKey: "openai_api_key", Condition: map[string]string{"openai.active_auth_method": "api_key"}, HelperText: "Stored through the profile secrets path and never returned in registry payloads."},
 				{Key: "openai.browser_auth_artifact_present", Label: "Browser Auth proof", Type: "browser-auth-status", ReadOnly: true, Persistence: "profile_settings", Condition: map[string]string{"openai.active_auth_method": "browser_auth"}, HelperText: "Cabinet requires verified auth artifact and provider-test proof before marking Browser Auth ready."},
 			},
@@ -217,10 +217,9 @@ func integrationConfigSchemaDefinitions() map[string]integrationConfigSchemaDefi
 		"integrations/telegram/channel": {
 			SchemaRef: "integrations/telegram/channel", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
 			Fields: []integrationConfigSchemaField{
-				{Key: "telegram.catalog_capture.sender_id", Label: "Sender ID", Type: "text", Required: true, Persistence: "profile_settings", Placeholder: "123456789", ValidationRules: []string{"numeric_string"}},
-				{Key: "telegram.catalog_capture.chat_id", Label: "Chat ID", Type: "text", Required: true, Persistence: "profile_settings", Placeholder: "-1001234567890", ValidationRules: []string{"telegram_chat_id"}},
-				{Key: "telegram.bot_token", Label: "Bot token", Type: "secret", Required: true, WriteOnly: true, Persistence: "profile_secrets", SecretKey: "telegram_bot_token"},
-				{Key: "telegram.webhook_route", Label: "Webhook route", Type: "url", Required: false, Persistence: "profile_settings", ValidationRules: []string{"url"}},
+				{Key: "telegram.bot_token", Label: "BotFather token", Type: "secret", Required: true, WriteOnly: true, Persistence: "profile_secrets", SecretKey: "telegram_bot_token", HelperText: "Validated with Telegram getMe, stored write-only, and never returned by Cabinet."},
+				{Key: "telegram.polling.transport", Label: "Transport", Type: "text", ReadOnly: true, Persistence: "profile_settings", Default: "long_polling", HelperText: "Outbound-only Telegram getUpdates polling; Cabinet opens no public listener."},
+				{Key: "telegram.polling.pairing_state", Label: "Private chat pairing", Type: "text", ReadOnly: true, Persistence: "profile_settings", Default: "pairing_required", HelperText: "A short-lived single-use /start code maps one numeric user and private chat to this profile."},
 			},
 		},
 		"integrations/ebay/setup": {
@@ -397,7 +396,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 				"image_help":         true,
 				"content_generation": true,
 			},
-			SetupInstructions: "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
+			SetupInstructions: "Sign in with ChatGPT in your browser (recommended). An OpenAI API key is available as an advanced alternative.",
 		},
 		{
 			ProviderID:        "anthropic",
@@ -461,12 +460,12 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 			ProviderCategory:  "notification",
 			ProviderType:      "messaging",
 			APIFamily:         "messaging_channel",
-			APISupportProfile: "bot_webhook_sender_chat_v1",
-			ActiveMode:        "sender_chat_authorization",
+			APISupportProfile: "bot_long_polling_private_pairing_v1",
+			ActiveMode:        "outbound_long_polling",
 			IntegrationMode:   "assistant_capture_channel",
 			APIAvailable:      true,
-			AuthRequirement:   "sender_chat_authorization",
-			AuthMode:          "sender_chat",
+			AuthRequirement:   "bot_token_private_chat_pairing",
+			AuthMode:          "bot_token_pairing",
 			ConfigSchemaRef:   "integrations/telegram/channel",
 			WorkflowRefs:      []string{"telegram.catalog_capture", "telegram.agent_text"},
 			CapabilityFlags: map[string]bool{
@@ -476,7 +475,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 				"media_capture": true,
 				"text_capture":  true,
 			},
-			SetupInstructions: "Configure Telegram sender/chat authorization, bot token secret, and webhook routing proof before running governed preview-before-apply channel intake.",
+			SetupInstructions: "Create a bot with BotFather, validate its write-only token, resolve any existing webhook explicitly, then pair one private chat with a short-lived single-use /start code. Cabinet uses outbound-only long polling and opens no public listener.",
 		},
 		{
 			ProviderID:        "ebay",

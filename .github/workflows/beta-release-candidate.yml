@@ -121,13 +121,82 @@ jobs:
           npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html *>&1 | Tee-Object .logs/release-candidate/openapi-build.log
           if ($LASTEXITCODE -ne 0) { throw "OpenAPI docs build failed with exit code $LASTEXITCODE" }
 
+      - name: Start controlled Telegram Bot API fixture
+        shell: pwsh
+        run: |
+          $stdout = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stdout.log"
+          $stderr = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stderr.log"
+          $fixtureExecutable = Join-Path $env:RUNNER_TEMP "cabinet-telegram-test-fixture.exe"
+          go build -o $fixtureExecutable ./cmd/telegram-test-fixture
+          if ($LASTEXITCODE -ne 0) { throw "Controlled Telegram fixture build failed with exit code $LASTEXITCODE" }
+          $fixture = Start-Process -FilePath $fixtureExecutable -ArgumentList @(
+            "-listen", "127.0.0.1:17994"
+          ) -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          $fixture.Id | Set-Content .logs/release-candidate/telegram-fixture.pid
+          $ready = $false
+          for ($attempt = 0; $attempt -lt 40; $attempt++) {
+            try {
+              $response = Invoke-RestMethod -Uri "http://127.0.0.1:17994/control/status" -TimeoutSec 1
+              if ($response.ok -eq $true) { $ready = $true; break }
+            } catch {}
+            Start-Sleep -Milliseconds 250
+          }
+          if (-not $ready) { throw "Controlled Telegram fixture did not become ready." }
+
       - name: Cypress release pack
         shell: pwsh
         env:
           CABINET_E2E_MODE: "1"
           CABINET_OPEN_BROWSER: "0"
+          CABINET_ALLOW_INSECURE_SECRET_FALLBACK: "1"
+          CABINET_TELEGRAM_TEST_API_BASE_URL: "http://127.0.0.1:17994"
+          CYPRESS_telegramRuntimeFixture: "true"
+          CYPRESS_telegramFixtureControlURL: "http://127.0.0.1:17994"
+          CYPRESS_telegramBotToken: "123456:test-runtime-token"
         run: |
-          pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec "${{ steps.cypress_pack.outputs.specs }}" -Browser chrome -RequireE2EHooks -ExecutionTimeoutSec 300 *>&1 | Tee-Object .logs/release-candidate/cypress.log
+          if ($env:CYPRESS_telegramRuntimeFixture -ne "true" -or [string]::IsNullOrWhiteSpace($env:CYPRESS_telegramFixtureControlURL)) {
+            throw "Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden."
+          }
+          $pack = Get-Content .logs/release-candidate/cypress-pack.json -Raw | ConvertFrom-Json
+          if ($pack.version -lt 4 -or $pack.spec_count -ne 22 -or $pack.specs.Count -ne 22) {
+            throw "Fixed beta Cypress pack must resolve version 4 with exactly 22 specs."
+          }
+          foreach ($spec in $pack.specs) {
+            $name = Split-Path (Split-Path $spec -Parent) -Leaf
+            pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec $spec -Browser chrome -Retries 0 -ExecutionTimeoutSec 300 -RequireE2EHooks -LogDir .logs/release-candidate/cypress -LogName "candidate-$name" *>&1 | Tee-Object -Append .logs/release-candidate/cypress.log
+            if ($LASTEXITCODE -ne 0) { throw "Candidate Cypress spec failed: $spec" }
+            $summaryPaths = @(Get-ChildItem .logs/release-candidate/cypress -Filter "*-candidate-$name.summary.json" | Select-Object -ExpandProperty FullName)
+            if ($summaryPaths.Count -ne 1) { throw "Candidate Cypress must produce exactly one summary for ${spec}; found $($summaryPaths.Count)." }
+            $summaryPath = $summaryPaths[0]
+            $summary = Get-Content $summaryPath -Raw | ConvertFrom-Json
+            if ($summary.runtime_revision -ne "${{ steps.commit.outputs.sha }}") {
+              throw "Candidate Cypress runtime revision mismatch for ${spec}: $($summary.runtime_revision)"
+            }
+            if ($summary.execution_timeout_sec -ne 300 -or $summary.runner_phase -ne "completed" -or $summary.exit_code -ne 0) {
+              throw "Candidate Cypress evidence is incomplete for ${spec}: $summaryPath"
+            }
+          }
+
+      - name: Stop controlled Telegram Bot API fixture
+        if: always()
+        shell: pwsh
+        run: |
+          $fixtureExecutable = Join-Path $env:RUNNER_TEMP "cabinet-telegram-test-fixture.exe"
+          $fixturePIDPath = ".logs/release-candidate/telegram-fixture.pid"
+          if (Test-Path -LiteralPath $fixturePIDPath) {
+            $rawFixturePID = (Get-Content -Raw -LiteralPath $fixturePIDPath).Trim()
+            $fixturePID = 0
+            if ([int]::TryParse($rawFixturePID, [ref]$fixturePID) -and $fixturePID -gt 0) {
+              $ownedFixture = Get-Process -Id $fixturePID -ErrorAction SilentlyContinue
+              if ($ownedFixture -and $ownedFixture.Path -eq $fixtureExecutable) {
+                Stop-Process -Id $fixturePID -Force -ErrorAction SilentlyContinue
+              } elseif ($ownedFixture) {
+                Write-Warning "Recorded Telegram fixture PID no longer belongs to the built fixture executable; no process was stopped."
+              }
+            } else {
+              Write-Warning "Recorded Telegram fixture PID is invalid; no process was stopped."
+            }
+          }
 
       - name: Write release-candidate validation summary
         if: always()

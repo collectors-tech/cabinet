@@ -574,8 +574,8 @@ func TestInboxAndUsersAdminSkillsExposeSafetyAndExecutionBoundaries(t *testing.T
 	if !ok {
 		t.Fatalf("expected users search skill")
 	}
-	if userSearch.SafetyLevel != SafetyReadOnly || !slices.Contains(userSearch.RequiredContext, "admin_session") || !userSearch.Executable {
-		t.Fatalf("users search should be executable read-only admin metadata, got %+v", userSearch)
+	if userSearch.SafetyLevel != SafetyReadOnly || slices.Contains(userSearch.RequiredContext, "admin_session") || !userSearch.Executable {
+		t.Fatalf("users search should defer admin authority to the server session rather than request context, got %+v", userSearch)
 	}
 
 	removeUser, ok := registry.Resolve("cabinet.users.remove_user")

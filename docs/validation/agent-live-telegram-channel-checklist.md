@@ -9,7 +9,7 @@ This is the human-readable validation target for the live Telegram-channel gate.
 
 ## Current Status
 
-Status: blocked - live sender/chat setup is not configured on the active demo2 profile.
+Status: historical blocker - the recorded demo2 check predates Cabinet's outbound-polling/private-pairing connector and must be rerun before release sign-off.
 
 Last checked: 2026-07-08 03:20 AEST
 
@@ -31,14 +31,18 @@ Non-secret provider-health result:
 - `credential_returned=false`
 - `next_action=authorize_sender_chat`
 
-Because the live channel is not configured, no live authorized text, authorized media, unauthorized sender, or Bot API delivery-failure scenarios were executed in this run. Fixture/proof-packet evidence remains separate from this live-channel checklist.
+Because that historical run had no live channel configured, no live authorized text, authorized media, unauthorized sender, or Bot API delivery-failure scenarios were executed. #2085 adds controlled-fixture connector proof, but that evidence remains separate from this live-channel checklist.
 
 ## Preconditions
 
 - Cabinet runtime branch and commit: `develop`, `rev-0b629fc54569`
 - Runtime URL and `/api/runtime` evidence: `http://127.0.0.1:17882`, `.work-agent/logs/issue-1773/demo2-runtime-precondition.json`
-- Telegram channel setup state: blocked by `TELEGRAM_SENDER_CHAT_REQUIRED`
-- Authorized sender/chat configured: no
+- Telegram connector transport (`long_polling` expected): rerun required
+- Public listener state (`false` expected): rerun required
+- Bot identity validated with `getMe` (non-secret username/id only): rerun required
+- Existing webhook conflict checked and explicitly resolved if present: rerun required
+- Authorized private sender/chat paired through a short-lived single-use `/start` code: no
+- Connector status (paired, paused, last success/update, safe error/retry state): rerun required
 - Unauthorized sender/chat available: not verified because authorized setup is missing
 - Operator approval for live-channel validation: not verified in repo/runtime state
 
@@ -52,6 +56,7 @@ Because the live channel is not configured, no live authorized text, authorized 
 - Review state: not run
 - Mutation state before confirmation: not run
 - Runtime/log evidence path: `.work-agent/logs/issue-1773/telegram-provider-health-precondition.json`
+- Connector offset after successful processing: not run
 - Result: blocked by missing live Telegram sender/chat setup
 
 Expected result: the authorized text request creates auditable Agent thread, message, workflow, response/deep-link, and review evidence without applying a mutation before confirmation.
@@ -89,7 +94,7 @@ Expected result: the unauthorized request is rejected before Cabinet creates Age
 - Telegram delivery method/status/body evidence: not run
 - Secret-return check: `credential_returned=false` in provider-health evidence
 - Runtime/log evidence path: `.work-agent/logs/issue-1773/telegram-provider-health-precondition.json`
-- Result: blocked by missing live Telegram sender/chat, bot token, and webhook setup
+- Result: blocked by missing live Telegram private pairing, validated bot token, and outbound polling proof
 
 Expected result: outbound delivery failure is recorded without losing Cabinet workflow state and without exposing secrets.
 
@@ -98,4 +103,4 @@ Expected result: outbound delivery failure is recorded without losing Cabinet wo
 - Completed by: pending live-channel setup
 - Completion date: pending live-channel setup
 - linked issue/PR comment: pending this branch/PR handoff
-- Residual blockers: live authorized sender/chat setup, bot token presence, webhook setup, and operator-approved non-secret source-message capture
+- Residual blockers: operator-authorized live bot token entry, explicit webhook conflict check/resolution, private sender/chat pairing, packaged outbound-polling runtime proof, and non-secret source-message capture

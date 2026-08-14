@@ -24,7 +24,7 @@ This checklist records the non-publishing proof required before the private beta
 
 - Start the packaged `cabinet.exe` from an extracted artifact folder with an isolated data directory.
 - Verify `/healthz` returns `ok`.
-- Verify `/api/runtime` reports `app_version=0.1.0-beta.1`.
+- Verify `/api/runtime` reports `app_version=0.1.0-beta.1` and its full lowercase `build_revision` exactly equals `cabinet-release-manifest.json` `source_commit`.
 - Record runtime port, process id, data directory, build revision, and build date in the run log.
 
 ## Release Gate

@@ -26,13 +26,15 @@ type chatAgentPlannerInput struct {
 }
 
 type chatAgentSkillSelection struct {
-	Decision      string         `json:"decision"`
-	SkillID       string         `json:"skill_id"`
-	Parameters    map[string]any `json:"parameters"`
-	Message       string         `json:"message"`
-	ErrorCode     string         `json:"error_code"`
-	NextAction    string         `json:"next_action"`
-	ProviderTrace map[string]string
+	Decision                string         `json:"decision"`
+	SkillID                 string         `json:"skill_id"`
+	Parameters              map[string]any `json:"parameters"`
+	Message                 string         `json:"message"`
+	ErrorCode               string         `json:"error_code"`
+	NextAction              string         `json:"next_action"`
+	ProviderTrace           map[string]string
+	ProviderErrorClass      string `json:"-"`
+	ProviderSetupNextAction string `json:"-"`
 }
 
 func planChatAgentSkill(ctx context.Context, provider ai.AssistantTurnProvider, input chatAgentPlannerInput) (chatAgentSkillSelection, error) {
@@ -73,7 +75,11 @@ func planChatAgentSkill(ctx context.Context, provider ai.AssistantTurnProvider, 
 	})
 	trace := plannerProviderTrace(resp)
 	if err != nil {
-		return chatAgentSkillSelection{ProviderTrace: trace}, err
+		return chatAgentSkillSelection{
+			ProviderTrace:           trace,
+			ProviderErrorClass:      strings.TrimSpace(resp.ErrorClass),
+			ProviderSetupNextAction: strings.TrimSpace(resp.SetupNextAction),
+		}, err
 	}
 
 	var selection chatAgentSkillSelection
@@ -251,6 +257,9 @@ func plannerProviderTrace(resp ai.AssistantTurnResponse) map[string]string {
 		"governed_dispatch_owner": "cabinet",
 		"cabinet_tool_authority":  "none",
 	}
+	if errorClass := strings.TrimSpace(resp.ErrorClass); errorClass != "" {
+		trace["error_class"] = errorClass
+	}
 	for key, value := range resp.Metadata {
 		switch key {
 		case "network", "test_provider", "live_provider", "integration_id", "active_auth_method", "error_class":
@@ -263,7 +272,8 @@ func plannerProviderTrace(resp ai.AssistantTurnResponse) map[string]string {
 }
 
 func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, providers *ai.AssistantProviderRegistry, registry agentskills.Registry, profileID, threadID, content string, envelope map[string]any, sourceMessageID string) (map[string]any, bool) {
-	if !chatMessageNeedsNaturalLanguageAgentPlanning(content) {
+	intentDomain, needsPlanning := chatAgentIntentDomain(content)
+	if !needsPlanning {
 		return nil, false
 	}
 	assistantContext, _ := envelope["assistant"].(map[string]any)
@@ -271,19 +281,38 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	if providerID == "" || providerID == "<nil>" {
 		providerID = "openai"
 	}
-	agentCtx := agentContextEvidence(envelope)
+	agentCtx := withoutClientAssertedAdminAuthority(agentContextEvidence(envelope))
 	provider, ok := providers.Provider(providerID)
 	if !ok {
-		return map[string]any{
+		result := map[string]any{
 			"mode":           "provider_planner",
 			"provider":       providerID,
+			"intent_domain":  intentDomain,
 			"source_msg_id":  sourceMessageID,
 			"source_surface": strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
 			"source_channel": strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
 			"recoverable":    true,
 			"error":          map[string]any{"code": "assistant_provider_unavailable", "message": "The selected assistant provider is not available for Chat planning."},
 			"next_action":    "Choose a configured assistant provider before retrying this natural-language request.",
-		}, true
+		}
+		response, _ := chat.NewAgentResponse(
+			chat.AgentResponseProviderUnavailable,
+			"The selected assistant provider is unavailable. No Cabinet action was completed.",
+			content,
+			"",
+			"Cabinet Agent",
+			strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+			strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+		)
+		if chatSvc != nil {
+			if assistantMessage, messageErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", response.Message, map[string]any{
+				"agent_planner":  result,
+				"agent_response": response,
+			}); messageErr == nil {
+				result["thread_message"] = assistantMessage
+			}
+		}
+		return result, true
 	}
 	model := strings.TrimSpace(fmt.Sprint(assistantContext["model"]))
 	if model == "<nil>" {
@@ -296,11 +325,12 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		Provider:     providerID,
 		Model:        model,
 		AgentContext: agentCtx,
-		Skills:       registry.List(),
+		Skills:       agentPlannerSkillsForSession(ctx, conn, profileID, registry.List()),
 	})
 	result := map[string]any{
 		"mode":           "provider_planner",
 		"provider":       providerID,
+		"intent_domain":  intentDomain,
 		"source_msg_id":  sourceMessageID,
 		"source_surface": strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
 		"source_channel": strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
@@ -311,10 +341,16 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	var runError map[string]any
 	if err != nil {
 		status = "failed"
-		runError = map[string]any{"code": "assistant_planner_failed", "message": "Assistant planning did not return a usable governed skill selection."}
+		failureCode := plannerProviderFailureCode(selection.ProviderErrorClass)
+		runError = map[string]any{"code": failureCode, "message": "Assistant planning did not return a usable governed skill selection."}
 		result["recoverable"] = true
 		result["error"] = runError
-		result["next_action"] = "Review assistant provider setup and retry the request."
+		if selection.ProviderSetupNextAction != "" {
+			result["setup_next_action"] = selection.ProviderSetupNextAction
+			result["next_action"] = plannerProviderSetupGuidance(selection.ProviderSetupNextAction)
+		} else {
+			result["next_action"] = "Review assistant provider setup and retry the request."
+		}
 	} else {
 		result["decision"] = selection.Decision
 		result["skill_id"] = selection.SkillID
@@ -326,7 +362,17 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		if selection.NextAction != "" {
 			result["next_action"] = selection.NextAction
 		}
-		if executionResult, authority, execErr := executeReadOnlyPlannerSelection(ctx, conn, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); execErr != nil {
+		if mismatch := plannerAgentContextScopeMismatch(profileID, threadID, agentCtx); len(mismatch) > 0 {
+			status = "failed"
+			runError = map[string]any{"code": "agent_context_scope_mismatch", "message": "Cabinet rejected Agent context that did not match the active profile or thread.", "mismatched_fields": mismatch}
+			selection.Decision = "reject"
+			selection.Message = "I could not use that Agent context because it did not match the active Cabinet profile or thread. Reopen Agent from the intended workspace and retry."
+			result["decision"] = selection.Decision
+			result["message"] = selection.Message
+			result["recoverable"] = true
+			result["error"] = runError
+			result["next_action"] = "Reopen Agent from the intended Cabinet profile and thread before retrying this request."
+		} else if executionResult, authority, execErr := executeReadOnlyPlannerSelection(ctx, conn, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); execErr != nil {
 			status = "failed"
 			runError = map[string]any{"code": "planner_read_only_execution_failed", "message": "Cabinet could not execute the selected read-only skill."}
 			result["recoverable"] = true
@@ -338,7 +384,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 		} else if executionResult != nil {
 			result["execution_result"] = executionResult
 			result["authority"] = authority
-		} else if previewResult, authority, previewErr := previewLocalWritePlannerSelection(ctx, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); previewErr != nil {
+		} else if previewResult, authority, previewErr := previewLocalWritePlannerSelection(ctx, conn, chatSvc, registry, profileID, threadID, selection, envelope, sourceMessageID); previewErr != nil {
 			status = "failed"
 			runError = map[string]any{"code": "planner_preview_failed", "message": "Cabinet could not create a confirmation preview for the selected skill."}
 			result["recoverable"] = true
@@ -382,11 +428,15 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	evidence := plannerWorkflowEvidence(providerID, selection, agentCtx, confirmationState, status, result, runError)
 	result["evidence"] = evidence
 	if chatSvc != nil {
+		sourceChannel := strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"]))
+		if sourceChannel == "" || sourceChannel == "<nil>" {
+			sourceChannel = "in_app_chat"
+		}
 		run, runErr := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
 			ProfileID:         profileID,
 			WorkflowID:        "chat.agent_planner.dispatch",
 			CapabilityID:      "assistant.agent_planner",
-			SourceChannel:     "in_app_chat",
+			SourceChannel:     sourceChannel,
 			SourceThreadID:    threadID,
 			SourceMessageID:   sourceMessageID,
 			Input:             map[string]any{"content": content, "agent_context": agentCtx, "evidence": evidence},
@@ -409,19 +459,125 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 				result["workflow_run"] = updated
 			}
 		}
-		messageText := strings.TrimSpace(selection.Message)
-		if messageText == "" {
-			if err != nil {
-				messageText = "I could not complete provider-backed planning for that request. Review assistant provider setup, then retry."
-			} else {
-				messageText = "I selected a governed Cabinet skill for this request. Cabinet still controls dispatch and confirmation."
-			}
-		}
-		if assistantMessage, messageErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", messageText, map[string]any{"agent_planner": result}); messageErr == nil {
+		agentResponse := plannerAgentResponse(registry, selection, result, status, content, agentCtx)
+		if assistantMessage, messageErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", agentResponse.Message, map[string]any{
+			"agent_planner":  result,
+			"agent_response": agentResponse,
+		}); messageErr == nil {
 			result["thread_message"] = assistantMessage
 		}
 	}
 	return result, true
+}
+
+func plannerAgentResponse(registry agentskills.Registry, selection chatAgentSkillSelection, result map[string]any, status, originalIntent string, agentCtx map[string]any) chat.AgentResponse {
+	state := chat.AgentResponseUnsupported
+	message := strings.TrimSpace(selection.Message)
+	if message == "" {
+		message = "Cabinet cannot safely complete that Agent request."
+	}
+	if status == "failed" {
+		state = chat.AgentResponseRetryableFailure
+		message = "Cabinet could not complete that Agent request. No action was completed."
+	}
+	if selection.Decision == "clarify" || strings.EqualFold(strings.TrimSpace(fmt.Sprint(result["decision"])), "clarify") {
+		state = chat.AgentResponseClarificationRequired
+		message = strings.TrimSpace(fmt.Sprint(result["message"]))
+	}
+	if selection.Decision == "reject" || selection.Decision == "unsupported" {
+		state = chat.AgentResponseUnsupported
+	}
+	if execution, _ := result["execution_result"].(map[string]any); execution != nil {
+		state = chat.AgentResponseReadResult
+		message = strings.TrimSpace(selection.Message)
+		if message == "" {
+			message = "Cabinet completed the governed read-only Agent request."
+		}
+	}
+	if _, ok := result["preview_result"].(map[string]any); ok {
+		state = chat.AgentResponsePreviewRequired
+		message = "Cabinet prepared a preview. Review it before applying any local change."
+	}
+	if errPayload, _ := result["error"].(map[string]any); errPayload != nil {
+		code := strings.TrimSpace(fmt.Sprint(errPayload["code"]))
+		switch {
+		case plannerProviderSetupRequired(result):
+			state = chat.AgentResponseSetupRequired
+			message = "The assistant provider needs setup before Cabinet can plan that request. No action was completed."
+		case strings.Contains(code, "authority") || strings.Contains(code, "policy") || strings.Contains(code, "dispatch_not_supported"):
+			state = chat.AgentResponseAuthorityBlocked
+			message = "Cabinet blocked this Agent request at the authority boundary. No action was completed."
+		case strings.Contains(code, "preview"):
+			state = chat.AgentResponsePreviewFailed
+			message = "Cabinet could not create a safe preview. No action was completed."
+		case strings.Contains(code, "provider") || strings.Contains(code, "assistant_planner"):
+			state = chat.AgentResponseProviderUnavailable
+			message = "The assistant provider is unavailable. No Cabinet action was completed."
+		case strings.Contains(code, "unsupported") || strings.Contains(code, "skill_unavailable"):
+			state = chat.AgentResponseUnsupported
+			message = "Cabinet does not support that Agent request. No action was completed."
+		}
+	}
+	skillName := strings.TrimSpace(selection.SkillID)
+	if skill, ok := registry.Resolve(selection.SkillID); ok && strings.TrimSpace(skill.DisplayName) != "" {
+		skillName = strings.TrimSpace(skill.DisplayName)
+	}
+	response, responseErr := chat.NewAgentResponse(
+		state,
+		message,
+		originalIntent,
+		selection.SkillID,
+		skillName,
+		strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+		strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+	)
+	if responseErr != nil {
+		response, _ = chat.NewAgentResponse(chat.AgentResponseUnsupported, "Cabinet rejected an invalid Agent response before any action was completed.", "", selection.SkillID, skillName, strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])), strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])))
+	}
+	if preview, _ := result["preview_result"].(map[string]any); preview != nil {
+		previewPayload, _ := preview["payload"].(map[string]any)
+		response.Preview = &chat.AgentResponsePreview{
+			ID:      strings.TrimSpace(fmt.Sprint(preview["preview_id"])),
+			Action:  strings.TrimSpace(fmt.Sprint(preview["action"])),
+			Status:  strings.TrimSpace(fmt.Sprint(preview["status"])),
+			Payload: plannerNonSecretActionPayload(previewPayload),
+		}
+	}
+	return response
+}
+
+func plannerProviderSetupRequired(result map[string]any) bool {
+	nextAction := strings.ToLower(strings.TrimSpace(fmt.Sprint(result["setup_next_action"])))
+	for _, prefix := range []string{"configure_", "choose_", "review_"} {
+		if strings.HasPrefix(nextAction, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func plannerAgentContextScopeMismatch(profileID, threadID string, agentCtx map[string]any) []string {
+	mismatches := []string{}
+	if contextProfileID := strings.TrimSpace(fmt.Sprint(agentCtx["profile_id"])); contextProfileID != "" && contextProfileID != "<nil>" && contextProfileID != strings.TrimSpace(profileID) {
+		mismatches = append(mismatches, "profile_id")
+	}
+	if contextThreadID := strings.TrimSpace(fmt.Sprint(agentCtx["thread_id"])); contextThreadID != "" && contextThreadID != "<nil>" && contextThreadID != strings.TrimSpace(threadID) {
+		mismatches = append(mismatches, "thread_id")
+	}
+	return mismatches
+}
+
+func agentPlannerSkillsForSession(ctx context.Context, conn *sql.DB, profileID string, skills []agentskills.Skill) []agentskills.Skill {
+	if _, err := resolveAgentAdminAuthority(ctx, conn, profileID); err == nil {
+		return skills
+	}
+	filtered := make([]agentskills.Skill, 0, len(skills))
+	for _, skill := range skills {
+		if !strings.HasPrefix(strings.TrimSpace(skill.ID), "cabinet.users.") {
+			filtered = append(filtered, skill)
+		}
+	}
+	return filtered
 }
 
 func dispatchChatAgentCapabilityExplanation(ctx context.Context, chatSvc *chat.Service, profileID, threadID, content string, envelope map[string]any, sourceMessageID string, explanation agentCapabilityExplanationResponse) (map[string]any, bool) {
@@ -474,7 +630,19 @@ func dispatchChatAgentCapabilityExplanation(ctx context.Context, chatSvc *chat.S
 			}
 		}
 		messageText := "Cabinet Agent can explain available skills, setup needs, and confirmation boundaries from the active profile."
-		if assistantMessage, messageErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", messageText, map[string]any{"agent_capabilities": result}); messageErr == nil {
+		agentResponse, _ := chat.NewAgentResponse(
+			chat.AgentResponseReadResult,
+			messageText,
+			content,
+			"assistant.agent_capability_explanation",
+			"Cabinet Agent capabilities",
+			strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+			strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+		)
+		if assistantMessage, messageErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", messageText, map[string]any{
+			"agent_capabilities": result,
+			"agent_response":     agentResponse,
+		}); messageErr == nil {
 			result["thread_message"] = assistantMessage
 		}
 	}
@@ -502,7 +670,7 @@ func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc 
 		return nil, agentskills.AgentAuthorityReview{}, nil
 	}
 	skill, ok := registry.Resolve(selection.SkillID)
-	if !ok || skill.SafetyLevel != agentskills.SafetyReadOnly {
+	if !ok || (skill.SafetyLevel != agentskills.SafetyReadOnly && !plannerSafePreviewExecutionSkill(skill)) {
 		return nil, agentskills.AgentAuthorityReview{}, nil
 	}
 	agentCtx := agentContextEvidence(envelope)
@@ -519,6 +687,15 @@ func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc 
 	}
 	req = normalizeAgentSkillContextRequest(req)
 	hydratePlannerSelectedRecordParams(req.Parameters, agentCtx)
+	var adminAuthority agentAdminAuthority
+	var err error
+	req, adminAuthority, err = authorizeAgentUsersRequest(ctx, conn, req)
+	if err != nil {
+		return nil, agentskills.AgentAuthorityReview{}, err
+	}
+	if adminAuthority.UserID != "" {
+		ctx = withAgentAdminAuthority(ctx, adminAuthority)
+	}
 	if plannerSkillNeedsSelectedTarget(skill) {
 		if clarification, ok := agentSkillContextClarification(registry, req); ok {
 			return map[string]any{
@@ -542,7 +719,7 @@ func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc 
 	if !review.ApplyAllowed {
 		return nil, review, fmt.Errorf("read-only planner selection not allowed: %s", review.Blocker)
 	}
-	result, blocker, err := applyAgentSkill(ctx, conn, chatSvc, selection.SkillID, profileID, selection.Parameters)
+	result, blocker, err := applyAgentSkill(ctx, conn, chatSvc, selection.SkillID, profileID, req.Parameters)
 	if err != nil {
 		if blocker != "" {
 			review.Blocker = blocker
@@ -552,18 +729,23 @@ func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc 
 	return result, review, nil
 }
 
-func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Service, registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview, error) {
+func plannerSafePreviewExecutionSkill(skill agentskills.Skill) bool {
+	return skill.ID == "cabinet.data.export_bundle" &&
+		skill.SafetyLevel == agentskills.SafetyPreviewOnly &&
+		!skill.Permissions.LocalWrite &&
+		!skill.Permissions.ExternalWrite &&
+		!skill.Permissions.Destructive
+}
+
+func previewLocalWritePlannerSelection(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview, error) {
 	if chatSvc == nil || selection.Decision != "select_skill" || selection.ErrorCode != "" {
 		return nil, agentskills.AgentAuthorityReview{}, nil
 	}
 	skill, ok := registry.Resolve(selection.SkillID)
-	if !ok || !skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive {
+	if !ok || (!skill.Permissions.LocalWrite && !skill.Permissions.ExternalWrite && !skill.Permissions.Destructive) {
 		return nil, agentskills.AgentAuthorityReview{}, nil
 	}
 	action := plannerChatActionForSkill(selection.SkillID)
-	if action == "" {
-		return nil, agentskills.AgentAuthorityReview{}, nil
-	}
 	agentCtx := agentContextEvidence(envelope)
 	req := agentskills.PreviewRequest{
 		SkillID:         selection.SkillID,
@@ -578,7 +760,16 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 	}
 	req = normalizeAgentSkillContextRequest(req)
 	hydratePlannerSelectedRecordParams(req.Parameters, agentCtx)
-	if plannerSkillNeedsSelectedTarget(skill) {
+	var adminAuthority agentAdminAuthority
+	var err error
+	req, adminAuthority, err = authorizeAgentUsersRequest(ctx, conn, req)
+	if err != nil {
+		return nil, agentskills.AgentAuthorityReview{}, err
+	}
+	if adminAuthority.UserID != "" {
+		ctx = withAgentAdminAuthority(ctx, adminAuthority)
+	}
+	if plannerSkillNeedsSelectedTarget(skill) || plannerSkillRequiresStrictAgentContext(skill) {
 		if clarification, ok := agentSkillContextClarification(registry, req); ok {
 			return map[string]any{
 				"decision":        "clarify",
@@ -601,6 +792,18 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 	if !review.PreviewAllowed {
 		return nil, review, fmt.Errorf("planner preview not allowed: %s", review.Blocker)
 	}
+	if action == "" || strings.EqualFold(strings.TrimSpace(req.SourceChannel), "telegram") {
+		preview, err := registry.Preview(req)
+		if err != nil {
+			return nil, review, fmt.Errorf("create Agent Skill preview for %s: %w", selection.SkillID, err)
+		}
+		record, err := createDurableAgentSkillPreview(ctx, conn, req, preview)
+		if err != nil {
+			return nil, review, fmt.Errorf("persist Agent Skill preview for %s: %w", selection.SkillID, err)
+		}
+		preview = bindDurableAgentSkillPreviewResponse(preview, record)
+		return genericPlannerAgentSkillPreview(preview, req, review), review, nil
+	}
 	preview, err := chatSvc.PreviewAction(ctx, chat.PreviewActionInput{
 		ProfileID: profileID,
 		ThreadID:  threadID,
@@ -620,6 +823,71 @@ func previewLocalWritePlannerSelection(ctx context.Context, chatSvc *chat.Servic
 		"mutation_applied":      false,
 		"next_action":           "Review the preview and confirm through the existing Chat confirmation endpoint before Cabinet applies this local change.",
 	}, review, nil
+}
+
+func genericPlannerAgentSkillPreview(preview agentskills.PreviewResponse, req agentskills.PreviewRequest, review agentskills.AgentAuthorityReview) map[string]any {
+	applyRequest := map[string]any{
+		"profile_id": strings.TrimSpace(req.ProfileID),
+		"preview_id": strings.TrimSpace(preview.PreviewID),
+		"confirm":    true,
+	}
+	cancelRequest := map[string]any{
+		"profile_id": strings.TrimSpace(req.ProfileID),
+		"preview_id": strings.TrimSpace(preview.PreviewID),
+	}
+	strongConfirmationRequest := map[string]any{
+		"profile_id": strings.TrimSpace(req.ProfileID),
+		"preview_id": strings.TrimSpace(preview.PreviewID),
+	}
+	return map[string]any{
+		"kind":                         "agent_skill_preview",
+		"preview_kind":                 "agent_skill",
+		"preview_id":                   strings.TrimSpace(preview.PreviewID),
+		"preview_status":               strings.TrimSpace(preview.PreviewStatus),
+		"expires_at":                   strings.TrimSpace(preview.ExpiresAt),
+		"skill_id":                     strings.TrimSpace(req.SkillID),
+		"status":                       strings.TrimSpace(preview.PreviewStatus),
+		"safety_level":                 preview.SafetyLevel,
+		"allowed":                      preview.Allowed,
+		"preview_only":                 true,
+		"confirmation_required":        preview.ConfirmationRequired,
+		"strong_confirmation_required": preview.StrongConfirmationRequired,
+		"strong_confirmation_endpoint": preview.StrongConfirmationEndpoint,
+		"strong_confirmation_request":  strongConfirmationRequest,
+		"mutation_applied":             false,
+		"blocker":                      preview.Blocker,
+		"next_action":                  preview.NextAction,
+		"target":                       redactPlannerEvidenceMap(preview.Target),
+		"parameters":                   plannerNonSecretActionPayload(req.Parameters),
+		"authority_blocker":            review.Blocker,
+		"apply_endpoint":               "/api/agent/skills/apply",
+		"cancel_endpoint":              "/api/agent/skills/cancel",
+		"retrieval_endpoint":           "/api/agent/skills/preview",
+		"source_surface":               strings.TrimSpace(req.SourceSurface),
+		"source_channel":               strings.TrimSpace(req.SourceChannel),
+		"source_thread_id":             strings.TrimSpace(req.SourceThreadID),
+		"source_message_id":            strings.TrimSpace(req.SourceMessageID),
+		"apply_contract": map[string]any{
+			"endpoint": "/api/agent/skills/apply",
+			"method":   "POST",
+			"request":  applyRequest,
+		},
+		"apply_request": applyRequest,
+		"cancel_contract": map[string]any{
+			"endpoint": "/api/agent/skills/cancel",
+			"method":   "POST",
+			"request":  cancelRequest,
+		},
+		"cancel_request": cancelRequest,
+		"retrieval_request": map[string]any{
+			"profile_id": strings.TrimSpace(req.ProfileID),
+			"preview_id": strings.TrimSpace(preview.PreviewID),
+		},
+	}
+}
+
+func plannerSkillRequiresStrictAgentContext(skill agentskills.Skill) bool {
+	return skill.Category == "inbox" || skill.Category == "users" || skill.Category == "settings" || skill.Category == "storage" || skill.Category == "data-management"
 }
 
 func denyPlannerSelectionWithoutSupportedDispatch(registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview) {
@@ -703,7 +971,15 @@ func plannerWorkflowEvidence(providerID string, selection chatAgentSkillSelectio
 		"apply_state":        "not_applicable",
 		"mutation_applied":   mutationApplied,
 	}
-	if previewID != "" && previewID != "<nil>" {
+	if previewResult, _ := result["preview_result"].(map[string]any); previewResult != nil && previewResult["kind"] == "agent_skill_preview" {
+		tokenState["preview_id"] = previewID
+		tokenState["skill_id"] = previewResult["skill_id"]
+		tokenState["action"] = "agent_skill.apply"
+		tokenState["apply_state"] = "pending_explicit_confirmation"
+		tokenState["apply_endpoint"] = "/api/agent/skills/apply"
+		tokenState["cancel_endpoint"] = "/api/agent/skills/cancel"
+		tokenState["authority_revalidated_on_apply"] = true
+	} else if previewID != "" && previewID != "<nil>" {
 		tokenState["preview_id"] = previewID
 		tokenState["action"] = action
 		tokenState["apply_state"] = "pending_explicit_confirmation"
@@ -796,6 +1072,9 @@ func plannerContextEvidenceSummary(agentCtx map[string]any) map[string]any {
 func plannerParameterEvidence(params map[string]any) map[string]any {
 	keys := make([]string, 0, len(params))
 	for key := range params {
+		if plannerSensitiveEvidenceKey(key) {
+			continue
+		}
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
@@ -813,7 +1092,6 @@ func redactPlannerEvidenceMap(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in))
 	for key, value := range in {
 		if plannerSensitiveEvidenceKey(key) {
-			out[key] = "[redacted]"
 			continue
 		}
 		out[key] = redactPlannerEvidenceValue(value)
@@ -830,9 +1108,34 @@ func plannerNonSecretActionPayload(in map[string]any) map[string]any {
 		if plannerSensitiveEvidenceKey(key) {
 			continue
 		}
-		out[key] = value
+		if safeValue, ok := plannerNonSecretActionValue(value); ok {
+			out[key] = safeValue
+		}
 	}
-	return copyActionPayload(out)
+	return out
+}
+
+func plannerNonSecretActionValue(value any) (any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return plannerNonSecretActionPayload(typed), true
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			if safeItem, ok := plannerNonSecretActionValue(item); ok {
+				out = append(out, safeItem)
+			}
+		}
+		return out, true
+	case string:
+		lower := strings.ToLower(typed)
+		if strings.Contains(lower, "sk-") || strings.Contains(lower, "secret") || strings.Contains(lower, "bearer ") {
+			return nil, false
+		}
+		return typed, true
+	default:
+		return value, true
+	}
 }
 
 func redactPlannerEvidenceValue(value any) any {
@@ -918,31 +1221,111 @@ func plannerChatActionForSkill(skillID string) string {
 }
 
 func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
+	_, ok := chatAgentIntentDomain(content)
+	return ok
+}
+
+func chatAgentIntentDomain(content string) (string, bool) {
 	normalized := normalizePlannerText(content)
 	if normalized == "" {
-		return false
+		return "", false
 	}
-	readIntent := (strings.Contains(normalized, "find") ||
-		strings.Contains(normalized, "search") ||
-		strings.Contains(normalized, "look up") ||
-		strings.Contains(normalized, "lookup")) &&
-		(strings.Contains(normalized, "item") ||
-			strings.Contains(normalized, "inventory") ||
-			strings.Contains(normalized, "wishlist") ||
-			strings.Contains(normalized, "part number"))
 	dashboardSummaryIntent := (strings.Contains(normalized, "summarise") ||
 		strings.Contains(normalized, "summarize") ||
 		strings.Contains(normalized, "summary") ||
 		strings.Contains(normalized, "what changed")) &&
 		strings.Contains(normalized, "dashboard")
-	writeIntent := (strings.Contains(normalized, "create") ||
+	if dashboardSummaryIntent {
+		return "dashboard", true
+	}
+	actionIntent := strings.Contains(normalized, "find") ||
+		strings.Contains(normalized, "search") ||
+		strings.Contains(normalized, "look up") ||
+		strings.Contains(normalized, "lookup") ||
+		strings.Contains(normalized, "summarise") ||
+		strings.Contains(normalized, "summarize") ||
+		strings.Contains(normalized, "show") ||
+		strings.Contains(normalized, "list") ||
+		strings.Contains(normalized, "review") ||
+		strings.Contains(normalized, "inspect") ||
+		strings.Contains(normalized, "create") ||
 		strings.Contains(normalized, "add") ||
 		strings.Contains(normalized, "rename") ||
-		strings.Contains(normalized, "update")) &&
-		(strings.Contains(normalized, "item") ||
-			strings.Contains(normalized, "inventory") ||
-			strings.Contains(normalized, "part number"))
-	return readIntent || dashboardSummaryIntent || writeIntent
+		strings.Contains(normalized, "update") ||
+		strings.Contains(normalized, "change") ||
+		strings.Contains(normalized, "mark") ||
+		strings.Contains(normalized, "archive") ||
+		strings.Contains(normalized, "route") ||
+		strings.Contains(normalized, "invite") ||
+		strings.Contains(normalized, "configure") ||
+		strings.Contains(normalized, "explain") ||
+		strings.Contains(normalized, "test") ||
+		strings.Contains(normalized, "check") ||
+		strings.Contains(normalized, "connect") ||
+		strings.Contains(normalized, "repair") ||
+		strings.Contains(normalized, "disable") ||
+		strings.Contains(normalized, "run") ||
+		strings.Contains(normalized, "dismiss") ||
+		strings.Contains(normalized, "send") ||
+		strings.Contains(normalized, "handoff") ||
+		strings.Contains(normalized, "receive") ||
+		strings.Contains(normalized, "reconcile") ||
+		strings.Contains(normalized, "purchase") ||
+		strings.Contains(normalized, "hide") ||
+		strings.Contains(normalized, "delete") ||
+		strings.Contains(normalized, "move") ||
+		strings.Contains(normalized, "assign") ||
+		strings.Contains(normalized, "upload") ||
+		strings.Contains(normalized, "import") ||
+		strings.Contains(normalized, "export") ||
+		strings.Contains(normalized, "attach") ||
+		strings.Contains(normalized, "annotate") ||
+		strings.Contains(normalized, "note") ||
+		strings.Contains(normalized, "restore") ||
+		strings.Contains(normalized, "remove")
+	actionIntent = actionIntent || strings.Contains(normalized, "make")
+	if !actionIntent {
+		return "", false
+	}
+	for _, candidate := range []struct {
+		domain string
+		terms  []string
+	}{
+		{domain: "media", terms: []string{"media", "photo", "image", "attachment", "unlinked"}},
+		{domain: "acquisition", terms: []string{"integration", "provider", "connection", "market watch", "saved watch", "watch", "discover", "result", "listing", "purchase", "order", "ebay"}},
+		{domain: "wishlist", terms: []string{"wishlist", "wish list", "wanted item"}},
+		{domain: "collections", terms: []string{"collection", "collections"}},
+		{domain: "admin", terms: []string{"inbox", "notification", "workspace user", "invite user", "user role", "user-", " admin", "profile setting", "account setting", "appearance", "storage", "backup", "import", "export", "restore"}},
+		{domain: "inventory", terms: []string{"inventory", "item", "part number"}},
+	} {
+		for _, term := range candidate.terms {
+			if strings.Contains(normalized, term) {
+				return candidate.domain, true
+			}
+		}
+	}
+	return "general", true
+}
+
+func plannerProviderFailureCode(errorClass string) string {
+	class := strings.ToLower(strings.TrimSpace(errorClass))
+	switch class {
+	case "missing_credentials", "missing_context", "unsupported_model", "rate_limit", "rate_limited", "timeout", "cancelled", "transport_failure", "provider_failure", "unhealthy_provider", "adapter_unavailable", "login_needed", "partial_result":
+		return "assistant_provider_" + class
+	default:
+		return "assistant_planner_failed"
+	}
+}
+
+func plannerProviderSetupGuidance(nextAction string) string {
+	switch strings.TrimSpace(nextAction) {
+	case "configure_openai_api_key", "configure_openai_provider":
+		return "Configure and test the OpenAI API key in Integrations, then retry this request."
+	case "choose_supported_openai_model":
+		return "Choose a supported OpenAI model in Integrations, then retry this request."
+	default:
+		return "Review assistant provider setup and retry the request."
+	}
 }
 
 func chatMessageRequestsAgentCapabilityExplanation(content string) bool {

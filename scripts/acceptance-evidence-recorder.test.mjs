@@ -88,16 +88,16 @@ const environment = {
   browser_version: '140.0.0.0',
   isolated_profile: 'cabinet-beta-acceptance',
   isolated_data_directory: 'C:\\Users\\operator\\AppData\\Local\\Cabinet\\acceptance-secret',
-  runtime: { app_version: '0.1.0-beta.1', build_date: '2026-08-11T00:00:00Z', port: 17900, pid: 4242 },
+  runtime: { app_version: '0.1.0-beta.1', build_revision: commit, build_date: '2026-08-11T00:00:00Z', port: 17900, pid: 4242 },
 }
 
-const start = async (fixture, outputPath = join(fixture.directory, 'acceptance.json')) => createOrResumeAcceptanceRun({
+const start = async (fixture, outputPath = join(fixture.directory, 'acceptance.json'), runtimeEnvironment = environment) => createOrResumeAcceptanceRun({
   cabinetManifestPath: fixture.cabinetManifestPath,
   companionManifestPath: fixture.companionManifestPath,
   bundleManifestPath: fixture.bundleManifestPath,
   releaseCandidateRunId: '31123456789',
   releaseCandidateArtifactName: 'cabinet-beta-candidate-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  environment,
+  environment: runtimeEnvironment,
   outputPath,
 })
 
@@ -119,6 +119,7 @@ test('candidate identity, three manifests, and independently verified package ch
 
   const state = await start(fixture)
   assert.equal(state.candidate.source_commit, commit)
+  assert.equal(state.environment.runtime.build_revision, commit)
   assert.equal(state.candidate.cabinet.package.filename, 'cabinet-0.1.0-beta.1-windows-amd64-portable.zip')
   assert.deepEqual(state.candidate.companion.packages.map((item) => item.target), ['chrome', 'edge'])
   assert.equal(state.rows.length, acceptanceRows.length)
@@ -126,6 +127,26 @@ test('candidate identity, three manifests, and independently verified package ch
   const cabinet = JSON.parse(await readFile(fixture.cabinetManifestPath, 'utf8'))
   await writeFile(join(fixture.directory, cabinet.artifact.filename), 'tampered')
   await assert.rejects(() => start(fixture, join(fixture.directory, 'tampered.json')), /acceptance_package_checksum_mismatch/)
+})
+
+test('running package revision must be a full lowercase SHA matching the candidate manifest', async () => {
+  const fixture = await candidateFixture()
+  for (const buildRevision of [undefined, 'a'.repeat(39), 'A'.repeat(40), 'not-a-commit']) {
+    await assert.rejects(
+      () => start(fixture, join(fixture.directory, `invalid-${String(buildRevision)}.json`), {
+        ...environment,
+        runtime: { ...environment.runtime, build_revision: buildRevision },
+      }),
+      /acceptance_environment_identity_required/,
+    )
+  }
+  await assert.rejects(
+    () => start(fixture, join(fixture.directory, 'wrong-runtime.json'), {
+      ...environment,
+      runtime: { ...environment.runtime, build_revision: 'b'.repeat(40) },
+    }),
+    /acceptance_runtime_source_commit_mismatch/,
+  )
 })
 
 test('resume preserves completed rows once and archives stale candidate evidence', async () => {
@@ -153,7 +174,10 @@ test('resume preserves completed rows once and archives stale candidate evidence
     bundleManifestPath: replacement.bundleManifestPath,
     releaseCandidateRunId: '31123456790',
     releaseCandidateArtifactName: 'cabinet-beta-candidate-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    environment,
+    environment: {
+      ...environment,
+      runtime: { ...environment.runtime, build_revision: 'b'.repeat(40) },
+    },
     outputPath,
   })
   assert.ok(reset.rows.every((row) => row.status === 'not_run'))
@@ -263,6 +287,7 @@ test('operator CLI initializes and resumes a real JSON and Markdown dry run', as
     '--isolated-profile', environment.isolated_profile,
     '--data-directory', environment.isolated_data_directory,
     '--app-version', environment.runtime.app_version,
+    '--build-revision', environment.runtime.build_revision,
     '--build-date', environment.runtime.build_date,
     '--runtime-port', String(environment.runtime.port),
     '--runtime-pid', String(environment.runtime.pid),

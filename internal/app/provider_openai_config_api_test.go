@@ -340,8 +340,8 @@ func TestTelegramRegistryExposesMessagingSetupContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Telegram health map, got %#v", telegram["health"])
 	}
-	if telegram["state"] != "needs_config" || health["state"] != "setup_needed" || setup["next_action"] != "authorize_sender_chat" {
-		t.Fatalf("expected Telegram setup-needed state before sender/chat proof, provider=%+v setup=%+v health=%+v", telegram, setup, health)
+	if telegram["state"] != "needs_config" || health["state"] != "bot_token_required" || setup["next_action"] != "test_connection" {
+		t.Fatalf("expected Telegram setup-needed state before bot validation, provider=%+v setup=%+v health=%+v", telegram, setup, health)
 	}
 	schema := telegram["setup_schema"].(map[string]any)
 	fields := schema["fields"].([]any)
@@ -352,10 +352,9 @@ func TestTelegramRegistryExposesMessagingSetupContract(t *testing.T) {
 		writeOnly   bool
 		required    bool
 	}{
-		{key: "telegram.catalog_capture.sender_id", fieldType: "text", persistence: "profile_settings", required: true},
-		{key: "telegram.catalog_capture.chat_id", fieldType: "text", persistence: "profile_settings", required: true},
 		{key: "telegram.bot_token", fieldType: "secret", persistence: "profile_secrets", writeOnly: true, required: true},
-		{key: "telegram.webhook_route", fieldType: "url", persistence: "profile_settings"},
+		{key: "telegram.polling.transport", fieldType: "text", persistence: "profile_settings"},
+		{key: "telegram.polling.pairing_state", fieldType: "text", persistence: "profile_settings"},
 	} {
 		field := findSetupSchemaField(fields, want.key)
 		if field == nil {
@@ -377,12 +376,12 @@ func TestTelegramRegistryExposesMessagingSetupContract(t *testing.T) {
 		if action == nil {
 			t.Fatalf("Telegram registry missing action %q in %+v", actionID, actions)
 		}
-		if action["availability_state"] != "setup_needed" || action["next_action"] != "authorize_sender_chat" || action["confirmation_required"] != true {
+		if action["availability_state"] != "setup_needed" || action["next_action"] != "test_connection" || action["confirmation_required"] != true {
 			t.Fatalf("expected setup-needed Telegram action %q, got %+v", actionID, action)
 		}
 	}
 
-	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.bot_token_secret_present":"true","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"12345","telegram.bot_token_secret_present":"true","telegram.bot_id":"2085","telegram.polling.tested_at":"2026-08-12T01:00:00Z","telegram.polling.webhook_conflict":"false","telegram.polling.paused":"false"}}`), map[string]string{"Content-Type": "application/json"})
 	if settings.Code != http.StatusOK {
 		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
 	}
@@ -399,7 +398,7 @@ func TestTelegramRegistryExposesMessagingSetupContract(t *testing.T) {
 	readyTelegram := findRegistryProvider(readyPayload.Providers, "telegram")
 	readySetup := readyTelegram["setup_status"].(map[string]any)
 	readyHealth := readyTelegram["health"].(map[string]any)
-	if readyTelegram["state"] != "ready" || readyHealth["state"] != "connected" || readySetup["runtime_proof"] != "ready" || readySetup["next_action"] != "run_live_channel_checklist" {
+	if readyTelegram["state"] != "ready" || readyHealth["state"] != "connected" || readySetup["runtime_proof"] != "ready" || readySetup["next_action"] != "talk_to_cabinet" {
 		t.Fatalf("expected Telegram ready-for-validation state, provider=%+v setup=%+v health=%+v", readyTelegram, readySetup, readyHealth)
 	}
 	for _, actionID := range []string{"telegram.catalog_capture", "telegram.agent_text"} {
@@ -979,11 +978,11 @@ func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
 		t.Fatalf("expected Telegram setup_status map, got %#v", telegram["setup_status"])
 	}
 	for key, want := range map[string]string{
-		"sender_chat_state": "authorized",
+		"sender_chat_state": "paired",
 		"bot_token_state":   "missing",
-		"webhook_state":     "pending",
+		"webhook_state":     "not_configured",
 		"runtime_proof":     "pending_live_channel_check",
-		"next_action":       "store_bot_token_secret",
+		"next_action":       "test_connection",
 	} {
 		if got := fmt.Sprintf("%v", setupStatus[key]); got != want {
 			t.Fatalf("setup_status[%s] got %q want %q; setup=%+v", key, got, want, setupStatus)
@@ -1004,7 +1003,7 @@ func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
 	if secret.Code != http.StatusOK {
 		t.Fatalf("telegram secret status=%d body=%s", secret.Code, secret.Body.String())
 	}
-	settings = doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	settings = doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"12345","telegram.bot_id":"2085","telegram.polling.tested_at":"2026-08-12T01:00:00Z","telegram.polling.webhook_conflict":"false","telegram.polling.paused":"false"}}`), map[string]string{"Content-Type": "application/json"})
 	if settings.Code != http.StatusOK {
 		t.Fatalf("full settings status=%d body=%s", settings.Code, settings.Body.String())
 	}
@@ -1064,8 +1063,8 @@ func TestTelegramProviderTestCreatesSetupRequiredInboxEvent(t *testing.T) {
 	for _, want := range []string{
 		`"provider":"telegram"`,
 		`"provider_test_passed":false`,
-		`"code":"TELEGRAM_SENDER_CHAT_REQUIRED"`,
-		`"next_action":"authorize_sender_chat"`,
+		`"code":"TELEGRAM_BOT_TOKEN_REQUIRED"`,
+		`"next_action":"test_connection"`,
 	} {
 		if !strings.Contains(testResp.Body.String(), want) {
 			t.Fatalf("Telegram provider test response missing %s, body=%s", want, testResp.Body.String())
@@ -1080,7 +1079,7 @@ func TestTelegramProviderTestCreatesSetupRequiredInboxEvent(t *testing.T) {
 		`"source":"provider_workflow"`,
 		`"provider_id":"telegram"`,
 		`"workflow_action_id":"telegram.provider_test"`,
-		`"required_action_code":"authorize_sender_chat"`,
+		`"required_action_code":"test_connection"`,
 		`"target_route":"/integrations"`,
 	} {
 		if !strings.Contains(inbox.Body.String(), want) {
@@ -1123,7 +1122,7 @@ func TestTelegramProviderTestResolvesSetupRequiredInboxEvent(t *testing.T) {
 	if secret.Code != http.StatusOK {
 		t.Fatalf("telegram secret status=%d body=%s", secret.Code, secret.Body.String())
 	}
-	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556","telegram.webhook_configured":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"12345","telegram.bot_id":"2085","telegram.polling.tested_at":"2026-08-12T01:00:00Z","telegram.polling.webhook_conflict":"false","telegram.polling.paused":"false"}}`), map[string]string{"Content-Type": "application/json"})
 	if settings.Code != http.StatusOK {
 		t.Fatalf("telegram settings status=%d body=%s", settings.Code, settings.Body.String())
 	}
@@ -1152,7 +1151,7 @@ func TestTelegramProviderTestResolvesSetupRequiredInboxEvent(t *testing.T) {
 		`"status":"read"`,
 		`"provider_id":"telegram"`,
 		`"workflow_action_id":"telegram.provider_test"`,
-		`"required_action_code":"authorize_sender_chat"`,
+		`"required_action_code":"test_connection"`,
 		`"resolution":"provider_test_passed"`,
 	} {
 		if !strings.Contains(inbox.Body.String(), want) {

@@ -72,7 +72,18 @@ func TestRuntimeRecoveryPromptAfterUncleanShutdown(t *testing.T) {
 }
 
 func TestRuntimeEndpointIncludesBuildMetadata(t *testing.T) {
-	t.Parallel()
+	originalVersion := buildVersion
+	originalRevision := buildRevision
+	originalDate := buildDate
+	t.Cleanup(func() {
+		buildVersion = originalVersion
+		buildRevision = originalRevision
+		buildDate = originalDate
+	})
+	buildVersion = "0.1.0-beta.1"
+	buildRevision = "303754c3cf2e940615817a53e2c496f0b99ef143"
+	buildDate = "2026-07-11T17:11:22Z"
+
 	a := newTestApp(t)
 
 	resp := doRequest(t, a, http.MethodGet, "/api/runtime", nil, nil)
@@ -84,6 +95,9 @@ func TestRuntimeEndpointIncludesBuildMetadata(t *testing.T) {
 	}
 	if !strings.Contains(resp.Body.String(), `"build_date"`) {
 		t.Fatalf("expected build_date in runtime payload, got %s", resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"build_revision":"303754c3cf2e940615817a53e2c496f0b99ef143"`) {
+		t.Fatalf("expected exact full build_revision in runtime payload, got %s", resp.Body.String())
 	}
 	if !strings.Contains(resp.Body.String(), `"runtime_host"`) {
 		t.Fatalf("expected runtime_host in runtime payload, got %s", resp.Body.String())

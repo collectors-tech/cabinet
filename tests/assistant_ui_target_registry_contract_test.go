@@ -163,7 +163,7 @@ func TestAssistantShellCommandBusTraceabilityIsImplemented(t *testing.T) {
 	}
 }
 
-func TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch(t *testing.T) {
+func TestAssistantWorkspaceConversationExposesMediaAndDiscoveriesDispatch(t *testing.T) {
 	t.Parallel()
 
 	panelPath := filepath.Join("..", "ui.web", "src", "components", "layout", "assistant-workspace-panel.tsx")
@@ -174,29 +174,18 @@ func TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch(t *
 	panel := string(panelRaw)
 
 	for _, fragment := range []string{
-		"id: 'cabinet.media.search'",
-		"id: 'cabinet.media.upload_or_import'",
-		"id: 'cabinet.media.attach_to_item'",
-		"id: 'cabinet.media.review_unlinked'",
-		"id: 'cabinet.media.update_notes'",
-		"id: 'cabinet.media.detach_from_item'",
-		"id: 'cabinet.discoveries.search'",
-		"id: 'cabinet.discoveries.review_result'",
-		"id: 'cabinet.discoveries.dismiss_result'",
-		"id: 'cabinet.discoveries.send_to_wishlist'",
-		"id: 'cabinet.discoveries.create_purchase'",
-		"id: 'cabinet.discoveries.create_or_update_inventory_candidate'",
-		"surface: 'media.workspace.assignment'",
-		"surface: 'discoveries.result.card'",
-		"params.media_id = primary",
-		"params.item_id = context",
-		"params.provider_id = primary",
-		"params.result_id = context",
-		"source_channel: 'in-app'",
-		"source_message_id: 'assistant-workspace-agent-skill'",
+		"CabinetAssistantUiMessageList",
+		"AgentResponseCards",
+		"agent_context: agentContextEnvelope",
+		"source_channel: inboxAgentContext?.source_channel || 'in-app'",
 	} {
 		if !strings.Contains(panel, fragment) {
-			t.Fatalf("expected Assistant workspace Agent Skill panel to include %q", fragment)
+			t.Fatalf("expected conversation-first Assistant workspace to include %q", fragment)
+		}
+	}
+	for _, stale := range []string{"shell-assistant-agent-skill-select", "shell-assistant-agent-skill-secret"} {
+		if strings.Contains(panel, stale) {
+			t.Fatalf("conversation-first Assistant workspace must not include %q", stale)
 		}
 	}
 
@@ -207,13 +196,12 @@ func TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch(t *
 	}
 	spec := string(specRaw)
 	for _, fragment := range []string{
-		"ASSISTANT-WORKSPACE-013/#1709 dispatches Media Agent Skills with in-app source context",
-		"ASSISTANT-WORKSPACE-013/#1709 dispatches Discoveries Agent Skills with in-app source context",
-		"cabinet.media.attach_to_item",
-		"cabinet.discoveries.send_to_wishlist",
-		"media.workspace.assignment",
-		"discoveries.result.card",
-		"source_channel).to.eq('in-app')",
+		"routes every product domain from natural conversation with governed context",
+		"review unlinked media",
+		"find eBay discoveries for slot cars",
+		"expectedDomain",
+		"agent_context.source_channel).to.eq('in-app')",
+		"agent_planner.preview_result).to.eq(undefined)",
 	} {
 		if !strings.Contains(spec, fragment) {
 			t.Fatalf("expected #1709 Agent Skill Cypress spec to include %q", fragment)
@@ -228,11 +216,11 @@ func TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch(t *
 	trace := string(traceRaw)
 	for _, fragment := range []string{
 		"`ASSISTANT-WORKSPACE-013`",
-		"#1709",
-		"Media/Discoveries skills",
+		"#1709/#2092",
+		"natural-language Chat dispatches Media/Discoveries capabilities",
 		"source_channel=in-app",
-		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
-		"TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch",
+		"ui.web/cypress/e2e/chats/cabinet-agent-collection-workflows/spec.cy.ts",
+		"internal/app/chat_agent_planner_test.go",
 	} {
 		if !strings.Contains(trace, fragment) {
 			t.Fatalf("expected #1709 Assistant workspace traceability to include %q", fragment)
@@ -240,7 +228,7 @@ func TestAssistantWorkspaceAgentSkillPanelExposesMediaAndDiscoveriesDispatch(t *
 	}
 }
 
-func TestAssistantWorkspaceAgentSkillPanelExposesInventoryDispatch(t *testing.T) {
+func TestAssistantWorkspaceConversationExposesInventoryDispatch(t *testing.T) {
 	t.Parallel()
 
 	panelPath := filepath.Join("..", "ui.web", "src", "components", "layout", "assistant-workspace-panel.tsx")
@@ -251,24 +239,13 @@ func TestAssistantWorkspaceAgentSkillPanelExposesInventoryDispatch(t *testing.T)
 	panel := string(panelRaw)
 
 	for _, fragment := range []string{
-		"id: 'cabinet.inventory.search_items'",
-		"id: 'cabinet.inventory.create_item'",
-		"id: 'cabinet.inventory.update_item'",
-		"id: 'cabinet.inventory.attach_media'",
-		"id: 'cabinet.inventory.assign_to_collection'",
-		"surface: 'inventory.quick-create'",
-		"surface: 'inventory.media.assignment'",
-		"surface: 'inventory.collection.assignment'",
-		"params.part_number = primary",
-		"params.title = context",
-		"params.item_id = primary",
-		"params.media_id = context",
-		"params.collection_name = context",
-		"source_channel: 'in-app'",
-		"source_message_id: 'assistant-workspace-agent-skill'",
+		"CabinetAssistantUiComposer",
+		"AgentResponseCards",
+		"selected_record: selectedAgentRecordContext",
+		"agent_context: agentContextEnvelope",
 	} {
 		if !strings.Contains(panel, fragment) {
-			t.Fatalf("expected #1707 Assistant workspace Agent Skill panel to include %q", fragment)
+			t.Fatalf("expected #1707 conversation-first Assistant workspace to include %q", fragment)
 		}
 	}
 
@@ -279,11 +256,10 @@ func TestAssistantWorkspaceAgentSkillPanelExposesInventoryDispatch(t *testing.T)
 	}
 	spec := string(specRaw)
 	for _, fragment := range []string{
-		"ASSISTANT-WORKSPACE-015/#1707 dispatches Inventory Agent Skills with in-app source context",
-		"cabinet.inventory.create_item",
-		"inventory.quick-create",
-		"part_number).to.eq('INV-1707-SP')",
-		"source_channel).to.eq('in-app')",
+		"routes every product domain from natural conversation with governed context",
+		"find inventory item AFX-22020",
+		"agent_context.source_channel).to.eq('in-app')",
+		"agent_planner.intent_domain).to.eq(expectedDomain)",
 	} {
 		if !strings.Contains(spec, fragment) {
 			t.Fatalf("expected #1707 Agent Skill Cypress spec to include %q", fragment)
@@ -298,11 +274,11 @@ func TestAssistantWorkspaceAgentSkillPanelExposesInventoryDispatch(t *testing.T)
 	trace := string(traceRaw)
 	for _, fragment := range []string{
 		"`ASSISTANT-WORKSPACE-015`",
-		"#1707",
-		"Inventory Agent Skills",
+		"#1707/#2092",
+		"natural-language Chat dispatches Inventory capabilities",
 		"source_channel=in-app",
-		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
-		"TestAssistantWorkspaceAgentSkillPanelExposesInventoryDispatch",
+		"ui.web/cypress/e2e/chats/cabinet-agent-continuity/spec.cy.ts",
+		"internal/app/chat_agent_planner_test.go",
 	} {
 		if !strings.Contains(trace, fragment) {
 			t.Fatalf("expected #1707 Assistant workspace traceability to include %q", fragment)

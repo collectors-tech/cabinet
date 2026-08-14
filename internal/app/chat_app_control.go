@@ -143,13 +143,55 @@ func dispatchChatMessageAppControl(ctx context.Context, chatSvc *chat.Service, p
 		}
 	}
 
-	assistantMessage, assistantErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", intent.Message, map[string]any{
-		"app_control": result,
+	state := chat.AgentResponseReadResult
+	if intent.SetupNeeded {
+		state = chat.AgentResponseSetupRequired
+	} else if intent.ErrorCode != "" {
+		state = chat.AgentResponseUnsupported
+	} else if preview, _ := result["preview"].(chat.ActionPreview); strings.TrimSpace(preview.ID) != "" {
+		state = chat.AgentResponsePreviewRequired
+	}
+	agentCtx := agentContextEvidence(envelope)
+	agentResponse, _ := chat.NewAgentResponse(
+		state,
+		intent.Message,
+		content,
+		intent.CapabilityID,
+		intent.CapabilityID,
+		strings.TrimSpace(fmt.Sprint(agentCtx["surface_id"])),
+		strings.TrimSpace(fmt.Sprint(agentCtx["source_channel"])),
+	)
+	if preview, _ := result["preview"].(chat.ActionPreview); strings.TrimSpace(preview.ID) != "" {
+		agentResponse.Preview = &chat.AgentResponsePreview{
+			ID: preview.ID, Action: preview.Action, Status: preview.Status, Payload: preview.Payload,
+		}
+	}
+	if route := strings.TrimSpace(intent.Route); route != "" {
+		agentResponse.NextAction = &chat.AgentResponseAction{Kind: "open_route", Label: labelForAgentResponseRoute(route), Route: route}
+	}
+	assistantMessage, assistantErr := chatSvc.CreateMessage(ctx, profileID, threadID, "assistant", agentResponse.Message, map[string]any{
+		"app_control":    result,
+		"agent_response": agentResponse,
 	})
 	if assistantErr == nil {
 		result["thread_message"] = assistantMessage
 	}
 	return result, true
+}
+
+func labelForAgentResponseRoute(route string) string {
+	normalized := strings.Trim(strings.TrimSpace(route), "/")
+	if normalized == "" {
+		return "Open Cabinet"
+	}
+	parts := strings.Split(normalized, "/")
+	for index, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[index] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return "Open " + strings.Join(parts, " / ")
 }
 
 func planChatMessageAppControl(content string, envelope map[string]any) (chatAppControlIntent, bool) {
@@ -270,6 +312,20 @@ func agentContextEvidence(envelope map[string]any) map[string]any {
 		if len(selectedEvidence) > 0 {
 			out["selected_record"] = selectedEvidence
 		}
+	}
+	if selected, _ := rawAgentContext["selected_notification"].(map[string]any); len(selected) > 0 {
+		selectedEvidence := map[string]any{}
+		for _, key := range []string{"id", "source"} {
+			if value := strings.TrimSpace(fmt.Sprint(selected[key])); value != "" && value != "<nil>" {
+				selectedEvidence[key] = value
+			}
+		}
+		if len(selectedEvidence) > 0 {
+			out["selected_notification"] = selectedEvidence
+		}
+	}
+	if adminSession := strings.ToLower(strings.TrimSpace(fmt.Sprint(rawAgentContext["admin_session"]))); adminSession == "authorized" || adminSession == "verified" {
+		out["admin_session"] = "authorized"
 	}
 	if values := stringSliceEvidence(rawAgentContext["media_ids"]); len(values) > 0 {
 		out["media_ids"] = values
@@ -435,8 +491,7 @@ func mentionsProviderBackedCapability(normalized string) bool {
 	return strings.Contains(normalized, "generate listing") ||
 		strings.Contains(normalized, "catalog content") ||
 		strings.Contains(normalized, "analyze image") ||
-		strings.Contains(normalized, "process image") ||
-		strings.Contains(normalized, "provider")
+		strings.Contains(normalized, "process image")
 }
 
 func looksLikePartNumber(value string) bool {

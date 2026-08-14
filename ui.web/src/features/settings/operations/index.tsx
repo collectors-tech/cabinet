@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -10,12 +11,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { recordNotificationHistory } from '@/lib/toast-history'
 import { ContentSection } from '../components/content-section'
 import { useProfileSettings } from '../use-profile-settings'
 
 type RuntimeResponse = {
   app_version?: string
+  build_revision?: string
   build_date?: string
   bind_mode?: string
   runtime_host?: string
@@ -799,6 +800,17 @@ export function SettingsOperations() {
             {loading
               ? 'Loading runtime...'
               : runtimeInfo?.build_date || 'Unavailable'}
+          </p>
+          <p>
+            Build revision:{' '}
+            <span
+              className='font-mono break-all'
+              data-testid='settings-operations-build-revision'
+            >
+              {loading
+                ? 'Loading runtime...'
+                : runtimeInfo?.build_revision || 'Unavailable'}
+            </span>
           </p>
           <p>Address: {loading ? 'Loading runtime...' : runtimeAddress}</p>
           <p>

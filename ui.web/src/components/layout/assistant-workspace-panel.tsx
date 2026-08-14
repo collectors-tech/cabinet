@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import {
   AssistantModalPrimitive,
@@ -20,11 +13,11 @@ import {
   ChevronRight,
   ExternalLink,
   GitBranchPlus,
+  Maximize2,
   MessageSquarePlus,
   Paperclip,
   Pause,
   Play,
-  Send,
   ShieldAlert,
   Sparkles,
   SkipForward,
@@ -40,7 +33,6 @@ import {
   type ShellCommandType,
 } from '@/lib/shell-command-bus'
 import { useShellWorkspace } from '@/context/shell-workspace-context'
-import { useIsMobile } from '@/hooks/use-mobile'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +47,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useSidebar } from '@/components/ui/sidebar'
+import {
+  AgentResponseCards,
+  type AgentCapabilitiesContext,
+  type NormalizedAgentResponse,
+  type AgentPlannerContext,
+} from '@/features/chats/agent-response-cards'
 import {
   CabinetAssistantUiComposer,
   CabinetAssistantUiMessageList,
@@ -87,6 +86,17 @@ type Message = {
   id: string
   role: string
   content: string
+  attachments_json?:
+    | Array<{
+        id: string
+        filename: string
+        mime_type: string
+        size_bytes: number
+        provenance: string
+        source: string
+        created_at: string
+      }>
+    | string
   context?: {
     route?: { pathname?: string; search?: string }
     profile?: { id?: string }
@@ -94,6 +104,9 @@ type Message = {
     assistant?: { provider?: string; model?: string }
     assistant_handoff?: { status?: string; inbox_item_id?: string }
     app_control?: AppControlContext
+    agent_capabilities?: AgentCapabilitiesContext
+    agent_planner?: AgentPlannerContext
+    agent_response?: NormalizedAgentResponse
   }
 }
 
@@ -156,44 +169,6 @@ type ApplyActionResult = {
   preview_id: string
 }
 
-type AgentSkillPreview = {
-  skill_id: string
-  status: string
-  safety_level: string
-  allowed: boolean
-  confirmation_required: boolean
-  blocker?: string
-  preview_target?: Record<string, string>
-  source_surface?: string
-  source_channel?: string
-}
-
-type AgentSkillAuthorityError = {
-  error?: string
-  authority?: {
-    entry_point?: string
-    next_action?: string
-    blocker?: string
-  }
-}
-
-type AgentSkillApplyResult = {
-  skill_id: string
-  mutation_applied: boolean
-  target?: {
-    operation?: string
-    provider_id?: string
-    connection_status?: string
-    secret_redacted?: boolean
-    external_write_claimed?: boolean
-    next_action?: string
-  }
-  source_surface?: string
-  source_channel?: string
-  source_thread_id?: string
-  source_message_id?: string
-}
-
 type AgentSelectedRecord = {
   type?: string
   id?: string
@@ -216,16 +191,10 @@ type InboxAgentContext = {
   source_message_id?: string
 }
 
-type AgentSkillOption = {
-  id: string
-  label: string
-  surface: string
-  primaryLabel: string
-  contextLabel: string
-  secretLabel: string
-}
-
-const agentSkillOptions = [
+/* The primary Agent surface is conversation-first. Skill selection and
+ * credential setup belong to the governed planner and Settings/Integrations,
+ * never an always-visible client-carried playground. */
+/*
   {
     id: 'cabinet.dashboard.summarise_activity',
     label: 'Summarise dashboard',
@@ -482,7 +451,7 @@ const agentSkillOptions = [
     contextLabel: 'Result ID',
     secretLabel: 'Notes',
   },
-] satisfies AgentSkillOption[]
+] */
 
 type NavigationAction = {
   id: string
@@ -575,16 +544,6 @@ function loadAgentSelectedRecord(
   return null
 }
 
-function surfaceIDForAgentSelectedRecord(record: AgentSelectedRecord | null) {
-  if (!record) {
-    return 'chats.side-panel'
-  }
-  if (record.type === 'inventory_item') {
-    return 'inventory.item.detail'
-  }
-  return `${record.type}.detail`
-}
-
 function loadInboxAgentContext(
   profileId: string,
   threadId: string
@@ -665,8 +624,10 @@ function navigationActionFromAppControl(
 }
 
 function latestAppControl(messages: Message[]) {
-  return [...messages].reverse().find((message) => message.context?.app_control)
-    ?.context?.app_control
+  const latestAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role.trim().toLowerCase() === 'assistant')
+  return latestAssistantMessage?.context?.app_control
 }
 
 async function loadAssistantDefaultSettings(profileId: string) {
@@ -687,7 +648,7 @@ async function loadAssistantDefaultSettings(profileId: string) {
 
 export function AssistantWorkspacePanel() {
   const { activeProfileId, setActiveWorkspace } = useShellWorkspace()
-  const isMobile = useIsMobile()
+  const { isMobile } = useSidebar()
   const navigate = useNavigate()
   const authUser = useAuthStore((state) => state.auth.user)
   const location = useRouterState({
@@ -712,20 +673,7 @@ export function AssistantWorkspacePanel() {
   const [provider, setProvider] = useState('openai')
   const [model, setModel] = useState('gpt-4o-mini')
   const manualProviderModelChangeRef = useRef(false)
-  const [actionPartNumber, setActionPartNumber] = useState('ASSIST-001')
-  const [actionTitle, setActionTitle] = useState('Assistant Proposed Item')
   const [actionPreview, setActionPreview] = useState<ActionPreview | null>(null)
-  const [agentSkillID, setAgentSkillID] = useState(agentSkillOptions[0].id)
-  const [agentSkillProvider, setAgentSkillProvider] = useState('ebay')
-  const [agentSkillSetupStep, setAgentSkillSetupStep] = useState('oauth')
-  const [agentSkillSecret, setAgentSkillSecret] = useState('')
-  const [agentSkillPreview, setAgentSkillPreview] =
-    useState<AgentSkillPreview | null>(null)
-  const [agentSkillResult, setAgentSkillResult] =
-    useState<AgentSkillApplyResult | null>(null)
-  const [confirmTarget, setConfirmTarget] = useState<'action' | 'agent-skill'>(
-    'action'
-  )
   const [executionState, setExecutionState] = useState<
     'idle' | 'queued' | 'running' | 'success' | 'failure'
   >('idle')
@@ -773,9 +721,7 @@ export function AssistantWorkspacePanel() {
       profile_id: activeProfileId,
       workspace_id: profileScope,
       route_id: inboxAgentContext?.route_id || routeContext.pathname,
-      surface_id:
-        inboxAgentContext?.surface_id ||
-        surfaceIDForAgentSelectedRecord(selectedAgentRecordContext),
+      surface_id: inboxAgentContext?.surface_id || 'chats.side-panel',
       selected_record: selectedAgentRecordContext
         ? {
             type: selectedAgentRecordContext.type,
@@ -821,13 +767,6 @@ export function AssistantWorkspacePanel() {
   const displayedPermissionGuidance = appControl?.setup_needed
     ? 'Provider setup is needed before Cabinet can run this assistant action.'
     : permissionGuidance
-  const selectedAgentSkillOption = useMemo(
-    () =>
-      agentSkillOptions.find((option) => option.id === agentSkillID) ??
-      agentSkillOptions[0],
-    [agentSkillID]
-  )
-
   const selectedThreadTitle = useMemo(
     () =>
       threads.find((thread) => thread.id === threadId)?.title ||
@@ -1158,6 +1097,8 @@ export function AssistantWorkspacePanel() {
     setModel(nextModel)
     setSending(true)
     setError('')
+    setPendingAttachment(null)
+    setAttachments([])
     try {
       const previousThreadId = threadId
       const newThreadId = await createAssistantThread(
@@ -1187,6 +1128,8 @@ export function AssistantWorkspacePanel() {
     setModel(nextModel)
     setSending(true)
     setError('')
+    setPendingAttachment(null)
+    setAttachments([])
     try {
       const previousThreadId = threadId
       const newThreadId = await createAssistantThread(
@@ -1489,426 +1432,6 @@ export function AssistantWorkspacePanel() {
     },
   })
 
-  async function previewAction() {
-    if (!activeProfileId || !threadId) return
-    setExecutionState('queued')
-    setError('')
-    setApplyResult(null)
-    setPermissionGuidance(
-      'Structured mutations are preview-only until you explicitly confirm apply.'
-    )
-    try {
-      const response = await cabinetProtectedFetch(
-        '/api/chat/actions/preview',
-        activeProfileId,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profile_id: activeProfileId,
-            thread_id: threadId,
-            action: 'create_item_stub',
-            payload: {
-              part_number: actionPartNumber.trim(),
-              title: actionTitle.trim(),
-              brand: 'AFX',
-              category: 'General',
-            },
-          }),
-        }
-      )
-      if (!response.ok) throw new Error(`assistant_preview_${response.status}`)
-      const preview = (await response.json()) as ActionPreview
-      setActionPreview(preview)
-      setExecutionState('running')
-      await loadMessages(activeProfileId, threadId)
-    } catch (err) {
-      setExecutionState('failure')
-      setWorkflowRunsLoading(false)
-      setError(err instanceof Error ? err.message : 'assistant_preview_failed')
-      setPermissionGuidance(
-        'This action could not be previewed under the active policy. Read-only browsing remains available; mutation preview/apply may be unavailable.'
-      )
-    }
-  }
-
-  function agentSkillParameters() {
-    const primary = agentSkillProvider.trim()
-    const context = agentSkillSetupStep.trim()
-    const secretOrTarget = agentSkillSecret.trim()
-    const params: Record<string, string | Record<string, string>> = {}
-    if (agentSkillID === 'cabinet.dashboard.summarise_activity') {
-      if (primary) {
-        params.window = primary
-      }
-      if (context) {
-        params.workspace_id = context
-      }
-      if (secretOrTarget) {
-        params.notes = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID.startsWith('cabinet.integrations.')) {
-      params.provider_id = primary
-      if (context) {
-        params.setup_step = context
-      }
-      if (secretOrTarget) {
-        params.provider_secret = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.market_watch.run_watch') {
-      params.provider_id = primary
-      if (context) {
-        params.watch_id = context
-      }
-      if (secretOrTarget) {
-        params.note = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.market_watch.handoff_result') {
-      params.provider_id = primary
-      if (context) {
-        params.result_id = context
-      }
-      if (secretOrTarget) {
-        params.destination = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.purchases.create_order') {
-      if (primary) {
-        params.purchase_source = primary
-        params.source = primary
-      }
-      if (context) {
-        params.item_id = context
-      }
-      if (secretOrTarget) {
-        params.tracking_number = secretOrTarget
-        params.source_url = secretOrTarget
-      }
-    }
-    if (agentSkillID.startsWith('cabinet.inventory.')) {
-      if (agentSkillID === 'cabinet.inventory.search_items') {
-        if (primary) {
-          params.query = primary
-        }
-        if (context) {
-          params.status = context
-          params.filter = context
-        }
-      } else if (agentSkillID === 'cabinet.inventory.create_item') {
-        if (primary) {
-          params.part_number = primary
-        }
-        if (context) {
-          params.title = context
-        }
-        if (secretOrTarget) {
-          params.source_url = secretOrTarget
-          params.notes = secretOrTarget
-        }
-      } else if (agentSkillID === 'cabinet.inventory.update_item') {
-        if (primary) {
-          params.item_id = primary
-        }
-        if (context) {
-          params.title = context
-        }
-        if (secretOrTarget) {
-          params.notes = secretOrTarget
-        }
-      } else if (agentSkillID === 'cabinet.inventory.attach_media') {
-        if (primary) {
-          params.item_id = primary
-        }
-        if (context) {
-          params.media_id = context
-        }
-        if (secretOrTarget) {
-          params.notes = secretOrTarget
-        }
-      } else if (agentSkillID === 'cabinet.inventory.assign_to_collection') {
-        if (primary) {
-          params.item_id = primary
-        }
-        if (context) {
-          params.collection_name = context
-        }
-        if (secretOrTarget) {
-          params.notes = secretOrTarget
-        }
-      }
-      return params
-    }
-    if (agentSkillID.startsWith('cabinet.wishlist.')) {
-      if (agentSkillID === 'cabinet.wishlist.create_entry') {
-        if (primary) {
-          params.title = primary
-        }
-        if (context) {
-          params.target_price = context
-        }
-        if (secretOrTarget) {
-          params.source_url = secretOrTarget
-          params.notes = secretOrTarget
-        }
-      } else if (agentSkillID === 'cabinet.wishlist.mark_purchased') {
-        if (primary) {
-          params.entry_id = primary
-          params.wishlist_entry_id = primary
-        }
-        if (context) {
-          params.quantity = context
-        }
-        if (secretOrTarget) {
-          params.purchase_url = secretOrTarget
-          params.notes = secretOrTarget
-        }
-      } else {
-        if (primary) {
-          params.entry_id = primary
-          params.wishlist_entry_id = primary
-          params.query = primary
-        }
-        if (context) {
-          params.title = context
-        }
-        if (secretOrTarget) {
-          params.notes = secretOrTarget
-        }
-      }
-      return params
-    }
-    if (agentSkillID.startsWith('cabinet.collections.')) {
-      if (
-        agentSkillID === 'cabinet.collections.create' ||
-        agentSkillID === 'cabinet.collections.update_metadata'
-      ) {
-        if (primary) {
-          params.collection_name = primary
-          params.name = primary
-        }
-        if (context) {
-          params.description = context
-        }
-      } else if (agentSkillID === 'cabinet.collections.assign_item') {
-        if (primary) {
-          params.collection_id = primary
-          params.collection_name = primary
-        }
-        if (context) {
-          params.item_id = context
-        }
-      } else {
-        if (primary) {
-          params.collection_id = primary
-          params.collection_name = primary
-          params.query = primary
-        }
-        if (context) {
-          params.destination_collection_id = context
-          params.destination_collection_name = context
-        }
-      }
-      if (secretOrTarget) {
-        params.notes = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.settings.update_profile') {
-      params.settings_profile = {
-        display_currency: primary,
-        timezone: context,
-        profile_private_note: secretOrTarget,
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.settings.update_account') {
-      params.settings_account = {
-        account_email: primary,
-        locale: context,
-        account_private_note: secretOrTarget,
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.settings.update_appearance') {
-      params.setting_key = primary
-      params.setting_scope = context || 'appearance'
-      params.setting_value = secretOrTarget
-      return params
-    }
-    if (agentSkillID === 'cabinet.storage.configure_backup') {
-      if (primary) {
-        params.backup_target = primary
-      }
-      if (context) {
-        params.backup_schedule = context
-      }
-      if (secretOrTarget) {
-        params.storage_note = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.maintenance.run_safe_check') {
-      if (primary) {
-        params.maintenance_scope = primary
-      }
-      if (context) {
-        params.check_level = context
-      }
-      if (secretOrTarget) {
-        params.maintenance_note = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.media.search') {
-      if (primary) {
-        params.query = primary
-      }
-      if (context) {
-        params.filter = context
-      }
-      if (secretOrTarget) {
-        params.notes = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.media.review_unlinked') {
-      if (primary) {
-        params.query = primary
-      }
-      params.filter = context || 'unlinked'
-      if (secretOrTarget) {
-        params.notes = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.media.upload_or_import') {
-      if (primary) {
-        params.source_url = primary
-        params.file_path = primary
-      }
-      if (context) {
-        params.filename = context
-      }
-      if (secretOrTarget) {
-        params.notes = secretOrTarget
-      }
-      return params
-    }
-    if (
-      agentSkillID === 'cabinet.media.attach_to_item' ||
-      agentSkillID === 'cabinet.media.detach_from_item'
-    ) {
-      if (primary) {
-        params.media_id = primary
-      }
-      if (context) {
-        params.item_id = context
-        params.target_item = context
-      }
-      if (secretOrTarget) {
-        params.notes = secretOrTarget
-      }
-      return params
-    }
-    if (agentSkillID === 'cabinet.media.update_notes') {
-      if (primary) {
-        params.media_id = primary
-      }
-      params.notes = secretOrTarget || context
-      return params
-    }
-    if (agentSkillID.startsWith('cabinet.discoveries.')) {
-      if (primary) {
-        params.provider_id = primary
-      }
-      if (agentSkillID === 'cabinet.discoveries.search') {
-        if (context) {
-          params.query = context
-        }
-      } else if (context) {
-        params.result_id = context
-        params.candidate_id = context
-      }
-      if (secretOrTarget) {
-        params.notes = secretOrTarget
-        params.destination = secretOrTarget
-      }
-      return params
-    }
-    return params
-  }
-
-  async function previewAgentSkill() {
-    if (!activeProfileId || !threadId) return
-    setExecutionState('queued')
-    setError('')
-    setAgentSkillResult(null)
-    setPermissionGuidance(
-      'Agent Skill work is preview-first and keeps provider secrets out of result text.'
-    )
-    try {
-      const response = await cabinetProtectedFetch(
-        '/api/agent/skills/preview',
-        activeProfileId,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profile_id: activeProfileId,
-            skill_id: agentSkillID,
-            source_surface: selectedAgentSkillOption.surface,
-            source_channel: 'in-app',
-            source_thread_id: threadId,
-            source_message_id: 'assistant-workspace-agent-skill',
-            agent_context: agentContextEnvelope,
-            parameters: agentSkillParameters(),
-          }),
-        }
-      )
-      if (!response.ok) {
-        const payload = (await response
-          .json()
-          .catch(() => null)) as AgentSkillAuthorityError | null
-        const blocker = payload?.error || payload?.authority?.blocker
-        if (blocker) {
-          throw new Error(
-            [
-              blocker,
-              payload?.authority?.entry_point
-                ? `entry=${payload.authority.entry_point}`
-                : '',
-              payload?.authority?.next_action || '',
-            ]
-              .filter(Boolean)
-              .join(' - ')
-          )
-        }
-        throw new Error(`agent_skill_preview_${response.status}`)
-      }
-      const preview = (await response.json()) as AgentSkillPreview
-      setAgentSkillPreview(preview)
-      setExecutionState(preview.confirmation_required ? 'running' : 'success')
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'agent_skill_preview_failed'
-      setExecutionState('failure')
-      setWorkflowRunsLoading(false)
-      setError(message)
-      setPermissionGuidance(
-        message.includes(' - ')
-          ? message
-          : 'Agent Skill preview could not be prepared under the current policy.'
-      )
-    }
-  }
-
   async function applyPreviewAction() {
     if (!activeProfileId || !threadId || !actionPreview?.id) return
     setExecutionState('running')
@@ -1944,1059 +1467,806 @@ export function AssistantWorkspacePanel() {
     }
   }
 
-  async function applyAgentSkillPreview() {
-    if (!activeProfileId || !threadId || !agentSkillPreview?.skill_id) return
-    setExecutionState('running')
-    setError('')
-    try {
-      const response = await cabinetProtectedFetch(
-        '/api/agent/skills/apply',
-        activeProfileId,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profile_id: activeProfileId,
-            skill_id: agentSkillPreview.skill_id,
-            confirm: true,
-            source_surface: selectedAgentSkillOption.surface,
-            source_channel: 'in-app',
-            source_thread_id: threadId,
-            source_message_id: 'assistant-workspace-agent-skill',
-            agent_context: agentContextEnvelope,
-            parameters: agentSkillParameters(),
-          }),
-        }
-      )
-      if (!response.ok) {
-        const payload = (await response
-          .json()
-          .catch(() => null)) as AgentSkillAuthorityError | null
-        const blocker = payload?.error || payload?.authority?.blocker
-        if (blocker) {
-          throw new Error(
-            [
-              blocker,
-              payload?.authority?.entry_point
-                ? `entry=${payload.authority.entry_point}`
-                : '',
-              payload?.authority?.next_action || '',
-            ]
-              .filter(Boolean)
-              .join(' - ')
-          )
-        }
-        throw new Error(`agent_skill_apply_${response.status}`)
-      }
-      const result = (await response.json()) as AgentSkillApplyResult
-      setAgentSkillResult(result)
-      setExecutionState('success')
-      setConfirmApplyOpen(false)
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'agent_skill_apply_failed'
-      setExecutionState('failure')
-      setWorkflowRunsLoading(false)
-      setError(message)
-      setPermissionGuidance(
-        message.includes(' - ')
-          ? message
-          : 'Agent Skill apply is confirm-required and may stay blocked until setup targets are complete.'
-      )
-    }
-  }
-
   const applyLink = resultLink(applyResult)
-  const compactModalStyle = isMobile
-    ? ({
-        position: 'relative',
-        inset: 'auto',
-        transform: 'none',
-        width: '100%',
-        height: '100%',
-        maxHeight: '100%',
-      } satisfies CSSProperties)
-    : undefined
 
-  const openFullChat = () => {
-    if (!threadId) {
-      return
-    }
+  function openFullAgent() {
+    if (!threadId) return
     const search = new URLSearchParams({
       thread_id: threadId,
       focus: 'composer',
     })
+    if (actionPreview?.id) {
+      search.set('preview_id', actionPreview.id)
+    }
+    setActiveWorkspace('navigation')
     window.location.assign(`/chats/?${search.toString()}`)
   }
 
+  const workspaceContent = (
+    <section
+      className='flex h-full min-h-0 max-w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden [@media(max-height:500px)]:overflow-y-auto'
+      data-testid='shell-assistant-codex-chat'
+    >
+      <div
+        className='max-h-[min(18rem,42vh)] shrink-0 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3 max-md:max-h-[34vh]'
+        data-testid='shell-chat-rail'
+      >
+        <div className='flex items-center justify-between gap-2'>
+          <h2
+            className='min-w-0 text-xl font-semibold tracking-normal text-slate-100'
+            data-testid='shell-assistant-panel-title'
+          >
+            <span>Cabinet Agent</span>
+          </h2>
+          <div className='flex min-w-0 flex-wrap items-center justify-end gap-1'>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              data-testid='shell-assistant-open-full-agent'
+              aria-label='Open this thread in full Cabinet Agent'
+              title='Open this thread in full Cabinet Agent'
+              className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
+              onClick={openFullAgent}
+              disabled={!threadId || loading || sending}
+            >
+              <Maximize2 className='h-3.5 w-3.5' />
+            </Button>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              data-testid='shell-assistant-new-thread'
+              aria-label='New assistant thread'
+              title='New assistant thread'
+              className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
+              onClick={() => void handleNewThread()}
+              disabled={loading || sending || !activeProfileId}
+            >
+              <MessageSquarePlus className='h-3.5 w-3.5' />
+            </Button>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              data-testid='shell-assistant-mute-toggle'
+              aria-label='Mute Cabinet Agent updates'
+              title='Mute Cabinet Agent updates'
+              className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
+            >
+              <VolumeX className='h-3.5 w-3.5' />
+            </Button>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              data-testid='shell-assistant-close'
+              aria-label='Close Cabinet Agent'
+              title='Close Cabinet Agent'
+              className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
+              onClick={() => setActiveWorkspace('navigation')}
+            >
+              <X className='h-3.5 w-3.5' />
+            </Button>
+          </div>
+        </div>
+
+        <div
+          className='mt-3 rounded-lg border border-slate-800 bg-slate-900/70 p-3 max-sm:hidden'
+          data-testid='shell-assistant-identity-card'
+        >
+          <div className='flex items-start gap-2'>
+            <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-cyan-300'>
+              <Bot className='h-4 w-4' />
+            </div>
+            <div className='min-w-0 flex-1'>
+              <p
+                className='truncate text-sm font-medium text-slate-100'
+                data-testid='shell-assistant-agent-name'
+              >
+                Cabinet Agent
+              </p>
+              <p
+                className='text-xs text-slate-400'
+                data-testid='shell-assistant-agent-role'
+              >
+                One governed Agent across Cabinet
+              </p>
+              <p
+                className='mt-1 flex items-center gap-1 text-[11px] text-emerald-300'
+                data-testid='shell-assistant-runtime-state'
+              >
+                <span className='h-1.5 w-1.5 rounded-full bg-emerald-300' />
+                {activeProfileId
+                  ? 'Agent runtime connected'
+                  : 'Waiting for profile'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <label className='mt-3 block space-y-1 text-xs'>
+          <span className='font-medium text-slate-300'>Conversation</span>
+          <select
+            data-testid='shell-assistant-thread-select'
+            className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-100'
+            value={threadId}
+            onChange={(e) => void handleSelectThread(e.target.value)}
+            disabled={loading || sending || threads.length === 0}
+          >
+            {threads.length === 0 ? (
+              <option value=''>No assistant chats yet</option>
+            ) : null}
+            {threads.map((thread) => (
+              <option key={thread.id} value={thread.id}>
+                {thread.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className='mt-3 flex flex-wrap gap-2 text-[11px]'>
+          <Badge
+            variant='outline'
+            data-testid='shell-assistant-context-chip'
+            className='max-w-full justify-start gap-1 truncate border-slate-700 bg-slate-900 text-slate-300'
+          >
+            <GitBranchPlus className='h-3 w-3 shrink-0' />
+            <span
+              className='truncate'
+              data-testid='shell-assistant-route-context'
+            >{`${routeContext.pathname}${routeContext.search}`}</span>
+          </Badge>
+          <Badge
+            variant='secondary'
+            data-testid='shell-assistant-model-chip'
+            className='max-w-full justify-start gap-1 truncate bg-slate-800 text-slate-200'
+          >
+            <Bot className='h-3 w-3 shrink-0' />
+            <span
+              className='truncate'
+              data-testid='shell-assistant-thread-provider'
+            >
+              {threadMetadata.provider || provider}
+            </span>
+            <span>/</span>
+            <span
+              className='truncate'
+              data-testid='shell-assistant-thread-model'
+            >
+              {threadMetadata.model || model}
+            </span>
+          </Badge>
+        </div>
+
+        <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
+          <label className='space-y-1'>
+            <span className='font-medium text-slate-300'>Provider</span>
+            <select
+              data-testid='shell-assistant-provider-select'
+              className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100'
+              value={provider}
+              onChange={(e) => void handleProviderChange(e.target.value)}
+            >
+              {assistantProviderOptions.map((option) => (
+                <option key={option.provider} value={option.provider}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='space-y-1'>
+            <span className='font-medium text-slate-300'>Model</span>
+            <select
+              data-testid='shell-assistant-model-select'
+              className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100'
+              value={model}
+              onChange={(e) => void handleModelChange(e.target.value)}
+            >
+              {availableModels.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className='mt-3 grid gap-1 text-[11px] text-slate-400'>
+          <span>
+            Profile:{' '}
+            <span data-testid='shell-assistant-profile-scope'>
+              {activeProfileId}
+            </span>
+          </span>
+          <span data-testid='shell-assistant-selection-context'>
+            Collection: {selectionContext}
+          </span>
+          <span data-testid='shell-assistant-selected-record-context'>
+            Selected:{' '}
+            {selectedAgentRecordContext
+              ? `${selectedAgentRecordContext.type}:${selectedAgentRecordContext.label || selectedAgentRecordContext.id}`
+              : 'None'}
+          </span>
+          <span data-testid='shell-assistant-thread-id'>
+            {threadId || 'bootstrapping'}
+          </span>
+          <span data-testid='shell-assistant-selected-thread-title'>
+            Conversation: {selectedThreadTitle}
+          </span>
+          <span data-testid='shell-assistant-boundary-note'>
+            Thread continuity persists across authenticated route changes until
+            an explicit reset boundary.
+          </span>
+          <span data-testid='shell-assistant-thread-semantics'>
+            Provider/model changes fork a new assistant thread; manual reset
+            creates a clean thread for the current profile.
+          </span>
+        </div>
+        {displayedNavigationAction ? (
+          <div
+            className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-3 text-sm'
+            data-testid='shell-assistant-navigation-action'
+          >
+            <div className='flex items-start gap-2'>
+              <ExternalLink className='mt-0.5 h-4 w-4 text-primary' />
+              <div className='min-w-0 flex-1'>
+                <p className='font-medium'>{displayedNavigationAction.label}</p>
+                <p
+                  className='mt-1 text-xs text-muted-foreground'
+                  data-testid='shell-assistant-navigation-reason'
+                >
+                  {displayedNavigationAction.reason}
+                </p>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                  data-testid='shell-assistant-navigation-action-open'
+                  onClick={() =>
+                    void runNavigationAction(displayedNavigationAction)
+                  }
+                >
+                  <ExternalLink className='h-3.5 w-3.5' />
+                  Open screen
+                </Button>
+                {displayedNavigationAction.target.startsWith('/inventory') ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    className='mt-2 ml-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                    data-testid='shell-assistant-navigation-action-highlight'
+                    onClick={() =>
+                      void runHighlightCommand('inventory.surface')
+                    }
+                  >
+                    <Sparkles className='h-3.5 w-3.5' />
+                    Show target
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {guidedWorkflow ? (
+          <div
+            className='mt-3 rounded-md border border-cyan-800/70 bg-cyan-950/30 p-3 text-sm'
+            data-testid='shell-assistant-guided-walkthrough'
+            data-guided-mode={guidedWorkflow.mode}
+            data-guided-recipe={guidedWorkflow.recipe_id}
+          >
+            <div className='flex items-start gap-2'>
+              <Sparkles className='mt-0.5 h-4 w-4 shrink-0 text-cyan-300' />
+              <div className='min-w-0 flex-1'>
+                <p
+                  className='font-medium text-slate-100'
+                  data-testid='shell-assistant-guided-title'
+                >
+                  {guidedWorkflow.title}
+                </p>
+                <p
+                  className='mt-1 text-xs text-slate-300'
+                  data-testid='shell-assistant-guided-boundary'
+                >
+                  {guidedWorkflow.mutation_boundary}
+                </p>
+                <div
+                  className='mt-2 flex flex-wrap gap-1'
+                  data-testid='shell-assistant-guided-steps'
+                >
+                  {guidedWorkflow.steps.map((step) => (
+                    <span
+                      key={step.id}
+                      className='rounded border border-cyan-800/60 bg-slate-950 px-2 py-1 text-[11px] text-slate-300'
+                      data-testid='shell-assistant-guided-step'
+                      data-guided-command={step.command}
+                      data-guided-target={step.ui_target_id || ''}
+                    >
+                      {step.title}
+                    </span>
+                  ))}
+                </div>
+                <div className='mt-3 flex flex-wrap gap-2'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    className='border-cyan-800 bg-slate-950 text-slate-100 hover:bg-slate-900'
+                    data-testid='shell-assistant-guided-start'
+                    onClick={() => void runGuidedWalkthrough(guidedWorkflow)}
+                  >
+                    <Play className='h-3.5 w-3.5' />
+                    Start
+                  </Button>
+                  <Button
+                    type='button'
+                    size='icon'
+                    variant='outline'
+                    className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                    aria-label='Previous walkthrough step'
+                    title='Previous walkthrough step'
+                    data-testid='shell-assistant-guided-back'
+                    onClick={() => {
+                      void dispatchGuidedControl('walkthrough.step_back')
+                      if (guidedWorkflow.steps[0]) {
+                        void dispatchGuidedStep(guidedWorkflow.steps[0])
+                      }
+                    }}
+                  >
+                    <ChevronLeft className='h-3.5 w-3.5' />
+                  </Button>
+                  <Button
+                    type='button'
+                    size='icon'
+                    variant='outline'
+                    className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                    aria-label={
+                      guidedPaused ? 'Resume walkthrough' : 'Pause walkthrough'
+                    }
+                    title={
+                      guidedPaused ? 'Resume walkthrough' : 'Pause walkthrough'
+                    }
+                    data-testid='shell-assistant-guided-pause'
+                    data-guided-paused={guidedPaused ? 'true' : 'false'}
+                    onClick={() => {
+                      const nextPaused = !guidedPaused
+                      setGuidedPaused(nextPaused)
+                      void dispatchGuidedControl(
+                        nextPaused ? 'walkthrough.pause' : 'walkthrough.resume'
+                      )
+                    }}
+                  >
+                    {guidedPaused ? (
+                      <Play className='h-3.5 w-3.5' />
+                    ) : (
+                      <Pause className='h-3.5 w-3.5' />
+                    )}
+                  </Button>
+                  <Button
+                    type='button'
+                    size='icon'
+                    variant='outline'
+                    className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                    aria-label='Skip walkthrough step'
+                    title='Skip walkthrough step'
+                    data-testid='shell-assistant-guided-skip'
+                    onClick={() => {
+                      void dispatchGuidedControl('walkthrough.skip')
+                      if (
+                        guidedWorkflow.steps[guidedWorkflow.steps.length - 1]
+                      ) {
+                        void dispatchGuidedStep(
+                          guidedWorkflow.steps[guidedWorkflow.steps.length - 1]
+                        )
+                      }
+                    }}
+                  >
+                    <SkipForward className='h-3.5 w-3.5' />
+                  </Button>
+                  <Button
+                    type='button'
+                    size='icon'
+                    variant='outline'
+                    className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
+                    aria-label='Next walkthrough step'
+                    title='Next walkthrough step'
+                    data-testid='shell-assistant-guided-next'
+                    onClick={() =>
+                      guidedWorkflow.steps[1]
+                        ? void dispatchGuidedStep(guidedWorkflow.steps[1])
+                        : undefined
+                    }
+                  >
+                    <ChevronRight className='h-3.5 w-3.5' />
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-900'
+                    data-testid='shell-assistant-guided-cancel'
+                    onClick={() => void cancelGuidance()}
+                  >
+                    <X className='h-3.5 w-3.5' />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <ScrollArea className='min-h-0 flex-1 bg-slate-950 p-3 [@media(max-height:500px)]:min-h-24 [@media(max-height:500px)]:shrink-0'>
+        <div
+          className='space-y-4 pb-2'
+          data-testid='shell-assistant-message-list'
+        >
+          {loading ? (
+            <p className='text-sm text-slate-400'>Loading Cabinet Agent...</p>
+          ) : null}
+          {!loading && messages.length === 0 ? (
+            <div className='rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-400'>
+              Ask Cabinet to update records, create drafts, search inventory,
+              and return links to the items it touched.
+            </div>
+          ) : null}
+          <CabinetAssistantUiMessageList messages={messages} />
+          <AgentResponseCards
+            messages={messages}
+            testIDPrefix='shell-assistant'
+            onRetry={sendAssistantMessage}
+            onApply={() => setConfirmApplyOpen(true)}
+            onAction={(response) => {
+              const route = response.next_action?.route?.trim()
+              if (route) void navigate({ to: route })
+            }}
+            onPreviewStateChanged={() =>
+              loadMessages(activeProfileId, threadId)
+            }
+          />
+
+          <div
+            className='rounded-lg border border-slate-800 bg-slate-900/70 p-3 text-xs'
+            data-testid='shell-assistant-execution-panel'
+          >
+            <div className='flex items-center justify-between gap-2'>
+              <div className='flex items-center gap-2 font-medium'>
+                <Wand2 className='h-4 w-4 text-cyan-300' />
+                Agent actions
+              </div>
+              <Badge
+                variant='outline'
+                className='border-slate-700 bg-slate-950 text-slate-300 uppercase'
+                data-testid='shell-assistant-execution-state'
+              >
+                {executionState}
+              </Badge>
+            </div>
+            <p
+              className='mt-2 text-slate-400'
+              data-testid='shell-assistant-permission-guidance'
+            >
+              {displayedPermissionGuidance}
+            </p>
+            {actionPreview ? (
+              <div className='mt-3 flex flex-wrap gap-2'>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  data-testid='shell-assistant-apply-action'
+                  onClick={() => setConfirmApplyOpen(true)}
+                  disabled={!actionPreview.id || sending}
+                >
+                  Review and apply
+                </Button>
+              </div>
+            ) : null}
+            {actionPreview ? (
+              <div
+                className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-2'
+                data-testid='shell-assistant-action-card'
+              >
+                <div
+                  className='text-xs'
+                  data-testid='shell-assistant-action-preview'
+                >
+                  Preview {actionPreview.action} ({actionPreview.status}) for{' '}
+                  {actionPreview.payload?.part_number} /{' '}
+                  {actionPreview.payload?.title}
+                </div>
+              </div>
+            ) : null}
+            {applyResult ? (
+              <div
+                className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-2'
+                data-testid='shell-assistant-apply-result'
+              >
+                <div className='flex items-start gap-2'>
+                  <CheckCircle2 className='mt-0.5 h-4 w-4 text-primary' />
+                  <div className='min-w-0 flex-1'>
+                    <p>
+                      Applied {applyResult.action}{' '}
+                      {applyResult.item_id ? `to ${applyResult.item_id}` : ''}
+                    </p>
+                    {applyLink ? (
+                      <Button
+                        type='button'
+                        variant='link'
+                        size='sm'
+                        asChild
+                        className='h-auto px-0 text-xs'
+                      >
+                        <a
+                          href={applyLink.href}
+                          data-testid='shell-assistant-result-link'
+                        >
+                          <ExternalLink className='h-3.5 w-3.5' />
+                          {applyLink.label}
+                        </a>
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <div
+              className='mt-3 flex items-start gap-2 rounded-lg border border-dashed border-slate-700 p-2 text-slate-400'
+              data-testid='shell-assistant-permission-boundary'
+            >
+              <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
+              <div>
+                <p className='font-medium text-slate-100'>
+                  Permission boundary
+                </p>
+                <p>
+                  Read-only is always allowed. Mutations are preview-first,
+                  confirm-required, and may still be unavailable under the
+                  active policy.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
+
+      {error ? (
+        <p
+          className='px-3 pb-2 text-xs text-red-300'
+          data-testid='shell-assistant-error'
+        >
+          {error}
+        </p>
+      ) : null}
+
+      <div className='max-h-[48vh] overflow-y-auto border-t border-slate-800 bg-slate-950 p-3 sm:max-h-none sm:overflow-visible [@media(max-height:500px)]:max-h-none [@media(max-height:500px)]:shrink-0 [@media(max-height:500px)]:overflow-visible'>
+        <div
+          className='mb-3 space-y-2 rounded-lg border border-slate-800 bg-slate-900/70 p-2 text-xs text-slate-300'
+          data-testid='shell-assistant-attachment-panel'
+        >
+          <div className='flex max-w-full min-w-0 flex-wrap items-center gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+              data-testid='shell-assistant-attachment-picker'
+              onClick={() =>
+                document
+                  .querySelector<HTMLInputElement>(
+                    '[data-testid="shell-assistant-attachment-input"]'
+                  )
+                  ?.click()
+              }
+              disabled={!threadId || loading || sending}
+            >
+              <Paperclip className='h-3.5 w-3.5' />
+              Attach
+            </Button>
+            <Input
+              data-testid='shell-assistant-attachment-input'
+              type='file'
+              className='hidden'
+              onChange={(event) =>
+                setPendingAttachment(event.target.files?.[0] ?? null)
+              }
+            />
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+              data-testid='shell-assistant-attachment-upload'
+              onClick={() => void uploadAttachment()}
+              disabled={!threadId || !pendingAttachment || sending}
+            >
+              Upload
+            </Button>
+            {pendingAttachment ? (
+              <span
+                className='min-w-0 truncate text-slate-400'
+                data-testid='shell-assistant-pending-attachment'
+              >
+                {pendingAttachment.name}
+              </span>
+            ) : null}
+          </div>
+          {attachments.length > 0 ? (
+            <div
+              className='space-y-1'
+              data-testid='shell-assistant-attachment-list'
+            >
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className='flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                  data-attachment-id={attachment.id}
+                >
+                  <span className='min-w-0 truncate'>
+                    {attachment.filename}
+                  </span>
+                  <span className='shrink-0 text-[10px] text-slate-500'>
+                    {attachment.mime_type || 'file'} / {attachment.size_bytes}{' '}
+                    bytes
+                  </span>
+                  <Button
+                    type='button'
+                    size='icon'
+                    variant='ghost'
+                    className='h-6 w-6 shrink-0 text-slate-500 hover:bg-slate-800 hover:text-slate-100'
+                    data-testid='shell-assistant-remove-attachment'
+                    aria-label={`Remove ${attachment.filename}`}
+                    onClick={() => removeAttachment(attachment.id)}
+                  >
+                    <X className='h-3.5 w-3.5' />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <CabinetAssistantUiComposer
+          composer={{
+            disabled: !threadId || loading || sending,
+            sending,
+          }}
+        />
+        <details
+          className='mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300'
+          data-testid='shell-assistant-action-timeline'
+        >
+          <summary className='cursor-pointer list-none font-medium'>
+            Action Timeline
+          </summary>
+          <div
+            className='mt-2 max-h-36 space-y-2 overflow-y-auto text-slate-400'
+            data-testid='shell-assistant-command-timeline'
+          >
+            {workflowRunsLoading ? (
+              <p>Loading durable workflow records...</p>
+            ) : null}
+            {!workflowRunsLoading &&
+            workflowRuns.length === 0 &&
+            commandEvents.length === 0 ? (
+              <p>
+                Durable workflow records appear here after Cabinet plans,
+                previews, applies, cancels, or fails an assistant action.
+              </p>
+            ) : null}
+            {workflowRunsError && workflowRuns.length === 0 ? (
+              <p
+                className='text-red-300'
+                data-testid='shell-assistant-action-timeline-error'
+              >
+                {workflowRunsError}
+              </p>
+            ) : null}
+            {workflowRuns.map((run) => (
+              <div
+                key={run.id}
+                className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                data-testid='shell-assistant-workflow-run'
+                data-workflow-status={run.status}
+                data-capability-id={run.capability_id}
+              >
+                <div className='flex items-center justify-between gap-2'>
+                  <span className='font-medium text-slate-200'>
+                    {run.status}
+                  </span>
+                  <span className='text-[10px] text-slate-500 uppercase'>
+                    {run.confirmation_state}
+                  </span>
+                </div>
+                <p>{run.capability_id}</p>
+                <p className='text-slate-500'>
+                  {workflowRunResultSummary(run)}
+                </p>
+                <p className='text-[10px] text-slate-600'>
+                  {workflowRunTimestamp(run)}
+                </p>
+              </div>
+            ))}
+            {commandEvents.map((event, index) => (
+              <div
+                key={`${event.id}-${event.status}-${index}`}
+                className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
+                data-testid='shell-assistant-command-event'
+                data-command-type={event.type}
+                data-command-status={event.status}
+              >
+                <span className='font-medium text-slate-200'>
+                  {event.status}
+                </span>{' '}
+                {event.type}: {event.message}
+              </div>
+            ))}
+          </div>
+          {commandEvents.length > 0 ? (
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+              data-testid='shell-assistant-command-cancel'
+              onClick={() => void cancelGuidance()}
+            >
+              Cancel guidance
+            </Button>
+          ) : null}
+        </details>
+      </div>
+    </section>
+  )
+
   return (
     <div
-      className='relative z-[1002] flex min-h-0 flex-1 px-2 py-2 max-md:fixed max-md:inset-2 max-md:p-0'
+      className='h-full min-h-0 max-w-full min-w-0 overflow-x-hidden px-2 py-2'
       data-testid='shell-assistant-workspace'
     >
       <AssistantRuntimeProvider runtime={assistantRuntime}>
-        <AssistantModalPrimitive.Root
-          defaultOpen
-          unstable_openOnRunStart={false}
-        >
-          <AssistantModalPrimitive.Anchor
-            className='block'
-            data-testid='shell-assistant-modal-anchor'
-          >
-            <AssistantModalPrimitive.Trigger asChild>
-              <Button
-                type='button'
-                variant='outline'
-                className='w-full justify-start gap-2'
-                data-testid='shell-assistant-modal-trigger'
-              >
-                <Sparkles className='h-4 w-4' />
-                Assistant workspace
-              </Button>
-            </AssistantModalPrimitive.Trigger>
-          </AssistantModalPrimitive.Anchor>
-          <AssistantModalPrimitive.Content
-            side='right'
-            align='start'
-            sideOffset={8}
-            collisionPadding={12}
-            className='z-[1000] flex h-[min(46rem,calc(100vh-6rem))] max-h-[calc(100vh-1rem)] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none max-md:!relative max-md:!inset-auto max-md:!h-full max-md:!max-h-full max-md:!w-full max-md:!translate-x-0 max-md:!translate-y-0 max-md:overflow-hidden'
-            style={compactModalStyle}
+        {isMobile ? (
+          <div
+            className='flex h-full min-h-0 max-w-full min-w-0 overflow-x-hidden overflow-y-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl'
             data-testid='shell-assistant-modal-content'
           >
-            <section
-              className='flex min-h-0 w-full flex-1 flex-col overflow-hidden max-md:h-full max-md:overflow-y-auto'
-              data-testid='shell-assistant-codex-chat'
+            {workspaceContent}
+          </div>
+        ) : (
+          <AssistantModalPrimitive.Root
+            defaultOpen
+            unstable_openOnRunStart={false}
+          >
+            <AssistantModalPrimitive.Anchor
+              className='block'
+              data-testid='shell-assistant-modal-anchor'
             >
-              <div
-                className='border-b border-slate-800 bg-slate-950 p-3'
-                data-testid='shell-chat-rail'
-              >
-                <div className='flex items-center justify-between gap-2'>
-                  <h2
-                    className='min-w-0 text-xl font-semibold tracking-normal text-slate-100'
-                    data-testid='shell-assistant-panel-title'
-                  >
-                    <span>Chat</span>
-                  </h2>
-                  <div className='flex items-center gap-1'>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon'
-                      data-testid='shell-assistant-open-full-chat'
-                      aria-label='Open this thread in full Chat'
-                      title='Open this thread in full Chat'
-                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
-                      onClick={openFullChat}
-                      onKeyDown={(event) => {
-                        if (event.key !== 'Enter' && event.key !== ' ') {
-                          return
-                        }
-                        event.preventDefault()
-                        openFullChat()
-                      }}
-                      disabled={!threadId || loading || sending}
-                    >
-                      <ExternalLink className='h-3.5 w-3.5' />
-                    </Button>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon'
-                      data-testid='shell-assistant-new-thread'
-                      aria-label='New assistant thread'
-                      title='New assistant thread'
-                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
-                      onClick={() => void handleNewThread()}
-                      disabled={loading || sending || !activeProfileId}
-                    >
-                      <MessageSquarePlus className='h-3.5 w-3.5' />
-                    </Button>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon'
-                      data-testid='shell-assistant-mute-toggle'
-                      aria-label='Mute assistant workspace updates'
-                      title='Mute assistant workspace updates'
-                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
-                    >
-                      <VolumeX className='h-3.5 w-3.5' />
-                    </Button>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon'
-                      data-testid='shell-assistant-close'
-                      aria-label='Close assistant workspace'
-                      title='Close assistant workspace'
-                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
-                      onClick={() => setActiveWorkspace('navigation')}
-                    >
-                      <X className='h-3.5 w-3.5' />
-                    </Button>
-                  </div>
-                </div>
-
-                <div
-                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/70 p-3 max-md:hidden'
-                  data-testid='shell-assistant-identity-card'
-                >
-                  <div className='flex items-start gap-2'>
-                    <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-cyan-300'>
-                      <Bot className='h-4 w-4' />
-                    </div>
-                    <div className='min-w-0 flex-1'>
-                      <p
-                        className='truncate text-sm font-medium text-slate-100'
-                        data-testid='shell-assistant-agent-name'
-                      >
-                        Cabinet Agent
-                      </p>
-                      <p
-                        className='text-xs text-slate-400'
-                        data-testid='shell-assistant-agent-role'
-                      >
-                        Single app-control agent
-                      </p>
-                      <p
-                        className='mt-1 flex items-center gap-1 text-[11px] text-emerald-300'
-                        data-testid='shell-assistant-runtime-state'
-                      >
-                        <span className='h-1.5 w-1.5 rounded-full bg-emerald-300' />
-                        {activeProfileId
-                          ? 'Agent runtime connected'
-                          : 'Waiting for profile'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <label className='mt-3 block space-y-1 text-xs max-md:hidden'>
-                  <span className='font-medium text-slate-300'>
-                    Conversation
-                  </span>
-                  <select
-                    data-testid='shell-assistant-thread-select'
-                    className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-100'
-                    value={threadId}
-                    onChange={(e) => void handleSelectThread(e.target.value)}
-                    disabled={loading || sending || threads.length === 0}
-                  >
-                    {threads.length === 0 ? (
-                      <option value=''>No assistant chats yet</option>
-                    ) : null}
-                    {threads.map((thread) => (
-                      <option key={thread.id} value={thread.id}>
-                        {thread.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className='mt-3 flex flex-wrap gap-2 text-[11px] max-md:hidden'>
-                  <Badge
-                    variant='outline'
-                    data-testid='shell-assistant-context-chip'
-                    className='max-w-full justify-start gap-1 truncate border-slate-700 bg-slate-900 text-slate-300'
-                  >
-                    <GitBranchPlus className='h-3 w-3 shrink-0' />
-                    <span
-                      className='truncate'
-                      data-testid='shell-assistant-route-context'
-                    >{`${routeContext.pathname}${routeContext.search}`}</span>
-                  </Badge>
-                  <Badge
-                    variant='secondary'
-                    data-testid='shell-assistant-model-chip'
-                    className='max-w-full justify-start gap-1 truncate bg-slate-800 text-slate-200'
-                  >
-                    <Bot className='h-3 w-3 shrink-0' />
-                    <span
-                      className='truncate'
-                      data-testid='shell-assistant-thread-provider'
-                    >
-                      {threadMetadata.provider || provider}
-                    </span>
-                    <span>/</span>
-                    <span
-                      className='truncate'
-                      data-testid='shell-assistant-thread-model'
-                    >
-                      {threadMetadata.model || model}
-                    </span>
-                  </Badge>
-                </div>
-
-                <div className='mt-3 grid grid-cols-2 gap-2 text-xs max-md:hidden'>
-                  <label className='space-y-1'>
-                    <span className='font-medium text-slate-300'>Provider</span>
-                    <select
-                      data-testid='shell-assistant-provider-select'
-                      className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100'
-                      value={provider}
-                      onChange={(e) =>
-                        void handleProviderChange(e.target.value)
-                      }
-                    >
-                      {assistantProviderOptions.map((option) => (
-                        <option key={option.provider} value={option.provider}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className='space-y-1'>
-                    <span className='font-medium text-slate-300'>Model</span>
-                    <select
-                      data-testid='shell-assistant-model-select'
-                      className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100'
-                      value={model}
-                      onChange={(e) => void handleModelChange(e.target.value)}
-                    >
-                      {availableModels.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className='mt-3 grid gap-1 text-[11px] text-slate-400 max-md:hidden'>
-                  <span>
-                    Profile:{' '}
-                    <span data-testid='shell-assistant-profile-scope'>
-                      {activeProfileId}
-                    </span>
-                  </span>
-                  <span data-testid='shell-assistant-selection-context'>
-                    Collection: {selectionContext}
-                  </span>
-                  <span data-testid='shell-assistant-selected-record-context'>
-                    Selected:{' '}
-                    {selectedAgentRecordContext
-                      ? `${selectedAgentRecordContext.type}:${selectedAgentRecordContext.label || selectedAgentRecordContext.id}`
-                      : 'None'}
-                  </span>
-                  <span data-testid='shell-assistant-thread-id'>
-                    {threadId || 'bootstrapping'}
-                  </span>
-                  <span data-testid='shell-assistant-selected-thread-title'>
-                    Conversation: {selectedThreadTitle}
-                  </span>
-                  <span data-testid='shell-assistant-boundary-note'>
-                    Thread continuity persists across authenticated route
-                    changes until an explicit reset boundary.
-                  </span>
-                  <span data-testid='shell-assistant-thread-semantics'>
-                    Provider/model changes fork a new assistant thread; manual
-                    reset creates a clean thread for the current profile.
-                  </span>
-                </div>
-                {displayedNavigationAction ? (
-                  <div
-                    className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-3 text-sm'
-                    data-testid='shell-assistant-navigation-action'
-                  >
-                    <div className='flex items-start gap-2'>
-                      <ExternalLink className='mt-0.5 h-4 w-4 text-primary' />
-                      <div className='min-w-0 flex-1'>
-                        <p className='font-medium'>
-                          {displayedNavigationAction.label}
-                        </p>
-                        <p
-                          className='mt-1 text-xs text-muted-foreground'
-                          data-testid='shell-assistant-navigation-reason'
-                        >
-                          {displayedNavigationAction.reason}
-                        </p>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                          data-testid='shell-assistant-navigation-action-open'
-                          onClick={() =>
-                            void runNavigationAction(displayedNavigationAction)
-                          }
-                        >
-                          <ExternalLink className='h-3.5 w-3.5' />
-                          Open screen
-                        </Button>
-                        {displayedNavigationAction.target.startsWith(
-                          '/inventory'
-                        ) ? (
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='outline'
-                            className='mt-2 ml-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                            data-testid='shell-assistant-navigation-action-highlight'
-                            onClick={() =>
-                              void runHighlightCommand('inventory.surface')
-                            }
-                          >
-                            <Sparkles className='h-3.5 w-3.5' />
-                            Show target
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                {guidedWorkflow ? (
-                  <div
-                    className='mt-3 rounded-md border border-cyan-800/70 bg-cyan-950/30 p-3 text-sm'
-                    data-testid='shell-assistant-guided-walkthrough'
-                    data-guided-mode={guidedWorkflow.mode}
-                    data-guided-recipe={guidedWorkflow.recipe_id}
-                  >
-                    <div className='flex items-start gap-2'>
-                      <Sparkles className='mt-0.5 h-4 w-4 shrink-0 text-cyan-300' />
-                      <div className='min-w-0 flex-1'>
-                        <p
-                          className='font-medium text-slate-100'
-                          data-testid='shell-assistant-guided-title'
-                        >
-                          {guidedWorkflow.title}
-                        </p>
-                        <p
-                          className='mt-1 text-xs text-slate-300'
-                          data-testid='shell-assistant-guided-boundary'
-                        >
-                          {guidedWorkflow.mutation_boundary}
-                        </p>
-                        <div
-                          className='mt-2 flex flex-wrap gap-1'
-                          data-testid='shell-assistant-guided-steps'
-                        >
-                          {guidedWorkflow.steps.map((step) => (
-                            <span
-                              key={step.id}
-                              className='rounded border border-cyan-800/60 bg-slate-950 px-2 py-1 text-[11px] text-slate-300'
-                              data-testid='shell-assistant-guided-step'
-                              data-guided-command={step.command}
-                              data-guided-target={step.ui_target_id || ''}
-                            >
-                              {step.title}
-                            </span>
-                          ))}
-                        </div>
-                        <div className='mt-3 flex flex-wrap gap-2'>
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='outline'
-                            className='border-cyan-800 bg-slate-950 text-slate-100 hover:bg-slate-900'
-                            data-testid='shell-assistant-guided-start'
-                            onClick={() =>
-                              void runGuidedWalkthrough(guidedWorkflow)
-                            }
-                          >
-                            <Play className='h-3.5 w-3.5' />
-                            Start
-                          </Button>
-                          <Button
-                            type='button'
-                            size='icon'
-                            variant='outline'
-                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
-                            aria-label='Previous walkthrough step'
-                            title='Previous walkthrough step'
-                            data-testid='shell-assistant-guided-back'
-                            onClick={() => {
-                              void dispatchGuidedControl(
-                                'walkthrough.step_back'
-                              )
-                              if (guidedWorkflow.steps[0]) {
-                                void dispatchGuidedStep(guidedWorkflow.steps[0])
-                              }
-                            }}
-                          >
-                            <ChevronLeft className='h-3.5 w-3.5' />
-                          </Button>
-                          <Button
-                            type='button'
-                            size='icon'
-                            variant='outline'
-                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
-                            aria-label={
-                              guidedPaused
-                                ? 'Resume walkthrough'
-                                : 'Pause walkthrough'
-                            }
-                            title={
-                              guidedPaused
-                                ? 'Resume walkthrough'
-                                : 'Pause walkthrough'
-                            }
-                            data-testid='shell-assistant-guided-pause'
-                            data-guided-paused={guidedPaused ? 'true' : 'false'}
-                            onClick={() => {
-                              const nextPaused = !guidedPaused
-                              setGuidedPaused(nextPaused)
-                              void dispatchGuidedControl(
-                                nextPaused
-                                  ? 'walkthrough.pause'
-                                  : 'walkthrough.resume'
-                              )
-                            }}
-                          >
-                            {guidedPaused ? (
-                              <Play className='h-3.5 w-3.5' />
-                            ) : (
-                              <Pause className='h-3.5 w-3.5' />
-                            )}
-                          </Button>
-                          <Button
-                            type='button'
-                            size='icon'
-                            variant='outline'
-                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
-                            aria-label='Skip walkthrough step'
-                            title='Skip walkthrough step'
-                            data-testid='shell-assistant-guided-skip'
-                            onClick={() => {
-                              void dispatchGuidedControl('walkthrough.skip')
-                              if (
-                                guidedWorkflow.steps[
-                                  guidedWorkflow.steps.length - 1
-                                ]
-                              ) {
-                                void dispatchGuidedStep(
-                                  guidedWorkflow.steps[
-                                    guidedWorkflow.steps.length - 1
-                                  ]
-                                )
-                              }
-                            }}
-                          >
-                            <SkipForward className='h-3.5 w-3.5' />
-                          </Button>
-                          <Button
-                            type='button'
-                            size='icon'
-                            variant='outline'
-                            className='h-8 w-8 border-slate-700 bg-slate-950 text-slate-300'
-                            aria-label='Next walkthrough step'
-                            title='Next walkthrough step'
-                            data-testid='shell-assistant-guided-next'
-                            onClick={() =>
-                              guidedWorkflow.steps[1]
-                                ? void dispatchGuidedStep(
-                                    guidedWorkflow.steps[1]
-                                  )
-                                : undefined
-                            }
-                          >
-                            <ChevronRight className='h-3.5 w-3.5' />
-                          </Button>
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='outline'
-                            className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-900'
-                            data-testid='shell-assistant-guided-cancel'
-                            onClick={() => void cancelGuidance()}
-                          >
-                            <X className='h-3.5 w-3.5' />
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <ScrollArea className='min-h-0 flex-1 bg-slate-950 p-3 max-md:hidden'>
-                <div
-                  className='space-y-4 pb-2'
-                  data-testid='shell-assistant-message-list'
-                >
-                  {loading ? (
-                    <p className='text-sm text-slate-400'>
-                      Loading assistant workspace...
-                    </p>
-                  ) : null}
-                  {!loading && messages.length === 0 ? (
-                    <div className='rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-400'>
-                      Ask Cabinet to update records, create drafts, search
-                      inventory, and return links to the items it touched.
-                    </div>
-                  ) : null}
-                  <CabinetAssistantUiMessageList messages={messages} />
-
-                  <div
-                    className='rounded-lg border border-slate-800 bg-slate-900/70 p-3 text-xs'
-                    data-testid='shell-assistant-execution-panel'
-                  >
-                    <div className='flex items-center justify-between gap-2'>
-                      <div className='flex items-center gap-2 font-medium'>
-                        <Wand2 className='h-4 w-4 text-cyan-300' />
-                        Agent actions
-                      </div>
-                      <Badge
-                        variant='outline'
-                        className='border-slate-700 bg-slate-950 text-slate-300 uppercase'
-                        data-testid='shell-assistant-execution-state'
-                      >
-                        {executionState}
-                      </Badge>
-                    </div>
-                    <p
-                      className='mt-2 text-slate-400'
-                      data-testid='shell-assistant-permission-guidance'
-                    >
-                      {displayedPermissionGuidance}
-                    </p>
-                    <div className='mt-3 grid gap-2 max-md:hidden'>
-                      <Input
-                        data-testid='shell-assistant-preview-part-number'
-                        className='border-slate-700 bg-slate-950 text-slate-100'
-                        value={actionPartNumber}
-                        onChange={(e) => setActionPartNumber(e.target.value)}
-                        placeholder='Part number'
-                        disabled={!threadId || sending}
-                      />
-                      <Input
-                        data-testid='shell-assistant-preview-title'
-                        className='border-slate-700 bg-slate-950 text-slate-100'
-                        value={actionTitle}
-                        onChange={(e) => setActionTitle(e.target.value)}
-                        placeholder='Item title'
-                        disabled={!threadId || sending}
-                      />
-                    </div>
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        data-testid='shell-assistant-preview-action'
-                        onClick={() => void previewAction()}
-                        disabled={
-                          !threadId ||
-                          !actionPartNumber.trim() ||
-                          !actionTitle.trim() ||
-                          sending
-                        }
-                      >
-                        Preview
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid='shell-assistant-apply-action'
-                        onClick={() => setConfirmApplyOpen(true)}
-                        disabled={!actionPreview?.id || sending}
-                      >
-                        Apply
-                      </Button>
-                    </div>
-                    {actionPreview ? (
-                      <div
-                        className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-2'
-                        data-testid='shell-assistant-action-card'
-                      >
-                        <div
-                          className='text-xs'
-                          data-testid='shell-assistant-action-preview'
-                        >
-                          Preview {actionPreview.action} ({actionPreview.status}
-                          ) for {actionPreview.payload?.part_number} /{' '}
-                          {actionPreview.payload?.title}
-                        </div>
-                      </div>
-                    ) : null}
-                    {applyResult ? (
-                      <div
-                        className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-2'
-                        data-testid='shell-assistant-apply-result'
-                      >
-                        <div className='flex items-start gap-2'>
-                          <CheckCircle2 className='mt-0.5 h-4 w-4 text-primary' />
-                          <div className='min-w-0 flex-1'>
-                            <p>
-                              Applied {applyResult.action}{' '}
-                              {applyResult.item_id
-                                ? `to ${applyResult.item_id}`
-                                : ''}
-                            </p>
-                            {applyLink ? (
-                              <Button
-                                type='button'
-                                variant='link'
-                                size='sm'
-                                asChild
-                                className='h-auto px-0 text-xs'
-                              >
-                                <a
-                                  href={applyLink.href}
-                                  data-testid='shell-assistant-result-link'
-                                >
-                                  <ExternalLink className='h-3.5 w-3.5' />
-                                  {applyLink.label}
-                                </a>
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                    <div
-                      className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3'
-                      data-testid='shell-assistant-agent-skill-panel'
-                    >
-                      <div className='flex items-center justify-between gap-2'>
-                        <p className='font-medium text-slate-100'>
-                          Agent Skill
-                        </p>
-                        <Badge
-                          variant='outline'
-                          className='border-slate-700 bg-slate-900 text-slate-300'
-                          data-testid='shell-assistant-agent-skill-policy'
-                        >
-                          preview-first
-                        </Badge>
-                      </div>
-                      <div className='mt-3 grid gap-2'>
-                        <select
-                          data-testid='shell-assistant-agent-skill-select'
-                          className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-100'
-                          value={agentSkillID}
-                          onChange={(event) => {
-                            setAgentSkillID(event.target.value)
-                            setAgentSkillPreview(null)
-                            setAgentSkillResult(null)
-                          }}
-                          disabled={!threadId || sending}
-                        >
-                          {agentSkillOptions.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <Input
-                          data-testid='shell-assistant-agent-skill-provider'
-                          className='border-slate-700 bg-slate-900 text-slate-100'
-                          value={agentSkillProvider}
-                          onChange={(event) =>
-                            setAgentSkillProvider(event.target.value)
-                          }
-                          placeholder={selectedAgentSkillOption.primaryLabel}
-                          disabled={!threadId || sending}
-                        />
-                        <Input
-                          data-testid='shell-assistant-agent-skill-setup-step'
-                          className='border-slate-700 bg-slate-900 text-slate-100'
-                          value={agentSkillSetupStep}
-                          onChange={(event) =>
-                            setAgentSkillSetupStep(event.target.value)
-                          }
-                          placeholder={selectedAgentSkillOption.contextLabel}
-                          disabled={!threadId || sending}
-                        />
-                        <Input
-                          data-testid='shell-assistant-agent-skill-secret'
-                          className='border-slate-700 bg-slate-900 text-slate-100'
-                          value={agentSkillSecret}
-                          onChange={(event) =>
-                            setAgentSkillSecret(event.target.value)
-                          }
-                          placeholder={selectedAgentSkillOption.secretLabel}
-                          disabled={!threadId || sending}
-                        />
-                      </div>
-                      <div className='mt-3 flex flex-wrap gap-2'>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          data-testid='shell-assistant-agent-skill-preview'
-                          onClick={() => void previewAgentSkill()}
-                          disabled={
-                            !threadId || !agentSkillProvider.trim() || sending
-                          }
-                        >
-                          Preview skill
-                        </Button>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          data-testid='shell-assistant-agent-skill-apply'
-                          onClick={() => {
-                            setConfirmTarget('agent-skill')
-                            setConfirmApplyOpen(true)
-                          }}
-                          disabled={!agentSkillPreview || sending}
-                        >
-                          Apply skill
-                        </Button>
-                      </div>
-                      {agentSkillPreview ? (
-                        <div
-                          className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-2 text-slate-300'
-                          data-testid='shell-assistant-agent-skill-preview-card'
-                        >
-                          {agentSkillPreview.skill_id} /{' '}
-                          {agentSkillPreview.safety_level} /{' '}
-                          {agentSkillPreview.blocker || 'ready'}
-                        </div>
-                      ) : null}
-                      {agentSkillResult ? (
-                        <div
-                          className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-2 text-slate-300'
-                          data-testid='shell-assistant-agent-skill-result'
-                        >
-                          {agentSkillResult.target?.operation} / mutation:{' '}
-                          {String(agentSkillResult.mutation_applied)} / secret
-                          redacted:{' '}
-                          {String(agentSkillResult.target?.secret_redacted)}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div
-                      className='mt-3 flex items-start gap-2 rounded-lg border border-dashed border-slate-700 p-2 text-slate-400'
-                      data-testid='shell-assistant-permission-boundary'
-                    >
-                      <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
-                      <div>
-                        <p className='font-medium text-slate-100'>
-                          Permission boundary
-                        </p>
-                        <p>
-                          Read-only is always allowed. Mutations are
-                          preview-first, confirm-required, and may still be
-                          unavailable under the active policy.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </ScrollArea>
-
-              {error ? (
-                <p
-                  className='px-3 pb-2 text-xs text-red-300'
-                  data-testid='shell-assistant-error'
-                >
-                  {error}
-                </p>
-              ) : null}
-
-              <div className='max-h-[48vh] shrink-0 overflow-y-auto border-t border-slate-800 bg-slate-950 p-3 md:max-h-none md:overflow-visible'>
-                <div
-                  className='mb-3 space-y-2 rounded-lg border border-slate-800 bg-slate-900/70 p-2 text-xs text-slate-300'
-                  data-testid='shell-assistant-attachment-panel'
-                >
-                  <div className='flex items-center gap-2'>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='sm'
-                      className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                      data-testid='shell-assistant-attachment-picker'
-                      onClick={() =>
-                        document
-                          .querySelector<HTMLInputElement>(
-                            '[data-testid="shell-assistant-attachment-input"]'
-                          )
-                          ?.click()
-                      }
-                      disabled={!threadId || loading || sending}
-                    >
-                      <Paperclip className='h-3.5 w-3.5' />
-                      Attach
-                    </Button>
-                    <Input
-                      data-testid='shell-assistant-attachment-input'
-                      type='file'
-                      className='hidden'
-                      onChange={(event) =>
-                        setPendingAttachment(event.target.files?.[0] ?? null)
-                      }
-                    />
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='sm'
-                      className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                      data-testid='shell-assistant-attachment-upload'
-                      onClick={() => void uploadAttachment()}
-                      disabled={!threadId || !pendingAttachment || sending}
-                    >
-                      Upload
-                    </Button>
-                    {pendingAttachment ? (
-                      <span
-                        className='min-w-0 truncate text-slate-400'
-                        data-testid='shell-assistant-pending-attachment'
-                      >
-                        {pendingAttachment.name}
-                      </span>
-                    ) : null}
-                  </div>
-                  {attachments.length > 0 ? (
-                    <div
-                      className='space-y-1'
-                      data-testid='shell-assistant-attachment-list'
-                    >
-                      {attachments.map((attachment) => (
-                        <div
-                          key={attachment.id}
-                          className='flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-950 px-2 py-1'
-                          data-attachment-id={attachment.id}
-                        >
-                          <span className='min-w-0 truncate'>
-                            {attachment.filename}
-                          </span>
-                          <span className='shrink-0 text-[10px] text-slate-500'>
-                            {attachment.mime_type || 'file'} /{' '}
-                            {attachment.size_bytes} bytes
-                          </span>
-                          <Button
-                            type='button'
-                            size='icon'
-                            variant='ghost'
-                            className='h-6 w-6 shrink-0 text-slate-500 hover:bg-slate-800 hover:text-slate-100'
-                            data-testid='shell-assistant-remove-attachment'
-                            aria-label={`Remove ${attachment.filename}`}
-                            onClick={() => removeAttachment(attachment.id)}
-                          >
-                            <X className='h-3.5 w-3.5' />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <CabinetAssistantUiComposer
-                  composer={{
-                    disabled: !threadId || loading || sending,
-                    sending,
-                  }}
-                  classNames={{
-                    root: 'max-md:relative max-md:w-full max-md:pr-12',
-                    input: 'max-md:w-full',
-                    sendButton: 'max-md:absolute max-md:top-1 max-md:right-1',
-                  }}
-                  testIds={{
-                    sendButton: 'shell-assistant-send-button-primitive',
-                  }}
-                />
+              <AssistantModalPrimitive.Trigger asChild>
                 <Button
                   type='button'
-                  size='icon'
-                  data-testid='shell-assistant-send-button'
-                  aria-label='Send assistant message'
-                  title='Send assistant message'
-                  className='mt-2 md:hidden'
-                  disabled={!threadId || loading || sending}
-                  onClick={() => {
-                    const draft =
-                      document
-                        .querySelector<HTMLTextAreaElement>(
-                          '[data-testid="shell-assistant-compose-input"]'
-                        )
-                        ?.value.trim() ?? ''
-                    void sendAssistantMessage(draft)
-                  }}
+                  variant='outline'
+                  className='w-full justify-start gap-2'
+                  data-testid='shell-assistant-modal-trigger'
                 >
-                  <Send className='h-4 w-4' />
+                  <Sparkles className='h-4 w-4' />
+                  Cabinet Agent
                 </Button>
-                <details
-                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300 max-md:hidden'
-                  data-testid='shell-assistant-action-timeline'
-                >
-                  <summary className='cursor-pointer list-none font-medium'>
-                    Action Timeline
-                  </summary>
-                  <div
-                    className='mt-2 max-h-36 space-y-2 overflow-y-auto text-slate-400'
-                    data-testid='shell-assistant-command-timeline'
-                  >
-                    {workflowRunsLoading ? (
-                      <p>Loading durable workflow records...</p>
-                    ) : null}
-                    {!workflowRunsLoading &&
-                    workflowRuns.length === 0 &&
-                    commandEvents.length === 0 ? (
-                      <p>
-                        Durable workflow records appear here after Cabinet
-                        plans, previews, applies, cancels, or fails an assistant
-                        action.
-                      </p>
-                    ) : null}
-                    {workflowRunsError && workflowRuns.length === 0 ? (
-                      <p
-                        className='text-red-300'
-                        data-testid='shell-assistant-action-timeline-error'
-                      >
-                        {workflowRunsError}
-                      </p>
-                    ) : null}
-                    {workflowRuns.map((run) => (
-                      <div
-                        key={run.id}
-                        className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
-                        data-testid='shell-assistant-workflow-run'
-                        data-workflow-status={run.status}
-                        data-capability-id={run.capability_id}
-                      >
-                        <div className='flex items-center justify-between gap-2'>
-                          <span className='font-medium text-slate-200'>
-                            {run.status}
-                          </span>
-                          <span className='text-[10px] text-slate-500 uppercase'>
-                            {run.confirmation_state}
-                          </span>
-                        </div>
-                        <p>{run.capability_id}</p>
-                        <p className='text-slate-500'>
-                          {workflowRunResultSummary(run)}
-                        </p>
-                        <p className='text-[10px] text-slate-600'>
-                          {workflowRunTimestamp(run)}
-                        </p>
-                      </div>
-                    ))}
-                    {commandEvents.map((event, index) => (
-                      <div
-                        key={`${event.id}-${event.status}-${index}`}
-                        className='rounded border border-slate-800 bg-slate-950 px-2 py-1'
-                        data-testid='shell-assistant-command-event'
-                        data-command-type={event.type}
-                        data-command-status={event.status}
-                      >
-                        <span className='font-medium text-slate-200'>
-                          {event.status}
-                        </span>{' '}
-                        {event.type}: {event.message}
-                      </div>
-                    ))}
-                  </div>
-                  {commandEvents.length > 0 ? (
-                    <Button
-                      type='button'
-                      size='sm'
-                      variant='outline'
-                      className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                      data-testid='shell-assistant-command-cancel'
-                      onClick={() => void cancelGuidance()}
-                    >
-                      Cancel guidance
-                    </Button>
-                  ) : null}
-                </details>
-              </div>
-            </section>
-          </AssistantModalPrimitive.Content>
-        </AssistantModalPrimitive.Root>
+              </AssistantModalPrimitive.Trigger>
+            </AssistantModalPrimitive.Anchor>
+            <AssistantModalPrimitive.Content
+              side='right'
+              align='start'
+              sideOffset={8}
+              collisionPadding={12}
+              className='z-[1000] flex h-[min(46rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
+              data-testid='shell-assistant-modal-content'
+            >
+              {workspaceContent}
+            </AssistantModalPrimitive.Content>
+          </AssistantModalPrimitive.Root>
+        )}
       </AssistantRuntimeProvider>
 
       <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}>
@@ -3004,11 +2274,9 @@ export function AssistantWorkspacePanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Assistant Action</AlertDialogTitle>
             <AlertDialogDescription data-testid='shell-assistant-apply-confirm-summary'>
-              {confirmTarget === 'agent-skill' && agentSkillPreview
-                ? `Apply ${agentSkillPreview.skill_id} for ${selectedAgentSkillOption.primaryLabel.toLowerCase()}=${agentSkillProvider.trim()} from ${selectedAgentSkillOption.surface}`
-                : actionPreview
-                  ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
-                  : 'No action preview selected.'}
+              {actionPreview
+                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
+                : 'No action preview selected.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3019,11 +2287,7 @@ export function AssistantWorkspacePanel() {
               data-testid='shell-assistant-apply-confirm'
               onClick={(event) => {
                 event.preventDefault()
-                if (confirmTarget === 'agent-skill') {
-                  void applyAgentSkillPreview()
-                } else {
-                  void applyPreviewAction()
-                }
+                void applyPreviewAction()
               }}
             >
               Confirm Apply

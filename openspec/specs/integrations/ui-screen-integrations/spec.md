@@ -255,6 +255,17 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 - **AND** each label MUST be programmatically associated with its input by matching `htmlFor` and input `id`
 - **AND** placeholder text MUST NOT be the only source of field meaning
 
+### Requirement UI-SCREEN-INTEGRATIONS-016: Telegram setup SHALL guide bot validation, private pairing, and connector lifecycle
+The Telegram provider dialog MUST make outbound-only connection setup usable without manual sender/chat identifiers or a public webhook URL.
+
+#### Scenario: Configure and operate Telegram from Integrations
+- **GIVEN** the user opens Telegram setup for the active profile
+- **WHEN** the guided setup renders
+- **THEN** it MUST explain BotFather token creation, write-only token handling, outbound-only long polling, and the absence of a public listener
+- **AND** it MUST provide a real `getMe` connection test, explicit webhook-conflict resolution, short-lived `/start` pairing, status refresh, pause/resume, token replacement, and disconnect controls
+- **AND** it MUST show non-secret bot identity, pairing state, last success/update, and safe error/retry state
+- **AND** it MUST NOT ask the user to manually copy sender ids, chat ids, or webhook URLs
+
 ## Acceptance Criteria
 - Provider cards are sourced from runtime registry, not static seed list.
 - Provider detail panel shows instructions, health, and last-run data.
@@ -285,3 +296,4 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-19 | Hydrate direct route empty filter state | Shared `/integrations/` URL with no matching providers shows deterministic no-match table state, stable zero-result pagination, and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-19: shows deterministic empty state for direct route filters` |
 | UC-INT-UI-20 | Hydrate direct route empty cards state | Shared `/integrations/` URL with no matching providers in cards view shows explicit no-match feedback and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-20: shows deterministic empty state for direct route filters in cards view` |
 | UC-INT-UI-21 | Add Integration provider-selection-first flow | Header action is icon-only/no visible text, opens provider selector first, keeps unconfigured registry providers addable, deterministically hands pointer and keyboard selection into focused setup, persists an enabled integration instance on save, and leaves unconfigured providers untouched on cancel | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-015 + #1435: Add Integration is icon-only and opens provider selection first`; `UI-SCREEN-INTEGRATIONS-015 + #1497: Add Integration shows unconfigured Voglers from registry metadata`; `cypress/e2e/integrations/add-integration-handoff/spec.cy.ts` `#2062: hands pointer and keyboard selections into persistent provider setup without configuring on cancel` |
+| UC-INT-UI-22 | Configure Telegram through outbound polling and private pairing | Token stays write-only; bot identity is validated; webhook conflicts require explicit resolution; private `/start` pairing establishes exact sender/chat authorization; connector status and lifecycle controls are visible without a public listener | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-016/#2085 guides Telegram outbound polling setup`; `ui.web/cypress/e2e/integrations/telegram-local-connector/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-016/#2085 completes Telegram setup and pairing against a running controlled fixture` |

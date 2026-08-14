@@ -8,7 +8,7 @@ import {
   evaluateKnownHighAdvisoryGraph,
 } from "./check-production-dependencies.mjs";
 
-test("known high advisory graph rejects only vulnerable nanoid and js-yaml lines", () => {
+test("known release advisory graph rejects vulnerable nanoid, js-yaml, postcss and extract-zip lines", () => {
   assert.throws(
     () =>
       evaluateKnownHighAdvisoryGraph({
@@ -16,9 +16,11 @@ test("known high advisory graph rejects only vulnerable nanoid and js-yaml lines
           "node_modules/nanoid": { version: "3.3.16" },
           "node_modules/tool/node_modules/nanoid": { version: "5.1.15" },
           "node_modules/js-yaml": { version: "4.3.0", dev: true },
+          "node_modules/postcss": { version: "8.5.22" },
+          "node_modules/extract-zip": { version: "2.0.1", dev: true },
         },
       }),
-    /nanoid.*3\.3\.16.*GHSA-2v37-7h3g-55p8[\s\S]*nanoid.*5\.1\.15.*GHSA-28wg-ghj8-5hjv[\s\S]*js-yaml.*4\.3\.0.*GHSA-5p4m-2wfm-xmqj/,
+    /nanoid.*3\.3\.16.*GHSA-2v37-7h3g-55p8[\s\S]*nanoid.*5\.1\.15.*GHSA-28wg-ghj8-5hjv[\s\S]*js-yaml.*4\.3\.0.*GHSA-5p4m-2wfm-xmqj[\s\S]*postcss.*8\.5\.22.*GHSA-fxqj-rqcc-2cmp[\s\S]*extract-zip.*2\.0\.1.*GHSA-jmr9-qjv8-65gv/,
   );
 
   assert.deepEqual(
@@ -27,19 +29,22 @@ test("known high advisory graph rejects only vulnerable nanoid and js-yaml lines
         "node_modules/nanoid": { version: "3.3.17" },
         "node_modules/tool/node_modules/nanoid": { version: "5.1.16" },
         "node_modules/js-yaml": { version: "4.3.1", dev: true },
+        "node_modules/postcss": { version: "8.5.23" },
       },
     }),
-    { nanoid: 2, "js-yaml": 1 },
+    { nanoid: 2, "js-yaml": 1, postcss: 1, "extract-zip": 0 },
   );
 });
 
-test("current lock graph is above the #56, #57 and #58 patched floors", async () => {
+test("current lock graph is above the #56-#60 patched floors or omits the package", async () => {
   const packageLock = JSON.parse(
     await readFile("ui.web/package-lock.json", "utf8"),
   );
   const counts = evaluateKnownHighAdvisoryGraph(packageLock);
   assert.ok(counts.nanoid > 0, "the nanoid advisory contract must exercise a lock path");
   assert.ok(counts["js-yaml"] > 0, "the js-yaml advisory contract must exercise a lock path");
+  assert.ok(counts.postcss > 0, "the postcss advisory contract must exercise a lock path");
+  assert.equal(counts["extract-zip"], 0, "the unpatched extract-zip package must be absent");
 });
 
 test("production dependency audit rejects unresolved critical and high findings", () => {
@@ -154,4 +159,7 @@ test("dependency security gate remains bound to OpenSpec and release evidence", 
   assert.match(evidence, /zero critical or high production vulnerabilities/);
   assert.match(evidence, /one low-severity `esbuild` advisory/);
   assert.match(evidence, /lock-owned optional WebAssembly bundle/);
+  assert.match(evidence, /#56-#60/);
+  assert.match(evidence, /no `extract-zip` entry/);
+  assert.match(evidence, /`postcss` 8\.5\.26/);
 });

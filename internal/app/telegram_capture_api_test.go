@@ -135,7 +135,7 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 }
 
-func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing.T) {
+func TestTelegramAgentTextRejectsLegacySkillGrammar(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -164,8 +164,8 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 
 	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
 		"settings":{
-			"telegram.catalog_capture.sender_id":"sender-agent",
-			"telegram.catalog_capture.chat_id":"chat-agent"
+			"telegram.catalog_capture.sender_id":"agent-peer",
+			"telegram.catalog_capture.chat_id":"agent-peer"
 		}
 	}`), map[string]string{"Content-Type": "application/json"})
 	if settings.Code != http.StatusOK {
@@ -173,26 +173,22 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 	}
 
 	readOnly := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
-		"sender_id":"sender-agent",
-		"chat_id":"chat-agent",
+		"sender_id":"agent-peer",
+		"chat_id":"agent-peer",
+		"chat_type":"private",
 		"message_id":"agent-message-read",
 		"text":"show me my AFX inventory",
 		"skill_id":"cabinet.inventory.search_items",
 		"parameters":{"query":"AFX"},
 		"source_metadata":{"update_id":1705}
 	}`), map[string]string{"Content-Type": "application/json"})
-	if readOnly.Code != http.StatusCreated {
-		t.Fatalf("read-only status=%d body=%s", readOnly.Code, readOnly.Body.String())
+	if readOnly.Code != http.StatusForbidden {
+		t.Fatalf("legacy grammar status=%d body=%s", readOnly.Code, readOnly.Body.String())
 	}
-	readBody := readOnly.Body.String()
-	if !strings.Contains(readBody, `"source_channel":"telegram"`) ||
-		!strings.Contains(readBody, `"source_surface":"telegram.agent.text"`) ||
-		!strings.Contains(readBody, `"source_message_id":"agent-message-read"`) ||
-		!strings.Contains(readBody, `"skill_id":"cabinet.inventory.search_items"`) ||
-		!strings.Contains(readBody, `"read_only":true`) ||
-		!strings.Contains(readBody, `"confirmation_state":"not_required"`) {
-		t.Fatalf("expected authorized read-only Telegram Agent text to preserve source and execute read-only skill, body=%s", readBody)
+	if !strings.Contains(readOnly.Body.String(), `"telegram_agent_request_rejected"`) {
+		t.Fatalf("expected raw skill grammar to fail closed, body=%s", readOnly.Body.String())
 	}
+	return
 
 	mutating := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
 		"sender_id":"sender-agent",
@@ -325,7 +321,7 @@ func TestTelegramAgentTextRoutesAuthorizedSkillThroughPreviewBoundary(t *testing
 	}
 }
 
-func TestTelegramAgentTextHonorsReadOnlyProfileAuthority(t *testing.T) {
+func TestTelegramAgentTextRejectsConfirmedLegacyMutationGrammar(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -341,8 +337,8 @@ func TestTelegramAgentTextHonorsReadOnlyProfileAuthority(t *testing.T) {
 	}
 	repo := profile.NewRepository(a.db)
 	if err := repo.PutSettings(context.Background(), p.ID, map[string]string{
-		"telegram.catalog_capture.sender_id": "sender-read-only-agent",
-		"telegram.catalog_capture.chat_id":   "chat-read-only-agent",
+		"telegram.catalog_capture.sender_id": "read-only-agent",
+		"telegram.catalog_capture.chat_id":   "read-only-agent",
 	}); err != nil {
 		t.Fatalf("authorize telegram sender: %v", err)
 	}
@@ -353,22 +349,20 @@ func TestTelegramAgentTextHonorsReadOnlyProfileAuthority(t *testing.T) {
 	}
 
 	blocked := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
-		"sender_id":"sender-read-only-agent",
-		"chat_id":"chat-read-only-agent",
+		"sender_id":"read-only-agent",
+		"chat_id":"read-only-agent",
+		"chat_type":"private",
 		"message_id":"agent-read-only-create",
 		"text":"create an inventory item even though the profile is read only",
 		"skill_id":"cabinet.inventory.create_item",
 		"confirm":true,
 		"parameters":{"title":"Blocked Telegram Authority Item","part_number":"TG-RO-1932"}
 	}`), map[string]string{"Content-Type": "application/json"})
-	if blocked.Code != http.StatusCreated {
+	if blocked.Code != http.StatusForbidden {
 		t.Fatalf("blocked telegram authority status=%d body=%s", blocked.Code, blocked.Body.String())
 	}
-	body := blocked.Body.String()
-	if !strings.Contains(body, `"blocker":"agent_authority_read_only"`) ||
-		!strings.Contains(body, `"source_channel":"telegram"`) ||
-		!strings.Contains(body, `"mutation_applied":false`) {
-		t.Fatalf("expected read-only authority blocker without mutation, body=%s", body)
+	if !strings.Contains(blocked.Body.String(), `"telegram_agent_request_rejected"`) {
+		t.Fatalf("expected confirmed legacy mutation grammar to fail closed, body=%s", blocked.Body.String())
 	}
 	var itemCount int
 	if err := a.db.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE profile_id = ? AND part_number = 'TG-RO-1932'`, p.ID).Scan(&itemCount); err != nil {
@@ -456,8 +450,8 @@ func TestTelegramAgentTextAuthorizedRouteResolvesSetupInboxEvent(t *testing.T) {
 
 	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
 		"settings":{
-			"telegram.catalog_capture.sender_id":"sender-agent-resolution",
-			"telegram.catalog_capture.chat_id":"chat-agent-resolution"
+			"telegram.catalog_capture.sender_id":"agent-resolution",
+			"telegram.catalog_capture.chat_id":"agent-resolution"
 		}
 	}`), map[string]string{"Content-Type": "application/json"})
 	if settings.Code != http.StatusOK {
@@ -465,12 +459,11 @@ func TestTelegramAgentTextAuthorizedRouteResolvesSetupInboxEvent(t *testing.T) {
 	}
 
 	authorized := doRequest(t, a, http.MethodPost, "/api/telegram/agent-text", strings.NewReader(`{
-		"sender_id":"sender-agent-resolution",
-		"chat_id":"chat-agent-resolution",
+		"sender_id":"agent-resolution",
+		"chat_id":"agent-resolution",
+		"chat_type":"private",
 		"message_id":"agent-message-authorized-resolution",
-		"text":"show me my AFX inventory",
-		"skill_id":"cabinet.inventory.search_items",
-		"parameters":{"query":"AFX"}
+		"text":"show me my AFX inventory"
 	}`), map[string]string{"Content-Type": "application/json"})
 	if authorized.Code != http.StatusCreated {
 		t.Fatalf("authorized status=%d body=%s", authorized.Code, authorized.Body.String())

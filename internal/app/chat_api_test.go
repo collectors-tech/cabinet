@@ -260,7 +260,8 @@ func TestChatMessagesUseSharedAgentPlannerContractForMainAndSidePanel(t *testing
 		!strings.Contains(mainBody, `"provider":"anthropic"`) ||
 		!strings.Contains(mainBody, `"source_surface":"chats.main"`) ||
 		!strings.Contains(mainBody, `"recoverable":true`) ||
-		!strings.Contains(mainBody, `"code":"assistant_planner_failed"`) {
+		!strings.Contains(mainBody, `"code":"assistant_provider_adapter_unavailable"`) ||
+		!strings.Contains(mainBody, `"setup_next_action":"wait_for_supported_assistant_provider_adapter"`) {
 		t.Fatalf("expected main Chat to use shared recoverable agent planner contract, body=%s", mainBody)
 	}
 
@@ -287,7 +288,8 @@ func TestChatMessagesUseSharedAgentPlannerContractForMainAndSidePanel(t *testing
 		!strings.Contains(sideBody, `"provider":"anthropic"`) ||
 		!strings.Contains(sideBody, `"source_surface":"chats.side-panel"`) ||
 		!strings.Contains(sideBody, `"recoverable":true`) ||
-		!strings.Contains(sideBody, `"code":"assistant_planner_failed"`) {
+		!strings.Contains(sideBody, `"code":"assistant_provider_adapter_unavailable"`) ||
+		!strings.Contains(sideBody, `"setup_next_action":"wait_for_supported_assistant_provider_adapter"`) {
 		t.Fatalf("expected side-panel Chat to use shared recoverable agent planner contract, body=%s", sideBody)
 	}
 
@@ -309,6 +311,73 @@ func TestChatMessagesUseSharedAgentPlannerContractForMainAndSidePanel(t *testing
 	} {
 		if !strings.Contains(runsBody, token) {
 			t.Fatalf("workflow evidence missing %s, body=%s", token, runsBody)
+		}
+	}
+}
+
+func TestChatMessagesRouteAdminLanguageThroughSharedAgentPlanner(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Chat Admin Planner Surfaces"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Admin Planner Surfaces"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	main := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"search inbox notifications needing review",
+		"context":{"route":{"pathname":"/chats"},"assistant":{"provider":"anthropic","model":"fake-planner-model"}}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if main.Code != http.StatusCreated {
+		t.Fatalf("main admin planner status=%d body=%s", main.Code, main.Body.String())
+	}
+	for _, token := range []string{`"agent_planner"`, `"mode":"provider_planner"`, `"source_surface":"chats.main"`, `"code":"assistant_provider_adapter_unavailable"`} {
+		if !strings.Contains(main.Body.String(), token) {
+			t.Fatalf("main admin planner response missing %s, body=%s", token, main.Body.String())
+		}
+	}
+
+	contextual := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"role":"user",
+		"content":"update appearance theme to dark",
+		"agent_context":{
+			"profile_id":"`+p.ID+`",
+			"workspace_id":"workspace-admin-surfaces",
+			"thread_id":"`+thread.ID+`",
+			"route_id":"/settings/appearance",
+			"surface_id":"settings.appearance.form",
+			"source_channel":"in-app",
+			"setup_state":"ready"
+		},
+		"context":{"route":{"pathname":"/settings/appearance"},"assistant":{"provider":"anthropic","model":"fake-planner-model"}}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if contextual.Code != http.StatusCreated {
+		t.Fatalf("contextual admin planner status=%d body=%s", contextual.Code, contextual.Body.String())
+	}
+	for _, token := range []string{`"agent_planner"`, `"mode":"provider_planner"`, `"source_surface":"settings.appearance.form"`, `"source_channel":"in-app"`, `"code":"assistant_provider_adapter_unavailable"`} {
+		if !strings.Contains(contextual.Body.String(), token) {
+			t.Fatalf("contextual admin planner response missing %s, body=%s", token, contextual.Body.String())
 		}
 	}
 }
@@ -628,6 +697,33 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	crossThreadAttachment := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+otherThread.ID+`","role":"user","content":"wrong thread attachment","attachment_ids":["`+attachment.ID+`"],"context":{"route":{"pathname":"/chats/"},"profile":{"id":"`+p.ID+`"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
 	if crossThreadAttachment.Code != http.StatusBadRequest {
 		t.Fatalf("cross-thread attachment status=%d body=%s", crossThreadAttachment.Code, crossThreadAttachment.Body.String())
+	}
+
+	duplicateAttachment := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"duplicate attachment binding","attachment_ids":["`+attachment.ID+`","`+attachment.ID+`"]}`), map[string]string{"Content-Type": "application/json"})
+	if duplicateAttachment.Code != http.StatusBadRequest {
+		t.Fatalf("duplicate attachment binding status=%d body=%s", duplicateAttachment.Code, duplicateAttachment.Body.String())
+	}
+
+	otherProfileResp := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Other Attachment Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if otherProfileResp.Code != http.StatusCreated {
+		t.Fatalf("create other profile status=%d body=%s", otherProfileResp.Code, otherProfileResp.Body.String())
+	}
+	var otherProfile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(otherProfileResp.Body).Decode(&otherProfile); err != nil {
+		t.Fatalf("decode other profile: %v", err)
+	}
+	otherProfileThreadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+otherProfile.ID+`","title":"Other Profile Thread"}`), map[string]string{"Content-Type": "application/json"})
+	var otherProfileThread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(otherProfileThreadResp.Body).Decode(&otherProfileThread); err != nil {
+		t.Fatalf("decode other profile thread: %v", err)
+	}
+	crossProfileAttachment := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+otherProfile.ID+`","thread_id":"`+otherProfileThread.ID+`","role":"user","content":"wrong profile attachment","attachment_ids":["`+attachment.ID+`"]}`), map[string]string{"Content-Type": "application/json"})
+	if crossProfileAttachment.Code != http.StatusBadRequest {
+		t.Fatalf("cross-profile attachment status=%d body=%s", crossProfileAttachment.Code, crossProfileAttachment.Body.String())
 	}
 
 	var badRecordCount int
@@ -954,7 +1050,7 @@ func TestChatAPIsValidateErrorsAndProfileIsolation(t *testing.T) {
 	_ = json.NewDecoder(createThread.Body).Decode(&thread)
 
 	badRole := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p1.ID+`","thread_id":"`+thread.ID+`","role":"invalid","content":"hello"}`), map[string]string{"Content-Type": "application/json"})
-	if badRole.Code != http.StatusForbidden {
+	if badRole.Code != http.StatusForbidden || !strings.Contains(badRole.Body.String(), `"error":"public_chat_messages_require_user_role"`) {
 		t.Fatalf("bad role status=%d body=%s", badRole.Code, badRole.Body.String())
 	}
 

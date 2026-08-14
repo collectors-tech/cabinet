@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/collectors-tech/cabinet/internal/backup"
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
@@ -31,9 +32,17 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 	if params == nil {
 		params = map[string]any{}
 	}
+	if strings.HasPrefix(skillID, "cabinet.users.") {
+		if _, err := resolveAgentAdminAuthority(ctx, conn, profileID); err != nil {
+			return nil, "agent_admin_authority_required", err
+		}
+		params = withoutClientAssertedAdminAuthority(params)
+	}
 	switch skillID {
 	case "cabinet.chat.action_timeline.view":
 		return applyAgentChatActionTimelineSkill(ctx, chatSvc, profileID, params)
+	case "cabinet.inbox.search_notifications", "cabinet.inbox.summarise_unhandled":
+		return applyAgentInboxReadSkill(ctx, chatSvc, skillID, profileID, params)
 	case "cabinet.inbox.mark_handled":
 		return applyAgentInboxSkill(ctx, chatSvc, profileID, params, "read")
 	case "cabinet.inbox.archive_or_hide":
@@ -108,6 +117,8 @@ func applyAgentSkill(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, s
 		"cabinet.data.restore_backup",
 		"cabinet.maintenance.run_safe_check":
 		return applyAgentSettingsDataSkill(ctx, conn, skillID, profileID, params)
+	case "cabinet.users.search":
+		return applyAgentUsersSearchSkill(ctx, conn, profileID, params)
 	case "cabinet.users.invite_user", "cabinet.users.resend_invitation":
 		email := stringMapParam(params, "target_email")
 		if email == "" {
@@ -2612,6 +2623,38 @@ func applyAgentDataRestoreBackup(ctx context.Context, profileID, backupPath stri
 	}, nil
 }
 
+func applyAgentDataRestoreBackupWithService(backupSvc *backup.Service, profileID string, params map[string]any) (map[string]any, string, error) {
+	if backupSvc == nil {
+		return nil, "data_backup_restore_service_unavailable", fmt.Errorf("backup restore service unavailable")
+	}
+	backupPath := stringMapParam(params, "backup_path")
+	validation, err := backupSvc.InspectBackup(backupPath, profileID)
+	if err != nil {
+		return nil, "data_backup_restore_validation_failed", err
+	}
+	restored, err := backupSvc.RestoreBackup(validation.Path)
+	if err != nil {
+		return nil, "data_backup_restore_failed", err
+	}
+	return map[string]any{
+		"profile_id":                 strings.TrimSpace(profileID),
+		"profile_scope":              strings.TrimSpace(profileID),
+		"operation":                  "data.backup.restore",
+		"status":                     "confirmed",
+		"destructive_confirmation":   true,
+		"restore_drill_verified":     true,
+		"profile_isolated":           strings.TrimSpace(profileID) != "",
+		"integrity_check":            restored.IntegrityCheck,
+		"selected_backup_redacted":   true,
+		"raw_payload_redacted":       true,
+		"restored_manifest_sha256":   validation.DatabaseSHA256,
+		"restored_manifest_bytes":    validation.SizeBytes,
+		"pre_restore_backup_taken":   restored.PreRestoreBackupTaken,
+		"pre_restore_backup_file":    restored.PreRestoreBackup.FileName,
+		"restore_recovery_available": restored.PreRestoreBackupTaken,
+	}, "", nil
+}
+
 func applyAgentSettingUpdate(ctx context.Context, conn *sql.DB, profileID, operation string, result map[string]any, params map[string]any) (map[string]any, string, error) {
 	if operation == "settings.profile.update" {
 		if values, ok := profileSettingsProfileParam(params); ok {
@@ -2798,6 +2841,86 @@ func applyAgentInboxSkill(ctx context.Context, chatSvc *chat.Service, profileID 
 		return nil, "inbox_notification_not_found", err
 	}
 	return map[string]any{"inbox_item": item}, "", nil
+}
+
+func applyAgentInboxReadSkill(ctx context.Context, chatSvc *chat.Service, skillID, profileID string, params map[string]any) (map[string]any, string, error) {
+	if chatSvc == nil {
+		return nil, "inbox_store_required", fmt.Errorf("chat service required")
+	}
+	items, err := chatSvc.ListInboxItems(ctx, profileID)
+	if err != nil {
+		return nil, "inbox_search_failed", err
+	}
+	query := strings.ToLower(strings.TrimSpace(stringMapParam(params, "query")))
+	statusFilter := strings.ToLower(strings.TrimSpace(stringMapParam(params, "status")))
+	resultItems := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		status := strings.ToLower(strings.TrimSpace(item.Status))
+		if skillID == "cabinet.inbox.summarise_unhandled" && status != "queued" && status != "unread" {
+			continue
+		}
+		if statusFilter != "" && status != statusFilter {
+			continue
+		}
+		searchable := strings.ToLower(strings.Join([]string{item.ID, item.Source, item.Status, item.Title, item.Summary}, " "))
+		if query != "" && !strings.Contains(searchable, query) {
+			continue
+		}
+		resultItems = append(resultItems, map[string]any{
+			"id":         item.ID,
+			"source":     item.Source,
+			"status":     item.Status,
+			"title":      item.Title,
+			"summary":    item.Summary,
+			"created_at": item.CreatedAt,
+			"updated_at": item.UpdatedAt,
+		})
+	}
+	operation := "inbox.search_notifications"
+	if skillID == "cabinet.inbox.summarise_unhandled" {
+		operation = "inbox.summarise_unhandled"
+	}
+	return map[string]any{
+		"profile_id":       strings.TrimSpace(profileID),
+		"operation":        operation,
+		"read_only":        true,
+		"mutation_applied": false,
+		"item_count":       len(resultItems),
+		"items":            resultItems,
+	}, "", nil
+}
+
+func applyAgentUsersSearchSkill(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (map[string]any, string, error) {
+	users, err := listRuntimeUsers(ctx, conn, profileID)
+	if err != nil {
+		return nil, "users_admin_search_failed", err
+	}
+	query := strings.ToLower(strings.TrimSpace(stringMapParam(params, "query")))
+	resultUsers := make([]map[string]any, 0, len(users))
+	for _, user := range users {
+		searchable := strings.ToLower(strings.Join([]string{user.ID, user.FirstName, user.LastName, user.Username, user.Email, user.Status, user.Role}, " "))
+		if query != "" && !strings.Contains(searchable, query) {
+			continue
+		}
+		resultUsers = append(resultUsers, map[string]any{
+			"id":           user.ID,
+			"display_name": strings.TrimSpace(strings.TrimSpace(user.FirstName) + " " + strings.TrimSpace(user.LastName)),
+			"username":     user.Username,
+			"email":        user.Email,
+			"status":       user.Status,
+			"role":         user.Role,
+			"created_at":   user.CreatedAt,
+			"updated_at":   user.UpdatedAt,
+		})
+	}
+	return map[string]any{
+		"profile_id":       strings.TrimSpace(profileID),
+		"operation":        "users.search",
+		"read_only":        true,
+		"mutation_applied": false,
+		"user_count":       len(resultUsers),
+		"users":            resultUsers,
+	}, "", nil
 }
 
 func resolveAgentSkillUserTarget(ctx context.Context, conn *sql.DB, profileID string, params map[string]any) (string, string, error) {

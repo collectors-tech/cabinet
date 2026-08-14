@@ -65,7 +65,7 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.location('pathname').then((initialPathname) => {
       cy.get('[data-testid="shell-chat-toggle"]')
         .invoke('attr', 'aria-label')
-        .should('match', /open.*assistant workspace/i)
+        .should('eq', 'Open Cabinet Agent')
       cy.get('[data-testid="shell-chat-toggle"]').click({ force: true })
       cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
       cy.get('[data-testid="shell-workspace-assistant"]')
@@ -77,7 +77,7 @@ describe('chats/ui-screen-chat-copilot', () => {
 
       cy.get('[data-testid="shell-chat-toggle"]')
         .invoke('attr', 'aria-label')
-        .should('match', /return to navigation workspace/i)
+        .should('eq', 'Close Cabinet Agent')
       cy.get('[data-testid="shell-chat-toggle"]').click({ force: true })
       cy.get('[data-testid="shell-assistant-workspace"]').should('not.exist')
       cy.get('[data-testid="shell-workspace-navigation"]')

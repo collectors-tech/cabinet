@@ -11,6 +11,18 @@
 - Validate token
 - Run provider sync
 
+## Telegram setup
+
+Telegram connects through outbound long polling, so Cabinet does not expose a public webhook or listener. In Integrations, open Telegram and create a bot with BotFather. Paste the bot token into Cabinet's password field and choose **Test connection**. Cabinet validates the bot with Telegram and stores the token as a write-only profile secret; it will show only the bot username and whether a token is present.
+
+If the bot already has a webhook, Cabinet reports a conflict and waits for you to choose **Remove webhook and use polling**. This explicit action preserves pending updates. Do not use the same bot with another webhook service while Cabinet polling is active.
+
+After validation, choose **Create pairing code**. In a private chat with the displayed bot, send the exact `/start CAB-...` command before it expires. The code works once and pairs that exact Telegram user and private chat to the active Cabinet profile. Cabinet rejects group-chat pairing and does not ask you to copy sender or chat identifiers manually.
+
+The setup panel shows polling state, last successful poll, last processed update, and safe retry/error information. Use pause/resume when you want to temporarily stop intake, replace the token to rotate it, or disconnect to remove the stored token and sender/chat mapping. Never put the bot token in a URL, screenshot, log, support request, or chat message.
+
+Automated setup proof uses a controlled Bot API fixture and is not live Telegram evidence. Before calling Telegram release-validated, complete the operator-approved live-channel checklist without recording tokens, private message content, or full sender/chat identifiers.
+
 ## Browser Companion pairing and recovery
 
 The optional Browser Companion connects only to Cabinet on your own computer. Start pairing in the extension, then open Integrations in an unlocked Cabinet window. Compare the extension name and six-digit pairing code before selecting **Approve**. Reject any device, origin or code you do not recognise. Approval is required before the extension receives a usable session.

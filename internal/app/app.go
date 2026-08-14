@@ -58,6 +58,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/search"
+	"github.com/collectors-tech/cabinet/internal/telegrambotconnector"
 	"github.com/collectors-tech/cabinet/internal/telegramcapture"
 	"github.com/collectors-tech/cabinet/internal/ui"
 	"github.com/collectors-tech/cabinet/internal/update"
@@ -193,16 +194,20 @@ func storageMigrationPreflightState(summary media.LegacyMigrationSummary) string
 }
 
 type App struct {
-	cfg           config.Config
-	db            *sql.DB
-	srv           *http.Server
-	backupSvc     *backup.Service
-	authService   *auth.Service
-	openapiSpec   []byte
-	runtimeLogs   *runtimeLogManager
-	runtimeStopCh chan string
-	startupNotice func(string)
-	startupIsTTY  func() bool
+	cfg                     config.Config
+	db                      *sql.DB
+	srv                     *http.Server
+	backupSvc               *backup.Service
+	authService             *auth.Service
+	openapiSpec             []byte
+	runtimeLogs             *runtimeLogManager
+	runtimeStopCh           chan string
+	agentPreviewCleanupStop chan struct{}
+	agentPreviewCleanupDone chan struct{}
+	agentPreviewCleanupOnce sync.Once
+	telegramConnector       *telegrambotconnector.Manager
+	startupNotice           func(string)
+	startupIsTTY            func() bool
 }
 
 const (
@@ -258,7 +263,20 @@ func New(cfg config.Config) (*App, error) {
 		return nil, fmt.Errorf("init browser companion: %w", err)
 	}
 	aiSvc := ai.NewService(ai.Config{})
-	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles)))
+	openAIBrowserAuth := ai.NewCodexBrowserAuthRuntime()
+	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles), openAIBrowserAuth))
+	if isE2EHooksEnabled(cfg) {
+		assistantProviders.Register(e2eSyntheticAgentProvider{})
+	}
+	var agentSkillMu sync.RWMutex
+	agentImportedSkills := loadAgentSkillImportedSkills(ctx, conn)
+	agentSkillStore := agentskills.NewInstalledSkillStore(loadAgentSkillInstalledStates(ctx, conn))
+	agentSkillRegistry := func(profileID string) agentskills.Registry {
+		agentSkillMu.RLock()
+		imported := append([]agentskills.Skill{}, agentImportedSkills...)
+		agentSkillMu.RUnlock()
+		return agentskills.NewProfileRegistry(profileID, imported, agentSkillStore.List(profileID))
+	}
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	logSvc := logging.NewService(conn)
 	authService, err := auth.NewService(cfg, conn, profiles)
@@ -286,6 +304,19 @@ func New(cfg config.Config) (*App, error) {
 	runtimeStopCh := make(chan string, 1)
 
 	mux := http.NewServeMux()
+	registerOpenAIBrowserAuthRoutes(mux, profiles, openAIBrowserAuth)
+	telegramBotAPIBaseURL := ""
+	if isE2EHooksEnabled(cfg) {
+		telegramBotAPIBaseURL = strings.TrimSpace(os.Getenv("CABINET_TELEGRAM_TEST_API_BASE_URL"))
+	}
+	telegramConnector := telegrambotconnector.NewManager(
+		conn,
+		profiles,
+		telegrambotconnector.InProcessGateway{Handler: mux},
+		telegramBotAPIBaseURL,
+		newProviderHTTPClient(35*time.Second),
+	)
+	telegramAgentConversation := newTelegramAgentConversationService(conn, profiles, chatSvc, agentSkillRegistry, assistantProviders)
 	registerZitadelAuthRoutes(mux, zitadelAuth)
 	if isE2EHooksEnabled(cfg) {
 		registerE2ETestHooks(mux, conn, cfg, authService)
@@ -366,7 +397,7 @@ func New(cfg config.Config) (*App, error) {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/api/runtime", func(w http.ResponseWriter, _ *http.Request) {
-		appVersion, buildDate := runtimeBuildMetadata()
+		appVersion, buildRevision, buildDate := runtimeBuildMetadata()
 		host := strings.TrimSpace(cfg.Host)
 		if host == "" {
 			host = "127.0.0.1"
@@ -380,6 +411,7 @@ func New(cfg config.Config) (*App, error) {
 			"update_channel":               cfg.UpdateChannel,
 			"update_public_key_configured": cfg.UpdatePublicKey != "",
 			"app_version":                  appVersion,
+			"build_revision":               buildRevision,
 			"build_date":                   buildDate,
 			"bind_mode":                    strings.TrimSpace(strings.ToLower(cfg.BindMode)),
 			"runtime_host":                 host,
@@ -1082,6 +1114,10 @@ func New(cfg config.Config) (*App, error) {
 			}
 			if r.Method == http.MethodGet {
 				key := strings.TrimSpace(r.URL.Query().Get("key"))
+				if strings.EqualFold(key, telegrambotconnector.BotTokenSecretKey) {
+					http.Error(w, `{"error":"write_only_secret"}`, http.StatusMethodNotAllowed)
+					return
+				}
 				value, err := profiles.GetSecret(r.Context(), profileID, key)
 				if err != nil {
 					http.Error(w, `{"error":"failed_to_get_secret"}`, http.StatusBadRequest)
@@ -5350,6 +5386,129 @@ func New(cfg config.Config) (*App, error) {
 			"draft_id":      strings.TrimSpace(req.DraftID),
 		})
 	})
+	mux.HandleFunc("/api/telegram/connection/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			BotToken  string `json:"bot_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := telegramConnector.TestConnection(r.Context(), strings.TrimSpace(req.ProfileID), req.BotToken)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, telegrambotconnector.ErrWebhookConflict) {
+				status = http.StatusConflict
+			}
+			w.WriteHeader(status)
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/connection/resolve-webhook", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := telegramConnector.ResolveWebhookConflict(r.Context(), strings.TrimSpace(req.ProfileID))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/pairing-codes", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		pairing, err := telegramConnector.CreatePairing(r.Context(), strings.TrimSpace(req.ProfileID))
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, telegrambotconnector.ErrWebhookConflict) {
+				status = http.StatusConflict
+			}
+			http.Error(w, `{"error":"telegram_pairing_unavailable"}`, status)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(pairing)
+	})
+	mux.HandleFunc("/api/telegram/connection/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		status, err := telegramConnector.Status(r.Context(), strings.TrimSpace(r.URL.Query().Get("profile_id")))
+		if err != nil {
+			http.Error(w, `{"error":"telegram_status_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(status)
+	})
+	mux.HandleFunc("/api/telegram/connection/pause", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Paused    bool   `json:"paused"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := telegramConnector.SetPaused(r.Context(), strings.TrimSpace(req.ProfileID), req.Paused); err != nil {
+			http.Error(w, `{"error":"telegram_pause_failed"}`, http.StatusBadRequest)
+			return
+		}
+		status, _ := telegramConnector.Status(r.Context(), strings.TrimSpace(req.ProfileID))
+		_ = json.NewEncoder(w).Encode(status)
+	})
+	mux.HandleFunc("/api/telegram/connection/disconnect", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := telegramConnector.Disconnect(r.Context(), strings.TrimSpace(req.ProfileID)); err != nil {
+			http.Error(w, `{"error":"telegram_disconnect_failed"}`, http.StatusBadRequest)
+			return
+		}
+		status, _ := telegramConnector.Status(r.Context(), strings.TrimSpace(req.ProfileID))
+		_ = json.NewEncoder(w).Encode(status)
+	})
+
 	mux.HandleFunc("/api/telegram/catalog-captures", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -5418,6 +5577,10 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
 		var update telegramcapture.WebhookUpdate
 		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
@@ -5428,7 +5591,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_telegram_webhook_update"}`, http.StatusBadRequest)
 			return
 		}
-		authorizer := allProfilesTelegramAuthorizer{profiles: profiles}
+		authorizer := telegramConnectorAuthorizer(r.Context(), profiles)
 		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), input.SenderID, input.ChatID)
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
@@ -5474,12 +5637,16 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
 		var req telegramAgentTextRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		authorizer := allProfilesTelegramAuthorizer{profiles: profiles}
+		authorizer := telegramConnectorAuthorizer(r.Context(), profiles)
 		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID)
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
@@ -5500,7 +5667,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		req.ProfileID = strings.TrimSpace(authorized.ProfileID)
-		result, err := handleTelegramAgentText(r.Context(), profiles, chatSvc, conn, req)
+		result, err := telegramAgentConversation.HandleText(r.Context(), req.ProfileID, req)
 		if err != nil {
 			if errors.Is(err, errTelegramAgentTextNeedsClarification) {
 				w.WriteHeader(http.StatusUnprocessableEntity)
@@ -5510,10 +5677,15 @@ func New(cfg config.Config) (*App, error) {
 				})
 				return
 			}
+			if errors.Is(err, errTelegramPrivateChatRequired) || errors.Is(err, errTelegramProfileMismatch) || errors.Is(err, errTelegramLegacyGrammar) {
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": "telegram_agent_request_rejected"})
+				return
+			}
 			http.Error(w, `{"error":"failed_to_route_telegram_agent_text"}`, http.StatusBadRequest)
 			return
 		}
-		if resolveErr := chatSvc.ResolveProviderWorkflowInboxEvents(r.Context(), req.ProfileID, "telegram", "telegram.agent_text", "agent_text_authorized", map[string]any{
+		if resolveErr := chatSvc.ResolveProviderWorkflowInboxEvents(r.Context(), authorized.ProfileID, "telegram", "telegram.agent_text", "agent_text_authorized", map[string]any{
 			"source_channel":      "telegram",
 			"source_surface":      "telegram.agent.text",
 			"source_message_id":   req.MessageID,
@@ -5532,12 +5704,16 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
 		var req telegramAgentTextCallbackRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		authorizer := allProfilesTelegramAuthorizer{profiles: profiles}
+		authorizer := telegramConnectorAuthorizer(r.Context(), profiles)
 		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID)
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
@@ -5547,9 +5723,14 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
 			return
 		}
-		result, err := handleTelegramAgentTextCallback(r.Context(), chatSvc, authorized.ProfileID, req)
+		result, err := telegramAgentConversation.HandleCallback(r.Context(), authorized.ProfileID, req)
 		if err != nil {
-			http.Error(w, `{"error":"failed_to_handle_telegram_agent_text_callback"}`, http.StatusBadRequest)
+			status := http.StatusConflict
+			if errors.Is(err, errTelegramPrivateChatRequired) || errors.Is(err, errTelegramPreviewScope) || errors.Is(err, errTelegramLegacyGrammar) {
+				status = http.StatusForbidden
+			}
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "telegram_agent_callback_rejected"})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(result)
@@ -5560,12 +5741,16 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
 		var req telegramCatalogCaptureCallbackRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		svc := telegramcapture.NewServiceWithMedia(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc, mediaService)
+		svc := telegramcapture.NewServiceWithMedia(telegramConnectorAuthorizer(r.Context(), profiles), chatSvc, mediaService)
 		result, err := svc.HandleCatalogCaptureCallback(r.Context(), telegramcapture.CallbackInput{
 			SenderID:     req.SenderID,
 			ChatID:       req.ChatID,
@@ -5724,15 +5909,6 @@ func New(cfg config.Config) (*App, error) {
 			"confirm_apply":    true,
 		})
 	})
-	var agentSkillMu sync.RWMutex
-	agentImportedSkills := loadAgentSkillImportedSkills(ctx, conn)
-	agentSkillStore := agentskills.NewInstalledSkillStore(loadAgentSkillInstalledStates(ctx, conn))
-	agentSkillRegistry := func(profileID string) agentskills.Registry {
-		agentSkillMu.RLock()
-		imported := append([]agentskills.Skill{}, agentImportedSkills...)
-		agentSkillMu.RUnlock()
-		return agentskills.NewProfileRegistry(profileID, imported, agentSkillStore.List(profileID))
-	}
 	mux.HandleFunc("/api/agent/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -5903,6 +6079,34 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/agent/skills/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			previewID := strings.TrimSpace(r.URL.Query().Get("preview_id"))
+			if profileID == "" || previewID == "" {
+				http.Error(w, `{"error":"profile_id_and_preview_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, profileID, previewID)
+			if err != nil {
+				var authorityErr *agentAdminAuthorityError
+				if errors.As(err, &authorityErr) {
+					writeAgentAdminAuthorityError(w, err)
+				} else {
+					writeAgentSkillPreviewLifecycleError(w, err)
+				}
+				return
+			}
+			if adminAuthority.UserID != "" {
+				r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+			}
+			preview, err := readDurableAgentSkillPreviewResponse(r.Context(), conn, agentSkillRegistry(profileID), profileID, previewID)
+			if err != nil {
+				writeAgentSkillPreviewLifecycleError(w, err)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
@@ -5916,6 +6120,16 @@ func New(cfg config.Config) (*App, error) {
 		if strings.TrimSpace(req.ProfileID) == "" {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
+		}
+		var adminAuthority agentAdminAuthority
+		var err error
+		req, adminAuthority, err = authorizeAgentUsersRequest(r.Context(), conn, req)
+		if err != nil {
+			writeAgentAdminAuthorityError(w, err)
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
 		}
 		registry := agentSkillRegistry(req.ProfileID)
 		if _, ok := registry.Resolve(req.SkillID); !ok {
@@ -5950,7 +6164,15 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
 			return
 		}
-		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-preview", req, authority, preview, nil); err != nil {
+		if preview.ConfirmationRequired && (preview.Blocker == "" || preview.Blocker == "confirmation_required") {
+			durablePreview, err := createDurableAgentSkillPreview(r.Context(), conn, req, preview)
+			if err != nil {
+				writeAgentSkillPreviewLifecycleError(w, err)
+				return
+			}
+			preview = bindDurableAgentSkillPreviewResponse(preview, durablePreview)
+		}
+		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-preview", req, authority, preview, preview.Target); err != nil {
 			http.Error(w, `{"error":"agent_skill_workflow_timeline_failed"}`, http.StatusInternalServerError)
 			return
 		}
@@ -5972,9 +6194,51 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
 			return
 		}
+		if strings.TrimSpace(req.PreviewID) != "" {
+			adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, req.ProfileID, req.PreviewID)
+			if err != nil {
+				var authorityErr *agentAdminAuthorityError
+				if errors.As(err, &authorityErr) {
+					writeAgentAdminAuthorityError(w, err)
+				} else {
+					writeAgentSkillPreviewLifecycleError(w, err)
+				}
+				return
+			}
+			if adminAuthority.UserID != "" {
+				r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+			}
+			preview, err := applyDurableAgentSkillPreview(r.Context(), conn, chatSvc, profiles, backupSvc, agentSkillRegistry(req.ProfileID), req)
+			if err != nil {
+				writeAgentSkillPreviewLifecycleError(w, err)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
+		var adminAuthority agentAdminAuthority
+		var err error
+		req, adminAuthority, err = authorizeAgentUsersRequest(r.Context(), conn, req)
+		if err != nil {
+			writeAgentAdminAuthorityError(w, err)
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+		}
 		registry := agentSkillRegistry(req.ProfileID)
-		if _, ok := registry.Resolve(req.SkillID); !ok {
+		skill, ok := registry.Resolve(req.SkillID)
+		if !ok {
 			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if skill.SafetyLevel == agentskills.SafetyDestructive || skill.Permissions.Destructive {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":       "agent_destructive_preview_required",
+				"recoverable": true,
+				"next_action": "Create a durable preview, review its target and impact, then use the dedicated strong-confirmation control.",
+			})
 			return
 		}
 		if clarification, ok := agentSkillContextClarification(registry, req); ok {
@@ -6035,6 +6299,84 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(preview)
 	})
+	mux.HandleFunc("/api/agent/skills/confirm-destructive", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.PreviewID) == "" {
+			http.Error(w, `{"error":"preview_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, req.ProfileID, req.PreviewID)
+		if err != nil {
+			var authorityErr *agentAdminAuthorityError
+			if errors.As(err, &authorityErr) {
+				writeAgentAdminAuthorityError(w, err)
+			} else {
+				writeAgentSkillPreviewLifecycleError(w, err)
+			}
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+		}
+		confirmation, err := issueAgentStrongConfirmation(r.Context(), conn, profiles, backupSvc, agentSkillRegistry(req.ProfileID), req)
+		if err != nil {
+			writeAgentSkillPreviewLifecycleError(w, err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(confirmation)
+	})
+	mux.HandleFunc("/api/agent/skills/cancel", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.PreviewID) == "" {
+			http.Error(w, `{"error":"preview_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, req.ProfileID, req.PreviewID)
+		if err != nil {
+			var authorityErr *agentAdminAuthorityError
+			if errors.As(err, &authorityErr) {
+				writeAgentAdminAuthorityError(w, err)
+			} else {
+				writeAgentSkillPreviewLifecycleError(w, err)
+			}
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+		}
+		preview, err := cancelDurableAgentSkillPreviewResponse(r.Context(), conn, chatSvc, agentSkillRegistry(req.ProfileID), req)
+		if err != nil {
+			writeAgentSkillPreviewLifecycleError(w, err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
 	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -6049,12 +6391,21 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_list_workflow_runs"}`, http.StatusBadRequest)
 				return
 			}
+			runs = filterUnauthorizedAgentAdminWorkflowRuns(r.Context(), conn, profileID, runs)
 			_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs})
 		case http.MethodPost:
 			var req chat.CreateWorkflowRunInput
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
+			}
+			if workflowRunInputRequiresAgentAdminAuthority(req) {
+				authority, err := resolveAgentAdminAuthority(r.Context(), conn, req.ProfileID)
+				if err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+				req = sanitizeAgentAdminWorkflowInput(req, authority)
 			}
 			run, err := chatSvc.CreateWorkflowRun(r.Context(), req)
 			if err != nil {
@@ -6086,6 +6437,12 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"workflow_run_not_found"}`, http.StatusNotFound)
 				return
 			}
+			if workflowRunRequiresAgentAdminAuthority(run) {
+				if _, err := resolveAgentAdminAuthority(r.Context(), conn, profileID); err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+			}
 			_ = json.NewEncoder(w).Encode(run)
 		case http.MethodPatch:
 			var req chat.UpdateWorkflowRunInput
@@ -6094,6 +6451,19 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			req.RunID = runID
+			currentRun, err := chatSvc.GetWorkflowRun(r.Context(), req.ProfileID, runID)
+			if err != nil {
+				http.Error(w, `{"error":"workflow_run_not_found"}`, http.StatusNotFound)
+				return
+			}
+			if workflowRunRequiresAgentAdminAuthority(currentRun) || workflowRunUpdateRequiresAgentAdminAuthority(req) {
+				authority, err := resolveAgentAdminAuthority(r.Context(), conn, req.ProfileID)
+				if err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+				req = sanitizeAgentAdminWorkflowUpdate(req, authority)
+			}
 			run, err := chatSvc.UpdateWorkflowRun(r.Context(), req)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_update_workflow_run"}`, http.StatusBadRequest)
@@ -6119,6 +6489,7 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_list_chat_messages"}`, http.StatusInternalServerError)
 				return
 			}
+			messages = filterUnauthorizedAgentAdminMessages(r.Context(), conn, profileID, messages)
 			_ = json.NewEncoder(w).Encode(map[string]any{"messages": messages})
 		case http.MethodPost:
 			var req struct {
@@ -6146,6 +6517,14 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, fmt.Sprintf(`{"error":"trusted_agent_evidence_rejected","key":%q}`, key), http.StatusBadRequest)
 				return
 			}
+			if messageContainsAgentUsersEvidence(req.Context) || messageContainsAgentUsersEvidence(req.AgentContext) {
+				if _, err := resolveAgentAdminAuthority(r.Context(), conn, req.ProfileID); err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+				req.Context = withoutClientAssertedAdminAuthority(req.Context)
+				req.AgentContext = withoutClientAssertedAdminAuthority(req.AgentContext)
+			}
 			messageContext := agentcontext.WithEnvelope(req.Context, agentcontext.NormalizeInput{
 				ProfileID:     req.ProfileID,
 				ThreadID:      req.ThreadID,
@@ -6164,7 +6543,7 @@ func New(cfg config.Config) (*App, error) {
 				if assistantContext, ok := messageContext["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
 					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
 						response["app_control"] = appControl
-					} else if chatMessageRequiresAssistantHandoff(req.Content) {
+					} else if chatMessageRequiresAssistantHandoff(req.Content) && !chatMessageNeedsNaturalLanguageAgentPlanning(req.Content) {
 						inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
 							ProfileID: req.ProfileID,
 							ThreadID:  req.ThreadID,
@@ -7778,9 +8157,11 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"insufficient_role"}`, http.StatusForbidden)
 				return
 			}
+			r = attachZitadelServerSessionPrincipal(r, remoteSession)
 			mux.ServeHTTP(w, r)
 			return
 		}
+		r = attachLocalServerSessionPrincipal(r, authService)
 		if !requiresUnlockedSession(cfg, r) {
 			mux.ServeHTTP(w, r)
 			return
@@ -7846,19 +8227,24 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	a := &App{
-		cfg:           cfg,
-		db:            conn,
-		srv:           srv,
-		backupSvc:     backupSvc,
-		authService:   authService,
-		openapiSpec:   openapiSpec,
-		runtimeLogs:   runtimeLogs,
-		runtimeStopCh: runtimeStopCh,
+		cfg:                     cfg,
+		db:                      conn,
+		srv:                     srv,
+		backupSvc:               backupSvc,
+		authService:             authService,
+		openapiSpec:             openapiSpec,
+		runtimeLogs:             runtimeLogs,
+		runtimeStopCh:           runtimeStopCh,
+		agentPreviewCleanupStop: make(chan struct{}),
+		agentPreviewCleanupDone: make(chan struct{}),
+		telegramConnector:       telegramConnector,
 		startupNotice: func(line string) {
 			log.Print(line)
 		},
 		startupIsTTY: isRuntimeTTY,
 	}
+	_ = cleanupExpiredDurableAgentSkillPreviews(context.Background(), conn, time.Now().UTC().Format(time.RFC3339Nano))
+	go runDurableAgentSkillPreviewCleanup(conn, a.agentPreviewCleanupStop, a.agentPreviewCleanupDone)
 
 	return a, nil
 }
@@ -9564,38 +9950,56 @@ func telegramProviderHealthForProfile(ctx context.Context, profiles *profile.Rep
 	}
 	senderChatReady := telegramCatalogCaptureConfigured(settings)
 	botTokenPresent := telegramBotTokenPresent(settings)
-	webhookConfigured := telegramWebhookConfigured(settings)
+	botValidated := strings.TrimSpace(settings["telegram.bot_id"]) != "" && strings.TrimSpace(settings["telegram.polling.tested_at"]) != ""
+	webhookConflict := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.webhook_conflict"]), "true")
+	paused := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.paused"]), "true")
 
 	base["sender_chat_authorized"] = senderChatReady
 	base["bot_token_present"] = botTokenPresent
-	base["webhook_configured"] = webhookConfigured
+	base["bot_validated"] = botValidated
+	base["webhook_conflict"] = webhookConflict
+	base["transport"] = "long_polling"
+	base["public_listener"] = false
+	base["paused"] = paused
 	base["credential_returned"] = false
 
 	switch {
-	case !senderChatReady:
-		base["status"] = "needs_config"
-		base["state"] = "disabled"
-		base["code"] = "TELEGRAM_SENDER_CHAT_REQUIRED"
-		base["message"] = "Telegram requires sender/chat authorization on the active profile before Cabinet accepts channel messages."
-		base["next_action"] = "authorize_sender_chat"
 	case !botTokenPresent:
 		base["status"] = "needs_config"
-		base["state"] = "degraded"
+		base["state"] = "disabled"
 		base["code"] = "TELEGRAM_BOT_TOKEN_REQUIRED"
-		base["message"] = "Sender/chat authorization is stored, but Telegram bot credentials still need to be configured."
-		base["next_action"] = "store_bot_token_secret"
-	case !webhookConfigured:
+		base["message"] = "Paste and validate a write-only BotFather token before Cabinet starts Telegram polling."
+		base["next_action"] = "test_connection"
+	case !botValidated:
 		base["status"] = "needs_config"
 		base["state"] = "degraded"
-		base["code"] = "TELEGRAM_WEBHOOK_REQUIRED"
-		base["message"] = "Telegram bot credentials are present, but webhook routing proof is still pending."
-		base["next_action"] = "configure_webhook"
+		base["code"] = "TELEGRAM_BOT_VALIDATION_REQUIRED"
+		base["message"] = "The Telegram token is stored but has not passed a live getMe validation."
+		base["next_action"] = "test_connection"
+	case webhookConflict:
+		base["status"] = "blocked"
+		base["state"] = "webhook_conflict"
+		base["code"] = "TELEGRAM_WEBHOOK_CONFLICT"
+		base["message"] = "This bot has a webhook. Remove it explicitly before outbound-only polling starts."
+		base["next_action"] = "resolve_webhook_conflict"
+	case !senderChatReady:
+		base["status"] = "needs_config"
+		base["state"] = "pairing_required"
+		base["code"] = "TELEGRAM_PAIRING_REQUIRED"
+		base["message"] = "Create a short-lived pairing code and send it from a private Telegram chat."
+		base["next_action"] = "create_pairing_code"
+	case paused:
+		base["status"] = "paused"
+		base["state"] = "paused"
+		base["code"] = "TELEGRAM_POLLING_PAUSED"
+		base["message"] = "Telegram polling is paused for this Cabinet profile."
+		base["next_action"] = "resume_polling"
 	default:
 		base["status"] = "ok"
-		base["state"] = "ready"
+		base["state"] = "connected"
 		base["code"] = "TELEGRAM_CHANNEL_READY"
-		base["message"] = "Telegram sender/chat authorization, bot credential presence, and webhook setup proof are present for the active profile."
-		base["next_action"] = "run_live_channel_checklist"
+		base["message"] = "Telegram is paired through outbound-only long polling and ready for Cabinet Agent messages."
+		base["next_action"] = "talk_to_cabinet"
 	}
 	return base
 }
@@ -9741,6 +10145,10 @@ func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc
 }
 
 func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	return reviewAgentSkillAuthorityWithStrongConfirmation(ctx, profiles, registry, req, entryPoint, false)
+}
+
+func reviewAgentSkillAuthorityWithStrongConfirmation(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest, entryPoint string, strongConfirmationVerified bool) (agentskills.AgentAuthorityReview, error) {
 	if profiles == nil {
 		return agentskills.AgentAuthorityReview{}, fmt.Errorf("profile repository required")
 	}
@@ -9752,9 +10160,9 @@ func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository
 		}
 	}
 	authorityReq := agentSkillAuthorityRequest(req)
-	strongConfirmation := stringMapParam(req.Parameters, "strong_confirmation_text")
-	if strings.TrimSpace(strongConfirmation) == "" && req.Confirm {
-		strongConfirmation = firstNonEmptyString(strings.TrimSpace(entryPoint), "agent-skill") + "-confirmed"
+	strongConfirmation := ""
+	if strongConfirmationVerified {
+		strongConfirmation = "server-issued-action-specific-confirmation"
 	}
 	review, err := registry.ReviewAuthority(authorityReq, agentskills.AgentAuthorityPolicy{
 		ProfileID:              policy.ProfileID,
@@ -9797,6 +10205,9 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 			"blocker":               authority.Blocker,
 		},
 	}
+	if adminEvidence := agentAdminAuthorityEvidence(ctx); len(adminEvidence) > 0 {
+		input["admin_authority"] = adminEvidence
+	}
 	if len(uiTargets) > 0 {
 		input["ui_targets"] = uiTargets
 	}
@@ -9837,6 +10248,14 @@ func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Servic
 		"source_thread_id":       strings.TrimSpace(req.SourceThreadID),
 		"source_message_id":      strings.TrimSpace(req.SourceMessageID),
 		"target_summary_present": len(target) > 0,
+	}
+	if adminEvidence := agentAdminAuthorityEvidence(ctx); len(adminEvidence) > 0 {
+		result["admin_authority"] = adminEvidence
+	}
+	if strings.TrimSpace(preview.PreviewID) != "" {
+		result["preview_id"] = preview.PreviewID
+		result["preview_status"] = preview.PreviewStatus
+		result["expires_at"] = preview.ExpiresAt
 	}
 	if len(uiTargets) > 0 {
 		result["ui_targets"] = uiTargets
@@ -9917,6 +10336,16 @@ func directAgentSkillProviderReadiness(req agentskills.PreviewRequest) ([]string
 }
 
 func directAgentSkillConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
+	switch strings.TrimSpace(preview.PreviewStatus) {
+	case "applied":
+		return "confirmed"
+	case "cancelled":
+		return "cancelled"
+	case "expired":
+		return "expired"
+	case "failed":
+		return "failed"
+	}
 	if preview.ConfirmationRequired {
 		if confirmed && preview.MutationApplied {
 			return "confirmed"
@@ -10378,6 +10807,7 @@ func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskil
 	putAgentContextParamIfMissing(req.Parameters, "workspace_id", agentContextString(ctx, "workspace_id"))
 	putAgentContextParamIfMissing(req.Parameters, "route_id", agentContextString(ctx, "route_id"))
 	putAgentContextParamIfMissing(req.Parameters, "permission_state", agentContextString(ctx, "permission_state"))
+	putAgentContextParamIfMissing(req.Parameters, "admin_session", agentContextString(ctx, "admin_session"))
 	putAgentContextParamIfMissing(req.Parameters, "setup_state", agentContextString(ctx, "setup_state"))
 	putAgentContextParamIfMissing(req.Parameters, "workflow_run_id", agentContextString(ctx, "workflow_run_id"))
 
@@ -10574,9 +11004,6 @@ func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.Prev
 	if strings.TrimSpace(req.SourceThreadID) == "" {
 		req.SourceThreadID = "direct-api"
 	}
-	if !agentSkillHasAnyParam(req.Parameters, "admin_session", "admin") {
-		req.Parameters["admin_session"] = "direct-api"
-	}
 	for _, key := range []string{
 		"backup_target",
 		"collection_name",
@@ -10766,9 +11193,12 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	openAIReady := openAIAPIKeyPresent || openAIBrowserReady
 	telegramSenderChatReady := telegramCatalogCaptureConfigured(settings)
 	telegramBotReady := telegramBotTokenPresent(settings)
-	telegramWebhookReady := telegramWebhookConfigured(settings)
-	telegramReady := telegramSenderChatReady && telegramBotReady && telegramWebhookReady
-	telegramConnectionState := telegramChannelConnectionState(telegramSenderChatReady, telegramBotReady, telegramWebhookReady)
+	telegramBotValidated := strings.TrimSpace(settings["telegram.bot_id"]) != "" && strings.TrimSpace(settings["telegram.polling.tested_at"]) != ""
+	telegramWebhookConflict := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.webhook_conflict"]), "true")
+	telegramPaused := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.paused"]), "true")
+	telegramReady := telegramSenderChatReady && telegramBotReady && telegramBotValidated && !telegramWebhookConflict && !telegramPaused
+	telegramConnectionState := telegramChannelConnectionState(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused)
+	telegramNextAction := telegramSetupNextAction(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused)
 	base := []map[string]any{}
 	for _, manifest := range coreIntegrationProviderManifests(amazonMode) {
 		provider := manifest.payload()
@@ -10792,7 +11222,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 					"setup_message":             "Browser Auth requires a verifiable callback/artifact and provider-test proof before Cabinet marks OpenAI connected.",
 				},
 			}
-			provider["model_options"] = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
+			provider["model_options"] = []string{"gpt-5.6-luna", "gpt-4o-mini", "gpt-4.1-mini"}
 			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
 			provider["setup_schema"] = openAIRegistrySetupSchema()
 			provider["setup_status"] = openAIRegistrySetupStatus(settings, openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProofState, openAIBrowserProviderTestPassed, openAIReady)
@@ -10814,40 +11244,44 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			provider["active_mode"] = telegramConnectionState
 			provider["auth_methods"] = map[string]any{
 				"sender_chat": map[string]any{
-					"state":              map[bool]string{true: "authorized", false: "setup_needed"}[telegramSenderChatReady],
+					"state":              map[bool]string{true: "paired", false: "pairing_required"}[telegramSenderChatReady],
 					"connected":          telegramSenderChatReady,
 					"credential_present": telegramSenderChatReady,
-					"setup_message":      "Store the Telegram sender id and chat id on the active profile before Cabinet accepts capture messages.",
+					"setup_message":      "Pair one private Telegram chat with a short-lived single-use /start code; Cabinet records numeric IDs automatically.",
 				},
 				"bot_token": map[string]any{
-					"state":              map[bool]string{true: "stored", false: "setup_needed"}[telegramBotReady],
-					"connected":          telegramBotReady,
+					"state":              map[bool]string{true: "validated", false: "setup_needed"}[telegramBotValidated],
+					"connected":          telegramBotValidated,
 					"credential_present": telegramBotReady,
-					"setup_message":      "Store a Telegram bot token secret before Cabinet can dispatch channel replies.",
+					"setup_message":      "Validate the write-only BotFather token with Telegram getMe before polling.",
 				},
-				"webhook": map[string]any{
-					"state":         map[bool]string{true: "configured", false: "pending"}[telegramWebhookReady],
-					"connected":     telegramWebhookReady,
-					"setup_message": "Configure webhook routing proof before Cabinet marks production-channel intake ready.",
+				"polling": map[string]any{
+					"state":           telegramConnectionState,
+					"connected":       telegramReady,
+					"public_listener": false,
+					"setup_message":   "Cabinet receives Telegram updates with outbound-only long polling.",
 				},
 			}
 			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[telegramReady]
 			provider["health"] = map[string]any{
 				"status":      map[bool]string{true: "ok", false: "needs_config"}[telegramReady],
 				"state":       telegramConnectionState,
-				"message":     telegramSetupMessage(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
-				"next_action": telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+				"message":     telegramSetupMessage(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused),
+				"next_action": telegramNextAction,
 			}
 			provider["setup_status"] = map[string]any{
-				"auth_mode":         "sender_chat_bot_token",
-				"sender_chat_state": map[bool]string{true: "authorized", false: "missing"}[telegramSenderChatReady],
-				"bot_token_state":   map[bool]string{true: "stored", false: "missing"}[telegramBotReady],
-				"webhook_state":     map[bool]string{true: "configured", false: "pending"}[telegramWebhookReady],
-				"runtime_proof":     map[bool]string{true: "ready", false: "pending_live_channel_check"}[telegramReady],
-				"workflow_state":    map[bool]string{true: "telegram_channel_ready_for_validation", false: "telegram_setup_required"}[telegramReady],
-				"next_action":       telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+				"auth_mode":            "bot_token_private_pairing",
+				"sender_chat_state":    map[bool]string{true: "paired", false: "pairing_required"}[telegramSenderChatReady],
+				"bot_token_state":      map[bool]string{true: "stored", false: "missing"}[telegramBotReady],
+				"bot_validation_state": map[bool]string{true: "validated", false: "pending"}[telegramBotValidated],
+				"transport":            "long_polling",
+				"public_listener":      false,
+				"webhook_state":        map[bool]string{true: "conflict", false: "not_configured"}[telegramWebhookConflict],
+				"runtime_proof":        map[bool]string{true: "ready", false: "pending_live_channel_check"}[telegramReady],
+				"workflow_state":       map[bool]string{true: "telegram_channel_ready_for_validation", false: "telegram_setup_required"}[telegramReady],
+				"next_action":          telegramNextAction,
 			}
-			provider["actions"] = telegramRegistryActions(telegramReady, telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady))
+			provider["actions"] = telegramRegistryActions(telegramReady, telegramNextAction)
 		case "ebay":
 			provider["has_token"] = strings.TrimSpace(settings["ebay_bearer_token"]) != ""
 			provider["setup_status"] = ebaySetupStatus(settings, "")
@@ -10973,10 +11407,10 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			provider["health"] = map[string]any{
 				"status":      map[bool]string{true: "ready", false: "needs_config"}[telegramReady],
 				"state":       telegramConnectionState,
-				"message":     telegramSetupMessage(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
-				"next_action": telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady),
+				"message":     telegramSetupMessage(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused),
+				"next_action": telegramNextAction,
 			}
-			provider["actions"] = telegramRegistryActions(telegramReady, telegramSetupNextAction(telegramSenderChatReady, telegramBotReady, telegramWebhookReady))
+			provider["actions"] = telegramRegistryActions(telegramReady, telegramNextAction)
 		}
 		provider["last_run"] = map[string]any{
 			"status":      lastRunStatus,
@@ -11283,42 +11717,52 @@ func telegramWebhookConfigured(settings map[string]string) bool {
 		strings.EqualFold(strings.TrimSpace(settings["telegram.webhook_url_set"]), "true")
 }
 
-func telegramChannelConnectionState(senderChatReady, botTokenReady, webhookReady bool) string {
+func telegramChannelConnectionState(botTokenReady, botValidated, webhookConflict, paired, paused bool) string {
 	switch {
-	case !senderChatReady:
-		return "setup_needed"
 	case !botTokenReady:
 		return "bot_token_required"
-	case !webhookReady:
-		return "webhook_pending"
+	case !botValidated:
+		return "bot_validation_required"
+	case webhookConflict:
+		return "webhook_conflict"
+	case !paired:
+		return "pairing_required"
+	case paused:
+		return "paused"
 	default:
 		return "connected"
 	}
 }
 
-func telegramSetupNextAction(senderChatReady, botTokenReady, webhookReady bool) string {
+func telegramSetupNextAction(botTokenReady, botValidated, webhookConflict, paired, paused bool) string {
 	switch {
-	case !senderChatReady:
-		return "authorize_sender_chat"
 	case !botTokenReady:
-		return "store_bot_token_secret"
-	case !webhookReady:
-		return "configure_webhook"
+		return "test_connection"
+	case !botValidated:
+		return "test_connection"
+	case webhookConflict:
+		return "resolve_webhook_conflict"
+	case !paired:
+		return "create_pairing_code"
+	case paused:
+		return "resume_polling"
 	default:
-		return "run_live_channel_checklist"
+		return "talk_to_cabinet"
 	}
 }
 
-func telegramSetupMessage(senderChatReady, botTokenReady, webhookReady bool) string {
-	switch telegramSetupNextAction(senderChatReady, botTokenReady, webhookReady) {
-	case "authorize_sender_chat":
-		return "Telegram requires active-profile sender/chat authorization before accepting channel messages."
-	case "store_bot_token_secret":
-		return "Sender/chat authorization is stored; add the Telegram bot token secret without exposing it back to the UI."
-	case "configure_webhook":
-		return "Bot credential presence is recorded; configure webhook routing proof before production-channel validation."
+func telegramSetupMessage(botTokenReady, botValidated, webhookConflict, paired, paused bool) string {
+	switch telegramSetupNextAction(botTokenReady, botValidated, webhookConflict, paired, paused) {
+	case "test_connection":
+		return "Paste a BotFather token and validate it with Telegram. Cabinet stores the token write-only."
+	case "resolve_webhook_conflict":
+		return "This bot has an existing webhook. Remove it explicitly before outbound-only long polling starts."
+	case "create_pairing_code":
+		return "Create a short-lived pairing code and send its /start command to the bot in a private chat."
+	case "resume_polling":
+		return "Telegram polling is paused for this profile."
 	default:
-		return "Telegram channel setup is ready for live-channel checklist validation."
+		return "Telegram is connected through outbound-only long polling with an exact private-chat profile mapping."
 	}
 }
 
@@ -14081,12 +14525,18 @@ var (
 	buildDate     string
 )
 
-func runtimeBuildMetadata() (string, string) {
+func runtimeBuildMetadata() (string, string, string) {
+	info, ok := debug.ReadBuildInfo()
+	return runtimeBuildMetadataFromBuildInfo(info, ok)
+}
+
+func runtimeBuildMetadataFromBuildInfo(info *debug.BuildInfo, ok bool) (string, string, string) {
 	version := "dev"
+	resolvedBuildRevision := normalizeBuildRevision(buildRevision)
 	resolvedBuildDate := "unknown"
 
-	if strings.TrimSpace(buildRevision) != "" {
-		short := strings.TrimSpace(buildRevision)
+	if resolvedBuildRevision != "unknown" {
+		short := resolvedBuildRevision
 		if len(short) > 12 {
 			short = short[:12]
 		}
@@ -14099,9 +14549,8 @@ func runtimeBuildMetadata() (string, string) {
 		version = strings.TrimSpace(buildVersion)
 	}
 
-	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return version, resolvedBuildDate
+		return version, resolvedBuildRevision, resolvedBuildDate
 	}
 
 	if strings.TrimSpace(buildVersion) == "" && strings.TrimSpace(info.Main.Version) != "" && info.Main.Version != "(devel)" {
@@ -14119,16 +14568,32 @@ func runtimeBuildMetadata() (string, string) {
 			}
 		}
 	}
+	if resolvedBuildRevision == "unknown" {
+		resolvedBuildRevision = normalizeBuildRevision(vcsRevision)
+	}
 
-	if strings.TrimSpace(buildVersion) == "" && vcsRevision != "" {
-		short := vcsRevision
+	if strings.TrimSpace(buildVersion) == "" && resolvedBuildRevision != "unknown" {
+		short := resolvedBuildRevision
 		if len(short) > 12 {
 			short = short[:12]
 		}
 		version = "rev-" + short
 	}
 
-	return version, resolvedBuildDate
+	return version, resolvedBuildRevision, resolvedBuildDate
+}
+
+func normalizeBuildRevision(value string) string {
+	revision := strings.ToLower(strings.TrimSpace(value))
+	if len(revision) != 40 {
+		return "unknown"
+	}
+	for _, char := range revision {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			return "unknown"
+		}
+	}
+	return revision
 }
 
 func (a *App) Run(ctx context.Context) error {
@@ -14137,6 +14602,13 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	if a.backupSvc != nil {
 		a.backupSvc.Start(ctx)
+	}
+	if a.telegramConnector != nil {
+		go func() {
+			if err := a.telegramConnector.Run(ctx); err != nil && !errors.Is(err, context.Canceled) && a.runtimeLogs != nil {
+				a.runtimeLogs.writeErrorEvent("telegram_polling_stopped", err.Error(), map[string]any{"transport": "long_polling", "public_listener": false})
+			}
+		}()
 	}
 	pid := os.Getpid()
 	if err := writeRuntimePIDFile(a.cfg, pid); err != nil {
@@ -14387,6 +14859,14 @@ func (a *App) isTTYRuntimeOutput() bool {
 }
 
 func (a *App) closeRuntime(clean bool, reason, resolvedURL string) error {
+	if a.agentPreviewCleanupStop != nil {
+		a.agentPreviewCleanupOnce.Do(func() {
+			close(a.agentPreviewCleanupStop)
+			if a.agentPreviewCleanupDone != nil {
+				<-a.agentPreviewCleanupDone
+			}
+		})
+	}
 	if a.runtimeLogs != nil {
 		level := "info"
 		event := "shutdown"
@@ -14488,6 +14968,7 @@ type telegramAgentTextRequest struct {
 	ProfileID      string                               `json:"profile_id"`
 	SenderID       string                               `json:"sender_id"`
 	ChatID         string                               `json:"chat_id"`
+	ChatType       string                               `json:"chat_type"`
 	MessageID      string                               `json:"message_id"`
 	Text           string                               `json:"text"`
 	SkillID        string                               `json:"skill_id"`
@@ -14500,6 +14981,7 @@ type telegramAgentTextRequest struct {
 type telegramAgentTextCallbackRequest struct {
 	SenderID        string `json:"sender_id"`
 	ChatID          string `json:"chat_id"`
+	ChatType        string `json:"chat_type"`
 	MessageID       string `json:"message_id"`
 	ThreadID        string `json:"thread_id"`
 	PreviewID       string `json:"preview_id"`
@@ -14544,6 +15026,15 @@ type profileSettingsTelegramAuthorizer struct {
 
 type allProfilesTelegramAuthorizer struct {
 	profiles *profile.Repository
+}
+
+func telegramConnectorAuthorizer(ctx context.Context, profiles *profile.Repository) telegramcapture.Authorizer {
+	if profileID, ok := telegrambotconnector.InProcessProfile(ctx); ok {
+		return profileSettingsTelegramAuthorizer{profiles: profiles, profileID: profileID}
+	}
+	// White-box legacy route tests predate the connector profile marker. The
+	// production Manager always supplies it before invoking the gateway.
+	return allProfilesTelegramAuthorizer{profiles: profiles}
 }
 
 func (a profileSettingsTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (telegramcapture.AuthorizedProfile, error) {
@@ -14676,6 +15167,25 @@ func handleTelegramAgentText(ctx context.Context, profiles *profile.Repository, 
 	if err != nil {
 		return nil, err
 	}
+	attachmentIDs := make([]string, 0, len(req.Media))
+	mediaInputs, err := telegramCatalogCaptureMedia(req.Media)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range mediaInputs {
+		filename := strings.TrimSpace(item.Filename)
+		if filename == "" {
+			filename = strings.TrimSpace(item.FileID)
+		}
+		if filename == "" {
+			return nil, fmt.Errorf("telegram media filename or file_id is required")
+		}
+		attachment, saveErr := chatSvc.SaveAttachment(ctx, profileID, thread.ID, filename, strings.TrimSpace(item.MIMEType), item.Reader)
+		if saveErr != nil {
+			return nil, saveErr
+		}
+		attachmentIDs = append(attachmentIDs, attachment.ID)
+	}
 	messageContext := map[string]any{
 		"source_channel":    "telegram",
 		"source_surface":    "telegram.agent.text",
@@ -14691,7 +15201,7 @@ func handleTelegramAgentText(ctx context.Context, profiles *profile.Repository, 
 		messageContext["media"] = mediaContext
 		messageContext["media_count"] = len(mediaContext)
 	}
-	message, err := chatSvc.CreateMessage(ctx, profileID, thread.ID, "user", text, messageContext)
+	message, err := chatSvc.CreateMessageWithAttachmentProvenance(ctx, profileID, thread.ID, "user", text, messageContext, attachmentIDs, "telegram_media", "telegram")
 	if err != nil {
 		return nil, err
 	}

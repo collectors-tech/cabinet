@@ -61,6 +61,7 @@ type CaptureCallbackRequest struct {
 type AgentTextRequest struct {
 	SenderID       string                  `json:"sender_id"`
 	ChatID         string                  `json:"chat_id"`
+	ChatType       string                  `json:"chat_type"`
 	MessageID      string                  `json:"message_id"`
 	Text           string                  `json:"text"`
 	SkillID        string                  `json:"skill_id,omitempty"`
@@ -79,13 +80,15 @@ type AgentTextMediaRequest struct {
 }
 
 type AgentTextCallbackRequest struct {
-	SenderID     string `json:"sender_id"`
-	ChatID       string `json:"chat_id"`
-	MessageID    string `json:"message_id"`
-	ThreadID     string `json:"thread_id,omitempty"`
-	PreviewID    string `json:"preview_id,omitempty"`
-	Confirmation string `json:"confirmation,omitempty"`
-	CallbackData string `json:"callback_data"`
+	SenderID        string `json:"sender_id"`
+	ChatID          string `json:"chat_id"`
+	ChatType        string `json:"chat_type"`
+	MessageID       string `json:"message_id"`
+	ThreadID        string `json:"thread_id,omitempty"`
+	PreviewID       string `json:"preview_id,omitempty"`
+	Confirmation    string `json:"confirmation,omitempty"`
+	CallbackData    string `json:"callback_data"`
+	CallbackQueryID string `json:"callback_query_id"`
 }
 
 func CabinetRequestFromUpdate(update Update) (CabinetRequest, error) {
@@ -112,7 +115,7 @@ func CabinetRequestFromUpdate(update Update) (CabinetRequest, error) {
 		return CabinetRequest{Path: CaptureCallbackPath, Body: body}, nil
 	}
 	if update.Message != nil {
-		if isAgentTextCommand(agentTextCommandSource(update.Message)) {
+		if isNaturalAgentTextMessage(update.Message) {
 			body := agentTextRequestFromMessage(update.UpdateID, update.Message)
 			if body.SenderID == "" || body.ChatID == "" || body.MessageID == "" || body.Text == "" {
 				return CabinetRequest{}, fmt.Errorf("telegram agent text sender, chat, message, and text are required")
@@ -193,6 +196,14 @@ func DispatchUpdateToBotAPI(ctx context.Context, gateway CabinetGateway, endpoin
 	if err != nil {
 		return result, err
 	}
+	err = ExecuteBotAPICalls(ctx, &result, endpoint, client)
+	return result, err
+}
+
+func ExecuteBotAPICalls(ctx context.Context, result *DispatchResult, endpoint BotAPIEndpoint, client HTTPDoer) error {
+	if result == nil {
+		return fmt.Errorf("telegram dispatch result is required")
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -200,12 +211,12 @@ func DispatchUpdateToBotAPI(ctx context.Context, gateway CabinetGateway, endpoin
 		req, err := endpoint.NewRequest(ctx, call)
 		if err != nil {
 			result.BotAPIErrors = append(result.BotAPIErrors, err.Error())
-			return result, err
+			return err
 		}
 		resp, err := client.Do(req)
 		if err != nil {
 			result.BotAPIErrors = append(result.BotAPIErrors, err.Error())
-			return result, err
+			return err
 		}
 		if resp.Body != nil {
 			defer resp.Body.Close()
@@ -221,10 +232,10 @@ func DispatchUpdateToBotAPI(ctx context.Context, gateway CabinetGateway, endpoin
 				err = fmt.Errorf("%w: %s", err, body)
 			}
 			result.BotAPIErrors = append(result.BotAPIErrors, err.Error())
-			return result, err
+			return err
 		}
 	}
-	return result, nil
+	return nil
 }
 
 func failureTelegramReply() telegramcapture.TelegramReply {
@@ -557,10 +568,15 @@ func telegramID(id int64) string {
 	return fmt.Sprintf("%d", id)
 }
 
-func isAgentTextCommand(text string) bool {
-	trimmed := strings.TrimSpace(text)
-	lower := strings.ToLower(trimmed)
-	return lower == "/agent" || strings.HasPrefix(lower, "/agent ") || strings.HasPrefix(lower, "agent:")
+func isNaturalAgentTextMessage(message *WebhookMessage) bool {
+	if message == nil || strings.TrimSpace(message.Text) == "" {
+		return false
+	}
+	if len(message.Photo) > 0 || message.Document != nil {
+		return false
+	}
+	normalized := strings.ToLower(strings.TrimSpace(message.Text))
+	return !strings.HasPrefix(normalized, "barcode ")
 }
 
 func agentTextCommandSource(message *WebhookMessage) string {
@@ -575,22 +591,16 @@ func agentTextCommandSource(message *WebhookMessage) string {
 
 func agentTextRequestFromMessage(updateID int64, message *WebhookMessage) AgentTextRequest {
 	commandText := strings.TrimSpace(agentTextCommandSource(message))
-	commandText = strings.TrimSpace(strings.TrimPrefix(commandText, "/agent"))
-	if strings.HasPrefix(strings.ToLower(commandText), "agent:") {
-		commandText = strings.TrimSpace(commandText[len("agent:"):])
-	}
-	skillID, params := parseAgentTextCommand(commandText)
 	return AgentTextRequest{
-		SenderID:   telegramID(message.From.ID),
-		ChatID:     telegramID(message.Chat.ID),
-		MessageID:  telegramID(message.MessageID),
-		Text:       commandText,
-		SkillID:    skillID,
-		Parameters: params,
-		Media:      agentTextMediaRequestsFromMessage(message),
+		SenderID:  telegramID(message.From.ID),
+		ChatID:    telegramID(message.Chat.ID),
+		ChatType:  strings.TrimSpace(message.Chat.Type),
+		MessageID: telegramID(message.MessageID),
+		Text:      commandText,
+		Media:     agentTextMediaRequestsFromMessage(message),
 		SourceMetadata: map[string]any{
-			"update_id": updateID,
-			"command":   "agent",
+			"update_id":    updateID,
+			"message_kind": "natural_text",
 		},
 	}
 }
@@ -650,55 +660,21 @@ func largestAgentTextPhoto(photos []telegramcapture.WebhookPhotoSize) telegramca
 	return selected
 }
 
-func parseAgentTextCommand(text string) (string, map[string]any) {
-	fields := strings.Fields(strings.TrimSpace(text))
-	if len(fields) == 0 {
-		return "", nil
-	}
-	skillID := ""
-	start := 0
-	if strings.HasPrefix(fields[0], "cabinet.") {
-		skillID = fields[0]
-		start = 1
-	}
-	params := map[string]any{}
-	for _, field := range fields[start:] {
-		key, value, ok := strings.Cut(field, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.Trim(strings.TrimSpace(value), `"'`)
-		if key != "" {
-			params[key] = value
-		}
-	}
-	if len(params) == 0 {
-		params = nil
-	}
-	return skillID, params
-}
-
 func isAgentTextCallback(data string) bool {
-	return strings.HasPrefix(strings.TrimSpace(data), "cabinet:agent_text:")
+	data = strings.TrimSpace(data)
+	return strings.HasPrefix(data, "asp_") && (strings.HasSuffix(data, ":apply") || strings.HasSuffix(data, ":cancel"))
 }
 
 func agentTextCallbackRequestFromCallback(callback *CallbackQuery) AgentTextCallbackRequest {
-	confirmation, previewID := parseAgentTextCallbackData(callback.Data)
+	previewID, confirmation, _ := strings.Cut(strings.TrimSpace(callback.Data), ":")
 	return AgentTextCallbackRequest{
-		SenderID:     telegramID(callback.From.ID),
-		ChatID:       telegramID(callback.Message.Chat.ID),
-		MessageID:    telegramID(callback.Message.MessageID),
-		PreviewID:    previewID,
-		Confirmation: confirmation,
-		CallbackData: strings.TrimSpace(callback.Data),
+		SenderID:        telegramID(callback.From.ID),
+		ChatID:          telegramID(callback.Message.Chat.ID),
+		ChatType:        strings.TrimSpace(callback.Message.Chat.Type),
+		MessageID:       telegramID(callback.Message.MessageID),
+		PreviewID:       previewID,
+		Confirmation:    confirmation,
+		CallbackData:    strings.TrimSpace(callback.Data),
+		CallbackQueryID: strings.TrimSpace(callback.ID),
 	}
-}
-
-func parseAgentTextCallbackData(data string) (string, string) {
-	parts := strings.Split(strings.TrimSpace(data), ":")
-	if len(parts) < 4 || parts[0] != "cabinet" || parts[1] != "agent_text" {
-		return "", ""
-	}
-	return strings.TrimSpace(parts[2]), strings.TrimSpace(parts[3])
 }

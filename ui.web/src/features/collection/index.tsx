@@ -2126,6 +2126,7 @@ export function Collection({
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const createPasteInputRef = useRef<HTMLInputElement | null>(null)
   const createBarcodeInputRef = useRef<HTMLInputElement | null>(null)
+  const createMenuDialogTransitionRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
@@ -4940,10 +4941,22 @@ export function Collection({
                   <Ellipsis className='size-4' aria-hidden />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align='end'>
+              <DropdownMenuContent
+                align='end'
+                onCloseAutoFocus={(event) => {
+                  if (!createMenuDialogTransitionRef.current) {
+                    return
+                  }
+                  event.preventDefault()
+                  createMenuDialogTransitionRef.current = false
+                }}
+              >
                 <DropdownMenuItem
                   data-testid='inventory-create-menu-item'
-                  onClick={startManualCreateItem}
+                  onSelect={() => {
+                    createMenuDialogTransitionRef.current = true
+                    startManualCreateItem()
+                  }}
                 >
                   New Item
                 </DropdownMenuItem>

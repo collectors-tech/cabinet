@@ -3,7 +3,9 @@ package backup
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,6 +47,20 @@ type RestoreResult struct {
 	IntegrityCheck        string     `json:"integrity_check"`
 	PreRestoreBackup      BackupInfo `json:"pre_restore_backup"`
 	PreRestoreBackupTaken bool       `json:"pre_restore_backup_taken"`
+}
+
+type BackupValidation struct {
+	Path                      string `json:"-"`
+	FileName                  string `json:"file_name"`
+	SizeBytes                 int64  `json:"size_bytes"`
+	CreatedAt                 string `json:"created_at"`
+	ArchiveFormat             string `json:"archive_format"`
+	BackupFormat              string `json:"backup_format"`
+	DatabaseSHA256            string `json:"database_sha256"`
+	IntegrityCheck            string `json:"integrity_check"`
+	LifecycleSchemaCompatible bool   `json:"lifecycle_schema_compatible"`
+	ProfileIncluded           bool   `json:"profile_included"`
+	Compatible                bool   `json:"compatible"`
 }
 
 func NewService(dbPath, backupDir string, intervalMinutes int) *Service {
@@ -186,6 +202,127 @@ func (s *Service) RestoreBackup(backupPath string) (RestoreResult, error) {
 		PreRestoreBackup:      preRestoreBackup.BackupInfo,
 		PreRestoreBackupTaken: true,
 	}, nil
+}
+
+func (s *Service) InspectBackup(nameOrPath string, requiredProfileIDs ...string) (BackupValidation, error) {
+	path, err := s.ResolveBackupPath(nameOrPath)
+	if err != nil {
+		return BackupValidation{}, err
+	}
+	info, err := describeBackup(path)
+	if err != nil {
+		return BackupValidation{}, err
+	}
+	databasePath := path
+	backupFormat := "legacy-sqlite-db"
+	cleanup := func() {}
+	if strings.EqualFold(filepath.Ext(path), ".zip") {
+		format, err := readBackupArchiveFormat(path)
+		if err != nil {
+			return BackupValidation{}, err
+		}
+		if format != "cabinet-backup-zip-v1" {
+			return BackupValidation{}, fmt.Errorf("unsupported backup format: %s", format)
+		}
+		backupFormat = format
+		databasePath, err = extractArchiveDatabase(path)
+		if err != nil {
+			return BackupValidation{}, err
+		}
+		cleanup = func() { _ = os.Remove(databasePath) }
+	}
+	defer cleanup()
+	integrity, err := validateSQLiteFile(databasePath)
+	if err != nil {
+		return BackupValidation{}, err
+	}
+	if integrity != "ok" {
+		return BackupValidation{}, fmt.Errorf("backup integrity check failed: %s", integrity)
+	}
+	lifecycleCompatible, profileIncluded, err := inspectBackupCompatibility(databasePath, requiredProfileIDs)
+	if err != nil {
+		return BackupValidation{}, err
+	}
+	if !lifecycleCompatible {
+		return BackupValidation{}, fmt.Errorf("backup is incompatible with destructive Agent receipt preservation")
+	}
+	if !profileIncluded {
+		return BackupValidation{}, fmt.Errorf("backup does not contain the active profile")
+	}
+	raw, err := os.ReadFile(databasePath)
+	if err != nil {
+		return BackupValidation{}, fmt.Errorf("read backup database identity: %w", err)
+	}
+	sum := sha256.Sum256(raw)
+	return BackupValidation{
+		Path: path, FileName: info.FileName, SizeBytes: info.SizeBytes, CreatedAt: info.CreatedAt,
+		ArchiveFormat: info.ArchiveFormat, BackupFormat: backupFormat, DatabaseSHA256: hex.EncodeToString(sum[:]),
+		IntegrityCheck: integrity, LifecycleSchemaCompatible: lifecycleCompatible,
+		ProfileIncluded: profileIncluded, Compatible: lifecycleCompatible && profileIncluded,
+	}, nil
+}
+
+func inspectBackupCompatibility(databasePath string, requiredProfileIDs []string) (bool, bool, error) {
+	conn, err := sql.Open("sqlite", "file:"+databasePath+"?mode=ro")
+	if err != nil {
+		return false, false, fmt.Errorf("open backup compatibility database: %w", err)
+	}
+	defer conn.Close()
+	for _, table := range []string{"profiles", "agent_skill_previews", "agent_skill_strong_confirmations"} {
+		var count int
+		if err := conn.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
+			return false, false, fmt.Errorf("inspect backup compatibility schema: %w", err)
+		}
+		if count != 1 {
+			return false, false, nil
+		}
+	}
+	profileIncluded := true
+	for _, profileID := range requiredProfileIDs {
+		profileID = strings.TrimSpace(profileID)
+		if profileID == "" {
+			continue
+		}
+		var count int
+		if err := conn.QueryRow(`SELECT COUNT(1) FROM profiles WHERE id = ?`, profileID).Scan(&count); err != nil {
+			return false, false, fmt.Errorf("inspect backup profile scope: %w", err)
+		}
+		if count != 1 {
+			profileIncluded = false
+		}
+	}
+	return true, profileIncluded, nil
+}
+
+func readBackupArchiveFormat(path string) (string, error) {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return "", fmt.Errorf("open backup archive: %w", err)
+	}
+	defer zr.Close()
+	for _, file := range zr.File {
+		if file.Name != "manifest.json" {
+			continue
+		}
+		reader, err := file.Open()
+		if err != nil {
+			return "", fmt.Errorf("open backup manifest: %w", err)
+		}
+		var manifest struct {
+			Format   string `json:"format"`
+			Database string `json:"database"`
+		}
+		decodeErr := json.NewDecoder(reader).Decode(&manifest)
+		_ = reader.Close()
+		if decodeErr != nil {
+			return "", fmt.Errorf("decode backup manifest: %w", decodeErr)
+		}
+		if manifest.Database != "database/cabinet.db" {
+			return "", fmt.Errorf("backup manifest database is incompatible")
+		}
+		return strings.TrimSpace(manifest.Format), nil
+	}
+	return "", fmt.Errorf("backup archive missing manifest.json")
 }
 
 func describeBackup(path string) (BackupInfo, error) {

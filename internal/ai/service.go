@@ -42,15 +42,20 @@ func (s *Service) Name() string {
 }
 
 type OpenAIAssistantProvider struct {
-	service  *Service
-	resolver AssistantProviderSetupResolver
+	service     *Service
+	resolver    AssistantProviderSetupResolver
+	browserAuth BrowserAuthRuntime
 }
 
-func NewOpenAIAssistantProvider(service *Service, resolver AssistantProviderSetupResolver) *OpenAIAssistantProvider {
+func NewOpenAIAssistantProvider(service *Service, resolver AssistantProviderSetupResolver, browserAuth ...BrowserAuthRuntime) *OpenAIAssistantProvider {
 	if service == nil {
 		service = NewService(Config{})
 	}
-	return &OpenAIAssistantProvider{service: service, resolver: resolver}
+	var runtime BrowserAuthRuntime
+	if len(browserAuth) > 0 {
+		runtime = browserAuth[0]
+	}
+	return &OpenAIAssistantProvider{service: service, resolver: resolver, browserAuth: runtime}
 }
 
 func (p *OpenAIAssistantProvider) Name() string {
@@ -83,6 +88,33 @@ func (p *OpenAIAssistantProvider) RunAssistantTurn(ctx context.Context, req Assi
 		respBase.ErrorClass = "unsupported_model"
 		respBase.SetupNextAction = "choose_supported_openai_model"
 		return respBase, fmt.Errorf("openai assistant model is not supported")
+	}
+	if strings.EqualFold(strings.TrimSpace(setup.ActiveAuthMethod), "browser_auth") {
+		if !setup.Enabled || p.browserAuth == nil {
+			respBase.ErrorClass = "missing_credentials"
+			respBase.SetupNextAction = "connect_openai_browser_auth"
+			return respBase, fmt.Errorf("openai browser auth is required")
+		}
+		status, err := p.browserAuth.Status(ctx)
+		if err != nil || !status.Authenticated {
+			respBase.ErrorClass = "missing_credentials"
+			respBase.SetupNextAction = "connect_openai_browser_auth"
+			return respBase, fmt.Errorf("openai browser auth is required")
+		}
+		text, err := p.browserAuth.RunAssistantTurn(ctx, BrowserAuthTurnRequest{
+			ProfileID: req.ProfileID,
+			ThreadID:  req.ThreadID,
+			Model:     respBase.Model,
+			Messages:  req.Messages,
+			Context:   req.Context,
+		})
+		if err != nil {
+			respBase.ErrorClass = classifyAssistantProviderError(err)
+			respBase.SetupNextAction = assistantProviderFailureNextAction(respBase.ErrorClass)
+			return respBase, assistantProviderRedactedError(respBase.ErrorClass)
+		}
+		respBase.Text = text
+		return respBase, nil
 	}
 	if !setup.Enabled || strings.TrimSpace(setup.APIKeySecretRef) == "" || !strings.EqualFold(strings.TrimSpace(setup.ActiveAuthMethod), "api_key") {
 		respBase.ErrorClass = "missing_credentials"
@@ -353,7 +385,7 @@ func assistantModelSupported(model string, supported []string) bool {
 		return false
 	}
 	if len(supported) == 0 {
-		supported = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
+		supported = []string{"gpt-5.6-luna", "gpt-4o-mini", "gpt-4.1-mini"}
 	}
 	for _, candidate := range supported {
 		if strings.EqualFold(model, strings.TrimSpace(candidate)) {

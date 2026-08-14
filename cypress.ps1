@@ -13,21 +13,19 @@ param(
   [switch]$SkipDependencyPrep,
   [switch]$SkipRuntimeBuild,
   [string]$BaseUrl = "http://127.0.0.1:17880",
-  [int]$StartupTimeoutSec = 45,
-  [int]$ExecutionTimeoutSec = 900,
+  [int]$StartupTimeoutSec = 90,
+  [int]$Retries = -1,
+  [int]$ExecutionTimeoutSec = 300,
   [string]$LogDir = ".work-agent\logs\cypress",
   [string]$LogName = ""
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "scripts\lib\cypress-process-watchdog.ps1")
 $script:CypressStepEvents = @()
 $script:LastApiContractSmokeSummaryPath = ""
-$script:CypressRunnerPhase = "initializing"
-$script:CypressChildPids = @()
-$script:CypressProcessTree = @()
-$script:CypressElapsedMs = $null
-$script:CypressLastOutput = @()
-$script:CypressCleanupResult = ""
+$script:LastE2EHooksProbeDiagnostic = "not_run"
+$e2eHooksProbeTimeoutSec = [Math]::Min([Math]::Max($StartupTimeoutSec, 3), 20)
 
 function Write-Step([string]$msg) {
   $timestamp = (Get-Date).ToString("o")
@@ -64,12 +62,24 @@ function Test-Health([string]$url) {
   }
 }
 
-function Test-E2EHooks([string]$url) {
+function Test-E2EHooks([string]$url, [int]$timeoutSec) {
   try {
-    $res = Invoke-WebRequest -Uri "$url/api/test/reset" -Method Post -Body "{}" -ContentType "application/json" -UseBasicParsing -TimeoutSec 2
-    return $res.StatusCode -ge 200 -and $res.StatusCode -lt 300
+    $res = Invoke-WebRequest -Uri "$url/api/test/reset" -Method Post -Body "{}" -ContentType "application/json" -UseBasicParsing -TimeoutSec $timeoutSec -SkipHttpErrorCheck
+    if ($res.StatusCode -ge 200 -and $res.StatusCode -lt 300) {
+      $script:LastE2EHooksProbeDiagnostic = "available: HTTP $($res.StatusCode)"
+      return $true
+    }
+    $script:LastE2EHooksProbeDiagnostic = "unavailable: HTTP $($res.StatusCode)"
+    return $false
   }
   catch {
+    $message = $_.Exception.Message
+    if ($message -match "(?i)timed out|timeout|canceled") {
+      $script:LastE2EHooksProbeDiagnostic = "timed out after $timeoutSec seconds"
+    }
+    else {
+      $script:LastE2EHooksProbeDiagnostic = "request failed: $message"
+    }
     return $false
   }
 }
@@ -126,23 +136,34 @@ function Test-AppVersionMatchesSourceCommit([string]$appVersion, [string]$source
   return $appVersion -eq "rev-$shortCommit"
 }
 
-function Assert-RuntimeAppVersionMatchesSourceCommit([string]$url, [string]$sourceCommit, [bool]$allowStaleRuntimeVersion) {
+function Assert-RuntimeBuildIdentityMatchesSourceCommit([string]$url, [string]$sourceCommit, [bool]$allowStaleRuntimeVersion) {
   if ([string]::IsNullOrWhiteSpace($sourceCommit)) {
-    Write-Step "Runtime app version preflight skipped; source commit is unavailable."
+    Write-Step "Runtime build identity preflight skipped; source commit is unavailable."
     return
   }
 
   $runtimeMetadata = Get-AppRuntimeMetadata $url
-  $appVersion = [string]$runtimeMetadata.app_version
-  $expectedVersion = "rev-$($sourceCommit.Substring(0, [Math]::Min(12, $sourceCommit.Length)))"
-  if (Test-AppVersionMatchesSourceCommit $appVersion $sourceCommit) {
-    Write-Step "Runtime app version preflight passed: app_version=$appVersion matches source_commit=$sourceCommit"
+  $appVersion = ([string]$runtimeMetadata.app_version).Trim()
+  $runtimeBuildRevision = ([string]$runtimeMetadata.build_revision).Trim().ToLowerInvariant()
+  $expectedBuildRevision = $sourceCommit.Trim().ToLowerInvariant()
+  $appVersionMatchesRevision = Test-AppVersionMatchesSourceCommit $appVersion $expectedBuildRevision
+  $appVersionIsSemantic = $appVersion -match '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$'
+  if ([string]::IsNullOrWhiteSpace($appVersion) -or (-not $appVersionMatchesRevision -and -not $appVersionIsSemantic)) {
+    $message = "Runtime app version mismatch: /api/runtime app_version=$appVersion is neither the expected revision version nor a semantic release version for source_commit=$expectedBuildRevision. Rebuild the runtime or pass -AllowStaleRuntimeVersion for explicit stale-runtime baseline testing."
+    if ($allowStaleRuntimeVersion) {
+      Write-Step "Runtime app version preflight allowed stale runtime: $message"
+    } else {
+      throw $message
+    }
+  }
+  if ($runtimeBuildRevision -eq $expectedBuildRevision) {
+    Write-Step "Runtime build identity preflight passed: /api/runtime build_revision=$runtimeBuildRevision app_version=$appVersion matches source_commit=$expectedBuildRevision"
     return
   }
 
-  $message = "Runtime app version mismatch: /api/runtime app_version=$appVersion did not match expected $expectedVersion for source_commit=$sourceCommit. Rebuild the runtime or pass -AllowStaleRuntimeVersion for explicit stale-runtime baseline testing."
+  $message = "Runtime build revision mismatch: /api/runtime build_revision=$runtimeBuildRevision app_version=$appVersion did not match source_commit=$expectedBuildRevision. Rebuild the runtime or pass -AllowStaleRuntimeVersion for explicit stale-runtime baseline testing."
   if ($allowStaleRuntimeVersion) {
-    Write-Step "Runtime app version preflight allowed stale runtime: $message"
+    Write-Step "Runtime build identity preflight allowed stale runtime: $message"
     return
   }
   throw $message
@@ -290,149 +311,6 @@ function Start-ProcessWithEnvironment([string]$filePath, [string[]]$argumentList
   }
 }
 
-function Get-ChildProcessIds([int]$parentProcessId) {
-  $descendants = @()
-  $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $parentProcessId" -ErrorAction SilentlyContinue)
-  foreach ($child in $children) {
-    $childId = [int]$child.ProcessId
-    $descendants += $childId
-    $descendants += @(Get-ChildProcessIds $childId)
-  }
-  return $descendants
-}
-
-function ConvertTo-RedactedCommandLine([string]$commandLine) {
-  if ([string]::IsNullOrWhiteSpace($commandLine)) {
-    return ""
-  }
-
-  $redacted = $commandLine
-  $redacted = $redacted -replace '(?i)(token|secret|password|passwd|api[_-]?key)(=|\s+)[^\s"]+', '$1$2[REDACTED]'
-  $redacted = $redacted -replace '(?i)(--(?:token|secret|password|passwd|api[_-]?key)(?:=|\s+))[^\s"]+', '$1[REDACTED]'
-  if ($redacted.Length -gt 500) {
-    return $redacted.Substring(0, 500)
-  }
-  return $redacted
-}
-
-function Get-ProcessTreeSnapshot([int]$rootProcessId) {
-  $processIds = @()
-  $processIds += $rootProcessId
-  $processIds += @(Get-ChildProcessIds $rootProcessId)
-  $snapshot = @()
-
-  foreach ($processId in ($processIds | Select-Object -Unique)) {
-    try {
-      $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
-      if ($process) {
-        $snapshot += [pscustomobject]@{
-          pid = [int]$process.ProcessId
-          parent_pid = [int]$process.ParentProcessId
-          name = [string]$process.Name
-          command_line = ConvertTo-RedactedCommandLine ([string]$process.CommandLine)
-        }
-      }
-    }
-    catch {
-      $snapshot += [pscustomobject]@{
-        pid = $processId
-        parent_pid = $null
-        name = ""
-        command_line = "snapshot_error=$($_.Exception.Message)"
-      }
-    }
-  }
-
-  return $snapshot
-}
-
-function Stop-OwnedProcessTree([int]$processId) {
-  $stopped = @()
-  $errors = @()
-  $processIds = @()
-  $processIds += @(Get-ChildProcessIds $processId)
-  $processIds += $processId
-  foreach ($ownedProcessId in ($processIds | Select-Object -Unique | Sort-Object -Descending)) {
-    try {
-      $process = Get-Process -Id $ownedProcessId -ErrorAction SilentlyContinue
-      if ($process) {
-        Stop-Process -Id $ownedProcessId -Force -ErrorAction Stop
-        $stopped += $ownedProcessId
-      }
-    }
-    catch {
-      $errors += "pid ${ownedProcessId}: $($_.Exception.Message)"
-    }
-  }
-  if ($errors.Count -gt 0) {
-    return "stopped_pids=$($stopped -join ','); errors=$($errors -join '; ')"
-  }
-  return "stopped_pids=$($stopped -join ',')"
-}
-
-function Get-LogTail([string[]]$paths, [int]$lineCount) {
-  $lines = @()
-  foreach ($path in $paths) {
-    if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path $path)) {
-      $lines += @(Get-Content -LiteralPath $path -Tail $lineCount -ErrorAction SilentlyContinue)
-    }
-  }
-  if ($lines.Count -gt $lineCount) {
-    return @($lines | Select-Object -Last $lineCount)
-  }
-  return $lines
-}
-
-function Resolve-CypressRunnerCommand {
-  if ($IsWindows) {
-    return "npx.cmd"
-  }
-
-  return "npx"
-}
-
-function Invoke-CypressProcessWithTimeout([string]$uiRoot, [string[]]$arguments, [int]$timeoutSeconds) {
-  if ($timeoutSeconds -le 0) {
-    throw "ExecutionTimeoutSec must be greater than zero."
-  }
-
-  $stdoutPath = Join-Path $env:TEMP ("cabinet-cypress-{0}-stdout.log" -f ([guid]::NewGuid().ToString("N")))
-  $stderrPath = Join-Path $env:TEMP ("cabinet-cypress-{0}-stderr.log" -f ([guid]::NewGuid().ToString("N")))
-  $startedAt = Get-Date
-  $script:CypressRunnerPhase = "cypress_process_started"
-  $cypressCommand = Resolve-CypressRunnerCommand
-
-  $process = Start-Process -FilePath $cypressCommand -ArgumentList $arguments -WorkingDirectory $uiRoot -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru
-  $script:CypressChildPids = @($process.Id)
-  Write-Step "Cypress child process started: command=$cypressCommand pid=$($process.Id) timeout_sec=$timeoutSeconds"
-
-  $completed = $process.WaitForExit($timeoutSeconds * 1000)
-  $script:CypressElapsedMs = [int64][Math]::Max(0, [Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds))
-  $script:CypressChildPids = @($process.Id) + @(Get-ChildProcessIds $process.Id)
-  $script:CypressProcessTree = @(Get-ProcessTreeSnapshot $process.Id)
-  $script:CypressLastOutput = @(Get-LogTail @($stdoutPath, $stderrPath) 80)
-
-  foreach ($line in $script:CypressLastOutput) {
-    Write-Host $line
-  }
-
-  if (-not $completed) {
-    $script:CypressRunnerPhase = "execution_timeout"
-    $script:CypressCleanupResult = Stop-OwnedProcessTree $process.Id
-    Write-Step "Cypress timed out after $($script:CypressElapsedMs) ms; $script:CypressCleanupResult"
-    return 124
-  }
-
-  $process.Refresh()
-  if ($process.ExitCode -eq 0) {
-    $script:CypressRunnerPhase = "completed"
-  } else {
-    $script:CypressRunnerPhase = "cypress_failed"
-  }
-  $script:CypressCleanupResult = "not_required"
-  return [int]$process.ExitCode
-}
-
 function Get-ReusableNodeModulesPath([string]$repoRoot, [string]$uiRoot) {
   $candidates = @()
 
@@ -560,13 +438,17 @@ function Write-RunSummary(
   [string]$apiContractSmokeSummaryPath,
   [bool]$allowStaleRuntimeVersion,
   [bool]$startedServer,
+  [int]$executionTimeoutSec,
   [string]$runnerPhase,
-  [int[]]$cypressChildPids,
+  [int]$cypressRootPID,
+  [int[]]$cypressChildPIDs,
   [object[]]$cypressProcessTree,
-  [Nullable[int64]]$cypressElapsedMs,
+  [int64]$cypressElapsedMs,
   [string[]]$cypressLastOutput,
   [string]$cypressCleanupResult,
-  [int]$executionTimeoutSec
+  [string]$cypressStandardOutputPath,
+  [string]$cypressStandardErrorPath,
+  [bool]$executionTimedOut
 ) {
   $runFinishedAt = Get-Date
   $apiContractSmokeStatus = ""
@@ -619,13 +501,18 @@ function Write-RunSummary(
     source_commit = $sourceCommit
     allow_stale_runtime_version = $allowStaleRuntimeVersion
     started_server = $startedServer
-    runner_phase = $runnerPhase
-    cypress_child_pids = $cypressChildPids
-    cypress_process_tree = $cypressProcessTree
-    cypress_elapsed_ms = $cypressElapsedMs
-    cypress_last_output = $cypressLastOutput
-    cypress_cleanup_result = $cypressCleanupResult
     execution_timeout_sec = $executionTimeoutSec
+    runner_phase = $runnerPhase
+    execution_timed_out = $executionTimedOut
+    cypress_root_pid = $cypressRootPID
+    cypress_child_pids = @($cypressChildPIDs)
+    cypress_process_tree = @($cypressProcessTree)
+    cypress_elapsed_ms = $cypressElapsedMs
+    last_cypress_output = @($cypressLastOutput)
+    cypress_cleanup_result = $cypressCleanupResult
+    cypress_stdout_path = $cypressStandardOutputPath
+    cypress_stderr_path = $cypressStandardErrorPath
+    runtime_revision = $sourceCommit
     log_path = $logPath
     api_contract_smoke_summary_path = $apiContractSmokeSummaryPath
     api_contract_smoke_status = $apiContractSmokeStatus
@@ -758,6 +645,16 @@ $startedServer = $false
 $apiContractSmokeSummaryPath = ""
 $exitCode = 1
 $runError = $null
+$runnerPhase = "preflight"
+$executionTimedOut = $false
+$cypressRootPID = 0
+$cypressChildPIDs = @()
+$cypressProcessTree = @()
+$cypressElapsedMs = 0
+$cypressLastOutput = @()
+$cypressCleanupResult = "not_required"
+$cypressStandardOutputPath = ""
+$cypressStandardErrorPath = ""
 
 try {
   if (-not $NoServer) {
@@ -773,16 +670,16 @@ try {
       }
     }
     elseif ($alreadyRunning -and $RequireE2EHooks) {
-      $canReuse = Test-E2EHooks $BaseUrl
+      $canReuse = Test-E2EHooks $BaseUrl $e2eHooksProbeTimeoutSec
       if (-not $canReuse) {
-        Write-Step "Existing server lacks E2E hooks; recycling runtime with CABINET_E2E_MODE=1."
+        Write-Step "Existing server lacks usable E2E hooks ($script:LastE2EHooksProbeDiagnostic); recycling runtime with CABINET_E2E_MODE=1."
         Stop-PortListener $BaseUrl
       }
     }
     if ($canReuse) {
       Write-Step "Reusing existing server at $BaseUrl"
       Assert-AppPreflight $BaseUrl
-      Assert-RuntimeAppVersionMatchesSourceCommit $BaseUrl $sourceCommit $AllowStaleRuntimeVersion.IsPresent
+      Assert-RuntimeBuildIdentityMatchesSourceCommit $BaseUrl $sourceCommit $AllowStaleRuntimeVersion.IsPresent
     }
     else {
       Write-Step "Starting Cabinet server..."
@@ -832,12 +729,12 @@ try {
       if (-not (Test-Health $BaseUrl)) {
         throw "Server did not become healthy at $BaseUrl within $StartupTimeoutSec seconds."
       }
-      if ($RequireE2EHooks -and -not (Test-E2EHooks $BaseUrl)) {
-        throw "Server is healthy but E2E hooks are unavailable at $BaseUrl/api/test/reset."
+      if ($RequireE2EHooks -and -not (Test-E2EHooks $BaseUrl $e2eHooksProbeTimeoutSec)) {
+        throw "Server is healthy but E2E hooks are unavailable at $BaseUrl/api/test/reset ($script:LastE2EHooksProbeDiagnostic)."
       }
       Write-Step "Server is healthy."
       Assert-AppPreflight $BaseUrl
-      Assert-RuntimeAppVersionMatchesSourceCommit $BaseUrl $sourceCommit $AllowStaleRuntimeVersion.IsPresent
+      Assert-RuntimeBuildIdentityMatchesSourceCommit $BaseUrl $sourceCommit $AllowStaleRuntimeVersion.IsPresent
     }
   }
 
@@ -846,6 +743,7 @@ try {
   }
 
   Write-Step "Running Cypress spec: $specPath"
+  $runnerPhase = "launching"
   $args = @(
     "cypress", "run",
     "--browser", $Browser,
@@ -865,10 +763,57 @@ try {
       Write-Step "Temporarily clearing ELECTRON_RUN_AS_NODE for Cypress runtime compatibility."
     }
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-    $exitCode = Invoke-CypressProcessWithTimeout $uiRoot $args $ExecutionTimeoutSec
+    $hadCypressRetries = Test-Path Env:CYPRESS_retries
+    $originalCypressRetries = $env:CYPRESS_retries
+    if ($Retries -ge 0) {
+      $env:CYPRESS_retries = "$Retries"
+    }
+    $hadAppData = Test-Path Env:APPDATA
+    $originalAppData = $env:APPDATA
+    $cypressAppDataDir = Join-Path $e2eDataDir "cypress-appdata"
+    New-Item -ItemType Directory -Force -Path $cypressAppDataDir | Out-Null
+    $env:APPDATA = $cypressAppDataDir
+    Write-Step "Cypress application data isolated: $cypressAppDataDir"
+    $cypressStdoutPath = Join-Path $resolvedLogDir "$runStamp-$logSegment.cypress.stdout.log"
+    $cypressStderrPath = Join-Path $resolvedLogDir "$runStamp-$logSegment.cypress.stderr.log"
+    $nodeCommand = (Get-Command node -ErrorAction Stop).Source
+    $runCypressScript = Join-Path $repoRoot "scripts\run-cypress.mjs"
+    $watchdogArgs = @($runCypressScript) + @($args | Select-Object -Skip 1)
+    $watchdogResult = Invoke-CypressOwnedProcess `
+      -FilePath $nodeCommand `
+      -ArgumentList $watchdogArgs `
+      -WorkingDirectory $uiRoot `
+      -TimeoutSec $ExecutionTimeoutSec `
+      -StandardOutputPath $cypressStdoutPath `
+      -StandardErrorPath $cypressStderrPath
+    $exitCode = [int]$watchdogResult.exit_code
+    $runnerPhase = [string]$watchdogResult.runner_phase
+    $executionTimedOut = [bool]$watchdogResult.timed_out
+    $cypressRootPID = [int]$watchdogResult.root_pid
+    $cypressChildPIDs = @($watchdogResult.child_pids)
+    $cypressProcessTree = @($watchdogResult.process_tree)
+    $cypressElapsedMs = [int64]$watchdogResult.elapsed_ms
+    $cypressLastOutput = @($watchdogResult.last_output)
+    $cypressCleanupResult = [string]$watchdogResult.cleanup_result
+    $cypressStandardOutputPath = [string]$watchdogResult.stdout_path
+    $cypressStandardErrorPath = [string]$watchdogResult.stderr_path
+    foreach ($line in $cypressLastOutput) { Write-Host $line }
+    if ($executionTimedOut) {
+      throw "Cypress execution timed out after $ExecutionTimeoutSec seconds; owned process tree cleanup: $cypressCleanupResult"
+    }
     Write-Step "Cypress exited with code $exitCode."
   }
   finally {
+    if ($hadCypressRetries) {
+      $env:CYPRESS_retries = $originalCypressRetries
+    } else {
+      Remove-Item Env:CYPRESS_retries -ErrorAction SilentlyContinue
+    }
+    if ($hadAppData) {
+      $env:APPDATA = $originalAppData
+    } else {
+      Remove-Item Env:APPDATA -ErrorAction SilentlyContinue
+    }
     if ($hadElectronRunAsNode) {
       $env:ELECTRON_RUN_AS_NODE = $originalElectronRunAsNode
     } else {
@@ -879,7 +824,10 @@ try {
 }
 catch {
   $runError = $_
-  $exitCode = 1
+  if (-not $executionTimedOut) {
+    $exitCode = 1
+    if ($runnerPhase -eq "preflight" -or $runnerPhase -eq "launching") { $runnerPhase = "runner_error" }
+  }
   if ([string]::IsNullOrWhiteSpace($apiContractSmokeSummaryPath)) {
     $apiContractSmokeSummaryPath = $script:LastApiContractSmokeSummaryPath
   }
@@ -912,13 +860,17 @@ finally {
     -apiContractSmokeSummaryPath $apiContractSmokeSummaryPath `
     -allowStaleRuntimeVersion $AllowStaleRuntimeVersion.IsPresent `
     -startedServer $startedServer `
-    -runnerPhase $script:CypressRunnerPhase `
-    -cypressChildPids $script:CypressChildPids `
-    -cypressProcessTree $script:CypressProcessTree `
-    -cypressElapsedMs $script:CypressElapsedMs `
-    -cypressLastOutput $script:CypressLastOutput `
-    -cypressCleanupResult $script:CypressCleanupResult `
-    -executionTimeoutSec $ExecutionTimeoutSec
+    -executionTimeoutSec $ExecutionTimeoutSec `
+    -runnerPhase $runnerPhase `
+    -cypressRootPID $cypressRootPID `
+    -cypressChildPIDs $cypressChildPIDs `
+    -cypressProcessTree $cypressProcessTree `
+    -cypressElapsedMs $cypressElapsedMs `
+    -cypressLastOutput $cypressLastOutput `
+    -cypressCleanupResult $cypressCleanupResult `
+    -cypressStandardOutputPath $cypressStandardOutputPath `
+    -cypressStandardErrorPath $cypressStandardErrorPath `
+    -executionTimedOut $executionTimedOut
   Write-Step "Run summary written: $summaryPath"
   if ($transcriptStarted) {
     Stop-Transcript | Out-Null
@@ -926,7 +878,7 @@ finally {
 }
 
 if ($runError) {
-  Write-Error -Message $runError.Exception.Message
-  exit 1
+  Write-Error -Message $runError.Exception.Message -ErrorAction Continue
+  exit $exitCode
 }
 exit $exitCode

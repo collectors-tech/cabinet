@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/collectors-tech/cabinet/internal/auth"
+	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/profile"
 )
@@ -91,6 +92,65 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config, a
 			return
 		}
 		_ = json.NewEncoder(w).Encode(out)
+	})
+
+	mux.HandleFunc("/api/test/chat/agent-response-state", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID      string `json:"profile_id"`
+			ThreadID       string `json:"thread_id"`
+			State          string `json:"state"`
+			OriginalIntent string `json:"original_intent"`
+		}
+		if r.Body != nil {
+			defer r.Body.Close()
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+		}
+		req.ProfileID = strings.TrimSpace(req.ProfileID)
+		req.ThreadID = strings.TrimSpace(req.ThreadID)
+		state := strings.TrimSpace(strings.ToLower(req.State))
+		if req.ProfileID == "" || req.ThreadID == "" || state == "" {
+			http.Error(w, `{"error":"profile_thread_and_state_required"}`, http.StatusBadRequest)
+			return
+		}
+
+		messageID := fmt.Sprintf("e2e-agent-response-%d", time.Now().UnixNano())
+		messageText := "An ordinary server response replaced the previous Agent state."
+		messageContext := map[string]any{}
+		if state != "ordinary_response" {
+			response, err := chat.NewAgentResponse(chat.AgentResponseState(state), state+" response from Cabinet.", req.OriginalIntent, "cabinet.inventory.search_items", "Cabinet Inventory Search", "chats.main", "in-app")
+			if err != nil {
+				http.Error(w, `{"error":"invalid_agent_response_state"}`, http.StatusBadRequest)
+				return
+			}
+			if response.State == chat.AgentResponsePreviewRequired {
+				response.Preview = &chat.AgentResponsePreview{ID: "e2e-preview-2099", Action: "update_inventory_item", Status: "previewed", Payload: map[string]any{"item_id": "e2e-item-001", "title": "Normalized preview"}}
+			}
+			messageText = response.Message
+			messageContext = chat.AgentResponseContext(response)
+		}
+		contextJSON, err := json.Marshal(messageContext)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_encode_agent_response"}`, http.StatusInternalServerError)
+			return
+		}
+		createdAt := time.Now().UTC().Format(time.RFC3339Nano)
+		if _, err := conn.ExecContext(r.Context(), `
+			INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json, created_at)
+			VALUES (?, ?, ?, 'assistant', ?, '[]', ?, ?)
+		`, messageID, req.ProfileID, req.ThreadID, messageText, string(contextJSON), createdAt); err != nil {
+			http.Error(w, `{"error":"failed_to_seed_agent_response"}`, http.StatusBadRequest)
+			return
+		}
+		_, _ = conn.ExecContext(r.Context(), `UPDATE chat_threads SET updated_at = ? WHERE id = ? AND profile_id = ?`, createdAt, req.ThreadID, req.ProfileID)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "message_id": messageID, "state": state})
 	})
 
 	mux.HandleFunc("/api/test/scale/bootstrap", func(w http.ResponseWriter, r *http.Request) {
@@ -388,10 +448,14 @@ func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) 
 		"app_state",
 		"assistant_workflow_runs",
 		"audit_events",
+		"agent_skill_strong_confirmations",
+		"agent_skill_previews",
 		"chat_action_previews",
 		"chat_attachments",
 		"chat_inbox_items",
 		"chat_messages",
+		"telegram_agent_deliveries",
+		"telegram_agent_threads",
 		"chat_threads",
 		"discovery_actions",
 		"expected_arrivals",
@@ -417,6 +481,8 @@ func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) 
 		"commerce_lifecycle_entries",
 		"instances",
 		"profile_settings",
+		"telegram_pairing_requests",
+		"telegram_connector_state",
 		"scanner_query_sets",
 		"canonical_items_fts",
 		"canonical_items",

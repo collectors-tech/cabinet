@@ -90,7 +90,7 @@ export function HeaderTitle({
   return (
     <div
       className={cn(
-        'pointer-events-none z-10 flex min-w-20 max-w-28 shrink-0 justify-center md:absolute md:top-1/2 md:left-1/2 md:min-w-0 md:max-w-[min(34rem,42vw)] md:-translate-x-1/2 md:-translate-y-1/2',
+        'pointer-events-none z-10 flex max-w-28 min-w-20 shrink-0 justify-center md:absolute md:top-1/2 md:left-1/2 md:max-w-[min(34rem,42vw)] md:min-w-0 md:-translate-x-1/2 md:-translate-y-1/2',
         isCrowded && 'md:opacity-0',
         className
       )}
@@ -127,7 +127,7 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
 
   const handleAssistantToggle = () => {
     if (!assistantActive && isMobile) {
-      setOpenMobile(false)
+      setOpenMobile(true)
     }
     toggleAssistantWorkspace()
   }
@@ -135,9 +135,7 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
   const handleAssistantToggleKeyDown = (
     event: React.KeyboardEvent<HTMLButtonElement>
   ) => {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return
-    }
+    if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
     handleAssistantToggle()
   }
@@ -181,15 +179,9 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
           variant={assistantActive ? 'default' : 'outline'}
           size='icon'
           aria-label={
-            assistantActive
-              ? 'Return to navigation workspace'
-              : 'Open assistant workspace'
+            assistantActive ? 'Close Cabinet Agent' : 'Open Cabinet Agent'
           }
-          title={
-            assistantActive
-              ? 'Return to navigation workspace'
-              : 'Open assistant workspace'
-          }
+          title={assistantActive ? 'Close Cabinet Agent' : 'Open Cabinet Agent'}
           onClick={handleAssistantToggle}
           onKeyDown={handleAssistantToggleKeyDown}
           className='shrink-0'

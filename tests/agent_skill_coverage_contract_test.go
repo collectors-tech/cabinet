@@ -256,11 +256,11 @@ func TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue201
 		"`cabinet.settings.update_profile`",
 		"source surface/channel/thread/message context",
 		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
-		"ASSISTANT-WORKSPACE-016/#2011 dispatches Settings Profile Agent Skills with in-app source context",
-		"side-panel Agent Skill preview/apply dispatch",
+		"TestChatAgentPlannerBuildsGenericProductDomainSkillPreviews",
+		"natural admin-domain dispatch",
 		"`source_channel=in-app`",
 		"structured `settings_profile`",
-		"private-note redaction",
+		"raw setting value redaction",
 		"broader Settings Account/Storage/Data and live Telegram/external-channel validation remain separate",
 	} {
 		if !strings.Contains(settingsProfileRow, required) {
@@ -277,9 +277,9 @@ func TestAgentSkillCoverageMatrixBindsSettingsProfileUIChannelDispatchToIssue201
 	}
 
 	for _, required := range []string{
-		"The #2011 Settings/Profile UI/channel dispatch slice adds focused side-panel proof",
-		"without claiming broader Settings Account/Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
-		"Settings/Profile direct API persistence is implemented under #2009 and side-panel UI/channel dispatch is implemented under #2011",
+		"The #2011 Settings/Profile UI/channel evidence now flows through #2092's conversation-first path",
+		"No raw selector or parameter form remains in Chat",
+		"Settings/Profile, Appearance, Account, Storage, and Data/Maintenance retain their prior registry/API contracts",
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2011 narrative %q", required)
@@ -367,11 +367,11 @@ func TestAgentSkillCoverageMatrixBindsSettingsAccountUIChannelDispatchToIssue201
 		"`cabinet.settings.update_account`",
 		"source surface/channel/thread/message context",
 		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
-		"ASSISTANT-WORKSPACE-016/#2017 dispatches Settings Account Agent Skills with in-app source context",
-		"side-panel Agent Skill preview/apply dispatch",
+		"TestChatAgentPlannerBuildsGenericProductDomainSkillPreviews",
+		"natural admin-domain dispatch",
 		"`source_channel=in-app`",
-		"structured `settings_account` parameters",
-		"private-note redaction",
+		"structured `settings_account` payload",
+		"raw setting value redaction",
 		"Settings Storage/Data and live Telegram/external-channel validation remain separate",
 	} {
 		if !strings.Contains(settingsAccountRow, required) {
@@ -388,9 +388,9 @@ func TestAgentSkillCoverageMatrixBindsSettingsAccountUIChannelDispatchToIssue201
 	}
 
 	for _, required := range []string{
-		"The #2017 Settings/Account UI/channel dispatch slice adds focused side-panel proof",
-		"without claiming broader Settings Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
-		"Settings/Account side-panel UI/channel dispatch is implemented under #2017",
+		"The #2017 Settings/Account UI/channel evidence now flows through #2092's conversation-first path",
+		"opaque server-owned preview",
+		"Settings/Profile, Appearance, Account, Storage, and Data/Maintenance retain their prior registry/API contracts",
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2017 narrative %q", required)
@@ -423,10 +423,10 @@ func TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue
 		"`cabinet.settings.update_appearance`",
 		"source surface/channel/thread/message context",
 		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
-		"ASSISTANT-WORKSPACE-016/#2013 dispatches Settings Appearance Agent Skills with in-app source context",
-		"side-panel Agent Skill preview/apply dispatch",
+		"TestChatAgentPlannerBuildsGenericProductDomainSkillPreviews",
+		"natural admin-domain dispatch",
 		"`source_channel=in-app`",
-		"`setting_key`/`setting_scope`/`setting_value` parameters",
+		"setting validation, confirmed persistence, and setting-value redaction",
 		"setting-value redaction",
 		"broader Settings Account/Storage/Data and live Telegram/external-channel validation remain separate",
 	} {
@@ -444,9 +444,9 @@ func TestAgentSkillCoverageMatrixBindsSettingsAppearanceUIChannelDispatchToIssue
 	}
 
 	for _, required := range []string{
-		"The #2013 Settings/Appearance UI/channel dispatch slice adds focused side-panel proof",
-		"without claiming broader Settings Account/Storage/Data coverage, live Telegram/external-channel validation, or #1701 parent closure",
-		"Settings/Appearance side-panel UI/channel dispatch is implemented under #2013",
+		"The #2013 Settings/Appearance UI/channel evidence now flows through #2092's conversation-first path",
+		"opaque server-owned preview",
+		"Settings/Profile, Appearance, Account, Storage, and Data/Maintenance retain their prior registry/API contracts",
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2013 narrative %q", required)
@@ -479,12 +479,10 @@ func TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue201
 		"`cabinet.storage.configure_backup`",
 		"source surface/channel/thread/message context",
 		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
-		"ASSISTANT-WORKSPACE-016/#2019 dispatches Settings Storage Agent Skills with in-app source context",
-		"side-panel Agent Skill preview/apply dispatch",
+		"TestChatAgentPlannerBuildsGenericProductDomainSkillPreviews",
+		"natural admin-domain dispatch",
 		"`source_channel=in-app`",
-		"`backup_target`/`backup_schedule`/`storage_note` parameters",
-		"private-note redaction",
-		"local filesystem path redaction",
+		"backup persistence, confirmation, private-note/local filesystem path redaction",
 		"restore drill, Settings Data/Maintenance, and live Telegram/external-channel validation remain separate",
 	} {
 		if !strings.Contains(settingsStorageRow, required) {
@@ -501,9 +499,9 @@ func TestAgentSkillCoverageMatrixBindsSettingsStorageUIChannelDispatchToIssue201
 	}
 
 	for _, required := range []string{
-		"The #2019 Settings/Storage UI/channel dispatch slice adds focused side-panel proof",
-		"without claiming restore drill, Settings Data/Maintenance coverage, live Telegram/external-channel validation, or #1701 parent closure",
-		"Settings/Storage side-panel UI/channel dispatch is implemented under #2019",
+		"The #2019 Settings/Storage UI/channel evidence now flows through #2092's conversation-first path",
+		"opaque server-owned preview",
+		"Settings/Profile, Appearance, Account, Storage, and Data/Maintenance retain their prior registry/API contracts",
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2019 narrative %q", required)
@@ -536,13 +534,11 @@ func TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchTo
 		"`cabinet.maintenance.run_safe_check`",
 		"source surface/channel/thread/message context",
 		"ui.web/cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts",
-		"ASSISTANT-WORKSPACE-016/#2021 dispatches Settings Data/Maintenance Agent Skills with in-app source context",
-		"side-panel Agent Skill preview/apply dispatch",
+		"TestChatAgentPlannerBuildsGenericProductDomainSkillPreviews",
+		"natural admin-domain dispatch",
 		"`source_channel=in-app`",
-		"`maintenance_scope`/`check_level`/`maintenance_note` parameters",
-		"private-note redaction",
-		"local filesystem path redaction",
-		"no external-write claim",
+		"TestAgentSkillApplyAPIHandlesDataImportRestorePersistenceEvidence",
+		"private-note/local filesystem path redaction",
 		"Live Telegram/external-channel validation remains separate",
 	} {
 		if !strings.Contains(dataMaintenanceRow, required) {
@@ -559,9 +555,9 @@ func TestAgentSkillCoverageMatrixBindsSettingsDataMaintenanceUIChannelDispatchTo
 	}
 
 	for _, required := range []string{
-		"The #2021 Settings Data/Maintenance UI/channel dispatch slice adds focused side-panel proof",
-		"without claiming real import/restore persistence, destructive restore drill, live Telegram/external-channel validation, packaged/release acceptance, or #1701 parent closure",
-		"Settings Data/Maintenance side-panel UI/channel dispatch is implemented under #2021",
+		"The #2021 Settings Data/Maintenance UI/channel evidence now flows through #2092's conversation-first path",
+		"opaque server-owned preview",
+		"Settings/Profile, Appearance, Account, Storage, and Data/Maintenance retain their prior registry/API contracts",
 	} {
 		if !strings.Contains(content, required) {
 			t.Fatalf("coverage matrix must include #2021 narrative %q", required)

@@ -322,6 +322,31 @@ The full `/chats` workspace SHALL render a Cabinet-branded dark chat shell inspi
 - **AND** desktop and mobile layouts MUST avoid overlapping text, clipped controls, or unusable sidebar/composer states
 
 ## Acceptance Criteria
+
+### Requirement UI-SCREEN-CHAT-COPILOT-020: Chat SHALL normalize Agent outcomes without false success
+The full Chat workspace SHALL render one server-owned response contract for read results, clarification, setup and authority blockers, unsupported requests, provider failures, preview lifecycle, cancellation, and applied results.
+
+#### Scenario: Render deterministic response-state actions
+- **GIVEN** the latest assistant message contains a normalized Agent response
+- **WHEN** `/chats` renders or refreshes that exact profile/thread
+- **THEN** it MUST show the governed skill name and bounded source surface/channel
+- **AND** retryable states MUST resubmit only the bounded original intent to that same profile/thread
+- **AND** non-retryable states MUST NOT expose Retry
+- **AND** failure or blocked states MUST NOT expose Apply or success language
+
+#### Scenario: Open the owning provider setup from a blocked Chat response
+- **GIVEN** the latest assistant response is `setup_required` because the OpenAI assistant provider is not configured
+- **WHEN** the user invokes `Open setup` from the normalized response card
+- **THEN** Chat MUST navigate to `/integrations?provider=openai`
+- **AND** Integrations MUST open the OpenAI provider configuration dialog directly
+- **AND** Chat MUST NOT route provider setup to the unrelated MCP settings screen
+
+#### Scenario: Ordinary response evicts stale structured cards
+- **GIVEN** an older assistant message contains planner, capability, navigation, or preview state
+- **WHEN** a newer ordinary assistant response is persisted
+- **THEN** `/chats` MUST render no older structured Agent card
+- **AND** the compact Assistant workspace MUST make the same latest-message decision
+
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
 

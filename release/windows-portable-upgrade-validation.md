@@ -22,7 +22,7 @@ This checklist records the non-publishing Windows validation required before #18
 - Extract the ZIP into a new writable folder on Windows.
 - Start `cabinet.exe` with a new isolated data directory.
 - Verify `/healthz` returns `200 ok`.
-- Verify `/api/runtime` reports `app_version=0.1.0-beta.1`, the runtime port, process id, data directory, build revision, and build date.
+- Verify `/api/runtime` reports `app_version=0.1.0-beta.1`, the runtime port, process id, data directory, build date, and a full lowercase `build_revision` that exactly equals the Cabinet manifest `source_commit`.
 - Complete the first-run/onboarding path far enough to prove the UI can create or open the local profile without test-only hooks.
 
 ## Existing Data Directory Upgrade

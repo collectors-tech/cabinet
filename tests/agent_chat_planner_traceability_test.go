@@ -23,7 +23,7 @@ func TestAgentChatPlannerTraceabilityRowsBindIssue1933Evidence(t *testing.T) {
 		"TestChatAgentPlannerUsesDeterministicFakeProviderSkillSelection",
 		"TestChatAgentPlannerExecutesReadOnlySelectionWithProfileIsolation",
 		"TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly",
-		"TestChatAgentPlannerDeniesExternalWriteSelectionWithoutApproval",
+		"TestChatAgentPlannerPreviewsExternalWriteSelectionWithoutApplyAuthority",
 		"TestChatMessagesUseSharedAgentPlannerContractForMainAndSidePanel",
 		"run-chat-agent-planner-packaged-smoke.ps1",
 		"provider-backed read",

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 4,
   "issue": 2055,
   "name": "Cabinet 0.1 beta core Cypress acceptance pack",
   "required_categories": [
@@ -9,7 +9,12 @@
     "collections",
     "media",
     "recovery",
-    "provider_handoff"
+    "provider_handoff",
+    "provider_auth",
+    "agent_primary",
+    "agent_authority",
+    "telegram_connector",
+    "telegram_conversation"
   ],
   "specs": [
     {
@@ -43,11 +48,69 @@
     {
       "category": "provider_handoff",
       "path": "cypress/e2e/integrations/browser-companion-pairing/spec.cy.ts"
+    },
+    {
+      "category": "provider_auth",
+      "path": "cypress/e2e/integrations/provider-openai-chatgpt-ux/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/cabinet-agent-production-surface/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/cabinet-agent-continuity/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/cabinet-agent-durable-preview/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/assistant-workspace-agent-skills/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/cabinet-agent-collection-workflows/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/assistant-acquisition-workflows/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/assistant-workspace-dashboard-summary/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/agent-attachment-continuity/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/agent-response-state-matrix/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/agent-compact-accessibility/spec.cy.ts"
+    },
+    {
+      "category": "agent_authority",
+      "path": "cypress/e2e/chats/agent-admin-session-authority/spec.cy.ts"
+    },
+    {
+      "category": "telegram_connector",
+      "path": "cypress/e2e/integrations/telegram-local-connector/spec.cy.ts"
+    },
+    {
+      "category": "telegram_conversation",
+      "path": "cypress/e2e/integrations/telegram-agent-conversation/spec.cy.ts"
     }
   ],
   "manual_packaged_steps": [
     "#1869 packaged Windows acceptance",
     "#1944 Frontline user-present live provider proof",
-    "#1945 Bonza user-present browser-assisted proof"
+    "#1945 Bonza user-present browser-assisted proof",
+    "#1716 packaged Windows Telegram connector acceptance",
+    "#1773 real Telegram private text and media acceptance"
   ]
 }

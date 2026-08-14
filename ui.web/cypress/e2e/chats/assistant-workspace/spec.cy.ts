@@ -18,7 +18,7 @@ describe('chats/assistant-workspace', () => {
       'not.contain',
       'Loading profiles'
     )
-    cy.get('[data-testid="shell-chat-toggle"]').click({ force: true })
+    cy.get('[data-testid="shell-chat-toggle"]').click()
     cy.get('[data-testid="shell-assistant-modal-content"]', {
       timeout: 20000,
     }).should('be.visible')
@@ -160,6 +160,7 @@ describe('chats/assistant-workspace', () => {
       expect(response?.body.app_control.route).to.eq('/media')
     })
     cy.get('[data-testid="shell-assistant-navigation-action"]')
+      .scrollIntoView()
       .should('be.visible')
       .and('contain', 'Open Media')
     cy.get('[data-testid="shell-assistant-navigation-reason"]').should(
@@ -184,10 +185,9 @@ describe('chats/assistant-workspace', () => {
       )
       expect(response?.body.app_control.route).to.eq('/inventory')
     })
-    cy.get('[data-testid="shell-assistant-navigation-action"]').should(
-      'contain',
-      'Open Inventory'
-    )
+    cy.get('[data-testid="shell-assistant-navigation-action"]')
+      .scrollIntoView()
+      .should('contain', 'Open Inventory')
     cy.get('[data-testid="shell-assistant-navigation-action-open"]').click()
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.get('[data-testid="shell-assistant-modal-content"]').should('be.visible')
@@ -204,9 +204,7 @@ describe('chats/assistant-workspace', () => {
       .last()
       .should('have.attr', 'data-command-status', 'success')
       .and('contain', 'Highlighted inventory.surface')
-    cy.get('[data-testid="shell-assistant-command-cancel"]').click({
-      force: true,
-    })
+    cy.get('[data-testid="shell-assistant-command-cancel"]').click()
     cy.get('[data-testid="ui-guidance-overlay"]').should('not.exist')
 
     cy.get('[data-testid="shell-assistant-compose-input"]').type(
@@ -282,6 +280,7 @@ describe('chats/assistant-workspace', () => {
     })
 
     cy.get('[data-testid="shell-assistant-navigation-action"]')
+      .scrollIntoView()
       .should('be.visible')
       .and('contain', 'Open Media')
     cy.get('[data-testid="shell-assistant-navigation-reason"]').should(
@@ -292,9 +291,7 @@ describe('chats/assistant-workspace', () => {
       'not.have.attr',
       'open'
     )
-    cy.get('[data-testid="shell-assistant-action-timeline"] summary').click({
-      force: true,
-    })
+    cy.get('[data-testid="shell-assistant-action-timeline"] summary').click()
     cy.get('[data-testid="shell-assistant-workflow-run"]')
       .should('contain', 'navigate.open_surface')
       .and('contain', 'completed')
@@ -354,6 +351,7 @@ describe('chats/assistant-workspace', () => {
     })
 
     cy.get('[data-testid="shell-assistant-guided-walkthrough"]')
+      .scrollIntoView()
       .should('exist')
       .and('have.attr', 'data-guided-mode', 'show_me')
       .and('have.attr', 'data-guided-recipe', 'inventory.item.update')
@@ -366,18 +364,16 @@ describe('chats/assistant-workspace', () => {
       .should('have.attr', 'data-guided-target', 'inventory.item.save')
     cy.get('[data-testid="shell-assistant-guided-pause"]')
       .should('have.attr', 'data-guided-paused', 'false')
-      .click({ force: true })
+      .click()
       .should('have.attr', 'data-guided-paused', 'true')
-    cy.get('[data-testid="shell-assistant-action-timeline"] summary').click({
-      force: true,
-    })
+    cy.get('[data-testid="shell-assistant-action-timeline"] summary').click()
     cy.get('[data-testid="shell-assistant-command-event"]')
       .filter('[data-command-type="walkthrough.pause"]')
       .last()
       .should('have.attr', 'data-command-status', 'success')
       .and('contain', 'Walkthrough paused before mutation')
     cy.get('[data-testid="shell-assistant-guided-pause"]')
-      .click({ force: true })
+      .click()
       .should('have.attr', 'data-guided-paused', 'false')
     cy.get('[data-testid="shell-assistant-command-event"]')
       .filter('[data-command-type="walkthrough.resume"]')
@@ -505,9 +501,7 @@ describe('chats/assistant-workspace', () => {
           expect(serialized).not.to.include('Guided Do With Me Updated Title')
         })
 
-      cy.get('[data-testid="shell-assistant-apply-action"]').click({
-        force: true,
-      })
+      cy.get('[data-testid="shell-assistant-apply-action"]').click()
       cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
         'be.visible'
       )
@@ -533,9 +527,7 @@ describe('chats/assistant-workspace', () => {
       cy.get('[data-testid="shell-assistant-apply-result"]')
         .should('contain', 'Applied update_open_item_title')
         .and('contain', itemId)
-      cy.get('[data-testid="shell-assistant-action-timeline"] summary').click({
-        force: true,
-      })
+      cy.get('[data-testid="shell-assistant-action-timeline"] summary').click()
       cy.get('[data-testid="shell-assistant-workflow-run"]')
         .last()
         .should('have.attr', 'data-workflow-status', 'completed')
@@ -581,8 +573,7 @@ describe('chats/assistant-workspace', () => {
         contents: Cypress.Buffer.from('remove before send'),
         fileName: 'side-panel-remove-me.txt',
         mimeType: 'text/plain',
-      },
-      { force: true }
+      }
     )
     cy.get('[data-testid="shell-assistant-attachment-upload"]').click()
     cy.wait('@assistantAttachment')
@@ -600,8 +591,7 @@ describe('chats/assistant-workspace', () => {
         contents: Cypress.Buffer.from('side panel attachment proof'),
         fileName: 'side-panel-proof.txt',
         mimeType: 'text/plain',
-      },
-      { force: true }
+      }
     )
     cy.get('[data-testid="shell-assistant-pending-attachment"]').should(
       'contain',
@@ -817,6 +807,7 @@ describe('chats/assistant-workspace', () => {
         cy.get('[data-testid="shell-assistant-send-button"]').click()
         cy.wait('@assistantLayoutMessage').its('response.statusCode').should('eq', 201)
         cy.get('[data-testid="shell-assistant-navigation-action"]')
+          .scrollIntoView()
           .should('be.visible')
           .and('contain', 'Open layout settings')
         cy.location('pathname').should('match', /^\/inventory\/?$/)
@@ -854,7 +845,7 @@ describe('chats/assistant-workspace', () => {
       })
   })
 
-  it('ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation', () => {
+  it('ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui primitives without a client-carried action form', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
     openAssistantWorkspace()
@@ -891,32 +882,12 @@ describe('chats/assistant-workspace', () => {
       1
     )
 
-    cy.get('[data-testid="shell-assistant-preview-part-number"]')
-      .clear()
-      .type('ADAPT-1133')
-    cy.get('[data-testid="shell-assistant-preview-title"]')
-      .clear()
-      .type('Adapter Guarded Item')
-    cy.get('[data-testid="shell-assistant-preview-action"]').click()
-    cy.get('[data-testid="shell-assistant-action-card"]').should(
-      'contain',
-      'ADAPT-1133'
-    )
-    cy.get('[data-testid="shell-assistant-apply-action"]').click()
-    cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
-      'be.visible'
-    )
-    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]').should(
-      'contain',
-      'ADAPT-1133'
-    )
-    cy.get('[data-testid="shell-assistant-apply-cancel"]').click()
-    cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
-      'not.exist'
-    )
-    cy.get('[data-testid="shell-assistant-action-card"]').should(
-      'contain',
-      'ADAPT-1133'
+    cy.get('[data-testid="shell-assistant-modal-content"]')
+      .find('input[placeholder="Part number"]')
+      .should('not.exist')
+    cy.get('[data-testid="shell-assistant-modal-content"]').should(
+      'not.contain.text',
+      'Agent Skill'
     )
   })
 
@@ -935,7 +906,7 @@ describe('chats/assistant-workspace', () => {
       .and('have.class', 'w-[min(22rem,calc(100vw-1.5rem))]')
     cy.get('[data-testid="shell-assistant-panel-title"]').should(
       'contain',
-      'Chat'
+      'Cabinet Agent'
     )
     cy.get('[data-testid="shell-assistant-identity-card"]').within(() => {
       cy.get('[data-testid="shell-assistant-agent-name"]').should(
@@ -944,7 +915,7 @@ describe('chats/assistant-workspace', () => {
       )
       cy.get('[data-testid="shell-assistant-agent-role"]').should(
         'contain',
-        'Single app-control agent'
+        'One governed Agent across Cabinet'
       )
       cy.get('[data-testid="shell-assistant-runtime-state"]').should(
         'contain',
@@ -957,8 +928,8 @@ describe('chats/assistant-workspace', () => {
     cy.get('[data-testid="shell-assistant-message-list"]').should('exist')
     ;[
       ['shell-assistant-new-thread', 'New assistant thread'],
-      ['shell-assistant-mute-toggle', 'Mute assistant workspace updates'],
-      ['shell-assistant-close', 'Close assistant workspace'],
+      ['shell-assistant-mute-toggle', 'Mute Cabinet Agent updates'],
+      ['shell-assistant-close', 'Close Cabinet Agent'],
       ['shell-assistant-send-button', 'Send assistant message'],
     ].forEach(([testId, label]) => {
       cy.get(`[data-testid="${testId}"]`)
@@ -989,7 +960,7 @@ describe('chats/assistant-workspace', () => {
 
   it('ASSISTANT-WORKSPACE-007/#1508 exposes governed action results with persistence and thread audit proof', () => {
     bootstrapInventory()
-    cy.intercept('POST', '/api/chat/actions/preview').as('assistantPreview')
+    cy.intercept('POST', '/api/chat/messages').as('assistantPreview')
     cy.intercept('POST', '/api/chat/actions/apply').as('assistantApply')
 
     let assistantThreadId = ''
@@ -1031,24 +1002,24 @@ describe('chats/assistant-workspace', () => {
       'contain',
       'idle'
     )
-    cy.get('[data-testid="shell-assistant-apply-action"]').should(
-      'be.disabled'
+    cy.get('[data-testid="shell-assistant-apply-action"]').should('not.exist')
+    cy.get('[data-testid="shell-assistant-compose-input"]').type(
+      'create an inventory item WS-1083 Workspace Execution Proof'
     )
-
-    cy.get('[data-testid="shell-assistant-preview-part-number"]')
-      .clear()
-      .type('WS-1083')
-    cy.get('[data-testid="shell-assistant-preview-title"]')
-      .clear()
-      .type('Workspace Execution Proof')
-    cy.get('[data-testid="shell-assistant-preview-action"]').click()
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
 
     cy.wait('@assistantPreview').then(({ request, response }) => {
       expect(request.body.profile_id).to.eq('e2e-profile-001')
-      expect(request.body.action).to.eq('create_item_stub')
-      expect(request.body.payload.part_number).to.eq('WS-1083')
-      expect(request.body.payload.title).to.eq('Workspace Execution Proof')
-      expect(response?.statusCode).to.eq(200)
+      expect(request.body.content).to.eq(
+        'create an inventory item WS-1083 Workspace Execution Proof'
+      )
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.app_control.preview.payload.part_number).to.eq(
+        'WS-1083'
+      )
+      expect(response?.body.app_control.preview.payload.title).to.eq(
+        'Workspace Execution Proof'
+      )
     })
     cy.get('[data-testid="shell-assistant-action-preview"]')
       .should('contain', 'create_inventory_item')

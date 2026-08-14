@@ -299,7 +299,7 @@ export function InboxWorkspacePanel() {
                     data-testid='shell-inbox-open-chats'
                     onClick={openChats}
                   >
-                    Open Chats
+                    Open Cabinet Agent
                   </Button>
                   <Button
                     type='button'
@@ -308,7 +308,7 @@ export function InboxWorkspacePanel() {
                     data-testid='shell-inbox-open-assistant-workspace'
                     onClick={() => setActiveWorkspace('assistant')}
                   >
-                    Open Assistant Workspace
+                    Open contextual Agent
                   </Button>
                 </div>
               </div>
