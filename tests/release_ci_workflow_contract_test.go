@@ -132,6 +132,7 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		"Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden.",
 		"$pack.version -lt 4 -or $pack.spec_count -ne 22 -or $pack.specs.Count -ne 22",
 		"Fixed beta Cypress pack must resolve version 4 with exactly 22 specs.",
+		"go test ./... -count=1 -timeout 300s",
 		"$name = Split-Path (Split-Path $spec -Parent) -Leaf",
 		"$summaryPaths.Count -ne 1",
 		"Candidate Cypress must produce exactly one summary",

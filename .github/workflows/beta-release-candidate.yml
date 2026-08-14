@@ -109,7 +109,9 @@ jobs:
 
       - name: Full Go test suite
         shell: pwsh
-        run: go test ./... *>&1 | Tee-Object .logs/release-candidate/go-test.log
+        run: |
+          go test ./... -count=1 -timeout 300s *>&1 | Tee-Object .logs/release-candidate/go-test.log
+          if ($LASTEXITCODE -ne 0) { throw "Full Go test suite failed with exit code $LASTEXITCODE" }
 
       - name: OpenAPI parity and docs
         shell: pwsh
