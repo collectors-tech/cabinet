@@ -117,10 +117,15 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		"Validate fixed beta core Cypress acceptance pack",
 		"node scripts/validate-beta-core-cypress-pack.mjs --manifest release/beta-core-cypress-pack.json",
 		".logs/release-candidate/cypress-pack.json",
-		"Start controlled Telegram Bot API fixture",
+		"Build controlled Telegram Bot API fixture",
 		"$fixtureExecutable = Join-Path $env:RUNNER_TEMP \"cabinet-telegram-test-fixture.exe\"",
 		"go build -o $fixtureExecutable ./cmd/telegram-test-fixture",
+		"$telegramFixtureSpecs = @(",
+		"if ($telegramFixtureSpecs -contains $spec)",
+		"if (-not $telegramFixtureStarted)",
+		`$telegramFixtureStatusURL = "$($env:CYPRESS_telegramFixtureControlURL.TrimEnd('/'))/control/status"`,
 		"Start-Process -FilePath $fixtureExecutable",
+		"Controlled Telegram fixture is unavailable before ${spec}",
 		"CABINET_TELEGRAM_TEST_API_BASE_URL",
 		"CYPRESS_telegramRuntimeFixture: \"true\"",
 		"if ($env:CYPRESS_telegramRuntimeFixture -ne \"true\"",
@@ -164,6 +169,14 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		if strings.Contains(content, forbidden) {
 			t.Fatalf("release-candidate gate contains forbidden fragment %q", forbidden)
 		}
+	}
+
+	loopIndex := strings.Index(content, "foreach ($spec in $pack.specs)")
+	telegramGuardIndex := strings.Index(content, "if ($telegramFixtureSpecs -contains $spec)")
+	fixtureStartIndex := strings.Index(content, "Start-Process -FilePath $fixtureExecutable")
+	cypressRunIndex := strings.Index(content, "pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec $spec")
+	if loopIndex < 0 || telegramGuardIndex < loopIndex || fixtureStartIndex < telegramGuardIndex || cypressRunIndex < fixtureStartIndex {
+		t.Fatal("controlled Telegram fixture must start inside the pack loop immediately before the Telegram specs")
 	}
 }
 
