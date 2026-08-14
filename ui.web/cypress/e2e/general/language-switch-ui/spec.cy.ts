@@ -1,23 +1,32 @@
 describe('language-switch-ui', () => {
-  function signInToHome() {
-    cy.clearCookies()
-    cy.clearLocalStorage()
-    cy.visit('/sign-in?redirect=%2Fdashboard')
-    cy.get('input[name="email"]').clear().type('e2e-theme-i18n@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard')
+  function enterHomeWithLocalSession() {
+    cy.viewport(1512, 967)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.setCookie('sidebar_state', 'true')
+      cy.useBootstrappedProfile(profile_id, profile_name, {
+        path: '/dashboard',
+      })
+    })
   }
 
   function switchLanguage(code: 'en' | 'zh' | 'ja') {
-    cy.get('[data-testid="header-language-switch-trigger"]').click()
-    cy.get(`[data-testid="header-language-option-${code}"]`).click()
+    cy.get('[data-testid="header-language-switch-trigger"]')
+      .filter(':visible')
+      .click()
+    cy.get(`[data-testid="header-language-option-${code}"]`)
+      .filter(':visible')
+      .click()
   }
 
   it('UI-FOUNDATION-THEME-RTL-I18N-004 updates visible shell and page labels when language is changed', () => {
-    signInToHome()
+    enterHomeWithLocalSession()
 
-    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should('contain', 'Dashboard')
+    cy.get('[data-testid="header-language-switch-trigger"]').should('contain', 'EN')
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should('contain', 'Home')
     cy.contains('h1', 'Home').should('be.visible')
 
     switchLanguage('zh')
