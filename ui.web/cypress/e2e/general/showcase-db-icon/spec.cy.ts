@@ -3,20 +3,11 @@ describe('showcase-db-icon', () => {
     return cy.get(`[data-testid="${testId}"]`).first()
   }
 
-  function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-showcase-db-icon@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-  }
+  function enterShowcaseProfile() {
+    cy.viewport(1512, 967)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
 
-  beforeEach(() => {
-    cy.clearCookies()
-    cy.clearLocalStorage()
-    cy.request('POST', '/api/test/reset', {})
-  })
-
-  it('UI-FOUNDATION-SHELL-NAVIGATION-010 renders Showcase DB icon variants with accessible profile text', () => {
     cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
       expect(primaryResp.status).to.eq(201)
 
@@ -24,11 +15,26 @@ describe('showcase-db-icon', () => {
         expect(showcaseResp.status).to.eq(201)
         const showcaseID = showcaseResp.body.id as string
 
-        cy.request('PUT', '/api/profiles/active', { profile_id: showcaseID }).its('status').should('eq', 200)
+        cy.request('PUT', '/api/profiles/active', {
+          profile_id: primaryResp.body.id,
+        }).its('status').should('eq', 200)
+        cy.e2eEnsureSignedOut()
+        cy.stubLocalServerSession(showcaseID)
+        cy.setCookie('sidebar_state', 'true')
+        cy.useBootstrappedProfile(showcaseID, 'Showcase DB', {
+          path: '/inventory/',
+        })
       })
     })
+  }
 
-    signInTo('/inventory/')
+  beforeEach(() => {
+    cy.clearCookies()
+    cy.clearLocalStorage()
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-010 renders Showcase DB icon variants with accessible profile text', () => {
+    enterShowcaseProfile()
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
     cy.get('[data-testid="active-profile-status"]').should(
       'contain',
