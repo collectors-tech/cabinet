@@ -1,9 +1,28 @@
 describe('ui-page-header-title', () => {
+  beforeEach(() => {
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+  })
+
+  function stubLocalSession(profileId: string) {
+    expect(profileId).to.not.equal('')
+    cy.intercept('POST', '**/api/auth/local/session', {
+      statusCode: 200,
+      body: {
+        ok: true,
+        session_token:
+          'test-only-opaque-profile-bound-session-credential-000000000001',
+      },
+    }).as('pageHeaderLocalSession')
+  }
+
   function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-header-title@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', /^Sign in$/).click()
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eSetSetupState('present')
+      cy.e2eEnsureSignedOut()
+      stubLocalSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path })
+    })
   }
 
   function assertCenteredHeader(testId: string, title: string) {
@@ -53,11 +72,6 @@ describe('ui-page-header-title', () => {
       )
     })
   }
-
-  beforeEach(() => {
-    cy.clearCookies()
-    cy.clearLocalStorage()
-  })
 
   it('UI-PAGE-HEADER-TITLE-001 keeps Inventory title visible between search and compact actions', () => {
     cy.viewport(1240, 720)
