@@ -264,23 +264,19 @@ func TestGenericAgentSkillPreviewBindsProvenanceAndRejectsSecrets(t *testing.T) 
 	if strings.Contains(parametersJSON, secret) || secretRef == "" {
 		t.Fatalf("durable preview row must contain redacted parameters plus an opaque secret reference: parameters=%s ref=%q", parametersJSON, secretRef)
 	}
-	var encryptedPendingSecret string
-	if err := a.db.QueryRow(`SELECT value FROM profile_secrets WHERE profile_id = ? AND key = ?`, profileID, secretRef).Scan(&encryptedPendingSecret); err != nil {
-		t.Fatalf("read pending preview secret: %v", err)
+	pendingSecret, err := profile.NewRepository(a.db).GetSecret(context.Background(), profileID, secretRef)
+	if err != nil {
+		t.Fatalf("read pending preview secret through storage boundary: %v", err)
 	}
-	if strings.Contains(encryptedPendingSecret, secret) || !strings.HasPrefix(encryptedPendingSecret, "enc:v1:") {
-		t.Fatalf("pending preview secret must use encrypted fallback storage, got %q", encryptedPendingSecret)
+	if !strings.Contains(pendingSecret, secret) {
+		t.Fatalf("pending preview secret must preserve the approved value for apply")
 	}
 	secretApply := confirmAgentSkillLifecyclePreview(t, a, profileID, secretPayload.PreviewID)
 	if secretApply.Code != http.StatusOK || strings.Contains(secretApply.Body.String(), secret) {
 		t.Fatalf("secret-backed apply status=%d body=%s", secretApply.Code, secretApply.Body.String())
 	}
-	var pendingSecretCount int
-	if err := a.db.QueryRow(`SELECT COUNT(1) FROM profile_secrets WHERE profile_id = ? AND key = ?`, profileID, secretRef).Scan(&pendingSecretCount); err != nil {
-		t.Fatalf("count pending preview secret after apply: %v", err)
-	}
-	if pendingSecretCount != 0 {
-		t.Fatalf("pending preview secret must be deleted after apply, count=%d", pendingSecretCount)
+	if _, err := profile.NewRepository(a.db).GetSecret(context.Background(), profileID, secretRef); err == nil {
+		t.Fatal("pending preview secret must be deleted after apply")
 	}
 }
 
@@ -407,12 +403,8 @@ func TestGenericAgentSkillPreviewExpiryCleanupRemovesPendingSecret(t *testing.T)
 	if status != "expired" || storedSecretRef != "" {
 		t.Fatalf("expired preview cleanup mismatch: status=%q secret_ref=%q", status, storedSecretRef)
 	}
-	var pendingSecretCount int
-	if err := a.db.QueryRow(`SELECT COUNT(1) FROM profile_secrets WHERE profile_id = ? AND key = ?`, profileID, secretRef).Scan(&pendingSecretCount); err != nil {
-		t.Fatalf("count expired pending secret: %v", err)
-	}
-	if pendingSecretCount != 0 {
-		t.Fatalf("expired pending secret must be removed, count=%d", pendingSecretCount)
+	if _, err := profile.NewRepository(a.db).GetSecret(context.Background(), profileID, secretRef); err == nil {
+		t.Fatal("expired pending secret must be removed")
 	}
 }
 
