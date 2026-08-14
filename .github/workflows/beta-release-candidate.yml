@@ -121,27 +121,12 @@ jobs:
           npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html *>&1 | Tee-Object .logs/release-candidate/openapi-build.log
           if ($LASTEXITCODE -ne 0) { throw "OpenAPI docs build failed with exit code $LASTEXITCODE" }
 
-      - name: Start controlled Telegram Bot API fixture
+      - name: Build controlled Telegram Bot API fixture
         shell: pwsh
         run: |
-          $stdout = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stdout.log"
-          $stderr = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stderr.log"
           $fixtureExecutable = Join-Path $env:RUNNER_TEMP "cabinet-telegram-test-fixture.exe"
           go build -o $fixtureExecutable ./cmd/telegram-test-fixture
           if ($LASTEXITCODE -ne 0) { throw "Controlled Telegram fixture build failed with exit code $LASTEXITCODE" }
-          $fixture = Start-Process -FilePath $fixtureExecutable -ArgumentList @(
-            "-listen", "127.0.0.1:17994"
-          ) -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-          $fixture.Id | Set-Content .logs/release-candidate/telegram-fixture.pid
-          $ready = $false
-          for ($attempt = 0; $attempt -lt 40; $attempt++) {
-            try {
-              $response = Invoke-RestMethod -Uri "http://127.0.0.1:17994/control/status" -TimeoutSec 1
-              if ($response.ok -eq $true) { $ready = $true; break }
-            } catch {}
-            Start-Sleep -Milliseconds 250
-          }
-          if (-not $ready) { throw "Controlled Telegram fixture did not become ready." }
 
       - name: Cypress release pack
         shell: pwsh
@@ -161,7 +146,53 @@ jobs:
           if ($pack.version -lt 4 -or $pack.spec_count -ne 22 -or $pack.specs.Count -ne 22) {
             throw "Fixed beta Cypress pack must resolve version 4 with exactly 22 specs."
           }
+          $telegramFixtureSpecs = @(
+            "cypress/e2e/integrations/telegram-local-connector/spec.cy.ts",
+            "cypress/e2e/integrations/telegram-agent-conversation/spec.cy.ts"
+          )
+          $telegramFixtureStarted = $false
           foreach ($spec in $pack.specs) {
+            if ($telegramFixtureSpecs -contains $spec) {
+              $fixtureExecutable = Join-Path $env:RUNNER_TEMP "cabinet-telegram-test-fixture.exe"
+              $fixturePIDPath = ".logs/release-candidate/telegram-fixture.pid"
+              $telegramFixtureStatusURL = "$($env:CYPRESS_telegramFixtureControlURL.TrimEnd('/'))/control/status"
+              if (-not $telegramFixtureStarted) {
+                $stdout = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stdout.log"
+                $stderr = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stderr.log"
+                $fixture = Start-Process -FilePath $fixtureExecutable -ArgumentList @(
+                  "-listen", "127.0.0.1:17994"
+                ) -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+                $fixture.Id | Set-Content $fixturePIDPath
+                $ready = $false
+                for ($attempt = 0; $attempt -lt 40; $attempt++) {
+                  try {
+                    $response = Invoke-RestMethod -Uri $telegramFixtureStatusURL -TimeoutSec 1
+                    if ($response.ok -eq $true) { $ready = $true; break }
+                  } catch {}
+                  Start-Sleep -Milliseconds 250
+                }
+                if (-not $ready) { throw "Controlled Telegram fixture did not become ready before ${spec}." }
+                $telegramFixtureStarted = $true
+              }
+
+              $rawFixturePID = (Get-Content -Raw -LiteralPath $fixturePIDPath).Trim()
+              $fixturePID = 0
+              if (-not [int]::TryParse($rawFixturePID, [ref]$fixturePID) -or $fixturePID -le 0) {
+                throw "Controlled Telegram fixture PID is invalid before ${spec}."
+              }
+              $ownedFixture = Get-Process -Id $fixturePID -ErrorAction SilentlyContinue
+              if (-not $ownedFixture -or $ownedFixture.Path -ne $fixtureExecutable) {
+                throw "Controlled Telegram fixture is unavailable before ${spec}."
+              }
+              try {
+                $fixtureStatus = Invoke-RestMethod -Uri $telegramFixtureStatusURL -TimeoutSec 2
+              } catch {
+                throw "Controlled Telegram fixture health probe failed before ${spec}."
+              }
+              if ($fixtureStatus.ok -ne $true) {
+                throw "Controlled Telegram fixture is unhealthy before ${spec}."
+              }
+            }
             $name = Split-Path (Split-Path $spec -Parent) -Leaf
             pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec $spec -Browser chrome -Retries 0 -ExecutionTimeoutSec 300 -RequireE2EHooks -LogDir .logs/release-candidate/cypress -LogName "candidate-$name" *>&1 | Tee-Object -Append .logs/release-candidate/cypress.log
             if ($LASTEXITCODE -ne 0) { throw "Candidate Cypress spec failed: $spec" }
