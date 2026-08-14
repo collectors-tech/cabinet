@@ -1,11 +1,18 @@
 describe("ui-foundation-auth-menus-shortcuts", () => {
+  beforeEach(() => {
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+  });
+
   function signInToHome() {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-    cy.visit("/sign-in?redirect=%2F");
-    cy.get('input[name="email"]').clear().type("e2e-auth-menus@example.com");
-    cy.get('input[name="password"]').clear().type("password123");
-    cy.contains("button", "Sign in").click();
+    cy.e2eBootstrap({ minimalProfile: true }).then((state) => {
+      cy.e2eEnsureSignedOut();
+      cy.stubLocalServerSession(state.profile_id);
+      cy.useBootstrappedProfile(state.profile_id, state.profile_name, {
+        path: "/dashboard",
+      });
+      cy.wait("@localServerSession");
+    });
     cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard");
   }
 
