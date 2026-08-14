@@ -2343,6 +2343,9 @@ export function Apps({
         payload.checked_at ?? payload.updated_at ?? new Date().toISOString()
       const healthStatus = payload.status ?? 'unknown'
       const readinessState = payload.state ?? healthStatus
+      const validationSucceeded =
+        payload.provider_test_passed === true ||
+        ['ok', 'ready', 'success', 'succeeded'].includes(healthStatus)
       const nextProvider: ProviderRecord = {
         ...editingProvider,
         state: readinessState,
@@ -2356,12 +2359,11 @@ export function Apps({
           last_checked_at: checkedAt,
         },
         last_run: {
-          status:
-            healthStatus === 'ok'
-              ? 'success'
-              : healthStatus === 'unknown'
-                ? 'never'
-                : 'failed',
+          status: validationSucceeded
+            ? 'success'
+            : healthStatus === 'unknown'
+              ? 'never'
+              : 'failed',
           finished_at: checkedAt,
         },
       }
@@ -2385,7 +2387,7 @@ export function Apps({
       setActionMessage(message)
       recordNotificationHistory({
         id: `integrations-provider-health-${notificationHistoryID(editingProvider.provider_id)}-${notificationHistoryID(healthStatus)}`,
-        level: healthStatus === 'ok' ? 'success' : 'warning',
+        level: validationSucceeded ? 'success' : 'warning',
         title: message,
         summary: 'Provider health validation status from Integrations.',
         source_label: 'Integrations',
