@@ -421,6 +421,11 @@ function AgentPlannerCard({
         : null,
     }
   }, [durablePreview, previewID])
+  const durableLifecycleMode = durableLifecycle
+    ? durableLifecycle.strongConfirmation
+      ? 'strong'
+      : 'standard'
+    : ''
   const durableProfileID = String(
     durableLifecycle?.apply.profile_id ?? ''
   ).trim()
@@ -443,7 +448,7 @@ function AgentPlannerCard({
           ? 'Preview expired'
           : ''
   const loadDurablePreview = useCallback(async () => {
-    if (!durableLifecycle || !durableProfileID || !previewID) return
+    if (!durableLifecycleMode || !durableProfileID || !previewID) return
     setPreviewError('')
     try {
       const response = await cabinetProtectedFetch(
@@ -465,9 +470,9 @@ function AgentPlannerCard({
         'Cabinet could not verify this preview. Retry the request.'
       )
     }
-  }, [durableLifecycle, durableProfileID, previewID])
+  }, [durableLifecycleMode, durableProfileID, previewID])
   useEffect(() => {
-    if (!durableLifecycle || !durableProfileID || !previewID) return
+    if (!durableLifecycleMode || !durableProfileID || !previewID) return
     setResolvedPreview({ previewID, status: '', loaded: false })
     setStrongConfirmation(null)
     void loadDurablePreview()
@@ -485,7 +490,7 @@ function AgentPlannerCard({
         'cabinet:agent-skill-preview-changed',
         handlePreviewChanged
       )
-  }, [durableLifecycle, durableProfileID, loadDurablePreview, previewID])
+  }, [durableLifecycleMode, durableProfileID, loadDurablePreview, previewID])
   const runPreviewAction = async (
     endpoint: '/api/agent/skills/apply' | '/api/agent/skills/cancel',
     body: Record<string, unknown>
