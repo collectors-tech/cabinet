@@ -177,7 +177,7 @@ describe('chats/cabinet-agent-continuity', () => {
       ).to.deep.eq({
         kind: 'open_setup',
         label: 'Open setup',
-        route: '/settings/integrations',
+        route: '/integrations?provider=openai',
       })
     })
 
