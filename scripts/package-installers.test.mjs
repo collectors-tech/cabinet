@@ -103,6 +103,10 @@ describe("Cabinet beta packaging contract", () => {
     assert.match(workflow, /actions\/download-artifact@v4/);
     assert.match(workflow, /verify-cabinet-release-package\.mjs/);
     assert.match(workflow, /verify-browser-companion-package\.mjs/);
+    assert.match(
+      workflow,
+      /candidate\/dist\/browser-companion\/browser-companion-candidate-summary\.md/,
+    );
     assert.match(workflow, /softprops\/action-gh-release@v2/);
     assert.match(workflow, /prerelease:\s*true/);
     assert.match(workflow, /target_commitish: \${{ inputs\.commit_sha }}/);
