@@ -63,6 +63,17 @@ const route = getRouteApi('/_authenticated/integrations/')
 type AppType = 'all' | 'connected' | 'notConnected'
 type ViewMode = 'rows' | 'cards'
 
+type OpenAIBrowserAuthStatus = {
+  provider: 'openai'
+  auth_method: 'browser_auth'
+  state: string
+  authenticated: boolean
+  profile_connected: boolean
+  recommended: boolean
+  message: string
+  global_login_preserved?: boolean
+}
+
 type ProviderRecord = {
   provider_id: string
   display_name: string
@@ -784,6 +795,9 @@ function isConfiguredIntegration(
   provider: ProviderRecord,
   settings: Record<string, string>
 ) {
+  if (provider.provider_id === 'openai') {
+    return true
+  }
   if (provider.has_token || provider.active_auth_method) {
     return true
   }
@@ -938,6 +952,13 @@ export function Apps({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [tokenFieldError, setTokenFieldError] = useState<string | null>(null)
   const [replaceToken, setReplaceToken] = useState(false)
+  const [openAIBrowserAuth, setOpenAIBrowserAuth] =
+    useState<OpenAIBrowserAuthStatus | null>(null)
+  const [openAIBrowserAuthWorking, setOpenAIBrowserAuthWorking] =
+    useState(false)
+  const [openAIBrowserAuthError, setOpenAIBrowserAuthError] = useState<
+    string | null
+  >(null)
   const [telegramStatus, setTelegramStatus] =
     useState<TelegramConnectionStatus | null>(null)
   const [telegramPairing, setTelegramPairing] =
@@ -963,7 +984,7 @@ export function Apps({
     token: '',
     marketplace: '',
     itemsPerPage: '',
-    openAiModel: 'gpt-4o-mini',
+    openAiModel: 'gpt-5.6-luna',
     openAiTestPrompt:
       'Write one sentence confirming OpenAI is connected to Cabinet.',
     buyerInterestPayload: defaultBuyerInterestPayload,
@@ -1429,7 +1450,9 @@ export function Apps({
         token: '',
         marketplace: settings[keys.marketplaceKey] ?? 'AU',
         itemsPerPage: settings[keys.itemsPerPageKey] ?? '24',
-        openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
+        openAiModel:
+          settings['assistant_default_model'] ??
+          (provider.provider_id === 'openai' ? 'gpt-5.6-luna' : 'gpt-4o-mini'),
         openAiTestPrompt:
           'Write one sentence confirming OpenAI is connected to Cabinet.',
         buyerInterestPayload: defaultBuyerInterestPayload,
@@ -1460,6 +1483,9 @@ export function Apps({
       setLandedCostError(null)
       setLandedCostResult(null)
       setLandedCostWorking(false)
+      setOpenAIBrowserAuth(null)
+      setOpenAIBrowserAuthError(null)
+      setOpenAIBrowserAuthWorking(false)
       setReplaceToken(
         !(
           provider.has_token ||
@@ -1469,6 +1495,139 @@ export function Apps({
     },
     [settings]
   )
+
+  const loadOpenAIBrowserAuthStatus = useCallback(async () => {
+    if (!activeProfileId) {
+      return null
+    }
+    const response = await fetch(
+      `/api/providers/openai/browser-auth?profile_id=${encodeURIComponent(activeProfileId)}`
+    )
+    if (!response.ok) {
+      throw new Error(`openai_browser_auth_status_${response.status}`)
+    }
+    const status = (await response.json()) as OpenAIBrowserAuthStatus
+    setOpenAIBrowserAuth(status)
+    return status
+  }, [activeProfileId])
+
+  useEffect(() => {
+    if (editingProviderID !== 'openai' || !activeProfileId) {
+      return
+    }
+    setOpenAIBrowserAuthError(null)
+    void loadOpenAIBrowserAuthStatus().catch(() => {
+      setOpenAIBrowserAuthError(
+        'Cabinet could not check ChatGPT sign-in. Retry from this PC.'
+      )
+    })
+  }, [activeProfileId, editingProviderID, loadOpenAIBrowserAuthStatus])
+
+  const connectOpenAIBrowserAuth = useCallback(async () => {
+    if (!activeProfileId || openAIBrowserAuthWorking) {
+      return
+    }
+    setOpenAIBrowserAuthWorking(true)
+    setOpenAIBrowserAuthError(null)
+    try {
+      const response = await fetch('/api/providers/openai/browser-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      const status = (await response.json()) as OpenAIBrowserAuthStatus
+      setOpenAIBrowserAuth(status)
+      if (!response.ok && response.status !== 202) {
+        throw new Error(`openai_browser_auth_connect_${response.status}`)
+      }
+      if (status.profile_connected) {
+        setSettings((previous) => ({
+          ...previous,
+          'openai.active_auth_method': 'browser_auth',
+          openai_active_auth_method: 'browser_auth',
+          'openai.browser_auth_state': 'connected',
+          'openai.browser_auth_artifact_present': 'true',
+          'openai.browser_auth_provider_test_state': 'passed',
+          'integration.openai.enabled': 'true',
+          assistant_default_provider: 'openai',
+          assistant_default_model: 'gpt-5.6-luna',
+        }))
+        setForm((previous) => ({
+          ...previous,
+          openAiModel: 'gpt-5.6-luna',
+        }))
+        setActionMessage('ChatGPT is connected and ready for Cabinet Chat.')
+      }
+    } catch {
+      setOpenAIBrowserAuthError(
+        'ChatGPT sign-in did not complete. Retry, or use an API key under Advanced.'
+      )
+    } finally {
+      setOpenAIBrowserAuthWorking(false)
+    }
+  }, [activeProfileId, openAIBrowserAuthWorking])
+
+  useEffect(() => {
+    if (
+      editingProviderID !== 'openai' ||
+      openAIBrowserAuth?.state !== 'signing_in'
+    ) {
+      return
+    }
+    const interval = window.setInterval(() => {
+      void loadOpenAIBrowserAuthStatus()
+        .then((status) => {
+          if (status?.authenticated && !status.profile_connected) {
+            return connectOpenAIBrowserAuth()
+          }
+        })
+        .catch(() => undefined)
+    }, 1500)
+    return () => window.clearInterval(interval)
+  }, [
+    connectOpenAIBrowserAuth,
+    editingProviderID,
+    loadOpenAIBrowserAuthStatus,
+    openAIBrowserAuth?.state,
+  ])
+
+  const disconnectOpenAIBrowserAuth = useCallback(async () => {
+    if (!activeProfileId || openAIBrowserAuthWorking) {
+      return
+    }
+    setOpenAIBrowserAuthWorking(true)
+    setOpenAIBrowserAuthError(null)
+    try {
+      const response = await fetch(
+        `/api/providers/openai/browser-auth?profile_id=${encodeURIComponent(activeProfileId)}`,
+        { method: 'DELETE' }
+      )
+      if (!response.ok) {
+        throw new Error(`openai_browser_auth_disconnect_${response.status}`)
+      }
+      const status = (await response.json()) as OpenAIBrowserAuthStatus
+      setOpenAIBrowserAuth(status)
+      setSettings((previous) => ({
+        ...previous,
+        'openai.active_auth_method': editingProvider?.has_token
+          ? 'api_key'
+          : '',
+        openai_active_auth_method: editingProvider?.has_token ? 'api_key' : '',
+        'openai.browser_auth_state': 'disconnected',
+        'openai.browser_auth_artifact_present': 'false',
+        'openai.browser_auth_provider_test_state': 'not_run',
+      }))
+      setActionMessage(
+        'ChatGPT was disconnected from this Cabinet profile. Your Codex login was left unchanged.'
+      )
+    } catch {
+      setOpenAIBrowserAuthError(
+        'Could not disconnect ChatGPT from this profile.'
+      )
+    } finally {
+      setOpenAIBrowserAuthWorking(false)
+    }
+  }, [activeProfileId, editingProvider?.has_token, openAIBrowserAuthWorking])
 
   useEffect(() => {
     const providerID = requestedProviderID.trim()
@@ -3390,76 +3549,84 @@ export function Apps({
               {editingProvider?.display_name ?? 'Integration'}
             </DialogTitle>
             <DialogDescription>
-              Manage provider credentials, validation, and setup controls.
+              {editingProvider?.provider_id === 'openai'
+                ? 'Connect ChatGPT to power Cabinet Chat. Browser sign-in is recommended; API keys are optional.'
+                : 'Manage provider credentials, validation, and setup controls.'}
             </DialogDescription>
           </DialogHeader>
           {editingProvider ? (
             <div className='space-y-4'>
-              <div className='rounded-md border bg-muted/20 p-3 text-xs'>
-                <p>Mode: {editingProvider.integration_mode}</p>
-                <p data-testid='provider-detail-category'>
-                  Category:{' '}
-                  {editingProvider.provider_category ?? 'uncategorized'}
-                  {' / '}
-                  Type: {editingProvider.provider_type ?? 'unknown'}
-                </p>
-                <p data-testid='provider-detail-api-family'>
-                  API Family: {editingProvider.api_family ?? 'custom'}
-                </p>
-                <p data-testid='provider-detail-api-support-profile'>
-                  Support Profile:{' '}
-                  {editingProvider.api_support_profile ?? 'unknown'}
-                </p>
-                <p data-testid='provider-detail-config-schema'>
-                  Config Schema:{' '}
-                  {editingProvider.config_schema_ref ?? 'provider-specific'}
-                </p>
-                <p data-testid='provider-detail-workflows'>
-                  Workflows:{' '}
-                  {editingProvider.workflow_refs?.length
-                    ? editingProvider.workflow_refs.join(', ')
-                    : 'none'}
-                </p>
-                <p data-testid='provider-detail-manifest-actions'>
-                  Manifest Actions:{' '}
-                  {providerManifestActions(editingProvider).join(', ') ||
-                    'none'}
-                </p>
-                <p>
-                  Readiness:{' '}
-                  {editingProvider.health?.state ?? editingProvider.state}
-                </p>
-                <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
-                {editingProvider.health?.message ? (
-                  <p>Message: {editingProvider.health.message}</p>
-                ) : null}
-                {editingProvider.health?.last_error ? (
-                  <p>Last error: {editingProvider.health.last_error}</p>
-                ) : null}
-                {typeof editingProvider.health?.retry_after_seconds ===
-                'number' ? (
-                  <p>
-                    Retry after: {editingProvider.health.retry_after_seconds}{' '}
-                    seconds
-                  </p>
-                ) : null}
-                {editingProvider.health?.next_action ? (
-                  <p>Next action: {editingProvider.health.next_action}</p>
-                ) : null}
-                <p>Last run: {editingProvider.last_run?.status ?? 'never'}</p>
-                <p>
-                  Last checked:{' '}
-                  {editingProvider.health?.last_checked_at ??
-                    editingProvider.last_run?.finished_at ??
-                    'n/a'}
-                </p>
-                {actionMessage ? <p>{actionMessage}</p> : null}
-              </div>
+              {editingProvider.provider_id !== 'openai' ? (
+                <>
+                  <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                    <p>Mode: {editingProvider.integration_mode}</p>
+                    <p data-testid='provider-detail-category'>
+                      Category:{' '}
+                      {editingProvider.provider_category ?? 'uncategorized'}
+                      {' / '}
+                      Type: {editingProvider.provider_type ?? 'unknown'}
+                    </p>
+                    <p data-testid='provider-detail-api-family'>
+                      API Family: {editingProvider.api_family ?? 'custom'}
+                    </p>
+                    <p data-testid='provider-detail-api-support-profile'>
+                      Support Profile:{' '}
+                      {editingProvider.api_support_profile ?? 'unknown'}
+                    </p>
+                    <p data-testid='provider-detail-config-schema'>
+                      Config Schema:{' '}
+                      {editingProvider.config_schema_ref ?? 'provider-specific'}
+                    </p>
+                    <p data-testid='provider-detail-workflows'>
+                      Workflows:{' '}
+                      {editingProvider.workflow_refs?.length
+                        ? editingProvider.workflow_refs.join(', ')
+                        : 'none'}
+                    </p>
+                    <p data-testid='provider-detail-manifest-actions'>
+                      Manifest Actions:{' '}
+                      {providerManifestActions(editingProvider).join(', ') ||
+                        'none'}
+                    </p>
+                    <p>
+                      Readiness:{' '}
+                      {editingProvider.health?.state ?? editingProvider.state}
+                    </p>
+                    <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
+                    {editingProvider.health?.message ? (
+                      <p>Message: {editingProvider.health.message}</p>
+                    ) : null}
+                    {editingProvider.health?.last_error ? (
+                      <p>Last error: {editingProvider.health.last_error}</p>
+                    ) : null}
+                    {typeof editingProvider.health?.retry_after_seconds ===
+                    'number' ? (
+                      <p>
+                        Retry after:{' '}
+                        {editingProvider.health.retry_after_seconds} seconds
+                      </p>
+                    ) : null}
+                    {editingProvider.health?.next_action ? (
+                      <p>Next action: {editingProvider.health.next_action}</p>
+                    ) : null}
+                    <p>
+                      Last run: {editingProvider.last_run?.status ?? 'never'}
+                    </p>
+                    <p>
+                      Last checked:{' '}
+                      {editingProvider.health?.last_checked_at ??
+                        editingProvider.last_run?.finished_at ??
+                        'n/a'}
+                    </p>
+                    {actionMessage ? <p>{actionMessage}</p> : null}
+                  </div>
 
-              <div className='rounded-md border p-3 text-xs text-muted-foreground'>
-                {editingProvider.setup_instructions ??
-                  'Enter provider details, validate health, and save configuration.'}
-              </div>
+                  <div className='rounded-md border p-3 text-xs text-muted-foreground'>
+                    {editingProvider.setup_instructions ??
+                      'Enter provider details, validate health, and save configuration.'}
+                  </div>
+                </>
+              ) : null}
 
               {editingProvider.provider_id === 'telegram' ? (
                 <section
@@ -3534,176 +3701,230 @@ export function Apps({
               {editingProvider.provider_id === 'openai' ? (
                 <div className='space-y-4' data-testid='openai-config-dialog'>
                   <section
-                    className='rounded-md border p-3'
+                    className='overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm'
                     data-testid='openai-browser-auth-section'
                   >
-                    <div className='flex items-center justify-between gap-3'>
-                      <div>
-                        <p className='font-medium'>Browser Auth</p>
-                        <p className='text-xs text-muted-foreground'>
-                          Use a verified OpenAI/Codex browser-auth artifact when
-                          available.
+                    <div className='space-y-4 p-5'>
+                      <div className='flex flex-wrap items-start justify-between gap-3'>
+                        <div className='space-y-1'>
+                          <div className='flex flex-wrap items-center gap-2'>
+                            <p className='text-base font-semibold'>
+                              Sign in with ChatGPT
+                            </p>
+                            <span className='rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground'>
+                              Recommended
+                            </span>
+                          </div>
+                          <p className='max-w-lg text-sm text-muted-foreground'>
+                            Use your ChatGPT account for Cabinet Chat. No API
+                            key required. Your password and browser session stay
+                            with OpenAI.
+                          </p>
+                        </div>
+                        <span
+                          className='rounded-full border bg-background px-3 py-1 text-xs font-medium'
+                          data-testid='openai-browser-auth-status'
+                        >
+                          {openAIBrowserAuth?.profile_connected
+                            ? 'Connected'
+                            : openAIBrowserAuth?.state === 'signing_in'
+                              ? 'Waiting for browser sign-in'
+                              : openAIBrowserAuth?.state ===
+                                    'runtime_missing' ||
+                                  openAIBrowserAuth?.state === 'unavailable'
+                                ? 'Codex runtime required'
+                                : 'Not connected'}
+                        </span>
+                      </div>
+                      <div className='rounded-lg border bg-background/80 p-3 text-sm'>
+                        <p className='font-medium'>What this enables</p>
+                        <p className='mt-1 text-muted-foreground'>
+                          Ask Cabinet Chat to find, organise, and prepare
+                          changes across your collection. Cabinet continues to
+                          require review and confirmation for governed actions.
                         </p>
                       </div>
-                      <span
-                        className='rounded bg-muted px-2 py-1 text-xs'
-                        data-testid='openai-browser-auth-status'
-                      >
-                        {settings['openai.browser_auth_state'] ??
-                          editingProvider.auth_methods?.browser_auth?.state ??
-                          'setup_needed'}
-                      </span>
-                    </div>
-                    <p
-                      className='mt-2 text-xs text-muted-foreground'
-                      data-testid='openai-browser-auth-setup-needed'
-                    >
-                      Browser Auth is setup-needed until Cabinet can verify an
-                      acquired callback/artifact. Navigation alone never marks
-                      OpenAI connected.
-                    </p>
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        disabled
-                        data-testid='openai-browser-auth-connect'
-                      >
-                        Only available on this PC
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid='openai-browser-auth-disconnect'
-                        onClick={() => {
-                          setSettings((prev) => ({
-                            ...prev,
-                            'openai.browser_auth_state': 'disconnected',
-                            'openai.active_auth_method':
-                              prev['openai.active_auth_method'] ===
-                              'browser_auth'
-                                ? ''
-                                : prev['openai.active_auth_method'],
-                          }))
-                        }}
-                      >
-                        Disconnect
-                      </Button>
+                      {openAIBrowserAuth?.message ? (
+                        <p
+                          className='text-sm text-muted-foreground'
+                          data-testid='openai-browser-auth-message'
+                        >
+                          {openAIBrowserAuth.message}
+                        </p>
+                      ) : null}
+                      {openAIBrowserAuth?.state === 'runtime_missing' ? (
+                        <p className='rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm'>
+                          Install OpenAI Codex or the ChatGPT IDE extension,
+                          then retry. Cabinet automatically detects either
+                          installation and opens the supported ChatGPT sign-in.
+                        </p>
+                      ) : null}
+                      {openAIBrowserAuthError ? (
+                        <p className='text-sm text-destructive' role='alert'>
+                          {openAIBrowserAuthError}
+                        </p>
+                      ) : null}
+                      {actionMessage ? (
+                        <p className='text-sm' role='status'>
+                          {actionMessage}
+                        </p>
+                      ) : null}
+                      <div className='flex flex-wrap gap-2'>
+                        <Button
+                          type='button'
+                          size='lg'
+                          disabled={
+                            !activeProfileId ||
+                            openAIBrowserAuthWorking ||
+                            openAIBrowserAuth?.profile_connected
+                          }
+                          data-testid='openai-browser-auth-connect'
+                          onClick={() => void connectOpenAIBrowserAuth()}
+                        >
+                          {openAIBrowserAuthWorking
+                            ? 'Checking ChatGPT sign-in...'
+                            : openAIBrowserAuth?.state === 'signing_in'
+                              ? 'Finish sign-in in your browser'
+                              : openAIBrowserAuth?.profile_connected
+                                ? 'ChatGPT connected'
+                                : 'Continue with ChatGPT'}
+                        </Button>
+                        {openAIBrowserAuth?.profile_connected ? (
+                          <Button
+                            type='button'
+                            size='lg'
+                            variant='outline'
+                            data-testid='openai-browser-auth-disconnect'
+                            onClick={() => void disconnectOpenAIBrowserAuth()}
+                            disabled={openAIBrowserAuthWorking}
+                          >
+                            Disconnect from this profile
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   </section>
 
-                  <section
-                    className='rounded-md border p-3'
-                    data-testid='openai-api-key-section'
-                  >
-                    <div className='flex items-center justify-between gap-3'>
-                      <div>
-                        <p className='font-medium'>API key</p>
-                        <p className='text-xs text-muted-foreground'>
-                          Validate and save an OpenAI API key for Cabinet
-                          assistant, image, and content workflows.
-                        </p>
+                  <details className='rounded-lg border bg-muted/10'>
+                    <summary
+                      className='cursor-pointer px-4 py-3 text-sm font-medium'
+                      data-testid='openai-api-key-advanced'
+                    >
+                      Advanced: use an API key
+                    </summary>
+                    <section
+                      className='space-y-3 border-t p-4'
+                      data-testid='openai-api-key-section'
+                    >
+                      <div className='flex items-start justify-between gap-3'>
+                        <div>
+                          <p className='font-medium'>OpenAI API key</p>
+                          <p className='text-xs text-muted-foreground'>
+                            Optional for usage-based API billing or service
+                            accounts. Most people should use ChatGPT sign-in.
+                          </p>
+                        </div>
+                        <span
+                          className='rounded bg-muted px-2 py-1 text-xs'
+                          data-testid='openai-api-key-status'
+                        >
+                          {editingProvider.has_token ||
+                          settings['openai.active_auth_method'] === 'api_key'
+                            ? 'connected'
+                            : 'setup_needed'}
+                        </span>
                       </div>
-                      <span
-                        className='rounded bg-muted px-2 py-1 text-xs'
-                        data-testid='openai-api-key-status'
-                      >
-                        {editingProvider.has_token ||
-                        settings['openai.active_auth_method'] === 'api_key'
-                          ? 'connected'
-                          : 'setup_needed'}
-                      </span>
-                    </div>
-                    {editingProvider.has_token && !replaceToken ? (
-                      <div className='mt-3 rounded-md border bg-muted/20 p-3 text-xs'>
-                        <p>API key on file.</p>
-                        <p className='text-muted-foreground'>
-                          Existing key is hidden. Replace it to update the
-                          active API-key method.
-                        </p>
+                      {editingProvider.has_token && !replaceToken ? (
+                        <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                          <p>API key on file.</p>
+                          <p className='text-muted-foreground'>
+                            The existing key is hidden.
+                          </p>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            className='mt-2'
+                            data-testid='replace-token'
+                            onClick={() => setReplaceToken(true)}
+                          >
+                            Replace API key
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className='space-y-2'>
+                          <Label htmlFor='provider-token'>OpenAI API key</Label>
+                          <Input
+                            ref={tokenInputRef}
+                            id='provider-token'
+                            type='password'
+                            data-testid='provider-token-input'
+                            placeholder='sk-...'
+                            value={form.token}
+                            aria-invalid={tokenFieldError ? 'true' : undefined}
+                            aria-describedby={
+                              tokenFieldError
+                                ? 'provider-token-error'
+                                : undefined
+                            }
+                            onChange={(e) => {
+                              setForm((prev) => ({
+                                ...prev,
+                                token: e.target.value,
+                              }))
+                              if (tokenFieldError) {
+                                setTokenFieldError(null)
+                              }
+                            }}
+                          />
+                          {tokenFieldError ? (
+                            <p
+                              id='provider-token-error'
+                              className='text-xs text-destructive'
+                            >
+                              {tokenFieldError}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                      <div className='flex flex-wrap gap-2'>
                         <Button
+                          type='button'
                           size='sm'
                           variant='outline'
-                          className='mt-2'
-                          data-testid='replace-token'
-                          onClick={() => setReplaceToken(true)}
+                          onClick={() => void validateProvider()}
+                          disabled={validating}
+                          data-testid='openai-api-key-validate'
                         >
-                          Replace API key
+                          {validating ? 'Validating...' : 'Validate'}
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          data-testid='openai-api-key-connect'
+                          onClick={() => void saveIntegration()}
+                          disabled={saving}
+                        >
+                          Connect API key
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid='openai-api-key-disconnect'
+                          onClick={() => void disconnectOpenAIApiKey()}
+                          disabled={saving}
+                        >
+                          Disconnect API key
                         </Button>
                       </div>
-                    ) : (
-                      <div className='mt-3 space-y-2'>
-                        <Label htmlFor='provider-token'>OpenAI API key</Label>
-                        <Input
-                          ref={tokenInputRef}
-                          id='provider-token'
-                          type='password'
-                          data-testid='provider-token-input'
-                          placeholder='OpenAI API key'
-                          value={form.token}
-                          aria-invalid={tokenFieldError ? 'true' : undefined}
-                          aria-describedby={
-                            tokenFieldError ? 'provider-token-error' : undefined
-                          }
-                          onChange={(e) => {
-                            setForm((prev) => ({
-                              ...prev,
-                              token: e.target.value,
-                            }))
-                            if (tokenFieldError) {
-                              setTokenFieldError(null)
-                            }
-                          }}
-                        />
-                        {tokenFieldError ? (
-                          <p
-                            id='provider-token-error'
-                            className='text-xs text-destructive'
-                          >
-                            {tokenFieldError}
-                          </p>
-                        ) : null}
-                      </div>
-                    )}
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        onClick={() => void validateProvider()}
-                        disabled={validating}
-                        data-testid='openai-api-key-validate'
-                      >
-                        {validating ? 'Validating...' : 'Validate'}
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        data-testid='openai-api-key-connect'
-                        onClick={() => void saveIntegration()}
-                        disabled={saving}
-                      >
-                        Connect
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid='openai-api-key-disconnect'
-                        onClick={() => void disconnectOpenAIApiKey()}
-                        disabled={saving}
-                      >
-                        Disconnect
-                      </Button>
-                    </div>
-                  </section>
+                    </section>
+                  </details>
 
                   <section
                     className='rounded-md border p-3'
                     data-testid='openai-test-section'
                   >
-                    <p className='font-medium'>Test OpenAI</p>
+                    <p className='font-medium'>Connection details</p>
                     <p className='text-xs text-muted-foreground'>
                       Uses the active connected method. If no method is
                       verified, Cabinet shows setup-needed instead of pretending
@@ -4983,7 +5204,8 @@ export function Apps({
                 </Button>
                 <Button
                   onClick={() =>
-                    editingProvider.provider_id === 'telegram'
+                    editingProvider.provider_id === 'telegram' ||
+                    editingProvider.provider_id === 'openai'
                       ? closeIntegration()
                       : void saveIntegration()
                   }
@@ -4992,7 +5214,7 @@ export function Apps({
                   {saving
                     ? 'Saving...'
                     : editingProvider.provider_id === 'openai'
-                      ? 'Save OpenAI'
+                      ? 'Done'
                       : editingProvider.provider_id === 'telegram'
                         ? 'Done'
                         : 'Save Integration'}

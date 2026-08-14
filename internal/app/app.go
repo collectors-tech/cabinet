@@ -263,7 +263,8 @@ func New(cfg config.Config) (*App, error) {
 		return nil, fmt.Errorf("init browser companion: %w", err)
 	}
 	aiSvc := ai.NewService(ai.Config{})
-	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles)))
+	openAIBrowserAuth := ai.NewCodexBrowserAuthRuntime()
+	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles), openAIBrowserAuth))
 	if isE2EHooksEnabled(cfg) {
 		assistantProviders.Register(e2eSyntheticAgentProvider{})
 	}
@@ -303,6 +304,7 @@ func New(cfg config.Config) (*App, error) {
 	runtimeStopCh := make(chan string, 1)
 
 	mux := http.NewServeMux()
+	registerOpenAIBrowserAuthRoutes(mux, profiles, openAIBrowserAuth)
 	telegramBotAPIBaseURL := ""
 	if isE2EHooksEnabled(cfg) {
 		telegramBotAPIBaseURL = strings.TrimSpace(os.Getenv("CABINET_TELEGRAM_TEST_API_BASE_URL"))
@@ -11220,7 +11222,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 					"setup_message":             "Browser Auth requires a verifiable callback/artifact and provider-test proof before Cabinet marks OpenAI connected.",
 				},
 			}
-			provider["model_options"] = []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"}
+			provider["model_options"] = []string{"gpt-5.6-luna", "gpt-4o-mini", "gpt-4.1-mini"}
 			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
 			provider["setup_schema"] = openAIRegistrySetupSchema()
 			provider["setup_status"] = openAIRegistrySetupStatus(settings, openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProofState, openAIBrowserProviderTestPassed, openAIReady)

@@ -187,6 +187,51 @@ func TestOpenAIAssistantProviderUsesProfileSecretBoundary(t *testing.T) {
 	}
 }
 
+func TestOpenAIAssistantProviderUsesChatGPTBrowserAuthWithoutReadingAPIKey(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeBrowserAuthRuntime{
+		status: BrowserAuthStatus{State: "connected", Authenticated: true, Method: "chatgpt"},
+		text:   "Browser-authenticated Cabinet response",
+	}
+	secretCalls := 0
+	resolver := countedAssistantSetupResolver{
+		setup: AssistantProviderSetup{
+			ProviderID:       "openai",
+			Enabled:          true,
+			ActiveAuthMethod: "browser_auth",
+			DefaultModel:     "gpt-5.6-luna",
+			SupportedModels:  []string{"gpt-5.6-luna"},
+			HealthState:      "ready",
+		},
+		secretCalls: &secretCalls,
+	}
+	provider := NewOpenAIAssistantProvider(NewService(Config{}), resolver, runner)
+
+	response, err := provider.RunAssistantTurn(context.Background(), AssistantTurnRequest{
+		ProfileID: "profile-browser-auth",
+		ThreadID:  "thread-browser-auth",
+		Provider:  "openai",
+		Model:     "gpt-5.6-luna",
+		Messages: []AssistantTurnMessage{
+			{Role: "user", Content: "Summarise my Cabinet inventory"},
+		},
+		Context: map[string]any{"route": "/inventory"},
+	})
+	if err != nil {
+		t.Fatalf("run browser-auth assistant turn: %v", err)
+	}
+	if response.Text != "Browser-authenticated Cabinet response" || response.Metadata["active_auth_method"] != "browser_auth" {
+		t.Fatalf("unexpected browser-auth response: %+v", response)
+	}
+	if secretCalls != 0 {
+		t.Fatalf("browser auth must not read API-key secrets, got %d secret calls", secretCalls)
+	}
+	if runner.runCalls != 1 || runner.lastRequest.ProfileID != "profile-browser-auth" || runner.lastRequest.ThreadID != "thread-browser-auth" {
+		t.Fatalf("expected one profile/thread-bound browser-auth turn, got runner=%+v", runner)
+	}
+}
+
 func TestOpenAIAssistantProviderUsesSetupBaseURL(t *testing.T) {
 	t.Parallel()
 
@@ -539,6 +584,27 @@ func (r fakeAssistantSetupResolver) GetAssistantProviderSecret(context.Context, 
 type errFakeSecretMissing struct{}
 
 func (errFakeSecretMissing) Error() string { return "secret not found" }
+
+type fakeBrowserAuthRuntime struct {
+	status      BrowserAuthStatus
+	text        string
+	runCalls    int
+	lastRequest BrowserAuthTurnRequest
+}
+
+func (r *fakeBrowserAuthRuntime) Status(context.Context) (BrowserAuthStatus, error) {
+	return r.status, nil
+}
+
+func (r *fakeBrowserAuthRuntime) StartLogin(context.Context) (BrowserAuthStatus, error) {
+	return r.status, nil
+}
+
+func (r *fakeBrowserAuthRuntime) RunAssistantTurn(_ context.Context, request BrowserAuthTurnRequest) (string, error) {
+	r.runCalls++
+	r.lastRequest = request
+	return r.text, nil
+}
 
 type countedAssistantSetupResolver struct {
 	setup       AssistantProviderSetup

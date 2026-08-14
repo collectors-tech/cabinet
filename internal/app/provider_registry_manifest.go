@@ -208,8 +208,8 @@ func integrationConfigSchemaDefinitions() map[string]integrationConfigSchemaDefi
 		"integrations/openai/auth": {
 			SchemaRef: "integrations/openai/auth", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
 			Fields: []integrationConfigSchemaField{
-				{Key: "openai.active_auth_method", Label: "Connection method", Type: "select", Required: true, Persistence: "profile_settings", Default: "api_key", Options: []integrationConfigSchemaOption{{Value: "api_key", Label: "API key"}, {Value: "browser_auth", Label: "Browser Auth"}}},
-				{Key: "assistant_default_model", Label: "Default assistant model", Type: "select", Required: true, Persistence: "profile_settings", Default: "gpt-4o-mini", Options: []integrationConfigSchemaOption{{Value: "gpt-4o-mini", Label: "GPT-4o mini"}, {Value: "gpt-4.1-mini", Label: "GPT-4.1 mini"}, {Value: "gpt-5.3-codex", Label: "GPT-5.3 Codex"}}},
+				{Key: "openai.active_auth_method", Label: "Connection method", Type: "select", Required: true, Persistence: "profile_settings", Default: "browser_auth", Options: []integrationConfigSchemaOption{{Value: "browser_auth", Label: "Sign in with ChatGPT (recommended)"}, {Value: "api_key", Label: "API key (advanced)"}}},
+				{Key: "assistant_default_model", Label: "Default assistant model", Type: "select", Required: true, Persistence: "profile_settings", Default: "gpt-5.6-luna", Options: []integrationConfigSchemaOption{{Value: "gpt-5.6-luna", Label: "GPT-5.6 Luna (ChatGPT)"}, {Value: "gpt-4o-mini", Label: "GPT-4o mini (API)"}, {Value: "gpt-4.1-mini", Label: "GPT-4.1 mini (API)"}}},
 				{Key: "openai_api_key", Label: "API key", Type: "secret", WriteOnly: true, Persistence: "profile_secrets", SecretKey: "openai_api_key", Condition: map[string]string{"openai.active_auth_method": "api_key"}, HelperText: "Stored through the profile secrets path and never returned in registry payloads."},
 				{Key: "openai.browser_auth_artifact_present", Label: "Browser Auth proof", Type: "browser-auth-status", ReadOnly: true, Persistence: "profile_settings", Condition: map[string]string{"openai.active_auth_method": "browser_auth"}, HelperText: "Cabinet requires verified auth artifact and provider-test proof before marking Browser Auth ready."},
 			},
@@ -396,7 +396,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 				"image_help":         true,
 				"content_generation": true,
 			},
-			SetupInstructions: "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
+			SetupInstructions: "Sign in with ChatGPT in your browser (recommended). An OpenAI API key is available as an advanced alternative.",
 		},
 		{
 			ProviderID:        "anthropic",

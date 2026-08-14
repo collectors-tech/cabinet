@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "issue": 2055,
   "name": "Cabinet 0.1 beta core Cypress acceptance pack",
   "required_categories": [
@@ -10,6 +10,7 @@
     "media",
     "recovery",
     "provider_handoff",
+    "provider_auth",
     "agent_primary",
     "agent_authority",
     "telegram_connector",
@@ -47,6 +48,10 @@
     {
       "category": "provider_handoff",
       "path": "cypress/e2e/integrations/browser-companion-pairing/spec.cy.ts"
+    },
+    {
+      "category": "provider_auth",
+      "path": "cypress/e2e/integrations/provider-openai-chatgpt-ux/spec.cy.ts"
     },
     {
       "category": "agent_primary",

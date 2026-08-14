@@ -1527,6 +1527,89 @@ paths:
                 $ref: "#/components/schemas/ProviderRegistryResponse"
         "400":
           $ref: "#/components/responses/Error"
+  /api/providers/openai/browser-auth:
+    get:
+      operationId: getApiProvidersOpenAIBrowserAuth
+      tags: [Integrations]
+      summary: Read ChatGPT browser sign-in status
+      description: Returns non-secret local Codex ChatGPT login and active-profile binding status. Browser cookies, account credentials, and API keys are never returned.
+      parameters:
+        - in: query
+          name: profile_id
+          schema: { type: string }
+          description: Profile to inspect. Defaults to the active profile.
+      responses:
+        "200":
+          description: Browser sign-in status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "503":
+          description: The local Codex runtime or sign-in status is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+    post:
+      operationId: postApiProvidersOpenAIBrowserAuth
+      tags: [Integrations]
+      summary: Connect ChatGPT browser sign-in to a Cabinet profile
+      description: Opens the supported Codex ChatGPT browser-login flow when needed, verifies it with a no-action provider turn, and binds only non-secret readiness evidence to the selected Cabinet profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              additionalProperties: false
+              properties:
+                profile_id: { type: string }
+      responses:
+        "200":
+          description: ChatGPT sign-in verified and profile connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "202":
+          description: Browser sign-in started and awaits user completion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "503":
+          description: Codex runtime, browser sign-in, or verification is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+    delete:
+      operationId: deleteApiProvidersOpenAIBrowserAuth
+      tags: [Integrations]
+      summary: Disconnect ChatGPT from a Cabinet profile
+      description: Removes profile-scoped Browser Auth readiness while preserving the user's global Codex ChatGPT login.
+      parameters:
+        - in: query
+          name: profile_id
+          schema: { type: string }
+          description: Profile to disconnect. Defaults to the active profile.
+      responses:
+        "200":
+          description: Profile disconnected; global login preserved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAIBrowserAuthResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/provider/health:
     get:
       operationId: getApiProviderHealth
@@ -6822,6 +6905,33 @@ components:
               health_state: ready
               next_action: run_ebay_query_sets_from_market_watch
               base_url_set: false
+    OpenAIBrowserAuthResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, auth_method, state, authenticated, profile_connected, recommended, message]
+      properties:
+        provider:
+          type: string
+          enum: [openai]
+        auth_method:
+          type: string
+          enum: [browser_auth]
+        state:
+          type: string
+          enum: [connected, signed_out, signing_in, runtime_missing, unavailable, verification_failed, disconnected]
+        authenticated:
+          type: boolean
+          description: Whether the supported local Codex runtime reports a valid ChatGPT login.
+        profile_connected:
+          type: boolean
+          description: Whether that login has passed a no-action provider test and is bound to the selected profile.
+        recommended:
+          type: boolean
+        message:
+          type: string
+        global_login_preserved:
+          type: boolean
+          description: True when profile disconnect deliberately leaves the user's global Codex login unchanged.
     ProviderRegistryEntry:
       type: object
       required: [provider_id, display_name, auth_mode, capabilities, state]
