@@ -4,6 +4,7 @@
 - Verification policy: `implemented` requires direct runtime/API/E2E test coverage; structural OpenSpec tests alone are marked `partial`.
 - Hardening baseline commit: `9ca1215`
 - #1469 provider-registry coverage for `INTEGRATION-027`, `INTEGRATION-028`, `INTEGRATION-029`, and `INTEGRATION-030` migrated out of stale planned rows after those IDs became implemented elsewhere; retained validation anchors include targeted Cypress Add Integration provider-selection/setup-schema rendering and Go status/inbox API tests. #1467 adds focused Go API coverage for provider-registry `INTEGRATION-029` profile-scoped integration-instance persistence through `/api/profiles/:profileId/integration-instances`, with secret values redirected to profile secrets and redacted from instance payloads.
+- #2143 binds the active `centralize-route-metadata-registry` route-title consistency scenario to `ui.web/cypress/e2e/general/ui-page-header-title/spec.cy.ts`, proving the current local-device setup/profile bootstrap contract for visible inventory, collections, and wishlist page header titles/icons and header action non-overlap.
 
 | Requirement ID | Spec Path | Route/Component Scope | Validating Tests | Status |
 | --- | --- | --- | --- | --- |
