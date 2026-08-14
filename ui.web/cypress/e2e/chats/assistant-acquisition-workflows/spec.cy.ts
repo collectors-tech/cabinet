@@ -69,7 +69,7 @@ describe('chats/assistant-acquisition-workflows', () => {
       expect(agentResponse.next_action).to.deep.eq({
         kind: 'open_setup',
         label: 'Open setup',
-        route: '/settings/integrations',
+        route: '/integrations?provider=openai',
       })
       expect(JSON.stringify(response?.body)).not.to.include('mutation_applied":true')
     })
@@ -92,6 +92,7 @@ describe('chats/assistant-acquisition-workflows', () => {
     )
       .should('be.visible')
       .click()
-    cy.location('pathname').should('eq', '/settings/integrations')
+    cy.location('pathname').should('eq', '/integrations')
+    cy.location('search').should('eq', '?provider=openai')
   })
 })
