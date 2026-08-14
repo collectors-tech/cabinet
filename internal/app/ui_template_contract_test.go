@@ -747,6 +747,8 @@ func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) 
 		"/api/provider/test",
 		"payload.checked_at ?? payload.updated_at ?? new Date().toISOString()",
 		"provider_test_passed?: boolean",
+		"payload.provider_test_passed === true",
+		"['ok', 'ready', 'success', 'succeeded'].includes(healthStatus)",
 		"OpenAI connection is ready for Cabinet Chat.",
 		"health: nextProvider.health",
 		"last_run: nextProvider.last_run",

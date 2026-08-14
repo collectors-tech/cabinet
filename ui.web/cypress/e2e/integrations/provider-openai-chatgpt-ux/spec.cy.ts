@@ -204,6 +204,7 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
     cy.get('[data-testid="provider-row-openai"]')
       .should('contain', 'Connected')
       .and('contain', 'Health: ready')
+      .and('contain', 'Last run: success')
   })
 
   it('PROVIDER-OPENAI-UX-006 explains the local runtime prerequisite without promoting API keys', () => {
