@@ -123,6 +123,18 @@ test('packaged browser loader reads target roots without shadowing the Node proc
   assert.doesNotMatch(loader, /const process = spawn\(/)
 })
 
+test('packaged browser loader resolves installed Chrome and Edge on Windows', async () => {
+  const loader = await readFile(join(repositoryRoot, 'scripts', 'verify-browser-extension-load.mjs'), 'utf8')
+  assert.match(loader, /process\.platform === ["']win32["']/)
+  assert.match(loader, /CABINET_CHROME_BIN/)
+  assert.match(loader, /CABINET_EDGE_BIN/)
+  assert.match(loader, /PROGRAMFILES/)
+  assert.match(loader, /PROGRAMFILES\(X86\)/)
+  assert.match(loader, /LOCALAPPDATA/)
+  assert.match(loader, /existsSync/)
+  assert.match(loader, /--edge-skip-compat-layer-relaunch/)
+})
+
 test('private-beta operator guide is truthful about install, permissions, rollback and removal', async () => {
   const guide = (await readFile(join(repositoryRoot, 'openspec', 'migration', 'browser-companion-private-beta-package-guide.md'), 'utf8')).toLowerCase()
   for (const required of [

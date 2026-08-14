@@ -1,5 +1,6 @@
 describe("UI-SCREEN-REPORTS", () => {
-  function signInToReports() {
+  function signInToReports(profileId: string) {
+    cy.stubLocalServerSession(profileId)
     cy.visit("/sign-in?redirect=%2Freports%2F")
     cy.get("body").then(($body) => {
       if ($body.find('input[name="email"]').length > 0) {
@@ -87,7 +88,7 @@ describe("UI-SCREEN-REPORTS", () => {
       body: { sources: { ebay: { latest: 30 } } },
     }).as("pricingSource")
 
-    signInToReports()
+    signInToReports("profile-reports-1")
     cy.wait("@activeProfile")
     cy.wait("@wishlistHits")
     cy.wait("@pricingStats")
@@ -122,7 +123,7 @@ describe("UI-SCREEN-REPORTS", () => {
       body: { sources: { ebay: { latest: 30 } } },
     })
 
-    signInToReports()
+    signInToReports("profile-reports-placement")
 
     cy.get('[data-testid="reports-global-header-actions"]')
       .should("be.visible")
@@ -140,7 +141,7 @@ describe("UI-SCREEN-REPORTS", () => {
     stubReports("profile-reports-header-overflow")
 
     cy.viewport(1280, 720)
-    signInToReports()
+    signInToReports("profile-reports-header-overflow")
     assertReportsHeaderActionsStayInsideViewport()
 
     cy.viewport(390, 720)
@@ -176,7 +177,7 @@ describe("UI-SCREEN-REPORTS", () => {
       headers: { "content-type": "text/csv; charset=utf-8" },
     }).as("exportCSV")
 
-    signInToReports()
+    signInToReports("profile-reports-2")
     cy.get('[data-testid="reports-export-button"]').click()
     cy.wait("@exportCSV")
     cy.get('[data-testid="reports-export-message"]')
@@ -226,7 +227,7 @@ describe("UI-SCREEN-REPORTS", () => {
       body: { error: "csv_export_failed" },
     }).as("exportCSVFailure")
 
-    signInToReports()
+    signInToReports("profile-reports-export-failure")
     cy.get('[data-testid="reports-export-button"]').click()
     cy.wait("@exportCSVFailure")
 
@@ -275,7 +276,7 @@ describe("UI-SCREEN-REPORTS", () => {
       }
     ).as("pricingSource")
 
-    signInToReports()
+    signInToReports("profile-reports-refresh")
     cy.wait("@activeProfile")
     cy.wait("@wishlistHitsRefresh")
     cy.wait("@pricingStats")
@@ -295,9 +296,14 @@ describe("UI-SCREEN-REPORTS", () => {
   })
 
   it("UI-SCREEN-REPORTS-004 disables export while reports are unavailable", () => {
-    cy.intercept("GET", "/api/profiles/active", {
-      statusCode: 404,
-      body: { error: "active_profile_404" },
+    let activeProfileReadCount = 0
+    cy.intercept("GET", "/api/profiles/active", (request) => {
+      activeProfileReadCount += 1
+      request.reply(
+        activeProfileReadCount === 1
+          ? { statusCode: 200, body: { id: "profile-reports-missing" } }
+          : { statusCode: 404, body: { error: "active_profile_404" } }
+      )
     }).as("activeProfileMissing")
     cy.intercept("GET", "/api/data/export/csv/items", {
       statusCode: 200,
@@ -305,7 +311,7 @@ describe("UI-SCREEN-REPORTS", () => {
       headers: { "content-type": "text/csv; charset=utf-8" },
     }).as("exportCSV")
 
-    signInToReports()
+    signInToReports("profile-reports-missing")
     cy.wait("@activeProfileMissing")
     cy.get('[data-testid="reports-error"]').should("be.visible")
     cy.contains("active_profile_404").should("be.visible")
@@ -342,7 +348,7 @@ describe("UI-SCREEN-REPORTS", () => {
       body: { sources: {} },
     })
 
-    signInToReports()
+    signInToReports("profile-reports-3")
     cy.contains("Loading...").should("be.visible")
     cy.wait("@wishlistRetry")
     cy.get('[data-testid="reports-error"]').should("be.visible")

@@ -92,7 +92,7 @@ func TestCabinetRequestFromUpdateRoutesCallbackQuery(t *testing.T) {
 	}
 }
 
-func TestCabinetRequestFromUpdateRoutesAgentTextCommand(t *testing.T) {
+func TestCabinetRequestFromUpdateRoutesNaturalTextWithoutSkillGrammar(t *testing.T) {
 	t.Parallel()
 
 	req, err := CabinetRequestFromUpdate(Update{
@@ -100,8 +100,8 @@ func TestCabinetRequestFromUpdateRoutesAgentTextCommand(t *testing.T) {
 		Message: &WebhookMessage{
 			MessageID: 51,
 			From:      WebhookUser{ID: 12345},
-			Chat:      WebhookChat{ID: -5235769556},
-			Text:      "/agent cabinet.inventory.search_items query=AFX",
+			Chat:      WebhookChat{ID: 12345, Type: "private"},
+			Text:      "find my AFX items",
 		},
 	})
 	if err != nil {
@@ -114,18 +114,18 @@ func TestCabinetRequestFromUpdateRoutesAgentTextCommand(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected AgentTextRequest body, got %T", req.Body)
 	}
-	if body.SenderID != "12345" || body.ChatID != "-5235769556" || body.MessageID != "51" {
+	if body.SenderID != "12345" || body.ChatID != "12345" || body.ChatType != "private" || body.MessageID != "51" {
 		t.Fatalf("agent text body did not preserve Telegram source identifiers: %+v", body)
 	}
-	if body.Text != "cabinet.inventory.search_items query=AFX" || body.SkillID != "cabinet.inventory.search_items" || body.Parameters["query"] != "AFX" {
-		t.Fatalf("agent text body did not preserve command text/skill parameters: %+v", body)
+	if body.Text != "find my AFX items" || body.SkillID != "" || len(body.Parameters) != 0 {
+		t.Fatalf("agent text body exposed legacy skill grammar: %+v", body)
 	}
-	if body.SourceMetadata["update_id"] != int64(9001) || body.SourceMetadata["command"] != "agent" {
+	if body.SourceMetadata["update_id"] != int64(9001) || body.SourceMetadata["message_kind"] != "natural_text" {
 		t.Fatalf("agent text body did not include non-secret source metadata: %+v", body.SourceMetadata)
 	}
 }
 
-func TestCabinetRequestFromUpdateRoutesAgentCaptionMediaCommand(t *testing.T) {
+func TestCabinetRequestFromUpdateKeepsCaptionMediaOnCatalogCapturePath(t *testing.T) {
 	t.Parallel()
 
 	req, err := CabinetRequestFromUpdate(Update{
@@ -144,27 +144,8 @@ func TestCabinetRequestFromUpdateRoutesAgentCaptionMediaCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CabinetRequestFromUpdate() agent media caption error = %v", err)
 	}
-	if req.Path != AgentTextPath {
-		t.Fatalf("expected agent text path, got %q", req.Path)
-	}
-	body, ok := req.Body.(AgentTextRequest)
-	if !ok {
-		t.Fatalf("expected AgentTextRequest body, got %T", req.Body)
-	}
-	if body.Text != "cabinet.inventory.attach_media item_id=item-1 media_id=telegram-photo-large" || body.SkillID != "cabinet.inventory.attach_media" {
-		t.Fatalf("agent caption body did not preserve command text/skill: %+v", body)
-	}
-	if body.Parameters["item_id"] != "item-1" || body.Parameters["media_id"] != "telegram-photo-large" {
-		t.Fatalf("agent caption body did not preserve parameters: %+v", body.Parameters)
-	}
-	if len(body.Media) != 1 ||
-		body.Media[0].FileID != "telegram-photo-large" ||
-		body.Media[0].FileUniqueID != "photo-large" ||
-		body.Media[0].FileSize != 4096 ||
-		body.Media[0].Filename != "photo-large.jpg" ||
-		body.Media[0].MIMEType != "image/jpeg" ||
-		body.Media[0].Kind != "photo" {
-		t.Fatalf("agent caption body did not preserve non-secret Telegram media evidence: %+v", body.Media)
+	if req.Path != WebhookCapturePath {
+		t.Fatalf("expected media capture path, got %q", req.Path)
 	}
 }
 
@@ -178,9 +159,9 @@ func TestCabinetRequestFromUpdateRoutesAgentTextCallbackQuery(t *testing.T) {
 			From: WebhookUser{ID: 12345},
 			Message: &CallbackMessage{
 				MessageID: 52,
-				Chat:      WebhookChat{ID: -5235769556},
+				Chat:      WebhookChat{ID: 12345, Type: "private"},
 			},
-			Data: "cabinet:agent_text:confirm:preview-1",
+			Data: "asp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:apply",
 		},
 	})
 	if err != nil {
@@ -193,10 +174,10 @@ func TestCabinetRequestFromUpdateRoutesAgentTextCallbackQuery(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected AgentTextCallbackRequest body, got %T", req.Body)
 	}
-	if body.SenderID != "12345" || body.ChatID != "-5235769556" || body.MessageID != "52" || body.PreviewID != "preview-1" || body.Confirmation != "confirm" {
+	if body.SenderID != "12345" || body.ChatID != "12345" || body.ChatType != "private" || body.MessageID != "52" || body.PreviewID != "asp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" || body.Confirmation != "apply" {
 		t.Fatalf("agent callback body did not preserve confirmation identifiers: %+v", body)
 	}
-	if body.CallbackData != "cabinet:agent_text:confirm:preview-1" {
+	if body.CallbackData != "asp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:apply" {
 		t.Fatalf("agent callback body did not preserve callback data: %+v", body)
 	}
 }
@@ -457,7 +438,7 @@ func TestDispatchUpdateAcknowledgesAndEditsCallbackReply(t *testing.T) {
 	}
 }
 
-func TestDispatchUpdateSendsStructuredFailureReplyWhenCabinetRejectsCapture(t *testing.T) {
+func TestDispatchUpdateSendsStructuredFailureReplyWhenCabinetRejectsNaturalAgentText(t *testing.T) {
 	t.Parallel()
 
 	gateway := &fakeCabinetGateway{
@@ -482,7 +463,7 @@ func TestDispatchUpdateSendsStructuredFailureReplyWhenCabinetRejectsCapture(t *t
 	if err != nil {
 		t.Fatalf("DispatchUpdate() structured failure error = %v", err)
 	}
-	if result.CabinetPath != WebhookCapturePath || result.CabinetError == "" {
+	if result.CabinetPath != AgentTextPath || result.CabinetError == "" {
 		t.Fatalf("dispatch did not preserve Cabinet path/error: %+v", result)
 	}
 	if len(result.BotCalls) != 1 || result.BotCalls[0].Method != "sendMessage" {

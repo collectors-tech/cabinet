@@ -66,10 +66,11 @@ func TestCypressScriptFailsOnStaleRuntimeAppVersion(t *testing.T) {
 	content := string(raw)
 	for _, snippet := range []string{
 		"[switch]$AllowStaleRuntimeVersion",
-		"Assert-RuntimeAppVersionMatchesSourceCommit",
-		"Runtime app version mismatch",
-		"/api/runtime app_version=",
-		"rev-$shortCommit",
+		"Assert-RuntimeBuildIdentityMatchesSourceCommit",
+		"Runtime build revision mismatch",
+		"/api/runtime build_revision=",
+		"app_version=$appVersion",
+		"Test-AppVersionMatchesSourceCommit",
 		"allow_stale_runtime_version",
 		"-AllowStaleRuntimeVersion",
 	} {
@@ -101,41 +102,6 @@ func TestCypressScriptSupportsFixedPackSpecLists(t *testing.T) {
 	}
 }
 
-func TestCypressScriptFailsClosedOnHungRunnerProcess(t *testing.T) {
-	t.Parallel()
-
-	scriptPath := filepath.Join("..", "cypress.ps1")
-	raw, err := os.ReadFile(scriptPath)
-	if err != nil {
-		t.Fatalf("read cypress script: %v", err)
-	}
-	content := string(raw)
-	for _, snippet := range []string{
-		"[int]$ExecutionTimeoutSec = 900",
-		"Invoke-CypressProcessWithTimeout $uiRoot $args $ExecutionTimeoutSec",
-		"$process.WaitForExit($timeoutSeconds * 1000)",
-		"$script:CypressRunnerPhase = \"execution_timeout\"",
-		"$script:CypressRunnerPhase = \"completed\"",
-		"$script:CypressRunnerPhase = \"cypress_failed\"",
-		"Stop-OwnedProcessTree $process.Id",
-		"return 124",
-		"runner_phase",
-		"cypress_child_pids",
-		"cypress_process_tree",
-		"cypress_elapsed_ms",
-		"cypress_last_output",
-		"cypress_cleanup_result",
-		"execution_timeout_sec",
-	} {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected cypress fail-closed watchdog snippet %q", snippet)
-		}
-	}
-	if strings.Contains(content, "& npx @args") {
-		t.Fatalf("cypress script still invokes npx directly without the execution watchdog")
-	}
-}
-
 func TestCypressScriptResetsManagedRuntimeDataDir(t *testing.T) {
 	t.Parallel()
 
@@ -152,6 +118,42 @@ func TestCypressScriptResetsManagedRuntimeDataDir(t *testing.T) {
 	} {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected cypress script to reset managed runtime data dir with snippet %q", snippet)
+		}
+	}
+}
+
+func TestCypressScriptRecordsFailClosedExecutionTimeoutEvidence(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile(filepath.Join("..", "cypress.ps1"))
+	if err != nil {
+		t.Fatalf("read cypress script: %v", err)
+	}
+	content := string(raw)
+	for _, snippet := range []string{
+		"[int]$ExecutionTimeoutSec = 300", "Invoke-CypressOwnedProcess",
+		"scripts\\run-cypress.mjs", "$args | Select-Object -Skip 1", "-ArgumentList $watchdogArgs", "execution_timeout_sec",
+		"Cypress application data isolated", "Join-Path $e2eDataDir \"cypress-appdata\"", "$env:APPDATA = $cypressAppDataDir",
+		"execution_timed_out", "runner_phase", "cypress_root_pid",
+		"cypress_child_pids", "cypress_process_tree", "cypress_elapsed_ms", "last_cypress_output",
+		"cypress_cleanup_result", "runtime_revision", "runtime_port",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected Cypress timeout summary contract snippet %q", snippet)
+		}
+	}
+	for _, forbidden := range []string{"Get-Process cypress", "Get-Process chrome", "Get-Process electron"} {
+		if strings.Contains(strings.ToLower(content), strings.ToLower(forbidden)) {
+			t.Fatalf("Cypress timeout cleanup must not enumerate unrelated processes with %q", forbidden)
+		}
+	}
+	watchdogRaw, err := os.ReadFile(filepath.Join("..", "scripts", "lib", "cypress-process-watchdog.ps1"))
+	if err != nil {
+		t.Fatalf("read Cypress watchdog helper: %v", err)
+	}
+	watchdog := string(watchdogRaw)
+	for _, snippet := range []string{"Get-CypressProcessTreeSnapshot", "ConvertTo-CypressRedactedCommandLine", "process_tree = @($processTree)"} {
+		if !strings.Contains(watchdog, snippet) {
+			t.Fatalf("expected Cypress process-tree diagnostic contract snippet %q", snippet)
 		}
 	}
 }

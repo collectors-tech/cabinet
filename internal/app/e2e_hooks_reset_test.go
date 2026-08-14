@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -111,6 +112,65 @@ func TestRunE2EResetWithRetryIsBoundedToStorageContention(t *testing.T) {
 	}
 	if unexpectedAttempts != 1 {
 		t.Fatalf("unexpected storage failure attempts=%d want=1", unexpectedAttempts)
+	}
+}
+
+func TestE2EAgentResponseStateFixturePersistsNormalizedLatestMessage(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+	bootstrap := doRequest(t, a, http.MethodPost, "/api/test/bootstrap", nil, nil)
+	if bootstrap.Code != http.StatusOK {
+		t.Fatalf("bootstrap status=%d body=%s", bootstrap.Code, bootstrap.Body.String())
+	}
+	for _, state := range []string{
+		"read_result", "clarification_required", "setup_required", "authority_blocked", "unsupported",
+		"provider_unavailable", "retryable_failure", "preview_required", "preview_expired", "preview_failed",
+		"preview_stale_target", "cancelled", "applied",
+	} {
+		payload := `{"profile_id":"e2e-profile-001","thread_id":"e2e-thread-001","state":"` + state + `","original_intent":"bounded ` + state + ` intent"}`
+		seed := doRequest(t, a, http.MethodPost, "/api/test/chat/agent-response-state", strings.NewReader(payload), map[string]string{"Content-Type": "application/json"})
+		if seed.Code != http.StatusOK {
+			t.Fatalf("seed %s status=%d body=%s", state, seed.Code, seed.Body.String())
+		}
+	}
+
+	messagesResponse := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id=e2e-profile-001&thread_id=e2e-thread-001", nil, nil)
+	if messagesResponse.Code != http.StatusOK {
+		t.Fatalf("messages status=%d body=%s", messagesResponse.Code, messagesResponse.Body.String())
+	}
+	var payload struct {
+		Messages []struct {
+			Context map[string]any `json:"context"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(messagesResponse.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode messages: %v", err)
+	}
+	if len(payload.Messages) != 15 {
+		t.Fatalf("expected 2 bootstrap + 13 matrix messages, got %d", len(payload.Messages))
+	}
+	latest := payload.Messages[len(payload.Messages)-1].Context["agent_response"].(map[string]any)
+	if latest["state"] != "applied" || latest["outcome"] != "applied" {
+		t.Fatalf("latest response is not deterministic applied state: %+v", latest)
+	}
+	if skill := latest["skill"].(map[string]any); skill["name"] != "Cabinet Inventory Search" {
+		t.Fatalf("latest response lost governed skill: %+v", skill)
+	}
+	if source := latest["source"].(map[string]any); source["surface"] != "chats.main" || source["channel"] != "in-app" {
+		t.Fatalf("latest response lost source bounds: %+v", source)
+	}
+
+	ordinary := doRequest(t, a, http.MethodPost, "/api/test/chat/agent-response-state", strings.NewReader(`{"profile_id":"e2e-profile-001","thread_id":"e2e-thread-001","state":"ordinary_response","original_intent":"ordinary"}`), map[string]string{"Content-Type": "application/json"})
+	if ordinary.Code != http.StatusOK {
+		t.Fatalf("ordinary status=%d body=%s", ordinary.Code, ordinary.Body.String())
+	}
+	messagesResponse = doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id=e2e-profile-001&thread_id=e2e-thread-001", nil, nil)
+	if err := json.Unmarshal(messagesResponse.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode messages after ordinary response: %v", err)
+	}
+	if latestContext := payload.Messages[len(payload.Messages)-1].Context; latestContext["agent_response"] != nil {
+		t.Fatalf("ordinary assistant response retained stale agent state: %+v", latestContext)
 	}
 }
 

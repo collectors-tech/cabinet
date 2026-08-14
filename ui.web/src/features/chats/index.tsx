@@ -19,7 +19,6 @@ import {
   Share2,
   Sparkles,
 } from 'lucide-react'
-import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +28,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +39,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { cabinetProtectedFetch } from '@/lib/cabinet-session'
 import {
   CabinetAssistantUiComposer,
   CabinetAssistantUiMessageList,
@@ -49,6 +48,12 @@ import {
   assistantAppendMessageText,
   cabinetMessageToAssistantUi,
 } from './assistant-ui-adapter-utils'
+import {
+  AgentResponseCards,
+  type AgentCapabilitiesContext,
+  type NormalizedAgentResponse,
+  type AgentPlannerContext,
+} from './agent-response-cards'
 import {
   fetchChatWorkflowRuns,
   type ChatWorkflowRun,
@@ -60,6 +65,11 @@ type ChatThread = {
   id: string
   profile_id: string
   title: string
+  metadata?: {
+    provider?: string
+    model?: string
+    thread_semantics?: string
+  }
   created_at: string
   updated_at: string
 }
@@ -70,11 +80,23 @@ type ChatMessage = {
   thread_id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  attachments_json?: Array<{
+    id: string
+    filename: string
+    mime_type: string
+    size_bytes: number
+    provenance: string
+    source: string
+    created_at: string
+  }> | string
   context?: {
     route?: { pathname?: string; search?: string }
     profile?: { id?: string }
     assistant?: { provider?: string; model?: string }
     app_control?: ChatAppControlContext
+    agent_capabilities?: AgentCapabilitiesContext
+    agent_planner?: AgentPlannerContext
+	agent_response?: NormalizedAgentResponse
   }
   created_at: string
 }
@@ -179,8 +201,10 @@ function labelForRoute(route: string) {
 }
 
 function latestAppControl(messages: ChatMessage[]) {
-  return [...messages].reverse().find((message) => message.context?.app_control)
-    ?.context?.app_control
+  const latestAssistantMessage = [...messages]
+	.reverse()
+	.find((message) => message.role === 'assistant')
+  return latestAssistantMessage?.context?.app_control
 }
 
 export function Chats() {
@@ -208,7 +232,7 @@ export function Chats() {
   const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
   const [applyNotice, setApplyNotice] = useState('')
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
-  const applyActionButtonRef = useRef<HTMLButtonElement | null>(null)
+  const applyActionButtonRef = useRef<HTMLButtonElement>(null)
   const [workflowRuns, setWorkflowRuns] = useState<ChatWorkflowRun[]>([])
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false)
   const [workflowRunsError, setWorkflowRunsError] = useState('')
@@ -217,6 +241,15 @@ export function Chats() {
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
     [selectedThreadId, threads]
+  )
+  const selectedAssistant = useMemo(
+    () => ({
+      provider:
+        selectedThread?.metadata?.provider?.trim() ||
+        assistantDefaults.provider,
+      model: selectedThread?.metadata?.model?.trim() || assistantDefaults.model,
+    }),
+    [assistantDefaults, selectedThread]
   )
   const selectedActionPreviewStorageKey = useMemo(
     () => actionPreviewStorageKey(activeProfileId, selectedThreadId),
@@ -381,6 +414,7 @@ export function Chats() {
   }, [selectedThreadId])
 
   useEffect(() => {
+    setAttachments([])
     setApplyResult(null)
     setApplyNotice('')
     setConfirmApplyOpen(false)
@@ -482,30 +516,30 @@ export function Chats() {
         '/api/chat/messages',
         activeProfileId,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          thread_id: selectedThreadId,
+          role: 'user',
+          content,
+          attachment_ids: attachments.map((attachment) => attachment.id),
+          agent_context: {
             profile_id: activeProfileId,
             thread_id: selectedThreadId,
-            role: 'user',
-            content,
-            attachment_ids: attachments.map((attachment) => attachment.id),
-            agent_context: {
-              profile_id: activeProfileId,
-              thread_id: selectedThreadId,
-              route_id: '/chats/',
-              surface_id: 'chats.main',
-              source_channel: 'in-app',
-              permission_state: 'ask_before_local_changes',
-              setup_state: 'ready',
-              intent_text: content,
-            },
-            context: {
-              route: { pathname: '/chats/' },
-              profile: { id: activeProfileId },
-              assistant: assistantDefaults,
-            },
-          }),
+            route_id: '/chats/',
+            surface_id: 'chats.main',
+            source_channel: 'in-app',
+            permission_state: 'ask_before_local_changes',
+            setup_state: 'ready',
+            intent_text: content,
+          },
+          context: {
+            route: { pathname: '/chats/' },
+            profile: { id: activeProfileId },
+            assistant: selectedAssistant,
+          },
+        }),
         }
       )
       if (!response.ok) {
@@ -517,9 +551,9 @@ export function Chats() {
     },
     [
       activeProfileId,
-      assistantDefaults,
       attachments,
       loadThreads,
+      selectedAssistant,
       selectedThreadId,
     ]
   )
@@ -593,14 +627,14 @@ export function Chats() {
       '/api/chat/actions/apply',
       activeProfileId,
       {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          thread_id: selectedThreadId,
-          preview_id: actionPreview.id,
-          confirm: true,
-        }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: activeProfileId,
+        thread_id: selectedThreadId,
+        preview_id: actionPreview.id,
+        confirm: true,
+      }),
       }
     )
     if (!response.ok) {
@@ -628,13 +662,13 @@ export function Chats() {
       '/api/chat/actions/cancel',
       activeProfileId,
       {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          thread_id: selectedThreadId,
-          preview_id: actionPreview.id,
-        }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: activeProfileId,
+        thread_id: selectedThreadId,
+        preview_id: actionPreview.id,
+      }),
       }
     )
     if (!response.ok) {
@@ -656,13 +690,6 @@ export function Chats() {
         : 'Action apply canceled; no mutation applied.'
     )
     await loadMessages(activeProfileId, selectedThreadId)
-  }
-
-  const closeApplyConfirmation = () => {
-    setConfirmApplyOpen(false)
-    window.requestAnimationFrame(() => {
-      applyActionButtonRef.current?.focus()
-    })
   }
 
   const applyResultSummary = (() => {
@@ -762,8 +789,8 @@ export function Chats() {
             runtime.
           </p>
           <p data-testid='chat-workspace-boundary-note'>
-            Use Assistant for AI-guided help and actions; use Chats for durable
-            conversation threads.
+            Cabinet Agent keeps the same governed conversation, context, and
+            action reviews in this full workspace and the contextual panel.
           </p>
         </div>
 
@@ -931,7 +958,7 @@ export function Chats() {
             ) : (
               <>
                 <div
-                  className='flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
+                  className='flex min-h-0 flex-1 flex-col overflow-hidden [@media(max-height:500px)]:overflow-y-auto'
                   data-testid='chat-main-surface'
                 >
                   <div
@@ -981,7 +1008,7 @@ export function Chats() {
                   </div>
                   <AssistantRuntimeProvider runtime={chatAssistantRuntime}>
                     <ScrollArea
-                      className='min-h-40 shrink-0 rounded-none border-0 bg-transparent px-3 py-3 lg:min-h-0 lg:flex-1 lg:shrink sm:px-4 sm:py-6'
+                      className='min-h-0 flex-1 rounded-none border-0 bg-transparent px-3 py-3 sm:px-4 sm:py-6 [@media(max-height:500px)]:min-h-32 [@media(max-height:500px)]:shrink-0'
                       data-testid='chat-main-canvas'
                     >
                       {messagesLoading ? (
@@ -1017,7 +1044,21 @@ export function Chats() {
                             'chat-assistant-ui-message-primitive',
                           userBubble: 'chat-message-bubble-user',
                           assistantBubble: 'chat-message-bubble-assistant',
+                          attachment: 'chat-message-attachment',
                         }}
+                      />
+                      <AgentResponseCards
+                        messages={messages}
+                        testIDPrefix='chat'
+						onRetry={sendMessageContent}
+						onApply={() => setConfirmApplyOpen(true)}
+						onAction={(response) => {
+						  const route = response.next_action?.route?.trim()
+						  if (route) void navigate({ to: route })
+						}}
+                        onPreviewStateChanged={() =>
+                          loadMessages(activeProfileId, selectedThreadId)
+                        }
                       />
                       {navigationRoute ? (
                         <div
@@ -1096,34 +1137,31 @@ export function Chats() {
                               </p>
                             </div>
                             <div className='flex flex-wrap gap-2'>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  ref={applyActionButtonRef}
-                                  type='button'
-                                  size='sm'
-                                  variant='outline'
-                                  className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
-                                  data-testid='chat-apply-action-button'
-                                  onClick={() => setConfirmApplyOpen(true)}
-                                  onKeyDown={(event) => {
-                                    if (
-                                      event.key !== 'Enter' &&
-                                      event.key !== ' '
-                                    ) {
-                                      return
-                                    }
+                              <Button
+                                ref={applyActionButtonRef}
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                className='border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
+                                data-testid='chat-apply-action-button'
+                                onClick={() => setConfirmApplyOpen(true)}
+                                onKeyDown={(event) => {
+                                  if (
+                                    !event.repeat &&
+                                    (event.key === 'Enter' || event.key === ' ')
+                                  ) {
                                     event.preventDefault()
-                                    setConfirmApplyOpen(true)
-                                  }}
-                                  disabled={
-                                    !selectedThreadId ||
-                                    !actionPreview.id ||
-                                    actionPreviewStatusLabel !== 'pending'
+                                    event.currentTarget.click()
                                   }
-                                >
-                                  Apply
-                                </Button>
-                              </AlertDialogTrigger>
+                                }}
+                                disabled={
+                                  !selectedThreadId ||
+                                  !actionPreview.id ||
+                                  actionPreviewStatusLabel !== 'pending'
+                                }
+                              >
+                                Apply
+                              </Button>
                               <Button
                                 type='button'
                                 size='sm'
@@ -1227,7 +1265,7 @@ export function Chats() {
                       </div>
                     </ScrollArea>
                     <div
-                      className='relative z-10 mx-auto mt-auto max-h-[55vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950 p-3 shadow-xl sm:max-h-none sm:overflow-visible'
+                      className='relative z-10 mx-auto mt-auto max-h-[55vh] w-full max-w-3xl shrink-0 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950 p-3 shadow-xl sm:max-h-none sm:overflow-visible'
                       data-testid='chat-composer-shell'
                       data-position='bottom-center'
                     >
@@ -1253,8 +1291,8 @@ export function Chats() {
                         >
                           <Bot className='h-3.5 w-3.5 text-cyan-300' />
                           <span data-testid='chat-model-selector'>
-                            {assistantDefaults.provider} /{' '}
-                            {assistantDefaults.model}
+                            {selectedAssistant.provider} /{' '}
+                            {selectedAssistant.model}
                           </span>
                         </div>
                       </div>
@@ -1312,6 +1350,36 @@ export function Chats() {
                           <Mic className='h-4 w-4' />
                         </Button>
                       </div>
+                      {attachments.length > 0 ? (
+                        <div
+                          className='mt-2 space-y-2'
+                          data-testid='chat-attachment-list'
+                        >
+                          {attachments.map((attachment) => (
+                            <div
+                              key={attachment.id}
+                              className='flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300'
+                            >
+                              <span>{attachment.filename}</span>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='ghost'
+                                data-testid='chat-remove-attachment-button'
+                                onClick={() =>
+                                  setAttachments((current) =>
+                                    current.filter(
+                                      (item) => item.id !== attachment.id
+                                    )
+                                  )
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </AssistantRuntimeProvider>
                 </div>
@@ -1329,39 +1397,35 @@ export function Chats() {
         </section>
       </Main>
 
-      <AlertDialogContent data-testid='chat-apply-confirm-dialog'>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
-          <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
-            {actionPreview
-              ? `Apply ${actionPreview.action} with ${actionPreviewTargetSummary || `part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
-              : 'No action preview selected.'}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            data-testid='chat-apply-confirm-cancel'
-            onClick={closeApplyConfirmation}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') {
-                return
-              }
-              event.preventDefault()
-              closeApplyConfirmation()
-            }}
-          >
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid='chat-apply-confirm-submit'
-            onClick={(event) => {
-              event.preventDefault()
-              void applyPreviewAction()
-            }}
-          >
-            Confirm Apply
-          </AlertDialogAction>
-        </AlertDialogFooter>
+      <AlertDialogContent
+        data-testid='chat-apply-confirm-dialog'
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          applyActionButtonRef.current?.focus()
+        }}
+      >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
+            <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
+              {actionPreview
+                ? `Apply ${actionPreview.action} with ${actionPreviewTargetSummary || `part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
+                : 'No action preview selected.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid='chat-apply-confirm-cancel'>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid='chat-apply-confirm-submit'
+              onClick={(event) => {
+                event.preventDefault()
+                void applyPreviewAction()
+              }}
+            >
+              Confirm Apply
+            </AlertDialogAction>
+          </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   )

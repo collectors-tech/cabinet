@@ -10,10 +10,16 @@ This checklist is the live-channel validation gate for the #1716 Agent acceptanc
 
 - Cabinet runtime branch and commit:
 - Runtime URL and `/api/runtime` evidence:
-- Telegram channel setup state:
-- Authorized sender/chat configured:
+- Telegram connector transport (`long_polling` expected):
+- Public listener state (`false` expected):
+- Bot identity validated with `getMe` (non-secret username/id only):
+- Existing webhook conflict checked and explicitly resolved if present:
+- Authorized private sender/chat paired through a short-lived single-use `/start` code:
+- Connector status (paired, paused, last success/update, safe error/retry state):
 - Unauthorized sender/chat available:
 - Operator approval for live-channel validation:
+
+Do not enter a bot token in this checklist. Use the Integrations write-only token field, and record only the non-secret connection status returned by Cabinet.
 
 ## Authorized Text Intake
 
@@ -25,6 +31,7 @@ This checklist is the live-channel validation gate for the #1716 Agent acceptanc
 - Review state:
 - Mutation state before confirmation:
 - Runtime/log evidence path:
+- Connector offset after successful processing:
 - Result: pending
 
 Expected result: the authorized text request creates auditable Agent thread, message, workflow, response/deep-link, and review evidence without applying a mutation before confirmation.

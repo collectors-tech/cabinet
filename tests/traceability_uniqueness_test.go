@@ -54,7 +54,7 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 		t.Fatalf("read traceability: %v", err)
 	}
 
-	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
+	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`?[^|]* \\|")
 	allowed := map[string][]string{
 		"AGENT-SKILL-COVERAGE-001": {
 			"| partial |",
@@ -205,6 +205,47 @@ func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
 	if len(missing) > 0 {
 		sort.Strings(missing)
 		t.Fatalf("expected allowed non-implemented traceability rows to remain explicit: %s", strings.Join(missing, ", "))
+	}
+}
+
+func TestAssistantWorkspace020TraceabilityNamesLocalCompactAccessibilityEvidence(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	row := ""
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `ASSISTANT-WORKSPACE-020` / `CHATS-WORKSPACE-012` |") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatal("missing combined ASSISTANT-WORKSPACE-020 / CHATS-WORKSPACE-012 traceability row")
+	}
+	for _, stale := range []string{
+		"| partial |",
+		"| planned |",
+	} {
+		if strings.Contains(row, stale) {
+			t.Fatalf("ASSISTANT-WORKSPACE-020 must not keep stale compact-accessibility status %q; row: %s", stale, row)
+		}
+	}
+	for _, required := range []string{
+		"CHATS-WORKSPACE-012",
+		"#2100",
+		"openspec/specs/chats/assistant-workspace/spec.md",
+		"openspec/specs/chats/chats-workspace/spec.md",
+		"ui.web/cypress/e2e/chats/agent-compact-accessibility/spec.cy.ts",
+		"| implemented |",
+	} {
+		if !strings.Contains(row, required) {
+			t.Fatalf("ASSISTANT-WORKSPACE-020 traceability row must include %q; row: %s", required, row)
+		}
 	}
 }
 

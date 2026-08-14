@@ -217,10 +217,9 @@ func integrationConfigSchemaDefinitions() map[string]integrationConfigSchemaDefi
 		"integrations/telegram/channel": {
 			SchemaRef: "integrations/telegram/channel", PersistenceScope: "active_profile", SubmitTarget: profileSettingsTarget, SecretTarget: profileSecretsTarget, ValidateAction: "provider.test",
 			Fields: []integrationConfigSchemaField{
-				{Key: "telegram.catalog_capture.sender_id", Label: "Sender ID", Type: "text", Required: true, Persistence: "profile_settings", Placeholder: "123456789", ValidationRules: []string{"numeric_string"}},
-				{Key: "telegram.catalog_capture.chat_id", Label: "Chat ID", Type: "text", Required: true, Persistence: "profile_settings", Placeholder: "-1001234567890", ValidationRules: []string{"telegram_chat_id"}},
-				{Key: "telegram.bot_token", Label: "Bot token", Type: "secret", Required: true, WriteOnly: true, Persistence: "profile_secrets", SecretKey: "telegram_bot_token"},
-				{Key: "telegram.webhook_route", Label: "Webhook route", Type: "url", Required: false, Persistence: "profile_settings", ValidationRules: []string{"url"}},
+				{Key: "telegram.bot_token", Label: "BotFather token", Type: "secret", Required: true, WriteOnly: true, Persistence: "profile_secrets", SecretKey: "telegram_bot_token", HelperText: "Validated with Telegram getMe, stored write-only, and never returned by Cabinet."},
+				{Key: "telegram.polling.transport", Label: "Transport", Type: "text", ReadOnly: true, Persistence: "profile_settings", Default: "long_polling", HelperText: "Outbound-only Telegram getUpdates polling; Cabinet opens no public listener."},
+				{Key: "telegram.polling.pairing_state", Label: "Private chat pairing", Type: "text", ReadOnly: true, Persistence: "profile_settings", Default: "pairing_required", HelperText: "A short-lived single-use /start code maps one numeric user and private chat to this profile."},
 			},
 		},
 		"integrations/ebay/setup": {
@@ -461,12 +460,12 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 			ProviderCategory:  "notification",
 			ProviderType:      "messaging",
 			APIFamily:         "messaging_channel",
-			APISupportProfile: "bot_webhook_sender_chat_v1",
-			ActiveMode:        "sender_chat_authorization",
+			APISupportProfile: "bot_long_polling_private_pairing_v1",
+			ActiveMode:        "outbound_long_polling",
 			IntegrationMode:   "assistant_capture_channel",
 			APIAvailable:      true,
-			AuthRequirement:   "sender_chat_authorization",
-			AuthMode:          "sender_chat",
+			AuthRequirement:   "bot_token_private_chat_pairing",
+			AuthMode:          "bot_token_pairing",
 			ConfigSchemaRef:   "integrations/telegram/channel",
 			WorkflowRefs:      []string{"telegram.catalog_capture", "telegram.agent_text"},
 			CapabilityFlags: map[string]bool{
@@ -476,7 +475,7 @@ func coreIntegrationProviderManifests(amazonMode string) []integrationProviderMa
 				"media_capture": true,
 				"text_capture":  true,
 			},
-			SetupInstructions: "Configure Telegram sender/chat authorization, bot token secret, and webhook routing proof before running governed preview-before-apply channel intake.",
+			SetupInstructions: "Create a bot with BotFather, validate its write-only token, resolve any existing webhook explicitly, then pair one private chat with a short-lived single-use /start code. Cabinet uses outbound-only long polling and opens no public listener.",
 		},
 		{
 			ProviderID:        "ebay",

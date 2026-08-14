@@ -300,6 +300,9 @@ func updateRuntimeUser(ctx context.Context, conn *sql.DB, profileID, id, firstNa
 		if normalizedStatus := normalizeUserStatus(status); normalizedStatus != "" {
 			nextStatus = normalizedStatus
 		}
+		if isProtectedLocalOwner(users[i]) && (nextRole != "admin" || nextStatus != "active") {
+			return runtimeUser{}, fmt.Errorf("protected_admin_required")
+		}
 		if protectedUserChangeLeavesNoAdmin(users, users[i].ID, nextRole, nextStatus) {
 			return runtimeUser{}, fmt.Errorf("protected_admin_required")
 		}

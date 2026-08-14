@@ -139,8 +139,8 @@ func TestAgentSkillRegistryAPIExposesGovernedSkillMetadata(t *testing.T) {
 	if userSearch == nil {
 		t.Fatalf("missing Users search skill")
 	}
-	if userSearch.SafetyLevel != "read-only" || !slices.Contains(userSearch.RequiredContext, "admin_session") || !userSearch.Executable {
-		t.Fatalf("expected executable read-only Users search metadata, got %+v", userSearch)
+	if userSearch.SafetyLevel != "read-only" || slices.Contains(userSearch.RequiredContext, "admin_session") || !userSearch.Executable {
+		t.Fatalf("expected Users search to defer admin authority to the server session rather than request context, got %+v", userSearch)
 	}
 
 	removeUser := findAPISkill(payload.Skills, "cabinet.users.remove_user")
@@ -789,16 +789,31 @@ func TestAgentSkillPreviewAPIBlocksUnsafeAdminMutation(t *testing.T) {
 	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	adminHeaders := agentAdminTestHeaders(t, a, p.ID)
+	users, err := listRuntimeUsers(context.Background(), a.db, p.ID)
+	if err != nil {
+		t.Fatalf("list protected owner target: %v", err)
+	}
+	var protectedOwnerID string
+	for _, user := range users {
+		if isProtectedLocalOwner(user) {
+			protectedOwnerID = user.ID
+			break
+		}
+	}
+	if protectedOwnerID == "" {
+		t.Fatalf("protected owner target missing: %+v", users)
+	}
 
 	resp := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.users.remove_user",
 		"confirm":true,
 		"parameters":{
-			"target_user":"owner@example.test",
-			"target_role_current":"owner"
+			"target_user":"`+protectedOwnerID+`",
+			"target_role_current":"attacker-supplied-and-ignored"
 		}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`), adminHeaders)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("preview status=%d body=%s", resp.Code, resp.Body.String())
 	}
@@ -2668,12 +2683,13 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	adminHeaders := agentAdminTestHeaders(t, a, p.ID)
 	invite := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.users.invite_user",
 		"confirm":true,
 		"parameters":{"target_email":"agent_skill_invite@example.test","target_role":"view"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`), adminHeaders)
 	if invite.Code != http.StatusOK {
 		t.Fatalf("invite apply status=%d body=%s", invite.Code, invite.Body.String())
 	}
@@ -2709,7 +2725,7 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 		"skill_id":"cabinet.users.update_role",
 		"confirm":true,
 		"parameters":{"target_user":"`+invitedID+`","target_role":"admin"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`), adminHeaders)
 	if updateRole.Code != http.StatusOK {
 		t.Fatalf("update role apply status=%d body=%s", updateRole.Code, updateRole.Body.String())
 	}
@@ -2722,7 +2738,7 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 		"skill_id":"cabinet.users.activate_or_deactivate",
 		"confirm":true,
 		"parameters":{"target_user":"`+invitedID+`","target_status":"inactive"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`), adminHeaders)
 	if deactivate.Code != http.StatusOK {
 		t.Fatalf("deactivate apply status=%d body=%s", deactivate.Code, deactivate.Body.String())
 	}
@@ -2730,25 +2746,19 @@ func TestAgentSkillApplyAPIConfirmsUsersMutationAndProtectsOwner(t *testing.T) {
 		t.Fatalf("expected confirmed deactivate result, body=%s", deactivate.Body.String())
 	}
 
-	removeOwner := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
+	removeOwner := doRequest(t, a, http.MethodPost, "/api/agent/skills/preview", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.users.remove_user",
-		"confirm":true,
 		"parameters":{"target_user":"`+ownerID+`"}
-	}`), map[string]string{"Content-Type": "application/json"})
-	if removeOwner.Code != http.StatusBadRequest {
+	}`), adminHeaders)
+	if removeOwner.Code != http.StatusOK {
 		t.Fatalf("remove protected owner status=%d body=%s", removeOwner.Code, removeOwner.Body.String())
 	}
-	if !strings.Contains(removeOwner.Body.String(), `"mutation_applied":false`) || !strings.Contains(removeOwner.Body.String(), `"blocker":"users_admin_protected_owner_change_blocked"`) {
+	if !strings.Contains(removeOwner.Body.String(), `"mutation_applied":false`) || !strings.Contains(removeOwner.Body.String(), `"blocker":"users_admin_protected_owner_remove_blocked"`) || strings.Contains(removeOwner.Body.String(), `"preview_id":"asp_`) {
 		t.Fatalf("expected protected owner blocker, body=%s", removeOwner.Body.String())
 	}
 
-	removeInvited := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
-		"profile_id":"`+p.ID+`",
-		"skill_id":"cabinet.users.remove_user",
-		"confirm":true,
-		"parameters":{"target_user":"`+invitedID+`"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	removeInvited := applyStrongConfirmedAgentSkill(t, a, p.ID, "cabinet.users.remove_user", map[string]any{"target_user": invitedID}, adminHeaders)
 	if removeInvited.Code != http.StatusOK {
 		t.Fatalf("remove invited user status=%d body=%s", removeInvited.Code, removeInvited.Body.String())
 	}
@@ -2941,12 +2951,11 @@ func TestAgentSkillApplyAPIHandlesIntegrationsAndSettingsSkills(t *testing.T) {
 		t.Fatalf("expected confirmed import preview result, body=%s", importFile.Body.String())
 	}
 
-	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
-		"profile_id":"`+p.ID+`",
-		"skill_id":"cabinet.data.restore_backup",
-		"confirm":true,
-		"parameters":{"backup_path":"backups/cabinet-backup.zip"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	backupRun, err := a.backupSvc.CreateBackup(context.Background())
+	if err != nil {
+		t.Fatalf("create restore backup fixture: %v", err)
+	}
+	restore := applyStrongConfirmedAgentSkill(t, a, p.ID, "cabinet.data.restore_backup", map[string]any{"backup_path": backupRun.Path}, map[string]string{"Content-Type": "application/json"})
 	if restore.Code != http.StatusOK {
 		t.Fatalf("restore backup apply status=%d body=%s", restore.Code, restore.Body.String())
 	}
@@ -2978,10 +2987,11 @@ func TestAgentSkillApplyAPIHandlesDataImportRestorePersistenceEvidence(t *testin
 	if err := os.WriteFile(importPath, importPayload, 0o600); err != nil {
 		t.Fatalf("write import fixture: %v", err)
 	}
-	backupPath := filepath.Join(fixtureDir, "cabinet-restore-private.zip")
-	if err := os.WriteFile(backupPath, []byte("fixture-backup-bytes"), 0o600); err != nil {
-		t.Fatalf("write restore fixture: %v", err)
+	backupRun, err := a.backupSvc.CreateBackup(context.Background())
+	if err != nil {
+		t.Fatalf("create restore fixture: %v", err)
 	}
+	backupPath := backupRun.Path
 
 	importFile := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
@@ -3014,12 +3024,7 @@ func TestAgentSkillApplyAPIHandlesDataImportRestorePersistenceEvidence(t *testin
 	}
 	assertProfileSetting(t, a, p.ID, "display_currency", "AUD")
 
-	restore := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
-		"profile_id":"`+p.ID+`",
-		"skill_id":"cabinet.data.restore_backup",
-		"confirm":true,
-		"parameters":{"backup_path":"`+strings.ReplaceAll(backupPath, `\`, `\\`)+`","confirmation_phrase":"Restore profile `+p.ID+` from selected backup"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	restore := applyStrongConfirmedAgentSkill(t, a, p.ID, "cabinet.data.restore_backup", map[string]any{"backup_path": backupPath}, map[string]string{"Content-Type": "application/json"})
 	if restore.Code != http.StatusOK {
 		t.Fatalf("restore backup apply status=%d body=%s", restore.Code, restore.Body.String())
 	}
@@ -3781,12 +3786,13 @@ func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	adminHeaders := agentAdminTestHeaders(t, a, p.ID)
 	cancel := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(`{
 		"profile_id":"`+p.ID+`",
 		"skill_id":"cabinet.users.invite_user",
 		"confirm":false,
 		"parameters":{"target_email":"agent_skill_cancel@example.test","target_role":"view"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`), adminHeaders)
 	if cancel.Code != http.StatusConflict {
 		t.Fatalf("cancelled apply status=%d body=%s", cancel.Code, cancel.Body.String())
 	}
@@ -3808,13 +3814,29 @@ func TestAgentSkillApplyAPIRequiresConfirmationAndRejectsUnknownSkill(t *testing
 		"skill_id":"cabinet.users.unsupported",
 		"confirm":true,
 		"parameters":{"target_user":"missing"}
-	}`), map[string]string{"Content-Type": "application/json"})
+	}`), adminHeaders)
 	if unknown.Code != http.StatusNotFound {
 		t.Fatalf("unknown apply status=%d body=%s", unknown.Code, unknown.Body.String())
 	}
 	if !strings.Contains(unknown.Body.String(), `"error":"skill_not_found"`) {
 		t.Fatalf("expected skill_not_found on unknown skill, body=%s", unknown.Body.String())
 	}
+}
+
+func agentAdminTestHeaders(t *testing.T, a *App, profileID string) map[string]string {
+	t.Helper()
+	active := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profileID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if active.Code != http.StatusOK {
+		t.Fatalf("activate Agent admin test profile status=%d body=%s", active.Code, active.Body.String())
+	}
+	if _, err := listRuntimeUsers(context.Background(), a.db, profileID); err != nil {
+		t.Fatalf("seed Agent admin owner membership: %v", err)
+	}
+	token, err := a.authService.CreateUnlockedSession(profileID)
+	if err != nil {
+		t.Fatalf("create Agent admin test session: %v", err)
+	}
+	return map[string]string{"Content-Type": "application/json", "X-Cabinet-Session": token}
 }
 
 func findAPISkill(skills []apiSkillPayload, id string) *apiSkillPayload {

@@ -26,8 +26,9 @@ Cabinet SHALL expose runtime and health diagnostics for local supportability.
 - **WHEN** `/healthz` and `/api/runtime` are requested
 - **THEN** Cabinet SHALL return runtime health payloads
   - `GET /healthz` MUST return `200` with body `ok`
-  - `GET /api/runtime` MUST return `200` with `app_version` and `build_date`
+  - `GET /api/runtime` MUST return `200` with `app_version`, full `build_revision`, and `build_date`
   - release builds with an explicit semantic beta version MUST report that version in `app_version` instead of only a revision-derived value
+  - release builds MUST report the full lowercase 40-character packaged source commit in `build_revision`; only unstamped developer builds MAY report `unknown`
 
 ### Requirement RUNTIME-CORE-019: Beta packaging SHALL produce truthful Windows portable artefacts
 Cabinet beta packaging SHALL use one canonical private-beta version source and SHALL produce Windows portable package evidence without claiming unsigned installers.
@@ -50,7 +51,8 @@ Cabinet beta release acceptance SHALL be encoded as a stable checklist before pa
 #### Scenario: Packaged core workflow acceptance pack
 - **GIVEN** a Windows beta package, checksum, release commit, and app version are nominated for #1869 acceptance
 - **WHEN** Cabinet runs or reports packaged core-workflow release acceptance
-- **THEN** the acceptance evidence SHALL identify OS, artefact filename, checksum, commit SHA, app version, runtime metadata, and release notes source
+- **THEN** the acceptance evidence SHALL identify OS, artefact filename, checksum, commit SHA, app version, full runtime build revision, runtime metadata, and release notes source
+- **AND** recorder initialization MUST reject a missing, malformed, uppercase, or mismatched runtime build revision and MUST require `/api/runtime.build_revision` to equal the Cabinet manifest `source_commit`
 - **AND** the checklist SHALL cover onboarding, inventory, media, wishlist-to-inventory, collections, export, backup, restore, Market Watch, Discovery handoff, failed-provider recovery, invalid import/restore recovery, restart persistence, profile isolation, and version visibility
 - **AND** every failure SHALL create or link a focused issue before rerun
 - **AND** the final packaged journey SHALL use the packaged binary without test-only hooks, dirty worktree state, unapproved release publication, or `develop` to `main` promotion
@@ -106,12 +108,13 @@ Cabinet SHALL bind beta release-candidate validation to one repository-owned, ve
 - **GIVEN** a full commit SHA is nominated for the Beta Release Candidate Gate
 - **WHEN** the candidate workflow resolves the Cypress release pack
 - **THEN** it MUST validate `release/beta-core-cypress-pack.json` before running Cypress
-- **AND** the pack MUST include login/profile, inventory, wishlist, collections, media, recovery, and provider handoff coverage
+- **AND** the pack MUST include login/profile, inventory, wishlist, collections, media, recovery, provider handoff, central Agent, conversational collection workflows, provider-backed acquisition/setup guidance, Dashboard summary routing, Agent attachment continuity, Agent response states, compact/200%-zoom Agent accessibility, server-derived Agent authority, Telegram connector, and Telegram conversation coverage
+- **AND** every spec SHALL run separately with retries disabled and a 300-second execution watchdog so a multi-spec runner hang or retry cannot hide an incomplete candidate lane
+- **AND** each completed spec summary MUST record the exact candidate `build_revision`, zero exit status, completed runner phase, and the configured execution timeout
+- **AND** Telegram source acceptance SHALL use a repository-owned loopback Bot API fixture, synthetic token, and explicit fixture flag; a skipped Telegram case MUST fail the required category
 - **AND** empty, missing, duplicate, extra, or under-scoped overrides MUST fail before Cypress starts
 - **AND** candidate evidence MUST record the exact manifest version, spec count, spec list, commit, and Cypress output
-- **AND** Cypress execution MUST use a bounded per-run watchdog that fails closed with distinct timeout evidence when the child process remains alive without completing the requested spec
-- **AND** timeout evidence MUST include runner phase, owned child process IDs, sanitized owned process-tree command lines, elapsed time, spec, browser, runtime revision/port, last Cypress output, and cleanup result without secrets
-- **AND** human Frontline, Bonza, packaged Windows acceptance, and final publication steps MUST remain separate and not be auto-passed by the source Cypress pack.
+- **AND** human Frontline, Bonza, real Telegram text/media, packaged Windows acceptance, and final publication steps MUST remain separate and not be auto-passed by the source Cypress pack.
 
 ### Requirement RUNTIME-CORE-025: Beta release lanes SHALL reject critical and high production dependency vulnerabilities
 Cabinet SHALL validate the exact `ui.web` lockfile before develop, main, beta candidate, or private package work can advance.
@@ -291,6 +294,8 @@ E2E-only reset hooks MUST clear supported runtime data without failing solely be
 - **AND** reset MAY retry recognized storage contention with a small bounded retry budget
 - **AND** reset MUST not retry arbitrary storage failures
 - **AND** reset diagnostics MUST log only allow-listed failure class and operation fields while the HTTP response remains generic
+- **AND** Cypress reset preflight MUST use a bounded probe budget that exceeds the reset operation's maximum SQLite contention retry envelope and MUST report a distinct timeout diagnostic
+- **AND** the Windows runtime startup wait MUST remain bounded while allowing the validated 90-second cold-start envelope before classifying the runtime as unhealthy
 
 ### Requirement RUNTIME-CORE-018: Cypress runner SHALL prepare dependencies and persist execution logs
 Cabinet Cypress execution scripts MUST perform required local preparation before invoking Cypress and MUST persist progress/output logs for traceability.
@@ -305,10 +310,19 @@ Cabinet Cypress execution scripts MUST perform required local preparation before
 - **AND** it MUST write a machine-readable run summary containing the spec, browser, base URL, runtime path, exit code, and ordered step list
 - **AND** it MUST retain existing runtime health, E2E hook, stale-port recycling, and project-local runtime path protections
 
-#### Scenario: Cypress runner fails on stale runtime app version
+#### Scenario: Cypress runner fails on stale runtime build identity
 - **GIVEN** the Cypress runner has resolved the current Git `source_commit`
-- **AND** the managed or reused runtime returns `/api/runtime.app_version`
-- **WHEN** the app version does not equal `rev-<source_commit first 12 chars>`
-- **THEN** the runner MUST fail before executing the browser spec with a diagnostic stale-runtime mismatch error
+- **AND** the managed or reused runtime returns `/api/runtime.app_version` and full `/api/runtime.build_revision`
+- **WHEN** the build revision does not exactly equal the full source commit, or the app version is neither its revision-derived version nor a semantic release version
+- **THEN** the runner MUST fail before executing the browser spec with a diagnostic stale-runtime identity mismatch error
 - **AND** the run summary MUST record whether stale runtime app versions were explicitly allowed
 - **AND** the runner MAY proceed only when an explicit stale-runtime baseline override is passed
+
+#### Scenario: Cypress execution hangs after runtime readiness
+- **GIVEN** the managed Cabinet runtime passed health and full source-revision preflight
+- **AND** the launched Cypress process remains alive without completing the requested isolated spec
+- **WHEN** the configured per-spec execution timeout expires
+- **THEN** the runner MUST terminate only the Cypress process tree that it launched and the managed Cabinet runtime that it started
+- **AND** it MUST exit non-zero without continuing the candidate pack or reporting an assertion result
+- **AND** the machine-readable summary MUST distinguish `execution_timeout` from Cypress assertion failure
+- **AND** it MUST record the spec, browser, execution bound, root and child process IDs, a process-tree snapshot with secret-redacted command lines, elapsed time, full runtime revision and port, secret-redacted last Cypress output, and owned-process cleanup result

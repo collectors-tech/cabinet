@@ -1,22 +1,23 @@
 ## Purpose
-Define Profile settings screen behavior for identity details, profile links, Telegram capture authorization, persistence feedback, and missing active-profile recovery.
+Define Profile settings screen behavior for identity details, profile links, Telegram setup handoff, persistence feedback, and missing active-profile recovery.
 
 ## Requirements
 ### Requirement UI-SCREEN-SETTINGS-PROFILE-001: Profile screen SHALL support validated profile editing
-Profile screen SHALL allow editing username, display email, bio, URL list, and Telegram catalog capture authorization values with inline validation.
+Profile screen SHALL allow editing username, display email, bio, and URL list with inline validation, while directing Telegram authorization to its governed Integrations pairing flow.
 
 #### Scenario: Save profile details
 - **GIVEN** user opens `/settings/profile`
 - **WHEN** user submits valid profile values
 - **THEN** runtime MUST persist values and UI MUST show deterministic success state
 - **AND** the screen title/description MUST resolve to user-facing copy instead of raw translation keys
-- **AND** Telegram catalog capture sender/chat authorization values MUST persist through the same profile settings API
+- **AND** profile save MUST NOT overwrite connector-owned Telegram sender/chat pairing state
 
-#### Scenario: Save Telegram catalog capture authorization
+#### Scenario: Open governed Telegram pairing setup
 - **GIVEN** user opens `/settings/profile`
-- **WHEN** user enters a Telegram sender ID and chat ID and submits the profile form
-- **THEN** runtime MUST persist `telegram.catalog_capture.sender_id` and `telegram.catalog_capture.chat_id`
-- **AND** reloading the Profile settings screen MUST show the saved Telegram authorization values
+- **WHEN** the Telegram catalog capture card renders
+- **THEN** it MUST explain that private pairing replaces manual sender/chat entry
+- **AND** it MUST link to the Telegram Integrations setup
+- **AND** it MUST NOT render editable sender-id or chat-id controls
 
 ### Requirement UI-SCREEN-SETTINGS-PROFILE-002: Profile screen SHALL handle deterministic error states
 
@@ -63,6 +64,6 @@ Profile screen SHALL allow editing username, display email, bio, URL list, and T
 | UC-SET-PROF-01 | Retry profile load failure | `Retry` re-attempts profile fetch deterministically | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-003 retries profile settings load failure without route reload` |
 | UC-SET-PROF-02 | Add URL action | `Add URL` appends editable URL row | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 persists profile values through Cabinet settings API` |
 | UC-SET-PROF-03 | Update profile action | `Update profile` persists profile values | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 persists profile values through Cabinet settings API` |
-| UC-SET-PROF-04 | Update Telegram catalog capture authorization | `Update profile` persists Telegram sender/chat authorization values | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001` |
+| UC-SET-PROF-04 | Open Telegram pairing setup | Profile shows no manual sender/chat inputs and links to Telegram Integrations setup | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001` |
 | UC-SET-PROF-05 | Invalid profile URL submission | Profile URL validation blocks save and keeps profile settings API untouched | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 blocks invalid profile URL submission before save` |
 | UC-SET-PROF-06 | Missing active profile blocker | Profile-context blocker hides editable profile controls and exposes recovery actions | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-005 blocks profile edits when active profile is missing` |

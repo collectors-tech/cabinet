@@ -1,5 +1,6 @@
 describe('settings/storage', () => {
   function signInToStorage() {
+    cy.stubLocalServerSession('default')
     cy.visit('/sign-in?redirect=%2Fsettings%2Fstorage')
     cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(

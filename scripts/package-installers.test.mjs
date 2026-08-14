@@ -126,6 +126,7 @@ describe("Cabinet beta packaging contract", () => {
     assert.match(checklist, /\/healthz/);
     assert.match(checklist, /\/api\/runtime/);
     assert.match(checklist, /app_version=0\.1\.0-beta\.1/);
+    assert.match(checklist, /build_revision.*source_commit/i);
     assert.match(checklist, /#1864 approval/);
     assert.match(checklist, /must not publish/i);
   });
@@ -141,6 +142,7 @@ describe("Cabinet beta packaging contract", () => {
     assert.match(checklist, /\/healthz/);
     assert.match(checklist, /\/api\/runtime/);
     assert.match(checklist, /app_version=0\.1\.0-beta\.1/);
+    assert.match(checklist, /build_revision.*source_commit/i);
     assert.match(checklist, /inventory item count/i);
     assert.match(checklist, /wishlist item count/i);
     assert.match(checklist, /collection membership count/i);

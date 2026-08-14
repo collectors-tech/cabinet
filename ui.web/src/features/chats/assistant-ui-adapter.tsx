@@ -7,8 +7,9 @@ import { Bot, Send, UserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
-  type CabinetAssistantUiComposerState,
-  type CabinetAssistantUiMessage,
+	type CabinetAssistantUiComposerState,
+	type CabinetAssistantUiMessage,
+	cabinetMessageAttachments,
 } from './assistant-ui-adapter-utils'
 
 function assistantUiMessageText(message: MessageState) {
@@ -24,7 +25,8 @@ type CabinetAssistantUiMessageListProps = {
     root?: string
     messagePrimitive?: string
     userBubble?: string
-    assistantBubble?: string
+		assistantBubble?: string
+		attachment?: string
   }
 }
 
@@ -81,8 +83,34 @@ export function CabinetAssistantUiMessageList({
                 </div>
               )
             }}
-          </ThreadPrimitive.Messages>
-        </div>
+			</ThreadPrimitive.Messages>
+			{messages.flatMap((message) =>
+				cabinetMessageAttachments(message).map((attachment) => (
+					<div
+						key={`${message.id}:${attachment.id}`}
+						className='ml-auto max-w-[92%] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300'
+						data-testid={
+							testIds?.attachment ?? 'shell-assistant-message-attachment'
+						}
+						data-attachment-id={attachment.id}
+						data-message-id={message.id}
+					>
+						<p className='font-medium text-slate-100'>
+							{attachment.filename}
+						</p>
+						<p>
+							{attachment.mime_type || 'file'} / {attachment.size_bytes}{' '}
+							bytes
+						</p>
+						<p>
+							{attachment.source === 'telegram'
+								? 'Received from Telegram'
+								: 'Uploaded in Cabinet'}
+						</p>
+					</div>
+				))
+			)}
+		</div>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
   )

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -8,6 +9,18 @@ const browsers = [
   {
     name: 'Chrome',
     commands: ['google-chrome', 'google-chrome-stable'],
+    executableVariable: 'CABINET_CHROME_BIN',
+    windowsPaths: [
+      resolve(process.env.PROGRAMFILES ?? 'C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      resolve(
+        process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)',
+        'Google',
+        'Chrome',
+        'Application',
+        'chrome.exe',
+      ),
+      resolve(process.env.LOCALAPPDATA ?? '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    ],
     rootVariable: 'CABINET_EXTENSION_CHROME_ROOT',
     startupTimeoutMilliseconds: 30_000,
     attempts: 1,
@@ -15,15 +28,31 @@ const browsers = [
   {
     name: 'Edge',
     commands: ['microsoft-edge', 'microsoft-edge-stable'],
+    executableVariable: 'CABINET_EDGE_BIN',
+    windowsPaths: [
+      resolve(
+        process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)',
+        'Microsoft',
+        'Edge',
+        'Application',
+        'msedge.exe',
+      ),
+      resolve(process.env.PROGRAMFILES ?? 'C:\\Program Files', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      resolve(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    ],
     rootVariable: 'CABINET_EXTENSION_EDGE_ROOT',
+    windowsArguments: ['--edge-skip-compat-layer-relaunch'],
     startupTimeoutMilliseconds: 90_000,
     attempts: 2,
   },
 ]
 
-const executable = (commands) => commands.find((command) =>
-  spawnSync('which', [command], { encoding: 'utf8' }).status === 0
-)
+const executable = (browser) => {
+  const override = process.env[browser.executableVariable]
+  if (override && existsSync(resolve(override))) return resolve(override)
+  if (process.platform === 'win32') return browser.windowsPaths.find((candidate) => existsSync(candidate))
+  return browser.commands.find((command) => spawnSync('which', [command], { encoding: 'utf8' }).status === 0)
+}
 
 const pause = (milliseconds) => new Promise((resolvePause) => setTimeout(resolvePause, milliseconds))
 
@@ -59,6 +88,7 @@ const tryVerify = async (browser, command, extensionRoot, manifest) => {
   const profile = await mkdtemp(`${tmpdir()}/cabinet-${browser.name.toLowerCase()}-`)
   const output = []
   const browserProcess = spawn(command, [
+    ...(process.platform === 'win32' ? (browser.windowsArguments ?? []) : []),
     '--headless=new',
     '--no-sandbox',
     '--disable-gpu',
@@ -106,7 +136,7 @@ const tryVerify = async (browser, command, extensionRoot, manifest) => {
 }
 
 const verify = async (browser) => {
-  const command = executable(browser.commands)
+  const command = executable(browser)
   assert.ok(command, `${browser.name} is required for the Browser Companion load gate`)
   const extensionRoot = resolve(process.env[browser.rootVariable] ?? 'browser-extension')
   const manifest = JSON.parse(await readFile(resolve(extensionRoot, 'manifest.json'), 'utf8'))

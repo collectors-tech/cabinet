@@ -19,6 +19,12 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useLayout } from '@/context/layout-provider'
 import { useShellWorkspace } from '@/context/shell-workspace-context'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -26,12 +32,6 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
@@ -76,8 +76,7 @@ export function AppSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { collapsible, variant } = useLayout()
-  const { state: sidebarState, isMobile, setOpen, setOpenMobile } =
-    useSidebar()
+  const { state: sidebarState, isMobile, setOpen } = useSidebar()
   const { t } = useTranslation('nav')
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const isCollapsedSidebar = sidebarState === 'collapsed' && !isMobile
@@ -408,20 +407,13 @@ export function AppSidebar() {
   const searchActive = !inboxActive && activeWorkspace === 'search'
   const assistantActive = !inboxActive && activeWorkspace === 'assistant'
 
-  useEffect(() => {
-    if (isMobile && assistantActive) {
-      setOpenMobile(false)
-    }
-  }, [assistantActive, isMobile, setOpenMobile])
-
   return (
     <Sidebar
       collapsible={collapsible}
       variant={variant}
-      mobileSheetMode={assistantActive ? 'assistant' : 'default'}
       className={
         assistantActive
-          ? 'assistant-active-mobile-sheet max-md:w-[calc(100vw-1rem)] max-md:overflow-visible max-md:duration-0 max-md:data-[state=open]:animate-none'
+          ? 'max-w-full overflow-x-hidden data-[state=open]:animate-none'
           : undefined
       }
     >
@@ -466,8 +458,8 @@ export function AppSidebar() {
             </button>
             <button
               type='button'
-              aria-label='Chat workspace'
-              title='Chat workspace'
+              aria-label='Cabinet Agent'
+              title='Cabinet Agent'
               data-testid='shell-workspace-assistant'
               data-active={assistantActive ? 'true' : 'false'}
               className='inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none data-[active=true]:bg-slate-800 data-[active=true]:text-white data-[active=true]:ring-1 data-[active=true]:ring-slate-500'
@@ -533,11 +525,11 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent
         className={
-          navEditMode || assistantActive
-            ? assistantActive
-              ? 'overflow-visible'
-              : 'overflow-hidden'
-            : undefined
+          navEditMode
+            ? 'overflow-hidden'
+            : activeWorkspace === 'assistant'
+              ? 'max-w-full min-w-0 overflow-x-hidden overflow-y-auto'
+              : undefined
         }
       >
         {navEditMode ? (

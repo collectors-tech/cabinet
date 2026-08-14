@@ -33,7 +33,6 @@ Telegram intake MUST produce a preview/inbox handoff first; it MUST NOT create o
 - **WHEN** Cabinet ingests the capture
 - **THEN** Cabinet MUST create a previewed inventory action and Inbox review item
 - **AND** no catalog item MUST be created until explicit confirmation is submitted
-
 ### Requirement TELEGRAM-CATALOG-CAPTURE-004: Barcode-only Telegram capture SHALL use a manual draft path when lookup is unavailable
 When Telegram intake receives a barcode but no resolved product lookup, Cabinet MUST create a transparent manual draft path instead of inventing product attributes.
 
@@ -241,23 +240,126 @@ Telegram catalog capture Inbox items MUST expose the capture review URL as an ac
 - **THEN** the link MUST point to the Cabinet Chats review URL
 - **AND** the Chats surface MUST select the requested Telegram capture thread instead of defaulting to another thread
 
-### Requirement TELEGRAM-CATALOG-CAPTURE-016: Profile settings SHALL manage Telegram capture authorization
-Cabinet MUST expose profile-scoped controls for the Telegram sender/chat authorization settings used by catalog capture intake, so users can configure the external channel without direct database edits.
+### Requirement TELEGRAM-CATALOG-CAPTURE-016: Cabinet SHALL establish Telegram capture authorization through private pairing
+Cabinet MUST establish profile-scoped Telegram sender/chat authorization from a short-lived pairing code instead of requiring users to copy Telegram identifiers manually.
 
-#### Scenario: Persist Telegram capture authorization from profile settings
-- **GIVEN** the user opens Profile settings for the active Cabinet profile
-- **WHEN** they enter a Telegram sender id and chat id and save the profile form
-- **THEN** Cabinet MUST persist `telegram.catalog_capture.sender_id` and `telegram.catalog_capture.chat_id` through the profile settings API
-- **AND** reloading the profile settings screen MUST show the saved sender/chat authorization values
+#### Scenario: Pair an exact private Telegram chat to a profile
+- **GIVEN** the user has validated a Telegram bot for the active Cabinet profile and created an unexpired single-use pairing code
+- **WHEN** the same Telegram user sends `/start <code>` from a private chat whose chat id equals the sender id
+- **THEN** Cabinet MUST persist that exact sender/chat mapping for the profile
+- **AND** the pairing code MUST become unusable after the first successful consume
+- **AND** Cabinet MUST reject group chats, mismatched sender/chat identities, expired codes, and reused codes without changing the existing authorization mapping
+- **AND** persisted pairing state MUST contain only a one-way code digest, expiry, and consumption state rather than the plaintext code
 
-### Requirement TELEGRAM-CATALOG-CAPTURE-025: Integrations SHALL expose Telegram capture channel setup state
-Cabinet MUST list Telegram in the Integrations registry and UI as an assistant capture channel whose setup state is derived from profile-scoped sender/chat authorization settings.
+### Requirement TELEGRAM-CATALOG-CAPTURE-025: Integrations SHALL expose Telegram polling and private-pairing state
+Cabinet MUST list Telegram in the Integrations registry and UI as an assistant capture channel whose readiness is derived from a validated write-only bot token, no webhook conflict, an exact private-chat pairing, and an active outbound long-polling connector.
 
 #### Scenario: Show Telegram channel state in Integrations
-- **GIVEN** the active profile has Telegram catalog capture sender/chat authorization settings
+- **GIVEN** the active profile has a validated Telegram bot and a paired private sender/chat mapping
 - **WHEN** the user opens the Integrations page and reviews the Telegram provider
-- **THEN** the provider registry MUST expose Telegram with `assistant_capture_channel` mode, sender/chat auth metadata, and assistant/media/text capture capabilities
-- **AND** the Integrations UI MUST show Telegram as connected, display the messaging API family and capture capabilities, and show sender/chat authorization status in the provider detail panel
+- **THEN** the provider registry MUST expose Telegram with `assistant_capture_channel` mode, bot-token/private-pairing auth metadata, outbound-long-polling transport, and assistant/media/text capture capabilities
+- **AND** the Integrations UI MUST show non-secret bot identity, pairing, pause, offset/last-success, and degraded/error state without returning the token or implying that Cabinet exposes a public Telegram listener
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-026: Cabinet SHALL validate Telegram Bot API identity and webhook compatibility before polling
+Cabinet MUST validate a candidate BotFather token against `getMe`, inspect `getWebhookInfo`, and require an explicit user action before removing a conflicting webhook.
+
+#### Scenario: Validate bot identity without leaking the token
+- **GIVEN** a user enters a candidate Telegram bot token for a Cabinet profile
+- **WHEN** Cabinet tests the connection
+- **THEN** Cabinet MUST call `getMe` and report non-secret bot identity
+- **AND** Cabinet MUST persist the token only in the profile secret store after successful bot validation
+- **AND** status, errors, logs, and API responses MUST NOT return the token
+
+#### Scenario: Resolve a webhook conflict explicitly
+- **GIVEN** `getWebhookInfo` reports a non-empty webhook URL
+- **WHEN** Cabinet tests the connection
+- **THEN** Cabinet MUST report a blocking webhook conflict without mutating Telegram configuration
+- **AND** Cabinet MUST call `deleteWebhook` only after the user explicitly chooses the conflict-resolution action
+- **AND** webhook removal MUST preserve pending updates
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-027: Cabinet SHALL poll Telegram outbound-only with durable exactly-once handoff boundaries
+Cabinet MUST use outbound Bot API `getUpdates` long polling without opening an inbound Telegram listener, and MUST persist update offsets only after governed Cabinet processing succeeds.
+
+#### Scenario: Poll restricted updates and advance after success
+- **GIVEN** the connector has a validated bot and a persisted update offset
+- **WHEN** it polls Telegram
+- **THEN** it MUST send that offset, a bounded long-poll timeout, and only the supported message/callback update types
+- **AND** it MUST process returned updates in update-id order through the existing governed Cabinet adapter
+- **AND** it MUST persist `update_id + 1` only after that update finishes successfully
+
+#### Scenario: Restart without duplicate processing
+- **GIVEN** Cabinet has persisted an offset after successfully processing Telegram updates
+- **WHEN** the runtime restarts and Telegram returns an older update plus the next update
+- **THEN** Cabinet MUST resume from the persisted offset, skip the older update, and process the next update once
+- **AND** a failed governed handoff MUST leave its update eligible for a later retry
+
+#### Scenario: Poll the paired profile independently of the UI-active profile
+- **GIVEN** one Cabinet profile has Telegram polling enabled and a different profile is currently active in the Cabinet UI
+- **WHEN** the runtime selects Telegram connectors to poll
+- **THEN** it MUST poll the Telegram-enabled profile instead of assuming the UI-active profile owns the bot
+- **AND** it MUST keep every update, thread, preview, sender/chat mapping, and offset bound to that configured profile
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-028: Telegram polling SHALL use bounded retry and visible runtime health
+Cabinet MUST run the Telegram connector with app lifecycle ownership, cancellation, bounded retry, Telegram `retry_after` handling, and non-secret health evidence.
+
+#### Scenario: Recover from transient Telegram failure
+- **GIVEN** Telegram returns a rate limit or transient network failure
+- **WHEN** the connector schedules another poll
+- **THEN** it MUST honor a positive Telegram `retry_after` value when present and otherwise use bounded exponential backoff
+- **AND** status MUST report degraded state, safe error code, retry delay, last successful poll, and last processed update without exposing credentials
+- **AND** pause, resume, token rotation, and disconnect controls MUST take effect without starting a public listener
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-029: Telegram connector acceptance SHALL include controlled real-runtime pairing proof
+The release gate MUST exercise the running Cabinet API and UI against a controlled Telegram Bot API fixture, with live Telegram proof remaining an explicit operator-owned gate.
+
+#### Scenario: Complete setup and pairing through a running Cabinet runtime
+- **GIVEN** Cabinet is running with a controlled Bot API fixture and no real Telegram credential
+- **WHEN** the acceptance journey enters a token, validates bot identity, resolves a fixture webhook conflict, creates a pairing code, and delivers a private `/start` update
+- **THEN** the running connector MUST persist the exact profile/sender/chat mapping and offset
+- **AND** the UI MUST show connected long-polling state, bot identity, and no public listener while keeping the token write-only
+- **AND** this fixture proof MUST NOT be described as live Telegram production proof
+
+### Requirement TELEGRAM-AGENT-CONVERSATION-001: Paired private Telegram text SHALL use the shared Cabinet Agent planner
+After private pairing, Cabinet MUST treat ordinary Telegram text as natural-language Cabinet Agent input, preserve one stable profile-scoped thread for the paired sender/chat, and dispatch through the same governed planner used by in-app Chat.
+
+#### Scenario: Continue one Cabinet conversation from Telegram
+- **GIVEN** an exact private sender/chat is paired to a Cabinet profile
+- **WHEN** that sender sends consecutive natural-language text messages
+- **THEN** Cabinet MUST persist both messages in the same profile-scoped Chat thread
+- **AND** planner context MUST identify the Telegram channel and conversation surface without exposing provider tools, raw skill ids, or a `key=value` command grammar
+- **AND** a read-only result MUST return as natural Telegram text without confirmation buttons
+
+#### Scenario: Reject text outside the paired private boundary
+- **GIVEN** Telegram supplies an unpaired sender, a group chat, a mismatched private sender/chat, a caller-selected profile, or legacy Agent command grammar
+- **WHEN** Cabinet receives the request
+- **THEN** Cabinet MUST reject it before planner dispatch or mutation
+- **AND** it MUST NOT create a cross-profile thread or grant authority from caller-authored fields
+
+### Requirement TELEGRAM-AGENT-CONVERSATION-002: Telegram mutations SHALL use opaque durable confirmation callbacks
+When the shared planner proposes a permitted non-admin mutation, Cabinet MUST persist the complete plan behind an opaque `asp_*` preview id and return only Apply and Cancel callbacks bound to that preview and exact Telegram conversation.
+
+#### Scenario: Apply a Telegram preview exactly once
+- **GIVEN** a paired private conversation has a pending unexpired `asp_*` preview
+- **WHEN** the same sender/chat activates its Apply callback
+- **THEN** Cabinet MUST revalidate profile authority, preview provenance, and target state before applying
+- **AND** duplicate update or callback delivery MUST NOT apply the mutation more than once
+- **AND** cross-sender, cross-profile, stale, expired, cancelled, malformed, or non-Telegram preview callbacks MUST fail closed
+
+#### Scenario: Cancel without mutation
+- **GIVEN** a paired private conversation has a pending `asp_*` preview
+- **WHEN** the same sender/chat activates its Cancel callback
+- **THEN** Cabinet MUST terminally cancel the preview without applying it
+- **AND** later Apply delivery MUST not mutate Cabinet
+
+### Requirement TELEGRAM-AGENT-CONVERSATION-003: Administrative work SHALL require authenticated in-app approval
+Telegram identity and pairing MUST NOT confer Cabinet administrator authority or carry an administrator session.
+
+#### Scenario: Route administrative intent to Cabinet
+- **GIVEN** a paired Telegram sender asks for user, role, or other administrator-elevated work
+- **WHEN** the shared planner classifies or selects that work
+- **THEN** Cabinet MUST return a non-secret link to the stable in-app conversation
+- **AND** it MUST NOT create an actionable Telegram preview or callback
+- **AND** execution MUST require current authenticated in-app administrator approval
 
 ### Requirement TELEGRAM-CATALOG-CAPTURE-017: Lookup-backed Telegram drafts SHALL preserve lookup evidence
 When Telegram catalog intake receives a barcode/product lookup result, Cabinet MUST preserve lookup source evidence with the preview, assistant message context, and Inbox audit trail so reviewers can distinguish resolved lookup-backed drafts from the manual barcode fallback.

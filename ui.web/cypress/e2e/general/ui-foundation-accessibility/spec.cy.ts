@@ -60,6 +60,7 @@ describe('ui-foundation-accessibility', () => {
       statusCode: 200,
       body: { id: 'profile-a11y' },
     }).as('profile')
+    cy.stubLocalServerSession('profile-a11y')
     signInToInventory()
     cy.wait('@items')
     cy.wait('@profile')

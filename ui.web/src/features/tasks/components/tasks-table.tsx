@@ -370,6 +370,7 @@ export function TasksTable({
   const [savedViewError, setSavedViewError] = useState<string | null>(null)
   const [activeSavedViewID, setActiveSavedViewID] = useState('')
   const clickTimerRef = useRef<number | null>(null)
+  const saveViewNameInputRef = useRef<HTMLInputElement>(null)
 
   const routeSearch = route.useSearch()
   const routeNavigate = route.useNavigate()
@@ -1082,7 +1083,6 @@ export function TasksTable({
                 inventoryProfileSettingsSaving
               }
               onClick={() => {
-                setSaveViewDialogOpen(true)
                 setSavedViewFeedback(null)
                 setSavedViewError(null)
                 setSaveViewName((previous) =>
@@ -1094,6 +1094,7 @@ export function TasksTable({
                         )?.name ?? '')
                       : ''
                 )
+                setSaveViewDialogOpen(true)
               }}
             >
               Save View
@@ -1526,7 +1527,13 @@ export function TasksTable({
         </DialogContent>
       </Dialog>
       <Dialog open={saveViewDialogOpen} onOpenChange={setSaveViewDialogOpen}>
-        <DialogContent data-testid='inventory-saved-view-dialog'>
+        <DialogContent
+          data-testid='inventory-saved-view-dialog'
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            saveViewNameInputRef.current?.focus()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Save Inventory View</DialogTitle>
             <DialogDescription>
@@ -1542,6 +1549,7 @@ export function TasksTable({
               View name
             </label>
             <Input
+              ref={saveViewNameInputRef}
               id='inventory-saved-view-name'
               data-testid='inventory-saved-view-name'
               value={saveViewName}

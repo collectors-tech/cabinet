@@ -1,7 +1,9 @@
 describe('ui-screen-integrations', () => {
   function signIn(
-    redirect = '%2Fintegrations%2F'
+    redirect = '%2Fintegrations%2F',
+    sessionProfileId = 'profile-e2e-001'
   ) {
+    cy.stubLocalServerSession(sessionProfileId)
     cy.visit(`/sign-in?redirect=${redirect}`)
     cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
@@ -40,7 +42,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'au-webshop-bonzaslotcars-com-au',
@@ -77,9 +82,9 @@ describe('ui-screen-integrations', () => {
       'contain',
       'Integrations'
     )
-    cy.contains('Configure providers, credentials, and connector actions.').should(
-      'not.exist'
-    )
+    cy.contains(
+      'Configure providers, credentials, and connector actions.'
+    ).should('not.exist')
     cy.contains('integrations.title').should('not.exist')
     cy.contains('integrations.description').should('not.exist')
 
@@ -91,27 +96,27 @@ describe('ui-screen-integrations', () => {
     cy.contains('th', 'Health / Last run').should('exist')
     cy.contains('th', 'Row actions').should('exist')
     cy.get('[data-testid="provider-row-ebay"]').should('be.visible')
-    cy.get('[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]').should(
-      'not.exist'
-    )
+    cy.get(
+      '[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]'
+    ).should('not.exist')
     cy.get('[data-testid="integrations-header-add"]')
       .should('be.visible')
       .and('have.attr', 'aria-label', 'Add integration')
       .and('not.contain.text', 'Add Integration')
 
     cy.get('input[placeholder="Filter providers..."]').clear().type('bonza')
-    cy.get('[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]').should(
-      'not.exist'
-    )
+    cy.get(
+      '[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]'
+    ).should('not.exist')
     cy.get('[data-testid="provider-row-ebay"]').should('not.exist')
 
     cy.get('input[placeholder="Filter providers..."]').clear()
     cy.contains('button', 'Cards').click()
     cy.location('search').should('contain', 'view=cards')
     cy.get('[data-testid="provider-card-ebay"]').should('be.visible')
-    cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
-      'not.exist'
-    )
+    cy.get(
+      '[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]'
+    ).should('not.exist')
     cy.contains('button', 'Rows').click()
     cy.get('table').should('be.visible')
   })
@@ -143,7 +148,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'au-webshop-acercmodels-com',
@@ -246,7 +254,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-06-25T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-06-25T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-06-25T00:00:00Z',
+            },
           },
           {
             provider_id: 'openai',
@@ -256,7 +267,8 @@ describe('ui-screen-integrations', () => {
             auth_mode: 'hybrid',
             state: 'needs_config',
             has_token: false,
-            setup_instructions: 'Configure OpenAI with Browser Auth or an API key.',
+            setup_instructions:
+              'Configure OpenAI with Browser Auth or an API key.',
             capabilities: {
               search: false,
               stock_observation: false,
@@ -320,9 +332,9 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-row-ebay"]').should('be.visible')
     cy.get('[data-testid="provider-row-openai"]').should('not.exist')
     cy.get('[data-testid="provider-row-amazon"]').should('not.exist')
-    cy.get('[data-testid="provider-row-au-webshop-legacy-example-test"]').should(
-      'not.exist'
-    )
+    cy.get(
+      '[data-testid="provider-row-au-webshop-legacy-example-test"]'
+    ).should('not.exist')
 
     cy.get('[data-testid="integrations-header-add"]').click()
     cy.get('[data-testid="integrations-provider-selector"]')
@@ -331,7 +343,9 @@ describe('ui-screen-integrations', () => {
       .and('contain', 'Amazon')
       .and('contain', 'legacy.example.test')
 
-    cy.get('[data-testid="integrations-provider-selector-option-amazon"]').click()
+    cy.get(
+      '[data-testid="integrations-provider-selector-option-amazon"]'
+    ).click()
     cy.get('[role="dialog"]')
       .should('contain', 'Amazon')
       .and('contain', 'Mode: disabled')
@@ -497,8 +511,12 @@ describe('ui-screen-integrations', () => {
       })
     cy.get('[data-testid="integrations-table-surface"]').then(($surface) => {
       const surfaceTop = $surface[0].getBoundingClientRect().top
-      cy.get('[data-testid="integrations-table-scroll-body"]').scrollTo('bottom')
-      cy.get('[data-testid="integrations-table-pagination"]').should('be.visible')
+      cy.get('[data-testid="integrations-table-scroll-body"]').scrollTo(
+        'bottom'
+      )
+      cy.get('[data-testid="integrations-table-pagination"]').should(
+        'be.visible'
+      )
       cy.get('[data-testid="integrations-table-surface"]').then(($after) => {
         expect($after[0].getBoundingClientRect().top).to.eq(surfaceTop)
       })
@@ -534,7 +552,10 @@ describe('ui-screen-integrations', () => {
               last_checked_at: '2026-03-01T00:00:00Z',
               next_action: 'retry_after_backoff',
             },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'offline-webshop',
@@ -630,7 +651,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'offline-webshop',
@@ -717,7 +741,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'offline-webshop',
@@ -809,7 +836,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'au-webshop-bonzaslotcars-com-au',
@@ -852,7 +882,11 @@ describe('ui-screen-integrations', () => {
     }).as('registry')
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
-      body: { settings: { 'integration.au-webshop-bonzaslotcars-com-au.enabled': 'true' } },
+      body: {
+        settings: {
+          'integration.au-webshop-bonzaslotcars-com-au.enabled': 'true',
+        },
+      },
     }).as('settings')
 
     signIn(
@@ -866,16 +900,19 @@ describe('ui-screen-integrations', () => {
     cy.location('search').should('contain', 'type=connected')
     cy.location('search').should('contain', 'sort=desc')
     cy.location('search').should('contain', 'view=rows')
-    cy.get('input[placeholder="Filter providers..."]').should('have.value', 'bonza')
+    cy.get('input[placeholder="Filter providers..."]').should(
+      'have.value',
+      'bonza'
+    )
     cy.contains('button', 'Connected').should('be.visible')
     cy.contains('button', 'Rows').should('have.attr', 'aria-pressed', 'true')
     cy.get('table').should('be.visible')
     cy.contains('td', 'bonzaslotcars.com.au').should('be.visible')
     cy.contains('td', 'eBay').should('not.exist')
     cy.contains('td', 'hobbyco.com.au').should('not.exist')
-    cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
-      'not.exist'
-    )
+    cy.get(
+      '[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]'
+    ).should('not.exist')
   })
 
   it('UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-19: shows deterministic empty state for direct route filters', () => {
@@ -903,7 +940,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'offline-webshop',
@@ -932,7 +972,8 @@ describe('ui-screen-integrations', () => {
     }).as('settings')
 
     signIn(
-      '%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Drows'
+      '%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Drows',
+      'profile-e2e-empty-filter'
     )
     cy.wait('@activeProfile')
     cy.wait('@registry')
@@ -942,7 +983,10 @@ describe('ui-screen-integrations', () => {
     cy.location('search').should('contain', 'type=connected')
     cy.location('search').should('contain', 'sort=asc')
     cy.location('search').should('contain', 'view=rows')
-    cy.get('input[placeholder="Filter providers..."]').should('have.value', 'arcade')
+    cy.get('input[placeholder="Filter providers..."]').should(
+      'have.value',
+      'arcade'
+    )
     cy.contains('button', 'Connected').should('be.visible')
     cy.contains('button', 'Rows').should('have.attr', 'aria-pressed', 'true')
     cy.get('[data-testid="integrations-table-surface"]')
@@ -986,7 +1030,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
           {
             provider_id: 'offline-webshop',
@@ -1015,7 +1062,8 @@ describe('ui-screen-integrations', () => {
     }).as('settings')
 
     signIn(
-      '%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Dcards'
+      '%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Dcards',
+      'profile-e2e-empty-cards'
     )
     cy.wait('@activeProfile')
     cy.wait('@registry')
@@ -1025,7 +1073,10 @@ describe('ui-screen-integrations', () => {
     cy.location('search').should('contain', 'type=connected')
     cy.location('search').should('contain', 'sort=asc')
     cy.location('search').should('contain', 'view=cards')
-    cy.get('input[placeholder="Filter providers..."]').should('have.value', 'arcade')
+    cy.get('input[placeholder="Filter providers..."]').should(
+      'have.value',
+      'arcade'
+    )
     cy.contains('button', 'Connected').should('be.visible')
     cy.contains('button', 'Cards').should('have.attr', 'aria-pressed', 'true')
     cy.get('[data-testid="integrations-cards-empty-state"]')
@@ -1051,17 +1102,17 @@ describe('ui-screen-integrations', () => {
             display_name: 'Telegram',
             base_domain: 'telegram.org',
             api_family: 'messaging_channel',
-            api_support_profile: 'bot_webhook_sender_chat_v1',
-            active_mode: 'webhook_pending',
+            api_support_profile: 'bot_long_polling_private_pairing_v1',
+            active_mode: 'connected',
             integration_mode: 'assistant_capture_channel',
-            auth_mode: 'sender_chat',
-            state: 'needs_config',
+            auth_mode: 'bot_token_pairing',
+            state: 'ready',
             has_token: false,
             setup_instructions:
-              'Configure Telegram sender/chat authorization, bot token secret, and webhook routing proof before running governed preview-before-apply channel intake.',
+              'Create a bot with BotFather, validate its write-only token, then pair one private chat. Cabinet uses outbound-only long polling.',
             auth_methods: {
               sender_chat: {
-                state: 'authorized',
+                state: 'paired',
                 connected: true,
                 credential_present: true,
                 setup_message:
@@ -1074,11 +1125,10 @@ describe('ui-screen-integrations', () => {
                 setup_message:
                   'Store a Telegram bot token secret before Cabinet can dispatch channel replies.',
               },
-              webhook: {
-                state: 'pending',
-                connected: false,
-                setup_message:
-                  'Configure webhook routing proof before Cabinet marks production-channel intake ready.',
+              polling: {
+                state: 'connected',
+                connected: true,
+                public_listener: false,
               },
             },
             capabilities: {
@@ -1091,18 +1141,20 @@ describe('ui-screen-integrations', () => {
               text_capture: true,
             },
             setup_status: {
-              sender_chat_state: 'authorized',
+              sender_chat_state: 'paired',
               bot_token_state: 'stored',
-              webhook_state: 'pending',
-              runtime_proof: 'pending_live_channel_check',
-              next_action: 'configure_webhook',
+              webhook_state: 'not_configured',
+              transport: 'long_polling',
+              public_listener: false,
+              runtime_proof: 'ready',
+              next_action: 'talk_to_cabinet',
             },
             health: {
-              status: 'needs_config',
-              state: 'webhook_pending',
+              status: 'ok',
+              state: 'connected',
               message:
-                'Bot credential presence is recorded; configure webhook routing proof before production-channel validation.',
-              next_action: 'configure_webhook',
+                'Telegram is connected through outbound-only long polling.',
+              next_action: 'talk_to_cabinet',
             },
             last_run: { status: 'never', finished_at: null },
           },
@@ -1120,34 +1172,52 @@ describe('ui-screen-integrations', () => {
         },
       },
     }).as('settings')
-    cy.intercept('PUT', '/api/profiles/profile-e2e-001/secrets', (req) => {
-      expect(req.body).to.deep.equal({
-        key: 'telegram_bot_token',
-        value: 'bot-token-replacement',
-      })
-      req.reply({ statusCode: 200, body: { ok: true } })
-    }).as('telegramSecretSave')
-    cy.intercept('PUT', '/api/profiles/profile-e2e-001/settings', (req) => {
-      expect(req.body.settings).to.include({
-        'telegram.catalog_capture.sender_id': '67890',
-        'telegram.catalog_capture.chat_id': '-100123',
-        'telegram.webhook_configured': 'true',
-        'telegram.webhook_url_set': 'true',
-        'integration.telegram.webhook_url':
-          'https://cabinet.example/api/telegram/webhook/catalog-captures',
-        'integration.telegram.enabled': 'true',
-        'telegram.bot_token_secret_present': 'true',
-      })
-      expect(JSON.stringify(req.body)).not.to.contain('bot-token-replacement')
+    cy.intercept('GET', '/api/telegram/connection/status?profile_id=*', {
+      statusCode: 200,
+      body: {
+        profile_id: 'profile-e2e-001',
+        status: 'ok',
+        state: 'connected',
+        code: 'TELEGRAM_POLLING_READY',
+        message: 'Telegram is connected.',
+        next_action: 'talk_to_cabinet',
+        transport: 'long_polling',
+        public_listener: false,
+        bot_token_present: true,
+        credential_returned: false,
+        bot_username: 'cabinet_bot',
+        sender_id: '12345',
+        chat_id: '12345',
+        paired: true,
+        paused: false,
+        webhook_conflict: false,
+        offset: 44,
+      },
+    }).as('telegramStatus')
+    cy.intercept('POST', '/api/telegram/connection/test', (req) => {
+      expect(req.body.bot_token).to.eq('bot-token-replacement')
       req.reply({
         statusCode: 200,
         body: {
-          settings: {
-            ...req.body.settings,
-          },
+          status: 'ready',
+          code: 'TELEGRAM_BOT_VALIDATED',
+          message: 'Telegram bot validated.',
+          next_action: 'create_pairing_code',
+          webhook_conflict: false,
+          bot_token_present: true,
+          credential_returned: false,
+          bot: { username: 'cabinet_bot' },
         },
       })
-    }).as('telegramSettingsSave')
+    }).as('telegramConnectionTest')
+    cy.intercept('POST', '/api/telegram/pairing-codes', {
+      statusCode: 201,
+      body: {
+        profile_id: 'profile-e2e-001',
+        code: 'CAB-ABCD-1234',
+        expires_at: '2026-08-12T02:00:00Z',
+      },
+    }).as('telegramPairing')
 
     signIn()
     cy.wait('@activeProfile')
@@ -1165,42 +1235,49 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-open-telegram"]').should('contain', 'Edit')
 
     cy.get('[data-testid="provider-open-telegram"]').click()
-    cy.contains('Manage provider credentials, validation, and setup controls.').should(
-      'be.visible'
-    )
-    cy.contains('Mode: assistant_capture_channel').should('be.visible')
-    cy.contains('Auth method: sender/chat authorization').should('be.visible')
-    cy.contains('Sender/chat state: authorized').should('be.visible')
-    cy.contains('Bot token state: stored').should('be.visible')
-    cy.contains('Webhook state: pending').should('be.visible')
     cy.get('[role="dialog"]')
-      .contains('Runtime proof: pending_live_channel_check')
-      .should('exist')
-    cy.get('[role="dialog"]').contains('configure_webhook').should('exist')
+      .contains('Manage provider credentials, validation, and setup controls.')
+      .should('be.visible')
     cy.get('[role="dialog"]')
-      .contains('production-channel validation')
-      .should('exist')
+      .contains('Mode: assistant_capture_channel')
+      .should('be.visible')
+    cy.wait('@telegramStatus')
     cy.get('[role="dialog"]')
-      .contains('preview-before-apply channel intake')
-      .should('exist')
-    cy.get('[data-testid="telegram-sender-id"]')
-      .should('have.value', '12345')
-      .clear()
-      .type('67890')
-    cy.get('[data-testid="telegram-chat-id"]')
-      .should('have.value', '-5235769556')
-      .clear()
-      .type('-100123')
-    cy.get('[data-testid="telegram-webhook-url"]').type(
-      'https://cabinet.example/api/telegram/webhook/catalog-captures'
-    )
+      .find('[data-testid="telegram-capture-auth-mode"]')
+      .should('contain.text', 'write-only bot token + private pairing')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[role="dialog"]')
+      .find('[data-testid="telegram-capture-sender-chat-state"]')
+      .should('contain.text', 'Private chat state: paired')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[role="dialog"]')
+      .find('[data-testid="telegram-capture-bot-token-state"]')
+      .should('contain.text', 'Bot token state: stored')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[role="dialog"]')
+      .find('[data-testid="telegram-capture-polling-state"]')
+      .should('contain.text', 'outbound long polling / public listener: no')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[role="dialog"]').contains('Runtime proof: ready').should('exist')
+    cy.get('[role="dialog"]').contains('talk_to_cabinet').should('exist')
+    cy.get('[data-testid="telegram-local-polling-setup"]')
+      .should('contain', 'BotFather')
+      .and('contain', 'No public webhook')
     cy.get('[data-testid="telegram-replace-token"]').click()
     cy.get('[data-testid="telegram-bot-token"]').type('bot-token-replacement')
-    cy.get('[data-testid="telegram-webhook-configured"]').check()
-    cy.contains('button', 'Save Telegram').click()
-    cy.wait('@telegramSecretSave')
-    cy.wait('@telegramSettingsSave')
-    cy.contains('Telegram setup saved.').should('be.visible')
+    cy.get('[data-testid="telegram-test-connection"]').click()
+    cy.wait('@telegramConnectionTest')
+    cy.get('[data-testid="telegram-bot-token"]').should('have.value', '')
+    cy.get('[data-testid="telegram-create-pairing-code"]').click()
+    cy.wait('@telegramPairing')
+    cy.get('[data-testid="telegram-pairing-code"]').should(
+      'contain',
+      '/start CAB-ABCD-1234'
+    )
   })
 
   it('UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status', () => {
@@ -1237,7 +1314,10 @@ describe('ui-screen-integrations', () => {
               base_url_set: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
         ],
       },
@@ -1250,9 +1330,9 @@ describe('ui-screen-integrations', () => {
     signIn()
 
     cy.get('[data-testid="provider-open-ebay"]').click()
-    cy.contains('Manage provider credentials, validation, and setup controls.').should(
-      'exist'
-    )
+    cy.contains(
+      'Manage provider credentials, validation, and setup controls.'
+    ).should('exist')
     cy.contains('Configure eBay token and marketplace.').should('exist')
     cy.get('[data-testid="ebay-setup-status-panel"]')
       .scrollIntoView()
@@ -1269,7 +1349,9 @@ describe('ui-screen-integrations', () => {
     cy.contains('Sync runs from Market Watch query sets.')
       .scrollIntoView()
       .should('be.visible')
-    cy.contains('button', 'Save Integration').scrollIntoView().should('be.visible')
+    cy.contains('button', 'Save Integration')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Mode: official_api').should('exist')
     cy.contains('Health: ok').should('exist')
     cy.contains('Last run: success').should('exist')
@@ -1300,7 +1382,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
         ],
       },
@@ -1309,37 +1394,41 @@ describe('ui-screen-integrations', () => {
       statusCode: 200,
       body: { settings: { 'integration.ebay.enabled': 'true' } },
     })
-    cy.intercept('POST', '/api/providers/ebay/buyer-interest/preview', (req) => {
-      expect(req.body.source_account).to.eq('buyer@example.test')
-      expect(req.body.items).to.have.length(2)
-      req.reply({
-        statusCode: 200,
-        body: {
-          provider: 'ebay',
-          mode: 'preview',
-          total: 2,
-          counts: { wishlist: 1, discovery: 1 },
-          mappings: [
-            {
-              title: 'Watched eBay listing',
-              listing_id: 'v1|watch|0',
-              interest_state: 'watched',
-              destination: 'wishlist',
-              write_back_allowed: false,
-              write_back_blocker: 'ebay_api_capability_not_verified',
-            },
-            {
-              title: 'Cart eBay listing',
-              listing_id: 'v1|cart|0',
-              interest_state: 'cart_like',
-              destination: 'discovery',
-              write_back_allowed: false,
-              write_back_blocker: 'ebay_api_capability_not_verified',
-            },
-          ],
-        },
-      })
-    }).as('buyerInterestPreview')
+    cy.intercept(
+      'POST',
+      '/api/providers/ebay/buyer-interest/preview',
+      (req) => {
+        expect(req.body.source_account).to.eq('buyer@example.test')
+        expect(req.body.items).to.have.length(2)
+        req.reply({
+          statusCode: 200,
+          body: {
+            provider: 'ebay',
+            mode: 'preview',
+            total: 2,
+            counts: { wishlist: 1, discovery: 1 },
+            mappings: [
+              {
+                title: 'Watched eBay listing',
+                listing_id: 'v1|watch|0',
+                interest_state: 'watched',
+                destination: 'wishlist',
+                write_back_allowed: false,
+                write_back_blocker: 'ebay_api_capability_not_verified',
+              },
+              {
+                title: 'Cart eBay listing',
+                listing_id: 'v1|cart|0',
+                interest_state: 'cart_like',
+                destination: 'discovery',
+                write_back_allowed: false,
+                write_back_blocker: 'ebay_api_capability_not_verified',
+              },
+            ],
+          },
+        })
+      }
+    ).as('buyerInterestPreview')
     cy.intercept('POST', '/api/providers/ebay/buyer-interest/import', (req) => {
       expect(req.body.source_account).to.eq('buyer@example.test')
       req.reply({
@@ -1395,9 +1484,9 @@ describe('ui-screen-integrations', () => {
       .scrollIntoView()
       .click()
     cy.wait('@buyerInterestPreview')
-    cy.contains('Buyer-interest preview mapped without remote write-back.').should(
-      'be.visible'
-    )
+    cy.contains(
+      'Buyer-interest preview mapped without remote write-back.'
+    ).should('be.visible')
     cy.get('[data-testid="ebay-buyer-interest-result"]')
       .should('contain', 'Mode: preview / Total: 2')
       .and('contain', 'Wishlist: 1 / Discoveries: 1')
@@ -1442,7 +1531,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
             seller_operations: [],
           },
         ],
@@ -1452,9 +1544,33 @@ describe('ui-screen-integrations', () => {
       statusCode: 200,
       body: { settings: { 'integration.ebay.enabled': 'true' } },
     })
-    cy.intercept('POST', '/api/providers/ebay/listing-lifecycle/preview', (req) => {
-      if (req.body.command === 'draft') {
-        expect(req.body.capability).to.eq('draft_only')
+    cy.intercept(
+      'POST',
+      '/api/providers/ebay/listing-lifecycle/preview',
+      (req) => {
+        if (req.body.command === 'draft') {
+          expect(req.body.capability).to.eq('draft_only')
+          expect(req.body.confirmed).to.eq(false)
+          req.reply({
+            statusCode: 200,
+            body: {
+              provider: 'ebay',
+              mode: 'listing_lifecycle_preview',
+              preview: {
+                command: 'draft',
+                capability: 'draft_only',
+                allowed: true,
+                local_only: true,
+                remote_write: false,
+                confirmation_required: false,
+              },
+            },
+          })
+          return
+        }
+
+        expect(req.body.command).to.eq('publish')
+        expect(req.body.capability).to.eq('confirmed_api')
         expect(req.body.confirmed).to.eq(false)
         req.reply({
           statusCode: 200,
@@ -1462,86 +1578,70 @@ describe('ui-screen-integrations', () => {
             provider: 'ebay',
             mode: 'listing_lifecycle_preview',
             preview: {
-              command: 'draft',
-              capability: 'draft_only',
-              allowed: true,
-              local_only: true,
-              remote_write: false,
-              confirmation_required: false,
+              command: 'publish',
+              capability: 'confirmed_api',
+              allowed: false,
+              local_only: false,
+              remote_write: true,
+              confirmation_required: true,
+              blocker: 'ebay_listing_lifecycle_confirmation_required',
             },
           },
         })
-        return
       }
+    ).as('listingLifecyclePreview')
+    cy.intercept(
+      'POST',
+      '/api/providers/ebay/listing-lifecycle/execute',
+      (req) => {
+        if (req.body.command === 'draft') {
+          expect(req.body.capability).to.eq('draft_only')
+          req.reply({
+            statusCode: 200,
+            body: {
+              provider: 'ebay',
+              mode: 'listing_lifecycle_execute',
+              execution: {
+                command: 'draft',
+                capability: 'draft_only',
+                allowed: true,
+                local_only: true,
+                remote_write: false,
+                executed: true,
+                status: 'local_draft_ready',
+                response: {
+                  provider: 'cabinet',
+                  command: 'draft',
+                  draft_id: 'draft-local-item-local-1',
+                  status: 'local_draft_ready',
+                },
+              },
+            },
+          })
+          return
+        }
 
-      expect(req.body.command).to.eq('publish')
-      expect(req.body.capability).to.eq('confirmed_api')
-      expect(req.body.confirmed).to.eq(false)
-      req.reply({
-        statusCode: 200,
-        body: {
-          provider: 'ebay',
-          mode: 'listing_lifecycle_preview',
-          preview: {
-            command: 'publish',
-            capability: 'confirmed_api',
-            allowed: false,
-            local_only: false,
-            remote_write: true,
-            confirmation_required: true,
-            blocker: 'ebay_listing_lifecycle_confirmation_required',
-          },
-        },
-      })
-    }).as('listingLifecyclePreview')
-    cy.intercept('POST', '/api/providers/ebay/listing-lifecycle/execute', (req) => {
-      if (req.body.command === 'draft') {
-        expect(req.body.capability).to.eq('draft_only')
+        expect(req.body.command).to.eq('publish')
+        expect(req.body.confirmed).to.eq(true)
         req.reply({
-          statusCode: 200,
+          statusCode: 409,
           body: {
             provider: 'ebay',
             mode: 'listing_lifecycle_execute',
             execution: {
-              command: 'draft',
-              capability: 'draft_only',
-              allowed: true,
-              local_only: true,
-              remote_write: false,
-              executed: true,
-              status: 'local_draft_ready',
-              response: {
-                provider: 'cabinet',
-                command: 'draft',
-                draft_id: 'draft-local-item-local-1',
-                status: 'local_draft_ready',
-              },
+              command: 'publish',
+              capability: 'confirmed_api',
+              allowed: false,
+              local_only: false,
+              remote_write: true,
+              executed: false,
+              status: 'blocked',
+              blocker: 'ebay_listing_lifecycle_adapter_required',
             },
           },
         })
-        return
       }
-
-      expect(req.body.command).to.eq('publish')
-      expect(req.body.confirmed).to.eq(true)
-      req.reply({
-        statusCode: 409,
-        body: {
-          provider: 'ebay',
-          mode: 'listing_lifecycle_execute',
-          execution: {
-            command: 'publish',
-            capability: 'confirmed_api',
-            allowed: false,
-            local_only: false,
-            remote_write: true,
-            executed: false,
-            status: 'blocked',
-            blocker: 'ebay_listing_lifecycle_adapter_required',
-          },
-        },
-      })
-    }).as('listingLifecycleExecute')
+    ).as('listingLifecycleExecute')
 
     signIn()
 
@@ -1553,18 +1653,18 @@ describe('ui-screen-integrations', () => {
 
     cy.get('[data-testid="ebay-listing-lifecycle-preview-draft"]').click()
     cy.wait('@listingLifecyclePreview')
-    cy.contains('Listing lifecycle preview completed without remote write.').should(
-      'be.visible'
-    )
+    cy.contains(
+      'Listing lifecycle preview completed without remote write.'
+    ).should('be.visible')
     cy.get('[data-testid="ebay-listing-lifecycle-preview-result"]')
       .should('contain', 'Preview: Create draft')
       .and('contain', 'Allowed: yes / Local only: yes / Remote write: no')
 
     cy.get('[data-testid="ebay-listing-lifecycle-execute-draft"]').click()
     cy.wait('@listingLifecycleExecute')
-    cy.contains('Listing draft was created locally without eBay remote write.').should(
-      'be.visible'
-    )
+    cy.contains(
+      'Listing draft was created locally without eBay remote write.'
+    ).should('be.visible')
     cy.get('[data-testid="ebay-listing-lifecycle-execute-result"]')
       .should('contain', 'Execute: Create draft')
       .and('contain', 'Executed: yes / Local only: yes / Remote write: no')
@@ -1577,7 +1677,9 @@ describe('ui-screen-integrations', () => {
       .and('contain', 'Allowed: no / Local only: no / Remote write: yes')
       .and('contain', 'ebay_listing_lifecycle_confirmation_required')
 
-    cy.get('[data-testid="ebay-listing-lifecycle-confirm-execute-publish"]').click()
+    cy.get(
+      '[data-testid="ebay-listing-lifecycle-confirm-execute-publish"]'
+    ).click()
     cy.wait('@listingLifecycleExecute')
     cy.get('[data-testid="ebay-listing-lifecycle-error"]').should(
       'contain',
@@ -1614,7 +1716,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
             seller_operations: [
               {
                 operation: 'messages',
@@ -1648,111 +1753,119 @@ describe('ui-screen-integrations', () => {
       statusCode: 200,
       body: { settings: { 'integration.ebay.enabled': 'true' } },
     })
-    cy.intercept('POST', '/api/providers/ebay/seller-operations/preview', (req) => {
-      if (req.body.operation === 'messages') {
-        expect(req.body.action).to.eq('sync')
-        expect(req.body.confirmed).to.eq(false)
+    cy.intercept(
+      'POST',
+      '/api/providers/ebay/seller-operations/preview',
+      (req) => {
+        if (req.body.operation === 'messages') {
+          expect(req.body.action).to.eq('sync')
+          expect(req.body.confirmed).to.eq(false)
+          req.reply({
+            statusCode: 200,
+            body: {
+              provider: 'ebay',
+              mode: 'seller_operation_preview',
+              preview: {
+                operation: 'messages',
+                action: 'sync',
+                capability: 'read_only',
+                read_available: true,
+                write_available: false,
+                confirmed: false,
+                allowed: true,
+                remote_write: false,
+                blocker: 'ebay_seller_write_capability_not_verified',
+              },
+            },
+          })
+          return
+        }
+
+        expect(req.body.operation).to.eq('offers')
+        expect(req.body.action).to.eq('fulfill')
+        expect(req.body.confirmed).to.eq(true)
         req.reply({
           statusCode: 200,
           body: {
             provider: 'ebay',
             mode: 'seller_operation_preview',
             preview: {
-              operation: 'messages',
-              action: 'sync',
-              capability: 'read_only',
+              operation: 'offers',
+              action: 'fulfill',
+              capability: 'confirmed_api',
               read_available: true,
-              write_available: false,
-              confirmed: false,
+              write_available: true,
+              confirmation_required: true,
+              confirmed: true,
               allowed: true,
-              remote_write: false,
-              blocker: 'ebay_seller_write_capability_not_verified',
+              remote_write: true,
             },
           },
         })
-        return
       }
+    ).as('sellerOperationPreview')
+    cy.intercept(
+      'POST',
+      '/api/providers/ebay/seller-operations/execute',
+      (req) => {
+        if (req.body.operation === 'messages') {
+          expect(req.body.action).to.eq('sync')
+          expect(req.body.confirmed).to.eq(false)
+          req.reply({
+            statusCode: 200,
+            body: {
+              provider: 'ebay',
+              mode: 'seller_operation_execute',
+              execution: {
+                operation: 'messages',
+                action: 'sync',
+                capability: 'read_only',
+                allowed: true,
+                remote_write: false,
+                executed: true,
+                local_only: true,
+                status: 'local_read_sync_complete',
+                result: {
+                  source: 'local_read_model',
+                  records: [
+                    {
+                      id: 'msg-1',
+                      title: 'Buyer question about condition',
+                      kind: 'seller_message',
+                      status: 'needs_reply',
+                    },
+                  ],
+                  summary: { total: 1 },
+                },
+              },
+            },
+          })
+          return
+        }
 
-      expect(req.body.operation).to.eq('offers')
-      expect(req.body.action).to.eq('fulfill')
-      expect(req.body.confirmed).to.eq(true)
-      req.reply({
-        statusCode: 200,
-        body: {
-          provider: 'ebay',
-          mode: 'seller_operation_preview',
-          preview: {
-            operation: 'offers',
-            action: 'fulfill',
-            capability: 'confirmed_api',
-            read_available: true,
-            write_available: true,
-            confirmation_required: true,
-            confirmed: true,
-            allowed: true,
-            remote_write: true,
-          },
-        },
-      })
-    }).as('sellerOperationPreview')
-    cy.intercept('POST', '/api/providers/ebay/seller-operations/execute', (req) => {
-      if (req.body.operation === 'messages') {
-        expect(req.body.action).to.eq('sync')
-        expect(req.body.confirmed).to.eq(false)
+        expect(req.body.operation).to.eq('offers')
+        expect(req.body.action).to.eq('fulfill')
+        expect(req.body.confirmed).to.eq(true)
         req.reply({
-          statusCode: 200,
+          statusCode: 409,
           body: {
             provider: 'ebay',
             mode: 'seller_operation_execute',
             execution: {
-              operation: 'messages',
-              action: 'sync',
-              capability: 'read_only',
-              allowed: true,
-              remote_write: false,
-              executed: true,
-              local_only: true,
-              status: 'local_read_sync_complete',
-              result: {
-                source: 'local_read_model',
-                records: [
-                  {
-                    id: 'msg-1',
-                    title: 'Buyer question about condition',
-                    kind: 'seller_message',
-                    status: 'needs_reply',
-                  },
-                ],
-                summary: { total: 1 },
-              },
+              operation: 'offers',
+              action: 'fulfill',
+              capability: 'confirmed_api',
+              allowed: false,
+              remote_write: true,
+              executed: false,
+              local_only: false,
+              status: 'blocked',
+              blocker: 'ebay_seller_operation_adapter_required',
             },
           },
         })
-        return
       }
-
-      expect(req.body.operation).to.eq('offers')
-      expect(req.body.action).to.eq('fulfill')
-      expect(req.body.confirmed).to.eq(true)
-      req.reply({
-        statusCode: 409,
-        body: {
-          provider: 'ebay',
-          mode: 'seller_operation_execute',
-          execution: {
-            operation: 'offers',
-            action: 'fulfill',
-            capability: 'confirmed_api',
-            allowed: false,
-            remote_write: true,
-            executed: false,
-            local_only: false,
-            status: 'blocked',
-            blocker: 'ebay_seller_operation_adapter_required',
-          },
-        },
-      })
-    }).as('sellerOperationExecute')
+    ).as('sellerOperationExecute')
 
     signIn()
 
@@ -1765,15 +1878,15 @@ describe('ui-screen-integrations', () => {
       'contain',
       'ebay_seller_operation_capability_not_verified'
     )
-    cy.get('[data-testid="ebay-seller-operation-preview-notifications"]').should(
-      'be.disabled'
-    )
+    cy.get(
+      '[data-testid="ebay-seller-operation-preview-notifications"]'
+    ).should('be.disabled')
 
     cy.get('[data-testid="ebay-seller-operation-preview-messages"]').click()
     cy.wait('@sellerOperationPreview')
-    cy.contains('Seller operation preview completed without remote write.').should(
-      'be.visible'
-    )
+    cy.contains(
+      'Seller operation preview completed without remote write.'
+    ).should('be.visible')
     cy.get('[data-testid="ebay-seller-operation-preview-result"]')
       .should('contain', 'Preview: Messages')
       .and('contain', 'Allowed: yes / Remote write: no')
@@ -1799,7 +1912,9 @@ describe('ui-screen-integrations', () => {
       .should('contain', 'Preview: Offers')
       .and('contain', 'Allowed: yes / Remote write: yes')
 
-    cy.get('[data-testid="ebay-seller-operation-confirm-execute-offers"]').click()
+    cy.get(
+      '[data-testid="ebay-seller-operation-confirm-execute-offers"]'
+    ).click()
     cy.wait('@sellerOperationExecute')
     cy.get('[data-testid="ebay-seller-operation-preview-error"]').should(
       'contain',
@@ -1836,7 +1951,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
             seller_operations: [],
           },
         ],
@@ -2036,7 +2154,9 @@ describe('ui-screen-integrations', () => {
     cy.contains('button', 'Validate').click()
     cy.contains('button', 'Validating...').should('be.visible')
     cy.wait('@validate')
-    cy.contains('Validated eBay health: ok.').scrollIntoView().should('be.visible')
+    cy.contains('Validated eBay health: ok.')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Health: ok').scrollIntoView().should('be.visible')
     cy.contains('Last run: success').scrollIntoView().should('be.visible')
     cy.contains('Last checked: 2026-03-01T00:01:00Z')
@@ -2044,8 +2164,13 @@ describe('ui-screen-integrations', () => {
       .should('be.visible')
     cy.contains('button', 'Cancel').click()
     cy.get('[role="dialog"]').should('not.exist')
-    cy.contains('[data-testid="provider-row-ebay"]', 'Health: ok').should('be.visible')
-    cy.contains('[data-testid="provider-row-ebay"]', 'Last run: success').should('be.visible')
+    cy.contains('[data-testid="provider-row-ebay"]', 'Health: ok').should(
+      'be.visible'
+    )
+    cy.contains(
+      '[data-testid="provider-row-ebay"]',
+      'Last run: success'
+    ).should('be.visible')
     cy.get('[data-testid="provider-open-ebay"]').click()
     cy.get('[data-testid="replace-token"]').click()
     cy.get('[data-testid="provider-schema-field-ebay_bearer_token"]').type(
@@ -2146,7 +2271,9 @@ describe('ui-screen-integrations', () => {
     cy.intercept('GET', '/api/provider/health?provider=ebay', (req) => {
       req.reply({
         statusCode: 200,
-        body: healthResponses[Math.min(healthIndex, healthResponses.length - 1)],
+        body: healthResponses[
+          Math.min(healthIndex, healthResponses.length - 1)
+        ],
       })
       healthIndex += 1
     }).as('providerHealth')
@@ -2158,7 +2285,9 @@ describe('ui-screen-integrations', () => {
 
     cy.contains('button', 'Validate').click()
     cy.wait('@providerHealth')
-    cy.contains('Validated eBay health: ok.').scrollIntoView().should('be.visible')
+    cy.contains('Validated eBay health: ok.')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Readiness: ready').scrollIntoView().should('be.visible')
     cy.contains('Message: eBay credentials are ready for Market Watch runs.')
       .scrollIntoView()
@@ -2204,7 +2333,9 @@ describe('ui-screen-integrations', () => {
     cy.contains('Last error: PROVIDER_RATE_LIMITED')
       .scrollIntoView()
       .should('be.visible')
-    cy.contains('Retry after: 120 seconds').scrollIntoView().should('be.visible')
+    cy.contains('Retry after: 120 seconds')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Next action: retry_after_backoff')
       .scrollIntoView()
       .should('be.visible')
@@ -2309,13 +2440,28 @@ describe('ui-screen-integrations', () => {
 
   it('UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context', () => {
     let activeProfileRecovered = false
+    let activeProfileReadCount = 0
 
     cy.intercept('GET', '/api/profiles/active', (req) => {
-      if (!activeProfileRecovered) {
-        req.reply({ statusCode: 404, body: { error: 'active_profile_not_set' } })
+      activeProfileReadCount += 1
+      if (activeProfileReadCount === 1) {
+        req.reply({
+          statusCode: 200,
+          body: { id: 'profile-e2e-002', name: 'Recovered Profile' },
+        })
         return
       }
-      req.reply({ statusCode: 200, body: { id: 'profile-e2e-002', name: 'Recovered Profile' } })
+      if (!activeProfileRecovered) {
+        req.reply({
+          statusCode: 404,
+          body: { error: 'active_profile_not_set' },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 200,
+        body: { id: 'profile-e2e-002', name: 'Recovered Profile' },
+      })
     }).as('activeProfile')
 
     cy.intercept('GET', '/api/profiles', {
@@ -2328,7 +2474,10 @@ describe('ui-screen-integrations', () => {
     cy.intercept('PUT', '/api/profiles/active', (req) => {
       expect(req.body.profile_id).to.eq('profile-e2e-002')
       activeProfileRecovered = true
-      req.reply({ statusCode: 200, body: { id: 'profile-e2e-002', name: 'Recovered Profile' } })
+      req.reply({
+        statusCode: 200,
+        body: { id: 'profile-e2e-002', name: 'Recovered Profile' },
+      })
     }).as('setActiveProfile')
 
     cy.intercept('GET', '/api/providers/registry', {
@@ -2351,7 +2500,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
         ],
       },
@@ -2362,11 +2514,13 @@ describe('ui-screen-integrations', () => {
       body: { settings: { 'integration.ebay.enabled': 'false' } },
     }).as('settingsRecovered')
 
-    signIn()
+    signIn('%2Fintegrations%2F', 'profile-e2e-002')
 
     cy.wait('@profilesList')
     cy.get('[data-testid="integrations-profile-recovery"]').should('be.visible')
-    cy.get('[data-testid="integrations-recovery-profile-profile-e2e-002"]').click()
+    cy.get(
+      '[data-testid="integrations-recovery-profile-profile-e2e-002"]'
+    ).click()
     cy.wait('@setActiveProfile')
     cy.wait('@registryRecovered')
     cy.wait('@settingsRecovered')
@@ -2376,13 +2530,28 @@ describe('ui-screen-integrations', () => {
 
   it('UI-SCREEN-INTEGRATIONS-005 + UC-INT-UI-16: creates a missing active profile inline and reloads integrations', () => {
     let activeProfileRecovered = false
+    let activeProfileReadCount = 0
 
     cy.intercept('GET', '/api/profiles/active', (req) => {
-      if (!activeProfileRecovered) {
-        req.reply({ statusCode: 404, body: { error: 'active_profile_not_set' } })
+      activeProfileReadCount += 1
+      if (activeProfileReadCount === 1) {
+        req.reply({
+          statusCode: 200,
+          body: { id: 'profile-e2e-created', name: 'Created Profile' },
+        })
         return
       }
-      req.reply({ statusCode: 200, body: { id: 'profile-e2e-created', name: 'Created Profile' } })
+      if (!activeProfileRecovered) {
+        req.reply({
+          statusCode: 404,
+          body: { error: 'active_profile_not_set' },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 200,
+        body: { id: 'profile-e2e-created', name: 'Created Profile' },
+      })
     }).as('activeProfile')
 
     cy.intercept('GET', '/api/profiles', {
@@ -2419,7 +2588,8 @@ describe('ui-screen-integrations', () => {
             auth_mode: 'api_key',
             state: 'ready',
             has_token: false,
-            setup_instructions: 'Configure created profile provider credentials.',
+            setup_instructions:
+              'Configure created profile provider credentials.',
             capabilities: {
               search: true,
               stock_observation: false,
@@ -2427,7 +2597,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
         ],
       },
@@ -2442,7 +2615,7 @@ describe('ui-screen-integrations', () => {
       },
     }).as('settingsRecovered')
 
-    signIn()
+    signIn('%2Fintegrations%2F', 'profile-e2e-created')
 
     cy.wait('@profilesList')
     cy.location('pathname').should('match', /^\/integrations\/?$/)
@@ -2470,7 +2643,9 @@ describe('ui-screen-integrations', () => {
   it('INTEGRATION-018 + INTEGRATION-019: runtime provider registry includes configured shop domains and capability classification fields', () => {
     cy.request('/api/providers/registry').then((response) => {
       expect(response.status).to.eq(200)
-      const providers = response.body.providers as Array<Record<string, unknown>>
+      const providers = response.body.providers as Array<
+        Record<string, unknown>
+      >
       expect(providers.length).to.be.greaterThan(0)
 
       const domains = providers
@@ -2611,8 +2786,9 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-schema-field-base_domain"]')
       .should('have.value', 'voglers.com.au')
       .and('have.attr', 'readonly')
-    cy.get('[data-testid="provider-schema-field-crawl_interval_minutes"]')
-      .should('have.value', '1440')
+    cy.get(
+      '[data-testid="provider-schema-field-crawl_interval_minutes"]'
+    ).should('have.value', '1440')
   })
 
   it('UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-10: cards show provider API family badges from registry mapping', () => {
@@ -2642,7 +2818,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
         ],
       },
@@ -2658,7 +2837,9 @@ describe('ui-screen-integrations', () => {
 
     signIn()
     cy.contains('button', 'Cards').click()
-    cy.get('[data-testid="provider-card-au-webshop-voglers-com-au"]').should('be.visible')
+    cy.get('[data-testid="provider-card-au-webshop-voglers-com-au"]').should(
+      'be.visible'
+    )
     cy.get('[data-testid="provider-api-family-au-webshop-voglers-com-au"]')
       .should('be.visible')
       .and('contain.text', 'API Family: bigcommerce')
@@ -2691,7 +2872,10 @@ describe('ui-screen-integrations', () => {
               health: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            last_run: {
+              status: 'success',
+              finished_at: '2026-03-01T00:00:00Z',
+            },
           },
         ],
       },

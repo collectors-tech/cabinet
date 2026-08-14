@@ -128,33 +128,40 @@ type InstalledSkillStore struct {
 }
 
 type PreviewRequest struct {
-	SkillID         string         `json:"skill_id"`
-	ProfileID       string         `json:"profile_id"`
-	Confirm         bool           `json:"confirm"`
-	SourceSurface   string         `json:"source_surface,omitempty"`
-	SourceChannel   string         `json:"source_channel,omitempty"`
-	SourceThreadID  string         `json:"source_thread_id,omitempty"`
-	SourceMessageID string         `json:"source_message_id,omitempty"`
-	AgentContext    map[string]any `json:"agent_context,omitempty"`
-	Parameters      map[string]any `json:"parameters,omitempty"`
+	PreviewID               string         `json:"preview_id,omitempty"`
+	StrongConfirmationToken string         `json:"strong_confirmation_token,omitempty"`
+	SkillID                 string         `json:"skill_id"`
+	ProfileID               string         `json:"profile_id"`
+	Confirm                 bool           `json:"confirm"`
+	SourceSurface           string         `json:"source_surface,omitempty"`
+	SourceChannel           string         `json:"source_channel,omitempty"`
+	SourceThreadID          string         `json:"source_thread_id,omitempty"`
+	SourceMessageID         string         `json:"source_message_id,omitempty"`
+	AgentContext            map[string]any `json:"agent_context,omitempty"`
+	Parameters              map[string]any `json:"parameters,omitempty"`
 }
 
 type PreviewResponse struct {
-	SkillID              string         `json:"skill_id"`
-	Status               Status         `json:"status"`
-	SafetyLevel          SafetyLevel    `json:"safety_level"`
-	Executable           bool           `json:"executable"`
-	Allowed              bool           `json:"allowed"`
-	PreviewOnly          bool           `json:"preview_only"`
-	MutationApplied      bool           `json:"mutation_applied"`
-	ConfirmationRequired bool           `json:"confirmation_required"`
-	SourceSurface        string         `json:"source_surface,omitempty"`
-	SourceChannel        string         `json:"source_channel,omitempty"`
-	SourceThreadID       string         `json:"source_thread_id,omitempty"`
-	SourceMessageID      string         `json:"source_message_id,omitempty"`
-	Blocker              string         `json:"blocker,omitempty"`
-	NextAction           string         `json:"next_action,omitempty"`
-	Target               map[string]any `json:"target,omitempty"`
+	PreviewID                  string         `json:"preview_id,omitempty"`
+	PreviewStatus              string         `json:"preview_status,omitempty"`
+	ExpiresAt                  string         `json:"expires_at,omitempty"`
+	SkillID                    string         `json:"skill_id"`
+	Status                     Status         `json:"status"`
+	SafetyLevel                SafetyLevel    `json:"safety_level"`
+	Executable                 bool           `json:"executable"`
+	Allowed                    bool           `json:"allowed"`
+	PreviewOnly                bool           `json:"preview_only"`
+	MutationApplied            bool           `json:"mutation_applied"`
+	ConfirmationRequired       bool           `json:"confirmation_required"`
+	StrongConfirmationRequired bool           `json:"strong_confirmation_required,omitempty"`
+	StrongConfirmationEndpoint string         `json:"strong_confirmation_endpoint,omitempty"`
+	SourceSurface              string         `json:"source_surface,omitempty"`
+	SourceChannel              string         `json:"source_channel,omitempty"`
+	SourceThreadID             string         `json:"source_thread_id,omitempty"`
+	SourceMessageID            string         `json:"source_message_id,omitempty"`
+	Blocker                    string         `json:"blocker,omitempty"`
+	NextAction                 string         `json:"next_action,omitempty"`
+	Target                     map[string]any `json:"target,omitempty"`
 }
 
 type RequirementReview struct {
@@ -534,7 +541,7 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 	if strings.HasPrefix(skill.ID, "cabinet.users.") && skill.ID != "cabinet.users.search" {
 		resp.Allowed = false
 		resp.Blocker = previewUsersAdminBlocker(skill.ID, params)
-		resp.Target = previewTarget(params, "target_user", "target_email", "target_role", "target_status")
+		resp.Target = previewTarget(params, "target_user", "target_email", "target_display_name", "target_role", "target_status", "target_role_current", "target_status_current", "target_updated_at", "protected")
 		if resp.NextAction == "" {
 			resp.NextAction = "Select a target user and confirm the requested admin action in Cabinet before applying any mutation."
 		}
@@ -690,12 +697,12 @@ func builtInSkills() []Skill {
 		builtIn("cabinet.inbox.mark_handled", "Mark Inbox item handled", "Preview and confirm marking a selected Inbox item as handled.", "inbox", SafetyConfirmRequired, []string{"profile", "workspace", "selected_notification"}, nil, nil, []string{"inbox.notification.card", "inbox.notification.mark_handled"}),
 		builtIn("cabinet.inbox.archive_or_hide", "Archive or hide Inbox item", "Preview and confirm archiving or hiding a selected Inbox item.", "inbox", SafetyConfirmRequired, []string{"profile", "workspace", "selected_notification"}, nil, nil, []string{"inbox.notification.card", "inbox.notification.archive"}),
 		builtIn("cabinet.inbox.route_to_surface", "Route Inbox item to surface", "Open the Cabinet surface connected to an Inbox item without applying a state change.", "inbox", SafetyPreviewOnly, []string{"profile", "workspace", "selected_notification"}, []string{"navigate.open_surface"}, nil, []string{"inbox.notification.route", "app.surface.target"}),
-		builtIn("cabinet.users.search", "Search users", "Search workspace users without changing roles, status, or invitations.", "users", SafetyReadOnly, []string{"profile", "workspace", "admin_session"}, nil, nil, []string{"users.table", "users.search"}),
-		builtIn("cabinet.users.invite_user", "Invite user", "Prepare a user invitation draft that requires explicit confirmation before sending or persistence.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_email", "target_role"}, nil, nil, []string{"users.invite.form", "users.invite.submit"}),
-		builtIn("cabinet.users.resend_invitation", "Resend invitation", "Preview resending an invitation to an explicitly selected invited user.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user"}, nil, nil, []string{"users.row.invitation", "users.invite.resend"}),
-		builtIn("cabinet.users.update_role", "Update user role", "Preview a role change with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user", "target_role"}, nil, nil, []string{"users.row.role", "users.role.editor"}),
-		builtIn("cabinet.users.activate_or_deactivate", "Activate or deactivate user", "Preview activation state changes with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "admin_session", "target_user", "target_status"}, nil, nil, []string{"users.row.status", "users.status.editor"}),
-		builtIn("cabinet.users.remove_user", "Remove user", "Require destructive confirmation before removing a non-protected workspace user.", "users", SafetyDestructive, []string{"profile", "workspace", "admin_session", "target_user"}, nil, nil, []string{"users.row.remove", "users.remove.confirmation"}),
+		builtIn("cabinet.users.search", "Search users", "Search workspace users without changing roles, status, or invitations.", "users", SafetyReadOnly, []string{"profile", "workspace"}, nil, nil, []string{"users.table", "users.search"}),
+		builtIn("cabinet.users.invite_user", "Invite user", "Prepare a user invitation draft that requires explicit confirmation before sending or persistence.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "target_email", "target_role"}, nil, nil, []string{"users.invite.form", "users.invite.submit"}),
+		builtIn("cabinet.users.resend_invitation", "Resend invitation", "Preview resending an invitation to an explicitly selected invited user.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "target_user"}, nil, nil, []string{"users.row.invitation", "users.invite.resend"}),
+		builtIn("cabinet.users.update_role", "Update user role", "Preview a role change with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "target_user", "target_role"}, nil, nil, []string{"users.row.role", "users.role.editor"}),
+		builtIn("cabinet.users.activate_or_deactivate", "Activate or deactivate user", "Preview activation state changes with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "target_user", "target_status"}, nil, nil, []string{"users.row.status", "users.status.editor"}),
+		builtIn("cabinet.users.remove_user", "Remove user", "Require destructive confirmation before removing a non-protected workspace user.", "users", SafetyDestructive, []string{"profile", "workspace", "target_user"}, nil, nil, []string{"users.row.remove", "users.remove.confirmation"}),
 		integrationSkill("cabinet.integrations.search_providers", "Search integration providers", "Search available integration providers and setup state without mutating configuration.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"integrations.provider.search"}, nil),
 		integrationSkill("cabinet.integrations.configure_provider", "Configure integration provider", "Prepare a provider configuration preview without echoing secrets before confirmed setup.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "setup_payload"}, []string{"integrations.provider.configure"}, []string{"provider_secret"}),
 		integrationSkill("cabinet.integrations.test_connection", "Test integration connection", "Check a selected provider connection and return actionable setup or health guidance.", SafetyPreviewOnly, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.test_connection"}, nil),
@@ -1209,6 +1216,8 @@ func contextProvided(context string, req PreviewRequest, params map[string]any) 
 		return hasAnyParam(params, "item_id", "selected_item", "target_item", "title", "part_number")
 	case "selected_media":
 		return hasAnyParam(params, "media_id", "selected_media", "attachment_id", "source_url")
+	case "media_source":
+		return hasAnyParam(params, "media_source", "source_url", "file_path", "attachment_id", "media_id")
 	case "collection":
 		return hasAnyParam(params, "collection_name", "collection")
 	case "wishlist_entry":
@@ -1229,8 +1238,14 @@ func contextProvided(context string, req PreviewRequest, params map[string]any) 
 		return hasAnyParam(params, "account_id", "account", "settings_account")
 	case "storage":
 		return hasAnyParam(params, "storage", "backup_path", "file_path")
-	case "admin_session":
-		return hasAnyParam(params, "admin_session", "admin", "target_user", "target_email")
+	case "backup_target":
+		return hasAnyParam(params, "backup_target", "backup_path")
+	case "selected_file":
+		return hasAnyParam(params, "selected_file", "file_path")
+	case "selected_backup":
+		return hasAnyParam(params, "selected_backup", "backup_path")
+	case "export_scope":
+		return hasAnyParam(params, "export_scope")
 	default:
 		return hasAnyParam(params, context)
 	}

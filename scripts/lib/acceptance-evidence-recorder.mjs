@@ -20,7 +20,7 @@ export const acceptanceRows = Object.freeze([
     'Browser name/version and Browser Companion package filename are recorded.',
     'Browser Companion package SHA-256, source commit, extension version and release-manifest path are recorded.',
     'Browser Companion production identity, target, protocol compatibility and immutable candidate version match the release manifest; the Development source build is not used.',
-    '`/api/runtime.app_version`, build date, runtime port, and pid are recorded.',
+    '`/api/runtime.app_version` and full `/api/runtime.build_revision`, build date, runtime port, and pid are recorded; build revision equals the Cabinet manifest `source_commit`.',
     'Cabinet and Browser Companion release notes paths are recorded.',
   ]),
   ...rows('Required Collector Journey', 'COLLECTOR', [
@@ -220,7 +220,8 @@ const verifyCandidate = async ({
 const sanitizeEnvironment = (environment) => {
   const runtime = environment?.runtime
   if (![environment?.os_version, environment?.host_profile, environment?.browser_name, environment?.browser_version,
-    environment?.isolated_profile, environment?.isolated_data_directory, runtime?.app_version, runtime?.build_date].every(requiredText) ||
+    environment?.isolated_profile, environment?.isolated_data_directory, runtime?.app_version, runtime?.build_revision, runtime?.build_date].every(requiredText) ||
+    !fullCommit(runtime?.build_revision) ||
     !Number.isInteger(runtime?.port) || runtime.port < 1 || runtime.port > 65535 || !Number.isInteger(runtime?.pid) || runtime.pid < 1) {
     throw new Error('acceptance_environment_identity_required')
   }
@@ -236,6 +237,7 @@ const sanitizeEnvironment = (environment) => {
     },
     runtime: {
       app_version: redactAcceptanceText(runtime.app_version),
+      build_revision: runtime.build_revision,
       build_date: redactAcceptanceText(runtime.build_date),
       port: runtime.port,
       pid: runtime.pid,
@@ -338,6 +340,9 @@ export const validateAcceptanceState = (state) => {
 export const createOrResumeAcceptanceRun = async (options) => {
   const candidate = await verifyCandidate(options ?? {})
   const environment = sanitizeEnvironment(options?.environment)
+  if (environment.runtime.build_revision !== candidate.source_commit) {
+    throw new Error('acceptance_runtime_source_commit_mismatch')
+  }
   if (!requiredText(options?.outputPath)) throw new Error('acceptance_output_path_required')
   const existing = await loadRecoverableState(options.outputPath)
   if (existing) {
@@ -452,7 +457,7 @@ export const renderAcceptanceMarkdown = (state) => {
     `- OS/host: ${state.environment.os_version} / ${state.environment.host_profile}`,
     `- Browser: ${state.environment.browser_name} ${state.environment.browser_version}`,
     `- Profile/data directory: ${state.environment.isolated_profile} / ${state.environment.isolated_data_directory.display} (SHA-256 \`${state.environment.isolated_data_directory.sha256}\`)`,
-    `- Runtime: ${state.environment.runtime.app_version}, build ${state.environment.runtime.build_date}, port ${state.environment.runtime.port}, pid ${state.environment.runtime.pid}`,
+    `- Runtime: ${state.environment.runtime.app_version}, revision \`${state.environment.runtime.build_revision}\`, build ${state.environment.runtime.build_date}, port ${state.environment.runtime.port}, pid ${state.environment.runtime.pid}`,
     '',
   ]
   for (const section of [...new Set(state.rows.map((row) => row.section))]) {

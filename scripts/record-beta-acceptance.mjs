@@ -23,7 +23,7 @@ init required options:
   --os-version <value> --host-profile <value>
   --browser-name <value> --browser-version <value>
   --isolated-profile <value> --data-directory <path>
-  --app-version <value> --build-date <value> --runtime-port <number> --runtime-pid <number>
+  --app-version <value> --build-revision <full-sha> --build-date <value> --runtime-port <number> --runtime-pid <number>
   --json <path> --markdown <path>
 
 record required options:
@@ -72,6 +72,7 @@ const run = async () => {
         isolated_data_directory: value('--data-directory'),
         runtime: {
           app_version: value('--app-version'),
+          build_revision: value('--build-revision'),
           build_date: value('--build-date'),
           port: Number(value('--runtime-port')),
           pid: Number(value('--runtime-pid')),

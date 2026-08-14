@@ -26,6 +26,8 @@ func TestPackagedCoreWorkflowAcceptanceChecklistCoversIssue1869(t *testing.T) {
 		"Cabinet source commit SHA",
 		"Browser Companion package SHA-256",
 		"/api/runtime.app_version",
+		"/api/runtime.build_revision",
+		"equals the Cabinet manifest `source_commit`",
 		"Fresh start and onboarding/profile setup",
 		"Inventory item can be created, edited, searched, filtered, reloaded",
 		"Media can be attached, marked primary",

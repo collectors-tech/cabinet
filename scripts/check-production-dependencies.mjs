@@ -109,14 +109,28 @@ function jsYamlAdvisory(version) {
   return null;
 }
 
+function postcssAdvisory(version) {
+  if (isBefore(version, { major: 8, minor: 5, patch: 23 })) {
+    return "GHSA-fxqj-rqcc-2cmp (patched in 8.5.23)";
+  }
+  return null;
+}
+
+function extractZipAdvisory(version) {
+  if (isBefore(version, { major: 2, minor: 0, patch: 2 })) {
+    return "GHSA-jmr9-qjv8-65gv (no patched release; package must remain absent)";
+  }
+  return null;
+}
+
 export function evaluateKnownHighAdvisoryGraph(packageLock) {
   if (!packageLock?.packages || typeof packageLock.packages !== "object") {
     throw new Error("package lock does not contain a packages graph");
   }
 
   const findings = [];
-  const counts = { nanoid: 0, "js-yaml": 0 };
-  for (const packageName of ["nanoid", "js-yaml"]) {
+  const counts = { nanoid: 0, "js-yaml": 0, postcss: 0, "extract-zip": 0 };
+  for (const packageName of ["nanoid", "js-yaml", "postcss", "extract-zip"]) {
     const suffix = `/node_modules/${packageName}`;
     for (const [rawPackagePath, entry] of Object.entries(packageLock.packages)) {
       const packagePath = rawPackagePath.replaceAll("\\", "/");
@@ -125,7 +139,14 @@ export function evaluateKnownHighAdvisoryGraph(packageLock) {
       }
       counts[packageName] += 1;
       const version = parseLockedVersion(packageName, packagePath, entry?.version);
-      const advisory = packageName === "nanoid" ? nanoidAdvisory(version) : jsYamlAdvisory(version);
+      const advisory =
+        packageName === "nanoid"
+          ? nanoidAdvisory(version)
+          : packageName === "js-yaml"
+            ? jsYamlAdvisory(version)
+            : packageName === "postcss"
+              ? postcssAdvisory(version)
+              : extractZipAdvisory(version);
       if (advisory) {
         findings.push(`${packageName} ${entry.version} at ${packagePath}: ${advisory}`);
       }
@@ -167,7 +188,7 @@ export function main() {
   evaluateDependencyTree(runNpmJson(["ls", "--depth=0", "--json"]), packageLock);
   const counts = evaluateAuditReport(runNpmJson(["audit", "--omit=dev", "--json"]));
   console.log(
-    `Known high advisory graph passed: nanoid=${graphCounts.nanoid} js-yaml=${graphCounts["js-yaml"]}`,
+    `Known release advisory graph passed: nanoid=${graphCounts.nanoid} js-yaml=${graphCounts["js-yaml"]} postcss=${graphCounts.postcss} extract-zip=${graphCounts["extract-zip"]}`,
   );
   console.log(
     `Production dependency audit passed: critical=${counts.critical} high=${counts.high} moderate=${counts.moderate} low=${counts.low}`,

@@ -55,7 +55,7 @@ node scripts/record-beta-acceptance.mjs render --json <state.json> --markdown <s
 - [ ] Browser name/version and Browser Companion package filename are recorded.
 - [ ] Browser Companion package SHA-256, source commit, extension version and release-manifest path are recorded.
 - [ ] Browser Companion production identity, target, protocol compatibility and immutable candidate version match the release manifest; the Development source build is not used.
-- [ ] `/api/runtime.app_version`, build date, runtime port, and pid are recorded.
+- [ ] `/api/runtime.app_version` and full `/api/runtime.build_revision`, build date, runtime port, and pid are recorded; build revision equals the Cabinet manifest `source_commit`.
 - [ ] Cabinet and Browser Companion release notes paths are recorded.
 
 ## Required Collector Journey

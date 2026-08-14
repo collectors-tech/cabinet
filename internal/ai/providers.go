@@ -67,6 +67,16 @@ func (r *AssistantProviderRegistry) Provider(name string) (AssistantTurnProvider
 	return p, ok
 }
 
+func (r *AssistantProviderRegistry) Register(provider AssistantTurnProvider) {
+	if r == nil || provider == nil {
+		return
+	}
+	name := strings.ToLower(strings.TrimSpace(provider.Name()))
+	if name != "" {
+		r.providers[name] = provider
+	}
+}
+
 type PlaceholderAssistantProvider struct {
 	name string
 }

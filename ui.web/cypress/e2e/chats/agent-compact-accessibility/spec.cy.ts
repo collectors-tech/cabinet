@@ -1,11 +1,12 @@
 describe('chats/agent-compact-accessibility', { retries: 0 }, () => {
-  function bootstrap(path = '/inventory/') {
-    cy.viewport(640, 360)
+  before(() => {
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
-    cy.e2eEnsureSignedOut()
-    cy.stubLocalServerSession('e2e-profile-001')
+  })
+
+  function bootstrap(path = '/inventory/') {
+    cy.viewport(640, 360)
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path })
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
@@ -51,7 +52,7 @@ describe('chats/agent-compact-accessibility', { retries: 0 }, () => {
     expectInsideViewport('shell-assistant-send-button')
 
     cy.get('[data-testid="shell-assistant-attachment-picker"]')
-      .should('not.be.disabled')
+      .should('be.enabled')
       .focus()
       .should('be.focused')
     cy.get('[data-testid="shell-assistant-attachment-upload"]').should(
@@ -62,12 +63,31 @@ describe('chats/agent-compact-accessibility', { retries: 0 }, () => {
       'be.focused'
     )
 
-    cy.get('[data-testid="shell-assistant-open-full-chat"]')
+    cy.get('[data-testid="shell-assistant-attachment-input"]').selectFile(
+      {
+        contents: Cypress.Buffer.from('compact keyboard focus proof'),
+        fileName: 'compact-keyboard-focus.txt',
+        mimeType: 'text/plain',
+      },
+      { force: true }
+    )
+    cy.get('[data-testid="shell-assistant-attachment-upload"]').should(
+      'be.enabled'
+    )
+    cy.get('[data-testid="shell-assistant-attachment-picker"]')
+      .focus()
+      .should('be.focused')
+    cy.press(Cypress.Keyboard.Keys.TAB)
+    cy.get('[data-testid="shell-assistant-attachment-upload"]').should(
+      'be.focused'
+    )
+
+    cy.get('[data-testid="shell-assistant-open-full-agent"]')
       .scrollIntoView()
       .focus()
       .should('be.visible')
       .and('be.focused')
-      .type(' ')
+    cy.press(Cypress.Keyboard.Keys.SPACE)
 
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
     cy.location('search').should('contain', 'thread_id=')
@@ -121,11 +141,11 @@ describe('chats/agent-compact-accessibility', { retries: 0 }, () => {
     cy.get('[data-testid="chat-apply-action-button"]')
       .focus()
       .should('be.focused')
-      .type(' ')
+      .type('{enter}')
     cy.get('[data-testid="chat-apply-confirm-cancel"]')
       .should('be.visible')
       .focus()
-      .type(' ')
+    cy.press(Cypress.Keyboard.Keys.SPACE)
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('not.exist')
     cy.get('[data-testid="chat-apply-action-button"]').should('be.focused')
     expectInsideViewport('chat-cancel-action-button')

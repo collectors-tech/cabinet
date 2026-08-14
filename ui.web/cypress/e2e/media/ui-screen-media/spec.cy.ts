@@ -311,7 +311,9 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-row-analyze-media-wishlist-reference"]')
       .should('be.enabled')
       .and('have.attr', 'aria-label', 'Analyze Wanted chassis reference')
-      .click()
+    cy.get(
+      '[data-testid="media-row-analyze-media-wishlist-reference"]'
+    ).click()
     cy.wait('@analysisWorkflow')
     cy.get('[data-testid="media-analysis-dialog"]')
       .should('be.visible')
@@ -330,7 +332,7 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-row-assign-media-slot-car-front"]')
       .should('be.enabled')
       .and('have.attr', 'aria-label', 'Assign AFX Mustang front view')
-      .click()
+    cy.get('[data-testid="media-row-assign-media-slot-car-front"]').click()
     cy.get('[data-testid="media-assignment-dialog"]')
       .should('be.visible')
       .and('contain', 'AFX Mustang front view')

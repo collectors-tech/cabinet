@@ -1,5 +1,6 @@
 describe('settings/operations', () => {
-  function signInToOperations() {
+  function signInToOperations(sessionProfileId = 'profile-ops-default') {
+    cy.stubLocalServerSession(sessionProfileId)
     cy.visit('/sign-in?redirect=%2Fsettings%2Foperations')
     cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
@@ -11,6 +12,14 @@ describe('settings/operations', () => {
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-ops-default' },
+    })
+    cy.intercept('GET', '/api/profiles/profile-ops-default/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
   })
 
   it('UI-SCREEN-SETTINGS-OPERATIONS-001 renders runtime metadata and recovery visibility', () => {
@@ -18,6 +27,7 @@ describe('settings/operations', () => {
       statusCode: 200,
       body: {
         app_version: 'rev-test123',
+        build_revision: '303754c3cf2e940615817a53e2c496f0b99ef143',
         build_date: '2026-04-22',
         bind_mode: 'lan',
         runtime_host: '192.168.1.53',
@@ -40,6 +50,10 @@ describe('settings/operations', () => {
     cy.get('[data-testid="settings-operations-runtime-card"]').should(
       'contain',
       'rev-test123'
+    )
+    cy.get('[data-testid="settings-operations-build-revision"]').should(
+      'have.text',
+      '303754c3cf2e940615817a53e2c496f0b99ef143'
     )
     cy.get('[data-testid="settings-operations-runtime-card"]').should(
       'contain',
@@ -93,7 +107,7 @@ describe('settings/operations', () => {
       },
     }).as('profileSettings')
 
-    signInToOperations()
+    signInToOperations('profile-ops-placement')
     cy.wait('@runtimeInfo')
     cy.wait('@runtimeRecovery')
     cy.wait('@activeProfile')
@@ -247,7 +261,7 @@ describe('settings/operations', () => {
       })
     }).as('saveProfileSettings')
 
-    signInToOperations()
+    signInToOperations('profile-ops-queue')
     cy.wait('@runtimeInfo')
     cy.wait('@runtimeRecovery')
     cy.wait('@activeProfile')
@@ -336,7 +350,7 @@ describe('settings/operations', () => {
       })
     }).as('beginRecoveryReset')
 
-    signInToOperations()
+    signInToOperations('profile-ops-recovery')
     cy.wait('@runtimeInfo')
     cy.wait('@runtimeRecovery')
     cy.wait('@activeProfile')

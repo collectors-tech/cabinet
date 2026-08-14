@@ -38,8 +38,6 @@ const profileFormSchema = z.object({
         : undefined,
   }),
   bio: z.string().max(160).min(4),
-  telegramCaptureSenderId: z.string().max(64).optional(),
-  telegramCaptureChatId: z.string().max(64).optional(),
   urls: z
     .array(
       z.object({
@@ -55,11 +53,8 @@ const defaultValues: Partial<ProfileFormValues> = {
   username: '',
   email: '',
   bio: 'I own a computer.',
-  telegramCaptureSenderId: '',
-  telegramCaptureChatId: '',
   urls: [],
 }
-
 export function ProfileForm() {
   const {
     settings,
@@ -106,9 +101,6 @@ export function ProfileForm() {
       username: settings['profile.username'] ?? '',
       email: settings['profile.email'] ?? 'm@example.com',
       bio: settings['profile.bio'] ?? 'I own a computer.',
-      telegramCaptureSenderId:
-        settings['telegram.catalog_capture.sender_id'] ?? '',
-      telegramCaptureChatId: settings['telegram.catalog_capture.chat_id'] ?? '',
       urls,
     })
   }, [form, loading, settings])
@@ -125,10 +117,6 @@ export function ProfileForm() {
         'profile.username': data.username.trim(),
         'profile.email': data.email.trim(),
         'profile.bio': data.bio.trim(),
-        'telegram.catalog_capture.sender_id':
-          data.telegramCaptureSenderId?.trim() ?? '',
-        'telegram.catalog_capture.chat_id':
-          data.telegramCaptureChatId?.trim() ?? '',
         'profile.urls': JSON.stringify(data.urls ?? []),
       })
       setSaveMessage('Profile settings saved.')
@@ -290,54 +278,17 @@ export function ProfileForm() {
                   Telegram catalog capture
                 </h3>
                 <p className='mt-1 text-sm text-muted-foreground'>
-                  Authorize one Telegram sender and chat to create catalog
-                  capture drafts for this profile.
+                  Telegram uses validated bot identity and private-chat pairing
+                  instead of manually entered sender or chat IDs.
                 </p>
               </div>
-              <FormField
-                control={form.control}
-                name='telegramCaptureSenderId'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sender ID</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder='123456789'
-                        inputMode='numeric'
-                        data-testid='settings-profile-telegram-sender-id'
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Telegram user ID allowed to submit capture messages for
-                      this profile.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='telegramCaptureChatId'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Chat ID</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder='-5235769556'
-                        inputMode='numeric'
-                        data-testid='settings-profile-telegram-chat-id'
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Telegram chat ID that must match before Cabinet accepts a
-                      capture.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <a
+                href='/integrations?filter=telegram'
+                className='inline-flex h-9 items-center justify-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground'
+                data-testid='settings-profile-open-telegram-setup'
+              >
+                Open Telegram setup
+              </a>
             </div>
             <div>
               {fields.map((field, index) => (

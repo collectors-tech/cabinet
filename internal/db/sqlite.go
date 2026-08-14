@@ -31,7 +31,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
-	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", path)
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -59,6 +59,21 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			value TEXT NOT NULL,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
+		`CREATE TABLE IF NOT EXISTS telegram_connector_state (
+			profile_id TEXT PRIMARY KEY,
+			update_offset INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS telegram_pairing_requests (
+			code_hash TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			consumed_at TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_telegram_pairing_profile_expiry ON telegram_pairing_requests(profile_id, expires_at);`,
 		`CREATE TABLE IF NOT EXISTS profiles (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -613,6 +628,33 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_threads_profile_id ON chat_threads(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS telegram_agent_threads (
+			profile_id TEXT NOT NULL,
+			sender_id TEXT NOT NULL,
+			chat_id TEXT NOT NULL,
+			thread_id TEXT NOT NULL UNIQUE,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(profile_id, sender_id, chat_id),
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+			FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_telegram_agent_threads_thread ON telegram_agent_threads(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS telegram_agent_deliveries (
+			profile_id TEXT NOT NULL,
+			sender_id TEXT NOT NULL,
+			chat_id TEXT NOT NULL,
+			delivery_kind TEXT NOT NULL,
+			delivery_id TEXT NOT NULL,
+			request_fingerprint TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'processing',
+			response_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(profile_id, sender_id, chat_id, delivery_kind, delivery_id),
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_telegram_agent_deliveries_status ON telegram_agent_deliveries(profile_id, status, updated_at);`,
 		`CREATE TABLE IF NOT EXISTS chat_messages (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -683,6 +725,44 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_action_previews_profile_id ON chat_action_previews(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS agent_skill_previews (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			skill_id TEXT NOT NULL,
+			source_surface TEXT NOT NULL DEFAULT '',
+			source_channel TEXT NOT NULL DEFAULT '',
+			source_thread_id TEXT NOT NULL DEFAULT '',
+			source_message_id TEXT NOT NULL DEFAULT '',
+			agent_context_json TEXT NOT NULL DEFAULT '{}',
+			parameters_json TEXT NOT NULL DEFAULT '{}',
+			target_json TEXT NOT NULL DEFAULT '{}',
+			result_json TEXT NOT NULL DEFAULT '{}',
+			secret_ref TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'previewed',
+			error_code TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			applied_at TEXT,
+			cancelled_at TEXT,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_skill_previews_profile_status ON agent_skill_previews(profile_id, status);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_skill_previews_expiry ON agent_skill_previews(status, expires_at);`,
+		`CREATE TABLE IF NOT EXISTS agent_skill_strong_confirmations (
+			id TEXT PRIMARY KEY,
+			preview_id TEXT NOT NULL,
+			profile_id TEXT NOT NULL,
+			skill_id TEXT NOT NULL,
+			target_fingerprint TEXT NOT NULL,
+			token_hash TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'confirmed',
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			used_at TEXT,
+			FOREIGN KEY (preview_id) REFERENCES agent_skill_previews(id) ON DELETE CASCADE,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_skill_strong_confirmation_preview ON agent_skill_strong_confirmations(preview_id, profile_id, status);`,
 		`CREATE TABLE IF NOT EXISTS assistant_workflow_runs (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,

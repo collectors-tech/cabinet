@@ -228,15 +228,53 @@ type IntegrationForm = {
   itemsPerPage: string
   openAiModel: string
   openAiTestPrompt: string
-  telegramSenderId: string
-  telegramChatId: string
-  telegramWebhookConfigured: boolean
   buyerInterestPayload: string
   landedCostPayload: string
   listingLifecycleItemId: string
   listingLifecycleDraftId: string
   listingLifecycleListingId: string
   listingLifecycleTitle: string
+}
+
+type TelegramConnectionStatus = {
+  profile_id: string
+  status: string
+  state: string
+  code: string
+  message: string
+  next_action: string
+  transport: 'long_polling'
+  public_listener: false
+  bot_token_present: boolean
+  credential_returned: false
+  bot_username?: string
+  sender_id?: string
+  chat_id?: string
+  paired: boolean
+  paused: boolean
+  webhook_conflict: boolean
+  offset: number
+  last_success_at?: string
+  last_update_id?: string
+  last_error_code?: string
+  retry_after_seconds?: number
+}
+
+type TelegramConnectionTest = {
+  status: string
+  code: string
+  message: string
+  next_action: string
+  webhook_conflict: boolean
+  bot_token_present: boolean
+  credential_returned: false
+  bot?: { username?: string }
+}
+
+type TelegramPairingCode = {
+  profile_id: string
+  code: string
+  expires_at: string
 }
 
 type BuyerInterestSyncResult = {
@@ -583,11 +621,11 @@ function providerSettingsKeys(providerID: string) {
   }
   if (providerID === 'telegram') {
     return {
-      baseURLKey: 'integration.telegram.webhook_url',
+      baseURLKey: 'telegram.polling.transport',
       tokenKey: 'telegram_bot_token',
-      marketplaceKey: 'telegram.catalog_capture.chat_id',
+      marketplaceKey: 'telegram.bot_username',
       enabledKey: 'integration.telegram.enabled',
-      itemsPerPageKey: 'telegram.catalog_capture.sender_id',
+      itemsPerPageKey: 'telegram.polling.state',
     }
   }
   const slug = providerID.replace(/[^a-z0-9]+/gi, '_').toLowerCase()
@@ -854,6 +892,7 @@ export function Apps({
     type = 'all',
     sort: initSort = 'asc',
     view,
+    provider: requestedProviderID = '',
   } = route.useSearch()
   const navigate = route.useNavigate()
 
@@ -899,6 +938,12 @@ export function Apps({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [tokenFieldError, setTokenFieldError] = useState<string | null>(null)
   const [replaceToken, setReplaceToken] = useState(false)
+  const [telegramStatus, setTelegramStatus] =
+    useState<TelegramConnectionStatus | null>(null)
+  const [telegramPairing, setTelegramPairing] =
+    useState<TelegramPairingCode | null>(null)
+  const [telegramBotUsername, setTelegramBotUsername] = useState('')
+  const [telegramWorking, setTelegramWorking] = useState<string | null>(null)
   const [rowDetailsProviderID, setRowDetailsProviderID] = useState<
     string | null
   >(null)
@@ -911,6 +956,7 @@ export function Apps({
   const addIntegrationButtonRef = useRef<HTMLButtonElement | null>(null)
   const providerSelectorWasOpenedRef = useRef(false)
   const providerSetupHandoffFrameRef = useRef<number | null>(null)
+  const deepLinkedProviderRef = useRef('')
   const tokenInputRef = useRef<HTMLInputElement | null>(null)
   const [form, setForm] = useState<IntegrationForm>({
     baseURL: '',
@@ -920,9 +966,6 @@ export function Apps({
     openAiModel: 'gpt-4o-mini',
     openAiTestPrompt:
       'Write one sentence confirming OpenAI is connected to Cabinet.',
-    telegramSenderId: '',
-    telegramChatId: '',
-    telegramWebhookConfigured: false,
     buyerInterestPayload: defaultBuyerInterestPayload,
     landedCostPayload: defaultLandedCostPayload,
     listingLifecycleItemId: 'item-local-1',
@@ -1389,12 +1432,6 @@ export function Apps({
         openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
         openAiTestPrompt:
           'Write one sentence confirming OpenAI is connected to Cabinet.',
-        telegramSenderId: settings['telegram.catalog_capture.sender_id'] ?? '',
-        telegramChatId: settings['telegram.catalog_capture.chat_id'] ?? '',
-        telegramWebhookConfigured:
-          settings['telegram.webhook_configured'] === 'true' ||
-          settings['telegram.webhook_url_set'] === 'true' ||
-          provider.auth_methods?.webhook?.connected === true,
         buyerInterestPayload: defaultBuyerInterestPayload,
         landedCostPayload: defaultLandedCostPayload,
         listingLifecycleItemId: 'item-local-1',
@@ -1432,6 +1469,27 @@ export function Apps({
     },
     [settings]
   )
+
+  useEffect(() => {
+    const providerID = requestedProviderID.trim()
+    if (!providerID) {
+      deepLinkedProviderRef.current = ''
+      return
+    }
+    if (loading || deepLinkedProviderRef.current === providerID) {
+      return
+    }
+    const requestedProvider = providerByID.get(providerID)
+    if (!requestedProvider) {
+      return
+    }
+    deepLinkedProviderRef.current = providerID
+    openIntegration(requestedProvider)
+    void navigate({
+      search: (previous) => ({ ...previous, provider: undefined }),
+      replace: true,
+    })
+  }, [loading, navigate, openIntegration, providerByID, requestedProviderID])
 
   useEffect(() => {
     if (providerSelectorOpen || !providerSelectorWasOpenedRef.current) {
@@ -1542,9 +1600,6 @@ export function Apps({
       openAiModel: 'gpt-4o-mini',
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
-      telegramSenderId: '',
-      telegramChatId: '',
-      telegramWebhookConfigured: false,
       buyerInterestPayload: defaultBuyerInterestPayload,
       landedCostPayload: defaultLandedCostPayload,
       listingLifecycleItemId: 'item-local-1',
@@ -1566,6 +1621,158 @@ export function Apps({
     setLandedCostError(null)
     setLandedCostResult(null)
     setLandedCostWorking(false)
+    setTelegramPairing(null)
+    setTelegramWorking(null)
+  }
+
+  const loadTelegramStatus = useCallback(async () => {
+    if (!activeProfileId) return
+    try {
+      const response = await fetch(
+        `/api/telegram/connection/status?profile_id=${encodeURIComponent(activeProfileId)}`
+      )
+      if (!response.ok) throw new Error(`telegram_status_${response.status}`)
+      const payload = (await response.json()) as TelegramConnectionStatus
+      setTelegramStatus(payload)
+      setTelegramBotUsername(payload.bot_username ?? '')
+    } catch {
+      setTelegramStatus(null)
+    }
+  }, [activeProfileId])
+
+  useEffect(() => {
+    if (editingProviderID === 'telegram') {
+      void loadTelegramStatus()
+    }
+  }, [editingProviderID, loadTelegramStatus])
+
+  const testTelegramConnection = async () => {
+    if (!activeProfileId) return
+    const token = form.token.trim()
+    if (!token && !telegramStatus?.bot_token_present) {
+      showTokenFieldError('Paste the BotFather token before testing Telegram.')
+      return
+    }
+    setTelegramWorking('test')
+    setSaveError(null)
+    try {
+      const response = await fetch('/api/telegram/connection/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId, bot_token: token }),
+      })
+      const payload = (await response.json()) as TelegramConnectionTest
+      setForm((previous) => ({ ...previous, token: '' }))
+      setTelegramBotUsername(payload.bot?.username ?? telegramBotUsername)
+      setActionMessage(payload.message)
+      if (!response.ok && response.status !== 409) {
+        throw new Error(payload.message || `telegram_test_${response.status}`)
+      }
+      await loadTelegramStatus()
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Telegram test failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const resolveTelegramWebhook = async () => {
+    if (!activeProfileId) return
+    setTelegramWorking('webhook')
+    setSaveError(null)
+    try {
+      const response = await fetch('/api/telegram/connection/resolve-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      const payload = (await response.json()) as TelegramConnectionTest
+      if (!response.ok) {
+        throw new Error(
+          payload.message || `telegram_webhook_${response.status}`
+        )
+      }
+      setActionMessage(payload.message)
+      await loadTelegramStatus()
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Webhook removal failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const createTelegramPairingCode = async () => {
+    if (!activeProfileId) return
+    setTelegramWorking('pair')
+    setSaveError(null)
+    try {
+      const response = await fetch('/api/telegram/pairing-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      if (!response.ok) {
+        throw new Error(`telegram_pairing_${response.status}`)
+      }
+      setTelegramPairing((await response.json()) as TelegramPairingCode)
+      setActionMessage(
+        'Pairing code created. Send the shown /start command to your bot in a private Telegram chat.'
+      )
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Pairing code failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const setTelegramPaused = async (paused: boolean) => {
+    if (!activeProfileId) return
+    setTelegramWorking(paused ? 'pause' : 'resume')
+    try {
+      const response = await fetch('/api/telegram/connection/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId, paused }),
+      })
+      if (!response.ok) throw new Error(`telegram_pause_${response.status}`)
+      setTelegramStatus((await response.json()) as TelegramConnectionStatus)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Pause failed.')
+    } finally {
+      setTelegramWorking(null)
+    }
+  }
+
+  const disconnectTelegram = async () => {
+    if (!activeProfileId) return
+    setTelegramWorking('disconnect')
+    try {
+      const response = await fetch('/api/telegram/connection/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: activeProfileId }),
+      })
+      if (!response.ok) {
+        throw new Error(`telegram_disconnect_${response.status}`)
+      }
+      setTelegramStatus((await response.json()) as TelegramConnectionStatus)
+      setTelegramPairing(null)
+      setTelegramBotUsername('')
+      setReplaceToken(true)
+      setActionMessage('Telegram disconnected and its bot token removed.')
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Disconnect failed.'
+      )
+    } finally {
+      setTelegramWorking(null)
+    }
   }
 
   useEffect(() => {
@@ -1716,123 +1923,6 @@ export function Apps({
           id: 'integrations-openai-save-success',
           title: message,
           summary: 'Provider configuration save status from Integrations.',
-        })
-        closeIntegration()
-        return
-      }
-      if (editingProvider.provider_id === 'telegram') {
-        const telegramSettings: Record<string, string> = {
-          'telegram.catalog_capture.sender_id': form.telegramSenderId.trim(),
-          'telegram.catalog_capture.chat_id': form.telegramChatId.trim(),
-          'telegram.webhook_configured': form.telegramWebhookConfigured
-            ? 'true'
-            : 'false',
-          'telegram.webhook_url_set': form.baseURL.trim() ? 'true' : 'false',
-          'integration.telegram.webhook_url': form.baseURL.trim(),
-          'integration.telegram.enabled':
-            form.telegramSenderId.trim() &&
-            form.telegramChatId.trim() &&
-            (editingProvider.auth_methods?.bot_token?.credential_present ||
-              editingProvider.setup_status?.bot_token_state === 'stored' ||
-              trimmedToken !== '')
-              ? 'true'
-              : 'false',
-        }
-        if (
-          editingProvider.auth_methods?.bot_token?.credential_present ||
-          editingProvider.setup_status?.bot_token_state === 'stored' ||
-          trimmedToken !== ''
-        ) {
-          telegramSettings['telegram.bot_token_secret_present'] = 'true'
-        }
-        if (trimmedToken !== '') {
-          const secretResponse = await fetch(
-            `/api/profiles/${activeProfileId}/secrets`,
-            {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                key: 'telegram_bot_token',
-                value: trimmedToken,
-              }),
-            }
-          )
-          if (!secretResponse.ok) {
-            throw new Error(`secret_save_failed_${secretResponse.status}`)
-          }
-        }
-        const settingsResponse = await fetch(
-          `/api/profiles/${activeProfileId}/settings`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings: telegramSettings }),
-          }
-        )
-        if (!settingsResponse.ok) {
-          throw new Error(`save_failed_${settingsResponse.status}`)
-        }
-        const payload = (await settingsResponse.json()) as {
-          settings?: Record<string, string>
-        }
-        setSettings(payload.settings ?? {})
-        setProviders((prev) =>
-          prev.map((provider) =>
-            provider.provider_id === 'telegram'
-              ? {
-                  ...provider,
-                  has_token: provider.has_token || trimmedToken !== '',
-                  auth_methods: {
-                    ...provider.auth_methods,
-                    sender_chat: {
-                      ...provider.auth_methods?.sender_chat,
-                      state:
-                        form.telegramSenderId.trim() &&
-                        form.telegramChatId.trim()
-                          ? 'authorized'
-                          : 'setup_needed',
-                      connected:
-                        Boolean(form.telegramSenderId.trim()) &&
-                        Boolean(form.telegramChatId.trim()),
-                      credential_present:
-                        Boolean(form.telegramSenderId.trim()) &&
-                        Boolean(form.telegramChatId.trim()),
-                    },
-                    bot_token: {
-                      ...provider.auth_methods?.bot_token,
-                      state:
-                        provider.auth_methods?.bot_token?.credential_present ||
-                        provider.setup_status?.bot_token_state === 'stored' ||
-                        trimmedToken !== ''
-                          ? 'stored'
-                          : 'setup_needed',
-                      connected:
-                        provider.auth_methods?.bot_token?.credential_present ||
-                        provider.setup_status?.bot_token_state === 'stored' ||
-                        trimmedToken !== '',
-                      credential_present:
-                        provider.auth_methods?.bot_token?.credential_present ||
-                        provider.setup_status?.bot_token_state === 'stored' ||
-                        trimmedToken !== '',
-                    },
-                    webhook: {
-                      ...provider.auth_methods?.webhook,
-                      state: form.telegramWebhookConfigured
-                        ? 'configured'
-                        : 'pending',
-                      connected: form.telegramWebhookConfigured,
-                    },
-                  },
-                }
-              : provider
-          )
-        )
-        const message = 'Telegram setup saved.'
-        setActionMessage(message)
-        recordIntegrationsStatusHistory({
-          id: 'integrations-telegram-save-success',
-          title: message,
-          summary: 'Telegram setup save status from Integrations.',
         })
         closeIntegration()
         return
@@ -2020,6 +2110,10 @@ export function Apps({
 
   const validateProvider = async () => {
     if (!editingProvider) {
+      return
+    }
+    if (editingProvider.provider_id === 'telegram') {
+      await testTelegramConnection()
       return
     }
     if (
@@ -3374,10 +3468,12 @@ export function Apps({
                 >
                   <div className='flex flex-wrap items-start justify-between gap-3'>
                     <div>
-                      <p className='font-medium'>Telegram capture channel</p>
+                      <p className='font-medium'>
+                        Telegram Cabinet Agent channel
+                      </p>
                       <p className='text-muted-foreground'>
-                        Sender/chat authorization gates assistant capture intake
-                        before preview and confirmation.
+                        A validated bot and exact private-chat pairing gate
+                        Agent intake before preview and confirmation.
                       </p>
                     </div>
                     <span
@@ -3387,20 +3483,20 @@ export function Apps({
                       {editingProvider.health?.next_action ??
                         editingProvider.setup_status?.next_action ??
                         (editingProvider.auth_methods?.sender_chat?.connected
-                          ? 'run_live_channel_checklist'
-                          : 'authorize_sender_chat')}
+                          ? 'talk_to_cabinet'
+                          : 'test_connection')}
                     </span>
                   </div>
                   <div className='mt-3 grid gap-2 sm:grid-cols-2'>
                     <p data-testid='telegram-capture-auth-mode'>
-                      Auth method: sender/chat authorization
+                      Auth method: write-only bot token + private pairing
                     </p>
                     <p data-testid='telegram-capture-sender-chat-state'>
-                      Sender/chat state:{' '}
+                      Private chat state:{' '}
                       {editingProvider.auth_methods?.sender_chat?.state ??
                         (editingProvider.auth_methods?.sender_chat?.connected
-                          ? 'connected'
-                          : 'setup_needed')}
+                          ? 'paired'
+                          : 'pairing_required')}
                     </p>
                     <p data-testid='telegram-capture-api-family'>
                       API family:{' '}
@@ -3409,7 +3505,7 @@ export function Apps({
                     <p data-testid='telegram-capture-support-profile'>
                       Support profile:{' '}
                       {editingProvider.api_support_profile ??
-                        'bot_webhook_sender_chat_v1'}
+                        'bot_long_polling_private_pairing_v1'}
                     </p>
                     <p data-testid='telegram-capture-bot-token-state'>
                       Bot token state:{' '}
@@ -3417,11 +3513,8 @@ export function Apps({
                         editingProvider.setup_status?.bot_token_state ??
                         'setup_needed'}
                     </p>
-                    <p data-testid='telegram-capture-webhook-state'>
-                      Webhook state:{' '}
-                      {editingProvider.auth_methods?.webhook?.state ??
-                        editingProvider.setup_status?.webhook_state ??
-                        'pending'}
+                    <p data-testid='telegram-capture-polling-state'>
+                      Transport: outbound long polling / public listener: no
                     </p>
                     <p data-testid='telegram-capture-runtime-proof-state'>
                       Runtime proof:{' '}
@@ -3703,114 +3796,203 @@ export function Apps({
                 </div>
               ) : editingProvider.provider_id === 'telegram' ? (
                 <section
-                  className='rounded-md border p-3'
-                  data-testid='telegram-setup-form'
+                  className='space-y-4 rounded-md border p-3'
+                  data-testid='telegram-local-polling-setup'
                 >
-                  <div className='grid gap-3 sm:grid-cols-2'>
-                    <div className='space-y-2'>
-                      <Label htmlFor='telegram-sender-id'>Sender ID</Label>
-                      <Input
-                        id='telegram-sender-id'
-                        data-testid='telegram-sender-id'
-                        placeholder='12345'
-                        value={form.telegramSenderId}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            telegramSenderId: e.target.value,
-                          }))
-                        }
-                      />
+                  <div>
+                    <p className='font-medium'>Connect Cabinet to Telegram</p>
+                    <ol className='mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground'>
+                      <li>
+                        Open @BotFather in Telegram and create a bot with
+                        /newbot.
+                      </li>
+                      <li>
+                        Paste the bot token below and test the connection.
+                      </li>
+                      <li>
+                        Create a short-lived pairing code, then send its /start
+                        command to your bot in a private chat.
+                      </li>
+                    </ol>
+                    <p className='mt-2 text-xs text-muted-foreground'>
+                      Outbound long polling only. No public webhook or listener
+                      is opened by Cabinet.
+                    </p>
+                  </div>
+
+                  <div className='space-y-2'>
+                    {telegramStatus?.bot_token_present && !replaceToken ? (
+                      <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                        <p>Bot token on file.</p>
+                        <p className='text-muted-foreground'>
+                          The existing token is write-only and cannot be read
+                          back from Cabinet.
+                        </p>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          className='mt-2'
+                          data-testid='telegram-replace-token'
+                          onClick={() => setReplaceToken(true)}
+                        >
+                          Rotate bot token
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Label htmlFor='telegram-bot-token'>Bot token</Label>
+                        <Input
+                          id='telegram-bot-token'
+                          type='password'
+                          autoComplete='new-password'
+                          data-testid='telegram-bot-token'
+                          placeholder='Paste BotFather token'
+                          value={form.token}
+                          onChange={(event) =>
+                            setForm((previous) => ({
+                              ...previous,
+                              token: event.target.value,
+                            }))
+                          }
+                        />
+                      </>
+                    )}
+                    <div className='flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        data-testid='telegram-test-connection'
+                        disabled={telegramWorking !== null}
+                        onClick={() => void testTelegramConnection()}
+                      >
+                        {telegramWorking === 'test'
+                          ? 'Testing...'
+                          : 'Test connection'}
+                      </Button>
+                      {telegramStatus?.webhook_conflict ? (
+                        <Button
+                          type='button'
+                          variant='outline'
+                          data-testid='telegram-resolve-webhook'
+                          disabled={telegramWorking !== null}
+                          onClick={() => void resolveTelegramWebhook()}
+                        >
+                          Remove existing webhook
+                        </Button>
+                      ) : null}
                     </div>
-                    <div className='space-y-2'>
-                      <Label htmlFor='telegram-chat-id'>Chat ID</Label>
-                      <Input
-                        id='telegram-chat-id'
-                        data-testid='telegram-chat-id'
-                        placeholder='-5235769556'
-                        value={form.telegramChatId}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            telegramChatId: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className='space-y-2 sm:col-span-2'>
-                      <Label htmlFor='telegram-webhook-url'>
-                        Webhook URL / routing proof
-                      </Label>
-                      <Input
-                        id='telegram-webhook-url'
-                        data-testid='telegram-webhook-url'
-                        placeholder='https://example.com/api/telegram/webhook/catalog-captures'
-                        value={form.baseURL}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            baseURL: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className='space-y-2 sm:col-span-2'>
-                      {editingProvider.auth_methods?.bot_token
-                        ?.credential_present && !replaceToken ? (
-                        <div className='rounded-md border bg-muted/20 p-3 text-xs'>
-                          <p>Bot token on file.</p>
-                          <p className='text-muted-foreground'>
-                            Existing token is hidden. Replace it to update the
-                            Telegram bot credential.
-                          </p>
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='outline'
-                            className='mt-2'
-                            data-testid='telegram-replace-token'
-                            onClick={() => setReplaceToken(true)}
-                          >
-                            Replace bot token
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <Label htmlFor='telegram-bot-token'>Bot token</Label>
-                          <Input
-                            id='telegram-bot-token'
-                            type='password'
-                            data-testid='telegram-bot-token'
-                            placeholder='Bot token'
-                            value={form.token}
-                            onChange={(e) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                token: e.target.value,
-                              }))
-                            }
-                          />
-                        </>
-                      )}
-                    </div>
-                    <label
-                      className='flex items-center gap-2 text-sm sm:col-span-2'
-                      htmlFor='telegram-webhook-configured'
+                    {telegramBotUsername ? (
+                      <p
+                        className='text-xs text-muted-foreground'
+                        data-testid='telegram-bot-identity'
+                      >
+                        Validated bot: @{telegramBotUsername}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className='rounded-md bg-muted/30 p-3 text-xs'>
+                    <p className='font-medium'>Private-chat pairing</p>
+                    <p className='mt-1 text-muted-foreground'>
+                      Cabinet learns the exact numeric user and private-chat IDs
+                      from Telegram. You do not enter or guess them manually.
+                    </p>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='mt-3'
+                      data-testid='telegram-create-pairing-code'
+                      disabled={
+                        telegramWorking !== null ||
+                        !telegramStatus?.bot_token_present ||
+                        telegramStatus.webhook_conflict
+                      }
+                      onClick={() => void createTelegramPairingCode()}
                     >
-                      <input
-                        id='telegram-webhook-configured'
-                        type='checkbox'
-                        data-testid='telegram-webhook-configured'
-                        checked={form.telegramWebhookConfigured}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            telegramWebhookConfigured: e.target.checked,
-                          }))
+                      {telegramStatus?.paired
+                        ? 'Re-pair chat'
+                        : 'Create pairing code'}
+                    </Button>
+                    {telegramPairing ? (
+                      <div className='mt-3 rounded border bg-background p-3'>
+                        <p data-testid='telegram-pairing-code'>
+                          /start {telegramPairing.code}
+                        </p>
+                        <p
+                          className='mt-1 text-muted-foreground'
+                          data-testid='telegram-pairing-expiry'
+                        >
+                          Single-use code expires{' '}
+                          {new Date(
+                            telegramPairing.expires_at
+                          ).toLocaleTimeString()}
+                          .
+                        </p>
+                      </div>
+                    ) : null}
+                    {telegramStatus?.paired ? (
+                      <p className='mt-3 text-muted-foreground'>
+                        Paired private chat ending in{' '}
+                        {telegramStatus.chat_id?.slice(-4)}.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className='grid gap-2 text-xs sm:grid-cols-2'>
+                    <p>State: {telegramStatus?.state ?? 'not connected'}</p>
+                    <p>Transport: outbound long polling</p>
+                    <p>
+                      Last success: {telegramStatus?.last_success_at ?? 'never'}
+                    </p>
+                    <p>
+                      Last update: {telegramStatus?.last_update_id ?? 'none'}
+                    </p>
+                    {telegramStatus?.last_error_code ? (
+                      <p className='sm:col-span-2'>
+                        Last error: {telegramStatus.last_error_code}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className='flex flex-wrap gap-2'>
+                    {telegramStatus?.paired ? (
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='telegram-pause-toggle'
+                        disabled={telegramWorking !== null}
+                        onClick={() =>
+                          void setTelegramPaused(!telegramStatus.paused)
                         }
-                      />
-                      Webhook routing proof is configured
-                    </label>
+                      >
+                        {telegramStatus.paused ? 'Resume' : 'Pause'}
+                      </Button>
+                    ) : null}
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      data-testid='telegram-refresh-status'
+                      disabled={telegramWorking !== null}
+                      onClick={() => void loadTelegramStatus()}
+                    >
+                      Refresh status
+                    </Button>
+                    {telegramStatus?.bot_token_present ? (
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='destructive'
+                        data-testid='telegram-disconnect'
+                        disabled={telegramWorking !== null}
+                        onClick={() => void disconnectTelegram()}
+                      >
+                        Disconnect
+                      </Button>
+                    ) : null}
                   </div>
                 </section>
               ) : editingProvider.setup_schema?.fields?.length ? (
@@ -4800,7 +4982,11 @@ export function Apps({
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => void saveIntegration()}
+                  onClick={() =>
+                    editingProvider.provider_id === 'telegram'
+                      ? closeIntegration()
+                      : void saveIntegration()
+                  }
                   disabled={saving}
                 >
                   {saving
@@ -4808,7 +4994,7 @@ export function Apps({
                     : editingProvider.provider_id === 'openai'
                       ? 'Save OpenAI'
                       : editingProvider.provider_id === 'telegram'
-                        ? 'Save Telegram'
+                        ? 'Done'
                         : 'Save Integration'}
                 </Button>
               </div>

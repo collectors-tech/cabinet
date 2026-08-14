@@ -117,9 +117,34 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		"Validate fixed beta core Cypress acceptance pack",
 		"node scripts/validate-beta-core-cypress-pack.mjs --manifest release/beta-core-cypress-pack.json",
 		".logs/release-candidate/cypress-pack.json",
+		"Start controlled Telegram Bot API fixture",
+		"$fixtureExecutable = Join-Path $env:RUNNER_TEMP \"cabinet-telegram-test-fixture.exe\"",
+		"go build -o $fixtureExecutable ./cmd/telegram-test-fixture",
+		"Start-Process -FilePath $fixtureExecutable",
+		"CABINET_TELEGRAM_TEST_API_BASE_URL",
+		"CYPRESS_telegramRuntimeFixture: \"true\"",
+		"if ($env:CYPRESS_telegramRuntimeFixture -ne \"true\"",
+		"Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden.",
+		"$pack.version -lt 3 -or $pack.spec_count -ne 21 -or $pack.specs.Count -ne 21",
+		"Fixed beta Cypress pack must resolve version 3 with exactly 21 specs.",
+		"$name = Split-Path (Split-Path $spec -Parent) -Leaf",
+		"$summaryPaths.Count -ne 1",
+		"Candidate Cypress must produce exactly one summary",
+		"-Retries 0",
+		"-ExecutionTimeoutSec 300",
+		"-RequireE2EHooks",
+		"-LogDir .logs/release-candidate/cypress",
+		"$summary.runtime_revision -ne \"${{ steps.commit.outputs.sha }}\"",
+		"$summary.execution_timeout_sec -ne 300",
+		"$summary.runner_phase -ne \"completed\"",
+		".logs/release-candidate/telegram-fixture.pid",
+		"[int]::TryParse($rawFixturePID, [ref]$fixturePID)",
+		"Get-Process -Id $fixturePID",
+		"$ownedFixture.Path -eq $fixtureExecutable",
+		"Stop-Process -Id $fixturePID -Force",
+		"foreach ($spec in $pack.specs)",
 		"${{ steps.cypress_pack.outputs.specs }}",
 		"./cypress.ps1 -Spec",
-		"-ExecutionTimeoutSec 300",
 		"Upload release-candidate logs",
 		"does not merge develop into main",
 	}
@@ -132,6 +157,9 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 	for _, forbidden := range []string{
 		"pull_request:",
 		"git push",
+		"Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 17994",
+		"Start-Process -FilePath go",
+		`"run", "./cmd/telegram-test-fixture"`,
 	} {
 		if strings.Contains(content, forbidden) {
 			t.Fatalf("release-candidate gate contains forbidden fragment %q", forbidden)
@@ -168,15 +196,25 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 	if manifest.Issue != 2055 {
 		t.Fatalf("manifest should stay bound to #2055, got #%d", manifest.Issue)
 	}
+	if manifest.Version < 3 {
+		t.Fatalf("expanded conversational Agent acceptance pack must be version 3 or newer, got %d", manifest.Version)
+	}
+	if len(manifest.Specs) != 21 {
+		t.Fatalf("expanded conversational Agent acceptance pack must contain exactly 21 specs, got %d", len(manifest.Specs))
+	}
 
 	required := map[string]bool{
-		"login_profile":    false,
-		"inventory":        false,
-		"wishlist":         false,
-		"collections":      false,
-		"media":            false,
-		"recovery":         false,
-		"provider_handoff": false,
+		"login_profile":         false,
+		"inventory":             false,
+		"wishlist":              false,
+		"collections":           false,
+		"media":                 false,
+		"recovery":              false,
+		"provider_handoff":      false,
+		"agent_primary":         false,
+		"agent_authority":       false,
+		"telegram_connector":    false,
+		"telegram_conversation": false,
 	}
 	declared := map[string]bool{}
 	for _, category := range manifest.RequiredCategories {
@@ -204,12 +242,31 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 			t.Fatalf("manifest spec %s is not present under ui.web: %v", spec.Path, err)
 		}
 	}
+	for requiredPath, requiredCategory := range map[string]string{
+		"cypress/e2e/chats/agent-attachment-continuity/spec.cy.ts": "agent_primary",
+		"cypress/e2e/chats/agent-response-state-matrix/spec.cy.ts": "agent_primary",
+		"cypress/e2e/chats/agent-compact-accessibility/spec.cy.ts": "agent_primary",
+		"cypress/e2e/chats/cabinet-agent-collection-workflows/spec.cy.ts": "agent_primary",
+		"cypress/e2e/chats/assistant-acquisition-workflows/spec.cy.ts": "agent_primary",
+		"cypress/e2e/chats/assistant-workspace-dashboard-summary/spec.cy.ts": "agent_primary",
+	} {
+		foundCategory := ""
+		for _, spec := range manifest.Specs {
+			if spec.Path == requiredPath {
+				foundCategory = spec.Category
+				break
+			}
+		}
+		if foundCategory != requiredCategory {
+			t.Fatalf("expanded #2091 Agent acceptance spec %s must use category %s, got %q", requiredPath, requiredCategory, foundCategory)
+		}
+	}
 	for category, covered := range required {
 		if !covered {
 			t.Fatalf("beta core Cypress pack does not cover required category %s", category)
 		}
 	}
-	for _, requiredStep := range []string{"#1869", "#1944", "#1945"} {
+	for _, requiredStep := range []string{"#1869", "#1944", "#1945", "#1716", "#1773"} {
 		found := false
 		for _, step := range manifest.ManualPackagedSteps {
 			if strings.Contains(step, requiredStep) {

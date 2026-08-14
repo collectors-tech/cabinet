@@ -152,7 +152,11 @@ describe("ui-screen-wishlist", () => {
           { timeout: 15000 }
         )
           .should("be.visible")
-          .click({ force: true });
+          .and("be.enabled");
+        cy.get(
+          `[data-testid="task-row-actions-trigger"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        ).click();
         cy.get(
           `[data-testid="task-row-actions-menu"][data-row-id="${rowId}"]`,
           { timeout: 15000 }
@@ -185,7 +189,7 @@ describe("ui-screen-wishlist", () => {
   it("UI-SCREEN-WISHLIST-001 filters list and persists row/card view mode", () => {
     signInToWishlist();
 
-    cy.contains("Wishlist").should("be.visible");
+    cy.get('[data-testid="wishlist-shell-header"]').should("be.visible");
     cy.get('[data-testid="wishlist-global-header-actions"]').within(() => {
       cy.get('[data-testid="wishlist-new-action"]')
         .should("be.visible")
@@ -609,9 +613,9 @@ describe("ui-screen-wishlist", () => {
       "have.value",
       "0"
     );
-    cy.get('[data-testid="wishlist-qty-input-item-collector-1"]').type(
-      "{selectall}4{enter}"
-    );
+    cy.get('[data-testid="wishlist-qty-input-item-collector-1"]')
+      .should("not.be.disabled")
+      .type("{selectall}4{enter}");
     cy.wait("@updateWishlistEntry")
       .its("request.body")
       .should("include", { quantity: 4 });

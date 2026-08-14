@@ -3,11 +3,28 @@ describe('profile-context-recovery', () => {
     return cy.get(`[data-testid="${testId}"]`).first()
   }
 
-  function signInTo(path: string) {
+  function openTeamSwitcher() {
+    cy.get('body').then(($body) => {
+      if ($body.find('[data-slot="dropdown-menu-content"]:visible').length > 0) {
+        cy.press(Cypress.Keyboard.Keys.ESC)
+        cy.get('[data-slot="dropdown-menu-content"]:visible').should(
+          'not.exist'
+        )
+      }
+    })
+    visibleByTestId('team-switcher-trigger').should('be.visible').click()
+    cy.get('[data-slot="dropdown-menu-content"]:visible').should('be.visible')
+  }
+
+  function openLocalWorkspace(path: string, profileID: string) {
+    cy.stubLocalServerSession(profileID)
     cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-profile-recovery@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible')
+    cy.get('[data-testid="open-local-workspace"]').should('be.enabled').click()
+    cy.wait('@activeProfile')
+      .its('response.statusCode')
+      .should('eq', 200)
+    cy.wait('@localServerSession')
   }
 
   beforeEach(() => {
@@ -29,7 +46,7 @@ describe('profile-context-recovery', () => {
     }).as('profiles')
     cy.intercept('GET', '/api/profiles/active', (req) => {
       activeProfileCalls += 1
-      if (activeProfileCalls === 1) {
+      if (activeProfileCalls === 2) {
         req.reply({
           statusCode: 503,
           body: { error: 'active profile unavailable' },
@@ -43,23 +60,24 @@ describe('profile-context-recovery', () => {
       })
     }).as('activeProfile')
 
-    signInTo('/inventory/')
+    openLocalWorkspace('/inventory/', 'showcase-db')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.wait('@activeProfile')
 
-    visibleByTestId('active-profile-status')
-      .should('be.visible')
-      .and('contain', 'Profile unavailable')
-
-    visibleByTestId('team-switcher-trigger').click()
+    openTeamSwitcher()
     visibleByTestId('team-switcher-profile-error')
       .should('be.visible')
       .and('contain', 'Retry loading databases')
     visibleByTestId('team-switcher-retry-profiles').click()
     cy.wait('@activeProfile')
 
-    visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
-    visibleByTestId('active-profile-status').should('have.text', 'Showcase sample data')
+    openTeamSwitcher()
+    visibleByTestId('team-option-showcase-db')
+      .should('be.visible')
+      .and('contain', 'Showcase DB')
+    visibleByTestId('team-option-showcase-db-plan')
+      .should('be.visible')
+      .and('have.text', 'Showcase sample data')
   })
 
   it('PROFILES-003 recovers a blocked active profile state from the switcher retry', () => {
@@ -76,7 +94,7 @@ describe('profile-context-recovery', () => {
     }).as('profiles')
     cy.intercept('GET', '/api/profiles/active', (req) => {
       activeProfileCalls += 1
-      if (activeProfileCalls === 1) {
+      if (activeProfileCalls === 2) {
         req.reply({
           statusCode: 403,
           body: { error: 'active_profile_blocked' },
@@ -90,22 +108,23 @@ describe('profile-context-recovery', () => {
       })
     }).as('activeProfile')
 
-    signInTo('/inventory/')
+    openLocalWorkspace('/inventory/', 'working-db')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.wait('@activeProfile')
 
-    visibleByTestId('active-profile-status')
-      .should('be.visible')
-      .and('contain', 'Profile unavailable')
-
-    visibleByTestId('team-switcher-trigger').click()
+    openTeamSwitcher()
     visibleByTestId('team-switcher-profile-error')
       .should('be.visible')
       .and('contain', 'Retry loading databases')
     visibleByTestId('team-switcher-retry-profiles').click()
     cy.wait('@activeProfile')
 
-    visibleByTestId('active-profile-name').should('contain', 'Working DB')
-    visibleByTestId('active-profile-status').should('have.text', 'Database')
+    openTeamSwitcher()
+    visibleByTestId('team-option-working-db')
+      .should('be.visible')
+      .and('contain', 'Working DB')
+    visibleByTestId('team-option-working-db-plan')
+      .should('be.visible')
+      .and('have.text', 'Database')
   })
 })
