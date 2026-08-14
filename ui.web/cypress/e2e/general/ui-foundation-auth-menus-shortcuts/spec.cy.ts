@@ -5,7 +5,7 @@ describe("ui-foundation-auth-menus-shortcuts", () => {
   });
 
   function signInToHome() {
-    cy.e2eBootstrap().then((state) => {
+    cy.e2eBootstrap({ minimalProfile: true }).then((state) => {
       cy.e2eEnsureSignedOut();
       cy.stubLocalServerSession(state.profile_id);
       cy.useBootstrappedProfile(state.profile_id, state.profile_name, {
