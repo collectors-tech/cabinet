@@ -1541,6 +1541,7 @@ export function Apps({
         throw new Error(`openai_browser_auth_connect_${response.status}`)
       }
       if (status.profile_connected) {
+        const checkedAt = new Date().toISOString()
         setSettings((previous) => ({
           ...previous,
           'openai.active_auth_method': 'browser_auth',
@@ -1556,6 +1557,27 @@ export function Apps({
           ...previous,
           openAiModel: 'gpt-5.6-luna',
         }))
+        setProviders((previous) =>
+          previous.map((provider) =>
+            provider.provider_id === 'openai'
+              ? {
+                  ...provider,
+                  state: 'ready',
+                  active_auth_method: 'browser_auth',
+                  health: {
+                    status: 'ready',
+                    state: 'ready',
+                    message: status.message,
+                    last_checked_at: checkedAt,
+                  },
+                  last_run: {
+                    status: 'success',
+                    finished_at: checkedAt,
+                  },
+                }
+              : provider
+          )
+        )
         setActionMessage('ChatGPT is connected and ready for Cabinet Chat.')
       }
     } catch {
@@ -2289,22 +2311,36 @@ export function Apps({
     setSaveError(null)
     setTokenFieldError(null)
     try {
-      const response = await fetch(
-        `/api/provider/health?provider=${encodeURIComponent(editingProvider.provider_id)}`
-      )
-      if (!response.ok) {
-        throw new Error(`validate_failed_${response.status}`)
-      }
+      const isOpenAI = editingProvider.provider_id === 'openai'
+      const response = isOpenAI
+        ? await fetch('/api/provider/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              provider: 'openai',
+              profile_id: activeProfileId,
+            }),
+          })
+        : await fetch(
+            `/api/provider/health?provider=${encodeURIComponent(editingProvider.provider_id)}`
+          )
       const payload = (await response.json()) as {
         status?: string
         state?: string
+        code?: string
         message?: string
         last_error?: string | null
         retry_after_seconds?: number | null
         next_action?: string | null
         updated_at?: string
+        checked_at?: string
+        provider_test_passed?: boolean
       }
-      const checkedAt = payload.updated_at ?? new Date().toISOString()
+      if (!response.ok) {
+        throw new Error(payload.message ?? `validate_failed_${response.status}`)
+      }
+      const checkedAt =
+        payload.checked_at ?? payload.updated_at ?? new Date().toISOString()
       const healthStatus = payload.status ?? 'unknown'
       const readinessState = payload.state ?? healthStatus
       const nextProvider: ProviderRecord = {
@@ -2341,7 +2377,11 @@ export function Apps({
             : provider
         )
       )
-      const message = `Validated ${editingProvider.display_name} health: ${healthStatus}.`
+      const message = isOpenAI
+        ? payload.provider_test_passed
+          ? 'OpenAI connection is ready for Cabinet Chat.'
+          : (payload.message ?? 'OpenAI connection needs attention.')
+        : `Validated ${editingProvider.display_name} health: ${healthStatus}.`
       setActionMessage(message)
       recordNotificationHistory({
         id: `integrations-provider-health-${notificationHistoryID(editingProvider.provider_id)}-${notificationHistoryID(healthStatus)}`,
@@ -3982,36 +4022,34 @@ export function Apps({
                         />
                       </div>
                     </div>
-                    <Label className='mt-3 block' htmlFor='openai-test-prompt'>
-                      Test prompt
-                    </Label>
-                    <Input
-                      className='mt-2'
-                      id='openai-test-prompt'
-                      data-testid='openai-test-prompt'
-                      aria-label='OpenAI test prompt'
-                      value={form.openAiTestPrompt}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          openAiTestPrompt: e.target.value,
-                        }))
-                      }
-                    />
+                    <div className='mt-3 rounded-md bg-muted/40 p-3 text-sm'>
+                      <p className='font-medium'>Safe connection check</p>
+                      <p className='mt-1 text-xs text-muted-foreground'>
+                        Verify that Cabinet Chat can reach OpenAI with the
+                        active method. This check cannot change your collection.
+                      </p>
+                    </div>
+                    {actionMessage?.startsWith('OpenAI connection') ? (
+                      <p
+                        className='mt-3 text-sm'
+                        data-testid='openai-provider-test-result'
+                        role='status'
+                      >
+                        {actionMessage}
+                      </p>
+                    ) : null}
                     <Button
                       type='button'
                       size='sm'
                       variant='outline'
                       className='mt-3'
                       data-testid='openai-test-run'
-                      disabled={!isConnected(editingProvider, settings)}
-                      onClick={() =>
-                        setActionMessage(
-                          'OpenAI test requires a verified active method before Cabinet runs provider calls.'
-                        )
+                      disabled={
+                        validating || !isConnected(editingProvider, settings)
                       }
+                      onClick={() => void validateProvider()}
                     >
-                      Test
+                      {validating ? 'Testing...' : 'Test connection'}
                     </Button>
                   </section>
                 </div>

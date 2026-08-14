@@ -744,7 +744,10 @@ func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) 
 	src := string(b)
 	required := []string{
 		"/api/provider/health?provider=",
-		"const checkedAt = payload.updated_at ?? new Date().toISOString()",
+		"/api/provider/test",
+		"payload.checked_at ?? payload.updated_at ?? new Date().toISOString()",
+		"provider_test_passed?: boolean",
+		"OpenAI connection is ready for Cabinet Chat.",
 		"health: nextProvider.health",
 		"last_run: nextProvider.last_run",
 		"last_error: payload.last_error",
