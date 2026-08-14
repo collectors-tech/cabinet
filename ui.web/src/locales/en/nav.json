@@ -4,6 +4,7 @@
     "other": "Other"
   },
   "items": {
+    "home": "Home",
     "dashboard": "Dashboard",
     "inventory": "Inventory",
     "media": "Media",
