@@ -233,9 +233,20 @@ test("keeps verification read-only and documents approval and emergency evidence
     /actions\/checkout|contents:\s*write|git push|pull-requests:\s*write/,
   );
   assert.ok(
-    publisherWorkflow.includes("comment.user?.login !== 'wildone'"),
+    publisherWorkflow.includes("approvalAuthor === 'wildone'"),
     "prerelease publisher must reject approval from anyone other than the release owner",
   );
+  for (const fragment of [
+    "approvalIssueNumber === 1864",
+    "exact_marker: hasExactMarker",
+    "approvalAssociation || 'UNKNOWN'",
+    "Approval checks:",
+  ]) {
+    assert.ok(
+      publisherWorkflow.includes(fragment),
+      `prerelease publisher must record deterministic approval check ${fragment}`,
+    );
+  }
   for (const workflow of [approvalWorkflow, publisherWorkflow]) {
     assert.ok(
       workflow.includes(
