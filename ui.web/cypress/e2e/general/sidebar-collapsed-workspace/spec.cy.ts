@@ -1,9 +1,14 @@
 describe('sidebar-collapsed-workspace', () => {
   function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-shell-nav@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap().then((bootstrap) => {
+      cy.e2eSetSetupState('present')
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(bootstrap.profile_id)
+      cy.useBootstrappedProfile(bootstrap.profile_id, bootstrap.profile_name, {
+        path,
+      })
+    })
   }
 
   beforeEach(() => {
@@ -27,7 +32,13 @@ describe('sidebar-collapsed-workspace', () => {
     )
     cy.wait('@runtimeMeta')
 
-    cy.get('[data-slot="sidebar-trigger"]').first().click()
+    cy.get('[data-slot="sidebar"]')
+      .first()
+      .then(($sidebar) => {
+        if ($sidebar.attr('data-state') !== 'collapsed') {
+          cy.get('[data-slot="sidebar-trigger"]').first().click()
+        }
+      })
     cy.get('[data-slot="sidebar"]')
       .first()
       .should('have.attr', 'data-state', 'collapsed')
