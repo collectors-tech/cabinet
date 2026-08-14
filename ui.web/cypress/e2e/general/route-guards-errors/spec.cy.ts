@@ -4,30 +4,50 @@ describe('route guards, titles, and error pages', () => {
     cy.e2eSetSetupState('present')
   })
 
+  function stubLocalSession(profileId: string) {
+    expect(profileId).to.not.equal('')
+    cy.intercept('POST', '**/api/auth/local/session', {
+      statusCode: 200,
+      body: {
+        ok: true,
+        session_token:
+          'test-only-opaque-profile-bound-session-credential-000000000001',
+      },
+    }).as('routeGuardLocalSession')
+  }
+
   function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-route-guards@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', /^Sign in$/).click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`)
-    )
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eSetSetupState('present')
+      cy.e2eEnsureSignedOut()
+      stubLocalSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path })
+    })
   }
 
   it('UI-ROUTE-COVERAGE-004 preserves protected-route deep-link query state through the sign-in guard', () => {
-    cy.e2eEnsureSignedOut()
+    cy.e2eBootstrap().then(({ profile_id }) => {
+      cy.e2eEnsureSignedOut()
+      stubLocalSession(profile_id)
 
-    cy.visit('/inventory?view=table&focus=filters')
+      cy.visit('/inventory?view=table&focus=filters')
 
-    cy.location('pathname', { timeout: 15000 }).should('eq', '/sign-in')
-    cy.location('search').should('include', 'redirect=')
-    cy.location('search').should(
-      'include',
-      encodeURIComponent('/inventory?view=table&focus=filters')
-    )
-    cy.get('input[name="email"]').should('be.visible')
-    cy.get('input[name="password"]').should('be.visible')
+      cy.location('pathname', { timeout: 15000 }).should('eq', '/sign-in')
+      cy.location('search').should('include', 'redirect=')
+      cy.location('search').should(
+        'include',
+        encodeURIComponent('/inventory?view=table&focus=filters')
+      )
+      cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible')
+      cy.get('input[name="email"]').should('not.exist')
+      cy.get('input[name="password"]').should('not.exist')
+      cy.contains('button', 'Open local workspace').should('be.visible').click()
+      cy.location('pathname', { timeout: 15000 }).should(
+        'match',
+        /^\/inventory\/?$/
+      )
+      cy.location('search').should('eq', '?view=table&focus=filters')
+    })
   })
 
   it('UI-ROUTE-COVERAGE-005 shows public 404 recovery controls', () => {
@@ -43,13 +63,7 @@ describe('route guards, titles, and error pages', () => {
   })
 
   it('UI-ROUTE-COVERAGE-005 renders authenticated error taxonomy states with shell recovery', () => {
-    cy.e2eBootstrap({ minimalProfile: true }).then(
-      ({ profile_id, profile_name }) => {
-        cy.useBootstrappedProfile(profile_id, profile_name, {
-          path: '/dashboard',
-        })
-      }
-    )
+    signInTo('/dashboard')
 
     cy.visit('/errors/forbidden?e2e=route-guards-errors')
     cy.location('pathname', { timeout: 15000 }).should(
@@ -76,7 +90,7 @@ describe('route guards, titles, and error pages', () => {
 
     const routeTitles = [
       { path: '/dashboard', title: 'Cabinet - Home' },
-      { path: '/settings/storage', title: 'Cabinet - Settings' },
+      { path: '/settings/storage', title: 'Cabinet - Storage Settings' },
       {
         path: '/errors/not-found?e2e=route-guards-errors',
         title: 'Cabinet - Error',
