@@ -114,6 +114,28 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
         message: 'ChatGPT is connected to Cabinet.',
       },
     }).as('browserAuthConnect')
+
+    cy.intercept('POST', '/api/provider/test', (req) => {
+      expect(req.body).to.deep.equal({
+        provider: 'openai',
+        profile_id: 'e2e-profile-001',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'openai',
+          status: 'ready',
+          code: 'OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED',
+          auth_method: 'browser_auth',
+          credential_present: true,
+          provider_test_passed: true,
+          provider_test_state: 'passed',
+          provider_test_artifact_id: 'local_codex_chatgpt_test',
+          message: 'ChatGPT browser-auth runtime test passed.',
+          checked_at: '2026-08-15T00:00:00Z',
+        },
+      })
+    }).as('openAIProviderTest')
   })
 
   it('PROVIDER-OPENAI-UX-001/005 renders a clean card and dialog-owned OpenAI setup sections', () => {
@@ -169,6 +191,19 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
     })
     cy.get('[data-testid="openai-browser-auth-status"]').should('contain', 'Connected')
     cy.get('[data-testid="openai-active-method"]').should('have.value', 'Browser Auth')
+    cy.get('[data-testid="openai-test-prompt"]').should('not.exist')
+    cy.get('[data-testid="openai-test-run"]')
+      .should('be.enabled')
+      .and('contain', 'Test connection')
+      .click()
+    cy.wait('@openAIProviderTest')
+    cy.get('[data-testid="openai-provider-test-result"]')
+      .should('be.visible')
+      .and('contain', 'OpenAI connection is ready for Cabinet Chat.')
+    cy.contains('button', 'Done').click()
+    cy.get('[data-testid="provider-row-openai"]')
+      .should('contain', 'Connected')
+      .and('contain', 'Health: ready')
   })
 
   it('PROVIDER-OPENAI-UX-006 explains the local runtime prerequisite without promoting API keys', () => {
