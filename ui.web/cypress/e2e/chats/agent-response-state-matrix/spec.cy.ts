@@ -52,23 +52,21 @@ describe('chats/agent-response-state-matrix', () => {
     if (!fixture.retryable) cy.get(cardSelector).find(`[data-testid="${actionTestID}-retry"]`).should('not.exist')
   }
 
-  beforeEach(() => {
-    cy.viewport(1440, 1000)
+  before(() => {
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
   })
 
-  it('AGENT-RESPONSE-STATES-001/#2099 normalizes every server state identically in main and contextual Chat', () => {
-    cy.wrap(fixtures).each((fixture) => seedState(fixture.state))
-    cy.useBootstrappedProfile(profileID, 'E2E Local', { path: '/chats/' })
-    cy.visit(`/chats/?thread_id=${threadID}`)
-    fixtures.forEach((fixture, index) => {
+  beforeEach(() => {
+    cy.viewport(1440, 1000)
+  })
+
+  fixtures.forEach((fixture) => {
+    it(`AGENT-RESPONSE-STATES-001/#2099 normalizes ${fixture.state} identically in main and contextual Chat`, () => {
       seedState(fixture.state).then(() => {
-        if (index > 0) {
-          cy.useBootstrappedProfile(profileID, 'E2E Local', { path: '/chats/' })
-          cy.visit(`/chats/?thread_id=${threadID}`)
-        }
+        cy.useBootstrappedProfile(profileID, 'E2E Local', { path: '/chats/' })
+        cy.visit(`/chats/?thread_id=${threadID}`)
         assertCard('chat-agent-response-state', fixture)
         cy.get('[data-testid="shell-chat-toggle"]').click({ force: true })
         cy.get('[data-testid="shell-assistant-thread-select"]', { timeout: 20000 }).select(threadID, { force: true })
