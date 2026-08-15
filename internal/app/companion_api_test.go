@@ -286,6 +286,43 @@ func TestCompanionAPILoopbackOriginBodyAndMediaBoundaries(t *testing.T) {
 	}
 }
 
+func TestCompanionAPIAuthenticatesChromiumOriginHeaderFallback(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profileID := prepareCompanionAPIProfile(t, a)
+	receipt := requestCompanionPairing(t, a, []string{companion.CapabilitySessionManage})
+	approvalBody := `{"request_id":"` + receipt.RequestID + `","profile_id":"` + profileID + `"}`
+	approved := doCompanionManagementRequest(t, a, http.MethodPost, "/api/companion/pairing/approvals", strings.NewReader(approvalBody), nil)
+	if approved.Code != http.StatusOK {
+		t.Fatalf("pairing approval status=%d body=%s", approved.Code, approved.Body.String())
+	}
+	exchanged := exchangeCompanionPairing(t, a, receipt, true)
+	var credential companion.CredentialResponse
+	if err := json.NewDecoder(exchanged.Body).Decode(&credential); err != nil {
+		t.Fatalf("decode credential: %v", err)
+	}
+
+	chromiumGET := doRawCompanionRequest(t, a, http.MethodGet, "/api/companion/session", nil, map[string]string{
+		"Authorization":              "Bearer " + credential.Credential,
+		"X-Cabinet-Companion-Device": "device-a",
+		"X-Cabinet-Companion-Origin": companionAPIOrigin,
+	}, "127.0.0.1:17880", "127.0.0.1:1234")
+	if chromiumGET.Code != http.StatusOK {
+		t.Fatalf("Chromium origin fallback status=%d body=%s", chromiumGET.Code, chromiumGET.Body.String())
+	}
+
+	mismatched := doRawCompanionRequest(t, a, http.MethodGet, "/api/companion/session", nil, map[string]string{
+		"Authorization":              "Bearer " + credential.Credential,
+		"Origin":                     companionAPIOrigin,
+		"X-Cabinet-Companion-Device": "device-a",
+		"X-Cabinet-Companion-Origin": "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	}, "127.0.0.1:17880", "127.0.0.1:1234")
+	if mismatched.Code != http.StatusForbidden || !strings.Contains(mismatched.Body.String(), "companion_origin_rejected") {
+		t.Fatalf("mismatched origin status=%d body=%s", mismatched.Code, mismatched.Body.String())
+	}
+}
+
 func companionPurchasePayloadJSON(t *testing.T, a *App, profileID, idempotencyKey, listingID string) string {
 	t.Helper()
 	instances, err := profile.NewRepository(a.db).ListIntegrationInstances(context.Background(), profileID)

@@ -11,10 +11,11 @@ export class CompanionProtocolError extends Error {
 }
 
 export class CompanionClient {
-  constructor({ baseURL, deviceID, fetchImpl = fetch, storage }) {
+  constructor({ baseURL, deviceID, fetchImpl = fetch, origin = '', storage }) {
     this.baseURL = new URL(baseURL)
     this.deviceID = deviceID
-    this.fetchImpl = fetchImpl
+    this.fetchImpl = (...args) => fetchImpl(...args)
+    this.origin = String(origin).trim()
     this.storage = storage
   }
 
@@ -116,7 +117,11 @@ export class CompanionClient {
   }
 
   async #request(path, { method, body, rawBody, authenticated = false, headers: additionalHeaders = {} }) {
-    const headers = { 'X-Cabinet-Companion-Device': this.deviceID, ...additionalHeaders }
+    const headers = {
+      'X-Cabinet-Companion-Device': this.deviceID,
+      ...(this.origin ? { 'X-Cabinet-Companion-Origin': this.origin } : {}),
+      ...additionalHeaders,
+    }
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json'
     }

@@ -131,10 +131,11 @@ elements.settingsForm.addEventListener('submit', (event) => {
   act(event.submitter, 'host:update-config', { cabinet_url: elements.cabinetURL.value })
 })
 elements.connect.addEventListener('click', async (event) => {
+  const button = event.currentTarget
   const state = await send('host:get-state')
   const action = state.connection === 'approval_required' ? 'host:exchange-pairing' :
     state.connection === 'pairing_required' ? 'host:start-pairing' : 'host:reconnect'
-  await act(event.currentTarget, action)
+  await act(button, action)
 })
 
 render(await send('host:get-state')).catch(showError)

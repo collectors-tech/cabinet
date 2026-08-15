@@ -13,13 +13,7 @@ const governorKey = 'cabinet.companion.governor.v1'
 const defaultCabinetURL = 'http://127.0.0.1:17880/'
 const storage = new BrowserStorage()
 const queue = new DurableQueue({ storage })
-const governor = new RetryGovernor({ snapshot: await storage.get(governorKey) })
-
-await storage.restrictToTrustedContexts()
-
-const savedState = (await storage.get(stateKey)) ?? {}
-let savedCabinetURL = defaultCabinetURL
-try { savedCabinetURL = normaliseCabinetURL(savedState.cabinet_url ?? defaultCabinetURL) } catch { /* reset unsafe legacy state */ }
+let governor = new RetryGovernor()
 const state = {
   cabinet_url: defaultCabinetURL,
   connection: 'disconnected',
@@ -33,12 +27,8 @@ const state = {
   error: '',
   sync_paused: false,
   extension_version: browserPlatform.runtime.manifest().version,
-  ...savedState,
-  cabinet_url: savedCabinetURL,
-  sync_paused: savedState.sync_paused === true,
-  modules: Array.isArray(savedState.modules) ? savedState.modules : [],
-  extension_version: browserPlatform.runtime.manifest().version,
 }
+let initialisation = Promise.resolve()
 
 const saveState = async () => {
   const pendingJobs = await queue.pending()
@@ -65,6 +55,7 @@ const deviceID = async () => {
 const client = async () => new CompanionClient({
   baseURL: state.cabinet_url,
   deviceID: await deviceID(),
+  origin: browserPlatform.runtime.origin(),
   storage,
 })
 
@@ -113,7 +104,13 @@ const reconnect = async () => {
     await (await client()).reconnect()
     return await refreshModules()
   } catch (error) {
-    state.connection = error instanceof CompanionProtocolError && error.status === 401 ? 'pairing_required' : 'disconnected'
+    const pairing = error instanceof CompanionProtocolError && error.status === 401
+      ? await storage.get(companionStorageKeys.pendingPairing)
+      : undefined
+    state.connection = pairing ? 'approval_required' :
+      error instanceof CompanionProtocolError && error.status === 401 ? 'pairing_required' : 'disconnected'
+    if (pairing?.pairing_code) state.pairing_code = pairing.pairing_code
+    else delete state.pairing_code
     state.error = error.code ?? 'cabinet_unavailable'
     for (const module of state.modules) module.status = 'disconnected'
     await saveState()
@@ -211,6 +208,7 @@ const processQueue = async () => {
 
 browserPlatform.runtime.onMessage((message, _sender, sendResponse) => {
   const run = async () => {
+    if (message?.type !== 'host:get-state') await initialisation
     switch (message?.type) {
       case 'host:get-state': return state
       case 'host:reconnect': return reconnect()
@@ -350,12 +348,32 @@ browserPlatform.runtime.onMessage((message, _sender, sendResponse) => {
   return true
 })
 
-browserPlatform.runtime.onStartup(reconnect)
-browserPlatform.runtime.onInstalled(() => reconnect())
+browserPlatform.runtime.onStartup(() => { void initialisation.then(() => reconnect()) })
+browserPlatform.runtime.onInstalled(() => { void initialisation.then(() => reconnect()) })
 browserPlatform.alarms.onAlarm((alarm) => {
-  if (alarm.name === 'cabinet-companion-queue') processQueue()
+  if (alarm.name === 'cabinet-companion-queue') void initialisation.then(() => processQueue())
 })
-await browserPlatform.alarms.create('cabinet-companion-queue', { periodInMinutes: 1 })
-await reconnect()
+
+const initialise = async () => {
+  await storage.restrictToTrustedContexts()
+  const [savedGovernor, savedStateValue] = await Promise.all([
+    storage.get(governorKey),
+    storage.get(stateKey),
+  ])
+  governor = new RetryGovernor({ snapshot: savedGovernor })
+  const savedState = savedStateValue ?? {}
+  let savedCabinetURL = defaultCabinetURL
+  try { savedCabinetURL = normaliseCabinetURL(savedState.cabinet_url ?? defaultCabinetURL) } catch { /* reset unsafe legacy state */ }
+  Object.assign(state, savedState, {
+    cabinet_url: savedCabinetURL,
+    sync_paused: savedState.sync_paused === true,
+    modules: Array.isArray(savedState.modules) ? savedState.modules : [],
+    extension_version: browserPlatform.runtime.manifest().version,
+  })
+  await browserPlatform.alarms.create('cabinet-companion-queue', { periodInMinutes: 1 })
+  return reconnect()
+}
+
+initialisation = initialise()
 
 export { moduleForURL }
