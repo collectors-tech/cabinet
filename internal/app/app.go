@@ -10804,7 +10804,11 @@ func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskil
 		req.SourceMessageID = agentContextString(ctx, "message_id")
 	}
 
-	putAgentContextParamIfMissing(req.Parameters, "workspace_id", agentContextString(ctx, "workspace_id"))
+	putAgentContextParamIfMissing(req.Parameters, "workspace_id", firstNonEmptyString(
+		agentContextString(ctx, "workspace_id"),
+		agentContextString(ctx, "surface_id"),
+		agentContextString(ctx, "route_id"),
+	))
 	putAgentContextParamIfMissing(req.Parameters, "route_id", agentContextString(ctx, "route_id"))
 	putAgentContextParamIfMissing(req.Parameters, "permission_state", agentContextString(ctx, "permission_state"))
 	putAgentContextParamIfMissing(req.Parameters, "admin_session", agentContextString(ctx, "admin_session"))
@@ -10898,15 +10902,28 @@ func agentSkillContextClarification(registry agentskills.Registry, req agentskil
 	for _, contextName := range review.RequiredContext {
 		switch contextName {
 		case "selected_item", "target_item":
-			if !agentSkillHasAnyParam(req.Parameters, "item_id", "selected_item", "target_item") {
+			if agentSkillHasAnyParam(req.Parameters, "item_id", "selected_item", "target_item") {
+				missing = removeMissingContext(missing, contextName)
+			} else {
 				missing = appendMissingContext(missing, contextName)
 			}
 		case "selected_media", "media":
-			if !agentSkillHasAnyParam(req.Parameters, "media_id", "selected_media", "media", "attachment_id") {
+			if agentSkillHasAnyParam(req.Parameters, "media_id", "selected_media", "media", "attachment_id") {
+				missing = removeMissingContext(missing, contextName)
+			} else {
 				missing = appendMissingContext(missing, contextName)
 			}
 		case "provider":
-			if !agentSkillHasAnyParam(req.Parameters, "provider_id", "provider_name", "provider") {
+			if agentSkillHasAnyParam(req.Parameters, "provider_id", "provider_name", "provider") {
+				missing = removeMissingContext(missing, contextName)
+			} else {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "wanted_item_details":
+			if agentSkillHasAnyParam(req.Parameters, "item_id") ||
+				(agentSkillHasAnyParam(req.Parameters, "part_number") && agentSkillHasAnyParam(req.Parameters, "title")) {
+				missing = removeMissingContext(missing, contextName)
+			} else {
 				missing = appendMissingContext(missing, contextName)
 			}
 		}
@@ -10946,6 +10963,17 @@ func appendMissingContext(missing []string, contextName string) []string {
 		}
 	}
 	return append(missing, contextName)
+}
+
+func removeMissingContext(missing []string, contextName string) []string {
+	contextName = strings.TrimSpace(contextName)
+	filtered := make([]string, 0, len(missing))
+	for _, existing := range missing {
+		if strings.TrimSpace(existing) != contextName {
+			filtered = append(filtered, existing)
+		}
+	}
+	return filtered
 }
 
 func agentSkillContextGuidance(contextName string) string {

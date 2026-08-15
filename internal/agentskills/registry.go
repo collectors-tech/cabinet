@@ -78,34 +78,35 @@ type AgentAuthorityReview struct {
 }
 
 type Skill struct {
-	ID                   string                `json:"id"`
-	Version              string                `json:"version"`
-	DisplayName          string                `json:"display_name"`
-	Description          string                `json:"description"`
-	Category             string                `json:"category"`
-	Source               SourceType            `json:"source"`
-	Status               Status                `json:"status"`
-	SafetyLevel          SafetyLevel           `json:"safety_level"`
-	RequiredContext      []string              `json:"required_context"`
-	RequiredActions      []string              `json:"required_actions,omitempty"`
-	RequiredProviders    []string              `json:"required_providers,omitempty"`
-	Capabilities         []string              `json:"capabilities,omitempty"`
-	GuidedWorkflows      []string              `json:"guided_workflows,omitempty"`
-	UITargets            []string              `json:"ui_targets,omitempty"`
-	IntegrationWorkflows []string              `json:"integration_workflows,omitempty"`
-	ShellCommands        []string              `json:"shell_commands,omitempty"`
-	InputSchemaRefs      []string              `json:"input_schema_refs,omitempty"`
-	OutputSchemaRefs     []string              `json:"output_schema_refs,omitempty"`
-	Permissions          PermissionDeclaration `json:"permissions"`
-	AuditBehavior        string                `json:"audit_behavior"`
-	Provenance           string                `json:"provenance"`
-	BuiltIn              bool                  `json:"built_in"`
-	Removable            bool                  `json:"removable"`
-	Enabled              bool                  `json:"enabled"`
-	Executable           bool                  `json:"executable"`
-	NextAction           string                `json:"next_action,omitempty"`
-	ValidationWarnings   []string              `json:"validation_warnings,omitempty"`
-	ValidationErrors     []string              `json:"validation_errors,omitempty"`
+	ID                      string                `json:"id"`
+	Version                 string                `json:"version"`
+	DisplayName             string                `json:"display_name"`
+	Description             string                `json:"description"`
+	Category                string                `json:"category"`
+	Source                  SourceType            `json:"source"`
+	Status                  Status                `json:"status"`
+	SafetyLevel             SafetyLevel           `json:"safety_level"`
+	RequiredContext         []string              `json:"required_context"`
+	RequiredActions         []string              `json:"required_actions,omitempty"`
+	RequiredProviders       []string              `json:"required_providers,omitempty"`
+	Capabilities            []string              `json:"capabilities,omitempty"`
+	GuidedWorkflows         []string              `json:"guided_workflows,omitempty"`
+	UITargets               []string              `json:"ui_targets,omitempty"`
+	IntegrationWorkflows    []string              `json:"integration_workflows,omitempty"`
+	ShellCommands           []string              `json:"shell_commands,omitempty"`
+	InputSchemaRefs         []string              `json:"input_schema_refs,omitempty"`
+	OptionalInputSchemaRefs []string              `json:"optional_input_schema_refs,omitempty"`
+	OutputSchemaRefs        []string              `json:"output_schema_refs,omitempty"`
+	Permissions             PermissionDeclaration `json:"permissions"`
+	AuditBehavior           string                `json:"audit_behavior"`
+	Provenance              string                `json:"provenance"`
+	BuiltIn                 bool                  `json:"built_in"`
+	Removable               bool                  `json:"removable"`
+	Enabled                 bool                  `json:"enabled"`
+	Executable              bool                  `json:"executable"`
+	NextAction              string                `json:"next_action,omitempty"`
+	ValidationWarnings      []string              `json:"validation_warnings,omitempty"`
+	ValidationErrors        []string              `json:"validation_errors,omitempty"`
 }
 
 type Registry struct {
@@ -676,7 +677,7 @@ func builtInSkills() []Skill {
 		inventorySkill("cabinet.inventory.attach_media", "Attach media to inventory item", "Attach explicit selected or uploaded media to an inventory item after confirmation.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "selected_media"}, []string{"inventory.media.attach"}, []string{"item_id", "media_id"}),
 		inventorySkill("cabinet.inventory.assign_to_collection", "Assign inventory item to collection", "Assign an inventory item to a valid collection after confirmation.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "selected_item", "collection"}, []string{"inventory.collection.assign"}, []string{"item_id", "collection_name"}),
 		wishlistSkill("cabinet.wishlist.search_entries", "Search wishlist entries", "Search wishlist entries, planning notes, purchase state, and highlight status without mutating records.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"wishlist.entry.search"}, nil),
-		wishlistSkill("cabinet.wishlist.create_entry", "Create wishlist entry", "Draft a wishlist entry and require confirmation before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wanted_item_details"}, []string{"wishlist.entry.create"}, []string{"wishlist.entry.create"}),
+		wishlistSkill("cabinet.wishlist.create_entry", "Create wishlist entry", "Draft a wishlist entry and require confirmation before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wanted_item_details"}, []string{"wishlist.entry.create"}, []string{"part_number", "title"}),
 		wishlistSkill("cabinet.wishlist.update_entry", "Update wishlist entry", "Preview updates to target price, priority, notes, purchase details, and planning state before persistence.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry"}, []string{"wishlist.entry.update"}, []string{"wishlist_entry_id"}),
 		wishlistSkill("cabinet.wishlist.mark_purchased", "Mark wishlist entry purchased", "Preview purchased wishlist state while preserving purchase lifecycle and inventory quantity sync rules.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry", "purchase_details"}, []string{"wishlist.entry.mark_purchased"}, []string{"wishlist_entry_id"}),
 		wishlistSkill("cabinet.wishlist.soft_delete_entry", "Soft-delete wishlist entry", "Preview hiding a wishlist entry without deleting owned inventory or purchase history.", SafetyConfirmRequired, []string{"profile", "workspace", "thread", "wishlist_entry"}, []string{"wishlist.entry.soft_delete"}, []string{"wishlist_entry_id"}),
@@ -852,6 +853,9 @@ func wishlistSkill(id, displayName, description string, safety SafetyLevel, cont
 	skill := builtIn(id, displayName, description, "wishlist", safety, context, []string{"wishlist.workflow"}, nil, []string{"wishlist.table", "wishlist.entry.detail"})
 	skill.IntegrationWorkflows = append([]string{}, workflows...)
 	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	if id == "cabinet.wishlist.create_entry" {
+		skill.OptionalInputSchemaRefs = []string{"target_price", "currency", "priority", "notes", "source_url", "brand", "category"}
+	}
 	if id == "cabinet.wishlist.mark_purchased" {
 		skill.OutputSchemaRefs = []string{"wishlist_purchase_lifecycle", "inventory_quantity_sync"}
 	}

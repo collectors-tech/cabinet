@@ -9,6 +9,7 @@ Cabinet MUST treat OpenAI/API-key/Browser Auth readiness as provider evidence th
 - **THEN** Cabinet SHALL call the assistant-provider runtime through the provider-neutral turn interface
 - **AND** Cabinet SHALL provide only enabled and available skill names, descriptions, JSON schemas, safety metadata, and canonical Agent context envelope fields needed for planning
 - **AND** provider output SHALL be parsed as structured skill-selection or clarification input to Cabinet's governed planner
+- **AND** Cabinet SHALL expose the concrete required fields for mutating skills, normalize supported schema-reference wrappers before preview, and ask for clarification instead of exposing an actionable preview when required fields remain incomplete
 - **AND** provider output SHALL NOT be treated as permission to mutate Cabinet state or as direct access to Cabinet skills, database, filesystem, app-control commands, or external-write actions
 
 #### Scenario: Execute planned work through governed skill boundaries
