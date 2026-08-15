@@ -108,7 +108,7 @@ Cabinet SHALL bind beta release-candidate validation to one repository-owned, ve
 - **GIVEN** a full commit SHA is nominated for the Beta Release Candidate Gate
 - **WHEN** the candidate workflow resolves the Cypress release pack
 - **THEN** it MUST validate `release/beta-core-cypress-pack.json` before running Cypress
-- **AND** the pack MUST include login/profile, inventory, wishlist, collections, media, recovery, provider handoff, central Agent, conversational collection workflows, provider-backed acquisition/setup guidance, Dashboard summary routing, Agent attachment continuity, Agent response states, compact/200%-zoom Agent accessibility, server-derived Agent authority, Telegram connector, and Telegram conversation coverage
+- **AND** the pack MUST include login/profile, inventory, wishlist, collections, media, recovery, provider handoff, central Agent, conversational collection workflows, provider-backed acquisition/setup guidance, Chat-managed integration configuration with governed apply, Dashboard summary routing, Agent attachment continuity, Agent response states, compact/200%-zoom Agent accessibility, server-derived Agent authority, Telegram connector, and Telegram conversation coverage
 - **AND** every spec SHALL run separately with retries disabled and a 300-second execution watchdog so a multi-spec runner hang or retry cannot hide an incomplete candidate lane
 - **AND** each completed spec summary MUST record the exact candidate `build_revision`, zero exit status, completed runner phase, and the configured execution timeout
 - **AND** Telegram source acceptance SHALL use a repository-owned loopback Bot API fixture, synthetic token, and explicit fixture flag; a skipped Telegram case MUST fail the required category

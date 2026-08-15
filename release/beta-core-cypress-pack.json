@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "issue": 2055,
   "name": "Cabinet 0.1 beta core Cypress acceptance pack",
   "required_categories": [
@@ -64,6 +64,10 @@
     {
       "category": "agent_primary",
       "path": "cypress/e2e/chats/cabinet-agent-durable-preview/spec.cy.ts"
+    },
+    {
+      "category": "agent_primary",
+      "path": "cypress/e2e/chats/chat-integration-management/spec.cy.ts"
     },
     {
       "category": "agent_primary",

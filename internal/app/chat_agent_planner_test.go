@@ -303,6 +303,57 @@ func TestChatAgentPlannerUsesDeterministicFakeProviderSkillSelection(t *testing.
 	}
 }
 
+func TestChatAgentPlannerNormalizesFriendlyIntegrationConfiguration(t *testing.T) {
+	t.Parallel()
+
+	registry := agentskills.NewRegistry(nil)
+	provider := &captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.integrations.configure_provider","parameters":{"provider_name":"Voglers","catalogue":"public catalogue"},"message":"Prepared for review."}`}
+	selection, err := planChatAgentSkill(context.Background(), provider, chatAgentPlannerInput{
+		ProfileID: "profile-integration-config",
+		ThreadID:  "thread-integration-config",
+		Intent:    "Configure Voglers for its public catalogue.",
+		Model:     "fake-planner-model",
+		AgentContext: map[string]any{
+			"profile_id": "profile-integration-config", "thread_id": "thread-integration-config",
+			"route_id": "/integrations", "surface_id": "integrations.main", "source_channel": "in-app",
+		},
+		Skills: []agentskills.Skill{mustResolveSkill(t, registry, "cabinet.integrations.configure_provider")},
+	})
+	if err != nil {
+		t.Fatalf("plan integration configuration: %v", err)
+	}
+	if selection.SkillID != "cabinet.integrations.configure_provider" {
+		t.Fatalf("unexpected skill selection: %+v", selection)
+	}
+	for key, want := range map[string]any{
+		"provider_id": "voglers", "setup_payload": "public_catalogue", "setup_step": "public_catalogue", "marketplace": "public",
+	} {
+		if got := selection.Parameters[key]; got != want {
+			t.Fatalf("normalized parameter %s=%v, want %v; all=%+v", key, got, want, selection.Parameters)
+		}
+	}
+	if _, exists := selection.Parameters["provider_name"]; exists {
+		t.Fatalf("friendly provider name must be normalized away: %+v", selection.Parameters)
+	}
+	if _, exists := selection.Parameters["catalogue"]; exists {
+		t.Fatalf("friendly catalogue must be normalized away: %+v", selection.Parameters)
+	}
+
+	exposedSkills, _ := provider.req.Context["skills"].([]map[string]any)
+	if len(exposedSkills) != 1 {
+		t.Fatalf("expected one exposed skill, got %+v", exposedSkills)
+	}
+	schema, _ := exposedSkills[0]["input_schema"].(map[string]any)
+	properties, _ := schema["properties"].(map[string]any)
+	if properties["provider_id"] == nil || properties["setup_payload"] == nil || properties["provider_secret"] == nil {
+		t.Fatalf("integration planner schema missing provider/setup/optional-secret inputs: %+v", schema)
+	}
+	required, _ := schema["required"].([]string)
+	if !slices.Contains(required, "provider_id") || !slices.Contains(required, "setup_payload") || slices.Contains(required, "provider_secret") {
+		t.Fatalf("integration schema required fields are unsafe or incomplete: %+v", schema)
+	}
+}
+
 func TestChatAgentPlannerNormalizesSchemaRefWrappedProviderParameters(t *testing.T) {
 	t.Parallel()
 

@@ -705,7 +705,7 @@ func builtInSkills() []Skill {
 		builtIn("cabinet.users.activate_or_deactivate", "Activate or deactivate user", "Preview activation state changes with protected owner/admin safeguards before applying.", "users", SafetyConfirmRequired, []string{"profile", "workspace", "target_user", "target_status"}, nil, nil, []string{"users.row.status", "users.status.editor"}),
 		builtIn("cabinet.users.remove_user", "Remove user", "Require destructive confirmation before removing a non-protected workspace user.", "users", SafetyDestructive, []string{"profile", "workspace", "target_user"}, nil, nil, []string{"users.row.remove", "users.remove.confirmation"}),
 		integrationSkill("cabinet.integrations.search_providers", "Search integration providers", "Search available integration providers and setup state without mutating configuration.", SafetyReadOnly, []string{"profile", "workspace"}, []string{"integrations.provider.search"}, nil),
-		integrationSkill("cabinet.integrations.configure_provider", "Configure integration provider", "Prepare a provider configuration preview without echoing secrets before confirmed setup.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "setup_payload"}, []string{"integrations.provider.configure"}, []string{"provider_secret"}),
+		integrationSkill("cabinet.integrations.configure_provider", "Configure integration provider", "Prepare a provider configuration preview without echoing secrets before confirmed setup.", SafetyConfirmRequired, []string{"profile", "workspace", "provider", "setup_payload"}, []string{"integrations.provider.configure"}, []string{"provider_id", "setup_payload"}),
 		integrationSkill("cabinet.integrations.test_connection", "Test integration connection", "Check a selected provider connection and return actionable setup or health guidance.", SafetyPreviewOnly, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.test_connection"}, nil),
 		integrationSkill("cabinet.integrations.repair_provider", "Repair integration provider", "Prepare provider repair steps and require confirmation before changing setup.", SafetyConfirmRequired, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.repair"}, nil),
 		integrationSkill("cabinet.integrations.disable_provider", "Disable integration provider", "Preview disabling a selected provider before confirmed configuration changes.", SafetyConfirmRequired, []string{"profile", "workspace", "provider"}, []string{"integrations.provider.disable"}, nil),
@@ -797,10 +797,13 @@ func integrationSkill(id, displayName, description string, safety SafetyLevel, c
 	skill.RequiredProviders = []string{"provider-registry"}
 	skill.IntegrationWorkflows = append([]string{}, workflows...)
 	skill.InputSchemaRefs = append([]string{}, schemaRefs...)
+	if id == "cabinet.integrations.configure_provider" {
+		skill.OptionalInputSchemaRefs = []string{"provider_secret", "setup_step", "base_url", "marketplace", "items_per_page"}
+	}
 	if safety == SafetyConfirmRequired {
 		skill.Permissions.ExternalWrite = true
 	}
-	if slices.Contains(schemaRefs, "provider_secret") {
+	if slices.Contains(schemaRefs, "provider_secret") || slices.Contains(skill.OptionalInputSchemaRefs, "provider_secret") {
 		skill.Permissions.SecretAccess = true
 	}
 	return deriveExecutionState(skill)
