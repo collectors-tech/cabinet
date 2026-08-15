@@ -1,7 +1,7 @@
 # Windows Portable Install and Upgrade Validation
 
 Issue: #1868
-Version: 0.1.0-beta.2
+Version: 0.1.0-beta.3
 Release gate: validate the private/internal candidate before approval; require #1864 approval before external publication or promotion.
 
 Internal candidate creation does not require final #1864 approval.
@@ -11,7 +11,7 @@ This checklist records the non-publishing Windows validation required before #18
 
 ## Candidate Identity
 
-- Build or nominate `dist/cabinet/cabinet-0.1.0-beta.2-windows-amd64-portable.zip` from a clean commit.
+- Build or nominate `dist/cabinet/cabinet-0.1.0-beta.3-windows-amd64-portable.zip` from a clean commit.
 - Record the matching `.sha256` value, release notes path, commit SHA, build date, and package extraction path.
 - Record the Cabinet release manifest, Browser Companion release manifest, combined candidate manifest and successful exact candidate workflow run ID.
 - Record the paired #2034 Browser Companion filename, SHA-256, source commit, manifest and browser version.
@@ -22,7 +22,7 @@ This checklist records the non-publishing Windows validation required before #18
 - Extract the ZIP into a new writable folder on Windows.
 - Start `cabinet.exe` with a new isolated data directory.
 - Verify `/healthz` returns `200 ok`.
-- Verify `/api/runtime` reports `app_version=0.1.0-beta.2`, the runtime port, process id, data directory, build date, and a full lowercase `build_revision` that exactly equals the Cabinet manifest `source_commit`.
+- Verify `/api/runtime` reports `app_version=0.1.0-beta.3`, the runtime port, process id, data directory, build date, and a full lowercase `build_revision` that exactly equals the Cabinet manifest `source_commit`.
 - Complete the first-run/onboarding path far enough to prove the UI can create or open the local profile without test-only hooks.
 
 ## Existing Data Directory Upgrade

@@ -30,8 +30,8 @@ const writeArtifact = async (directory, filename, contents) => {
 
 const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) => {
   const directory = await mkdtemp(join(tmpdir(), 'cabinet-acceptance-recorder-'))
-  const candidateVersion = `0.1.0-beta.2.g${sourceCommit.slice(0, 12)}`
-  const cabinetArtifact = await writeArtifact(directory, 'cabinet-0.1.0-beta.2-windows-amd64-portable.zip', `cabinet-${suffix}`)
+  const candidateVersion = `0.1.0-beta.3.g${sourceCommit.slice(0, 12)}`
+  const cabinetArtifact = await writeArtifact(directory, 'cabinet-0.1.0-beta.3-windows-amd64-portable.zip', `cabinet-${suffix}`)
   cabinetArtifact.kind = 'portable_zip'
   const chromeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-chrome.zip`, `chrome-${suffix}`)
   const edgeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-edge.zip`, `edge-${suffix}`)
@@ -39,12 +39,12 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
     schema_version: 1,
     product: 'Cabinet',
     channel: 'private-beta',
-    version: '0.1.0-beta.2',
+    version: '0.1.0-beta.3',
     source_commit: sourceCommit,
     build_date: '2026-08-11T00:00:00Z',
     publication_state: 'private_candidate_not_published',
     artifact: cabinetArtifact,
-    release_notes_filename: 'cabinet-0.1.0-beta.2-release-notes.md',
+    release_notes_filename: 'cabinet-0.1.0-beta.3-release-notes.md',
   }
   const companion = {
     schema_version: 1,
@@ -88,7 +88,7 @@ const environment = {
   browser_version: '140.0.0.0',
   isolated_profile: 'cabinet-beta-acceptance',
   isolated_data_directory: 'C:\\Users\\operator\\AppData\\Local\\Cabinet\\acceptance-secret',
-  runtime: { app_version: '0.1.0-beta.2', build_revision: commit, build_date: '2026-08-11T00:00:00Z', port: 17900, pid: 4242 },
+  runtime: { app_version: '0.1.0-beta.3', build_revision: commit, build_date: '2026-08-11T00:00:00Z', port: 17900, pid: 4242 },
 }
 
 const start = async (fixture, outputPath = join(fixture.directory, 'acceptance.json'), runtimeEnvironment = environment) => createOrResumeAcceptanceRun({
@@ -120,7 +120,7 @@ test('candidate identity, three manifests, and independently verified package ch
   const state = await start(fixture)
   assert.equal(state.candidate.source_commit, commit)
   assert.equal(state.environment.runtime.build_revision, commit)
-  assert.equal(state.candidate.cabinet.package.filename, 'cabinet-0.1.0-beta.2-windows-amd64-portable.zip')
+  assert.equal(state.candidate.cabinet.package.filename, 'cabinet-0.1.0-beta.3-windows-amd64-portable.zip')
   assert.deepEqual(state.candidate.companion.packages.map((item) => item.target), ['chrome', 'edge'])
   assert.equal(state.rows.length, acceptanceRows.length)
 
