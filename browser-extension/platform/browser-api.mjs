@@ -60,6 +60,7 @@ export const browserPlatform = Object.freeze({
   },
   runtime: {
     manifest: () => assertBrowserAPI().runtime.getManifest(),
+    origin: () => assertBrowserAPI().runtime.getURL('').replace(/\/$/, ''),
     onInstalled: (listener) => assertBrowserAPI().runtime.onInstalled.addListener(listener),
     onMessage: (listener) => assertBrowserAPI().runtime.onMessage.addListener(listener),
     onStartup: (listener) => assertBrowserAPI().runtime.onStartup.addListener(listener),

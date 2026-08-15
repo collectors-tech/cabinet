@@ -12,6 +12,7 @@
   },
   "headers": {
     "device": "X-Cabinet-Companion-Device",
+    "extension_origin": "X-Cabinet-Companion-Origin",
     "profile": "X-Cabinet-Profile",
     "idempotency": "X-Cabinet-Idempotency-Key",
 	"capture_id": "X-Cabinet-Capture-ID",

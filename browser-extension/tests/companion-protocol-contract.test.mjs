@@ -171,6 +171,61 @@ test('client pairs, reconnects after restart, rotates and revokes without URL se
   }
 })
 
+test('client invokes browser fetch without an illegal CompanionClient receiver', async () => {
+  let receiver = 'not-called'
+  const fetchImpl = async function () {
+    receiver = this
+    return Response.json({
+      request_id: 'pairing-browser',
+      exchange_secret: 'exchange-browser',
+      pairing_code: '123456',
+      status: 'pending',
+      expires_at: '2026-08-15T12:10:00Z',
+      protocol_version: '1',
+      capabilities: ['modules:read'],
+    }, { status: 201 })
+  }
+  const storage = {
+    get: async () => undefined,
+    set: async () => {},
+    delete: async () => {},
+  }
+  const client = new CompanionClient({
+    baseURL: contract.base_url,
+    deviceID: 'brave-windows-1',
+    fetchImpl,
+    storage,
+  })
+
+  await client.startPairing('Brave on Windows', ['modules:read'])
+  assert.equal(receiver, undefined)
+})
+
+test('client projects its runtime extension origin for authenticated Chromium GETs', async () => {
+  const stored = new Map([[companionStorageKeys.credential, 'cabcmp_browser']])
+  let request
+  const client = new CompanionClient({
+    baseURL: contract.base_url,
+    deviceID: 'brave-windows-1',
+    origin: 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    fetchImpl: async (url, init) => {
+      request = { url, init }
+      return Response.json({ id: 'session-browser', protocol_version: '1' })
+    },
+    storage: {
+      get: async (key) => stored.get(key),
+      set: async (key, value) => stored.set(key, value),
+      delete: async (key) => stored.delete(key),
+    },
+  })
+
+  await client.reconnect()
+  assert.equal(
+    request.init.headers['X-Cabinet-Companion-Origin'],
+    'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  )
+})
+
 test('capture and media writes carry idempotent typed metadata and require committed acknowledgements', async () => {
   const stored = new Map([[companionStorageKeys.credential, 'cabcmp_test']])
   const storage = {

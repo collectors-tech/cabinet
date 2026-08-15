@@ -264,3 +264,25 @@ Cabinet SHALL dispatch each accepted Browser Companion provider result through t
 - **WHEN** #1944 and #1945 collect source-ready evidence
 - **THEN** those tests MAY prove the ingestion and hand-off implementation
 - **AND** they MUST NOT replace the external user-present and exact packaged-candidate proof required by #1869.
+
+### Requirement INTEGRATION-081: Companion startup and authenticated browser transport MUST remain actionable
+The MV3 worker SHALL register popup command handling before asynchronous storage or Cabinet recovery, and authenticated requests SHALL preserve the installed extension-origin binding when Chromium omits the standard `Origin` header.
+
+#### Scenario: Popup remains actionable during worker recovery
+- **GIVEN** the Browser Companion worker starts while storage or Cabinet reconnect is still pending
+- **WHEN** the popup requests `host:get-state`
+- **THEN** the worker MUST return bounded local state without waiting for recovery
+- **AND** Connect MUST retain its button across asynchronous state lookup so pairing can proceed without an exception.
+
+#### Scenario: Chromium GET retains the approved extension binding
+- **GIVEN** an approved session bound to one exact extension origin and device
+- **WHEN** Chromium omits the standard `Origin` header on an authenticated loopback GET
+- **THEN** the extension MUST send its runtime-derived origin through `X-Cabinet-Companion-Origin`
+- **AND** Cabinet MUST validate that fallback against the stored session origin
+- **AND** Cabinet MUST reject invalid fallback origins or a mismatch when the standard and fallback headers are both present.
+
+#### Scenario: Pending approval survives worker restart
+- **GIVEN** a pairing receipt is waiting for approval or one-time exchange
+- **WHEN** the MV3 worker restarts or reconnect reports no credential
+- **THEN** the same pairing code MUST remain in `approval_required` state
+- **AND** the worker MUST NOT silently create a replacement pairing request.

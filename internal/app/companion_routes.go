@@ -412,6 +412,23 @@ func prepareCompanionRequest(w http.ResponseWriter, r *http.Request, requireExte
 		return companion.RequestMetadata{}, false
 	}
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	declaredOrigin := strings.TrimSpace(r.Header.Get("X-Cabinet-Companion-Origin"))
+	if requireExtensionOrigin && declaredOrigin != "" {
+		validatedDeclaredOrigin, err := companion.ValidateExtensionOrigin(declaredOrigin)
+		if err != nil {
+			writeCompanionCode(w, http.StatusForbidden, "companion_origin_rejected")
+			return companion.RequestMetadata{}, false
+		}
+		if origin == "" {
+			origin = validatedDeclaredOrigin
+		} else {
+			validatedRequestOrigin, requestOriginErr := companion.ValidateExtensionOrigin(origin)
+			if requestOriginErr != nil || validatedRequestOrigin != validatedDeclaredOrigin {
+				writeCompanionCode(w, http.StatusForbidden, "companion_origin_rejected")
+				return companion.RequestMetadata{}, false
+			}
+		}
+	}
 	if requireExtensionOrigin && origin == "" {
 		writeCompanionCode(w, http.StatusForbidden, "companion_origin_rejected")
 		return companion.RequestMetadata{}, false
@@ -443,7 +460,7 @@ func handleCompanionPreflight(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Cabinet-Companion-Device, X-Cabinet-Idempotency-Key, X-Cabinet-Capture-ID, X-Cabinet-Media-Field, X-Cabinet-Media-Filename, X-Cabinet-Media-SHA256, X-Cabinet-Profile")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Cabinet-Companion-Device, X-Cabinet-Companion-Origin, X-Cabinet-Idempotency-Key, X-Cabinet-Capture-ID, X-Cabinet-Media-Field, X-Cabinet-Media-Filename, X-Cabinet-Media-SHA256, X-Cabinet-Profile")
 	w.Header().Set("Access-Control-Max-Age", "600")
 	w.WriteHeader(http.StatusNoContent)
 	return true
