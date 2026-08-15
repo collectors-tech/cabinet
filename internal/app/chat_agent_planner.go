@@ -108,6 +108,7 @@ func normalizeChatAgentSkillSelection(selection chatAgentSkillSelection, exposed
 			return plannerRejection("skill_unavailable", "That Cabinet skill is disabled, unavailable, or not exposed for this request.", "Choose an enabled Cabinet skill or adjust Agent Skill settings before retrying.", selection)
 		}
 		selection.Parameters = normalizePlannerSchemaRefParameters(selection.SkillID, selection.Parameters, exposedSkills)
+		selection.Parameters = normalizeIntegrationPlannerParameters(selection.SkillID, selection.Parameters)
 		if strings.TrimSpace(selection.Message) == "" {
 			selection.Message = "I selected a governed Cabinet skill for this request. Cabinet still controls dispatch and confirmation."
 		}
@@ -128,6 +129,50 @@ func normalizeChatAgentSkillSelection(selection chatAgentSkillSelection, exposed
 	default:
 		return plannerRejection("unsupported_planner_decision", "Cabinet rejected an unsupported planner decision before any work was applied.", "Retry with a supported Cabinet request; no action was completed.", selection)
 	}
+}
+
+func normalizeIntegrationPlannerParameters(skillID string, parameters map[string]any) map[string]any {
+	if skillID != "cabinet.integrations.configure_provider" || len(parameters) == 0 {
+		return parameters
+	}
+
+	normalized := make(map[string]any, len(parameters)+4)
+	for key, value := range parameters {
+		normalized[key] = value
+	}
+	providerID := strings.ToLower(strings.TrimSpace(fmt.Sprint(normalized["provider_id"])))
+	if providerID == "" || providerID == "<nil>" {
+		providerID = strings.ToLower(strings.TrimSpace(fmt.Sprint(normalized["provider_name"])))
+	}
+	providerID = strings.ReplaceAll(providerID, " ", "-")
+	if providerID != "" && providerID != "<nil>" {
+		normalized["provider_id"] = providerID
+	}
+	catalogue := strings.ToLower(strings.TrimSpace(fmt.Sprint(normalized["catalogue"])))
+	if catalogue == "<nil>" {
+		catalogue = ""
+	}
+	catalogueName := strings.TrimSpace(strings.TrimSuffix(catalogue, " catalogue"))
+	setupPayload := strings.ToLower(strings.TrimSpace(fmt.Sprint(normalized["setup_payload"])))
+	if setupPayload == "" || setupPayload == "<nil>" {
+		setupPayload = catalogueName
+		if setupPayload != "" {
+			setupPayload += "_catalogue"
+		}
+	}
+	setupPayload = strings.ReplaceAll(setupPayload, " ", "_")
+	if setupPayload != "" {
+		normalized["setup_payload"] = setupPayload
+		if strings.TrimSpace(fmt.Sprint(normalized["setup_step"])) == "" || fmt.Sprint(normalized["setup_step"]) == "<nil>" {
+			normalized["setup_step"] = setupPayload
+		}
+	}
+	if catalogueName != "" && (strings.TrimSpace(fmt.Sprint(normalized["marketplace"])) == "" || fmt.Sprint(normalized["marketplace"]) == "<nil>") {
+		normalized["marketplace"] = catalogueName
+	}
+	delete(normalized, "provider_name")
+	delete(normalized, "catalogue")
+	return normalized
 }
 
 func plannerClarification(code, message, nextAction string, selection chatAgentSkillSelection) chatAgentSkillSelection {

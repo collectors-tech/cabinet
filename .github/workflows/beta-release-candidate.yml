@@ -146,8 +146,8 @@ jobs:
             throw "Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden."
           }
           $pack = Get-Content .logs/release-candidate/cypress-pack.json -Raw | ConvertFrom-Json
-          if ($pack.version -lt 4 -or $pack.spec_count -ne 22 -or $pack.specs.Count -ne 22) {
-            throw "Fixed beta Cypress pack must resolve version 4 with exactly 22 specs."
+          if ($pack.version -lt 5 -or $pack.spec_count -ne 23 -or $pack.specs.Count -ne 23) {
+            throw "Fixed beta Cypress pack must resolve version 5 with exactly 23 specs."
           }
           $telegramFixtureSpecs = @(
             "cypress/e2e/integrations/telegram-local-connector/spec.cy.ts",

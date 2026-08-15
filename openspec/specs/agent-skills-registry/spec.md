@@ -197,6 +197,17 @@ Cabinet Agent SHALL require a fresh server-issued confirmation for each exact de
 - **AND** it SHALL create a pre-restore recovery backup before applying the selected backup
 - **AND** the terminal durable preview and used-confirmation receipt SHALL survive the restored database state without persisting the raw token
 
+### Requirement: AGENT-SKILLS-REGISTRY-015 Integration configure-provider Chat previews SHALL carry canonical setup context
+Cabinet Agent SHALL let natural-language Chat configure integration providers through the governed Agent Skill preview lifecycle without requiring clients to own provider setup authority or echo secrets.
+
+#### Scenario: Configure an integration provider through Chat preview and token apply
+- **GIVEN** Chat selects `cabinet.integrations.configure_provider` from a user-friendly provider/setup request
+- **WHEN** the planner returns friendly provider name, catalogue, setup metadata, or optional credential fields
+- **THEN** Cabinet SHALL expose planner schema fields for provider identity and non-secret setup payload, keep provider secrets optional and write-only, and normalize friendly values into canonical `provider_id` and setup parameters before preview creation
+- **AND** the durable preview SHALL persist enough non-secret canonical context for token-only apply to revalidate authority and execute without `missing_context`
+- **AND** confirmed apply SHALL persist enabled provider setup metadata for the active profile, omit secrets from response/log evidence, and reject replay or cross-profile confirmation without a second mutation
+- **AND** read-only integration provider search and explanation skills SHALL remain non-mutating and unchanged by configure-provider normalization
+
 ### Requirement: Marketplace behavior SHALL remain explicitly deferred
 Cabinet SHALL not treat local skill import support as a public marketplace implementation.
 

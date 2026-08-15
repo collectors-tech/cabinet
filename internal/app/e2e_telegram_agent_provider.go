@@ -58,6 +58,16 @@ func (e2eSyntheticAgentProvider) RunAssistantTurn(ctx context.Context, req ai.As
 			"parameters": map[string]any{"target_user": syntheticPlannerValue(text, " target ")},
 			"message":    "I prepared the exact user removal for strong confirmation.",
 		}
+	} else if strings.Contains(normalized, "agent-2185-synthetic") && strings.Contains(normalized, "configure provider") {
+		plan = map[string]any{
+			"decision": "select_skill",
+			"skill_id": "cabinet.integrations.configure_provider",
+			"parameters": map[string]any{
+				"provider_name": "Voglers",
+				"catalogue":     "public catalogue",
+			},
+			"message": "I prepared the Voglers public catalogue configuration for governed review.",
+		}
 	}
 	planJSON, err := json.Marshal(plan)
 	if err != nil {

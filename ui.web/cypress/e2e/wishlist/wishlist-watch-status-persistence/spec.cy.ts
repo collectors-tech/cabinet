@@ -58,7 +58,7 @@ describe("wishlist-watch-status-persistence", () => {
         (entry: { notes?: string }) =>
           entry.notes === "Seeded for status persistence"
       );
-      expect(manualEntry, "manual wishlist entry").to.exist;
+      expect(manualEntry, "manual wishlist entry").not.to.eq(undefined);
       expect(manualEntry.below_target_now).to.eq(true);
     });
 

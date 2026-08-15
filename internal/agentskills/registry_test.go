@@ -503,6 +503,11 @@ func TestIntegrationsAndSettingsSkillsExposeSetupPreviewBoundaries(t *testing.T)
 	if configure.SafetyLevel != SafetyConfirmRequired || !configure.Permissions.RequiresConfirm || !configure.Permissions.ExternalWrite || !configure.Permissions.SecretAccess {
 		t.Fatalf("configure provider should declare confirm-required external/secret safety, got %+v", configure)
 	}
+	if !slices.Contains(configure.InputSchemaRefs, "provider_id") ||
+		!slices.Contains(configure.InputSchemaRefs, "setup_payload") ||
+		!slices.Contains(configure.OptionalInputSchemaRefs, "provider_secret") {
+		t.Fatalf("configure provider must expose provider/setup inputs with an optional secret, got required=%+v optional=%+v", configure.InputSchemaRefs, configure.OptionalInputSchemaRefs)
+	}
 
 	configurePreview, err := registry.Preview(PreviewRequest{
 		SkillID: "cabinet.integrations.configure_provider",

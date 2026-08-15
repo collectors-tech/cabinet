@@ -130,8 +130,8 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		"CYPRESS_telegramRuntimeFixture: \"true\"",
 		"if ($env:CYPRESS_telegramRuntimeFixture -ne \"true\"",
 		"Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden.",
-		"$pack.version -lt 4 -or $pack.spec_count -ne 22 -or $pack.specs.Count -ne 22",
-		"Fixed beta Cypress pack must resolve version 4 with exactly 22 specs.",
+		"$pack.version -lt 5 -or $pack.spec_count -ne 23 -or $pack.specs.Count -ne 23",
+		"Fixed beta Cypress pack must resolve version 5 with exactly 23 specs.",
 		"timeout-minutes: 30",
 		"go test ./... -count=1 -p 1 -parallel 4 -timeout 900s",
 		"$name = Split-Path (Split-Path $spec -Parent) -Leaf",
@@ -211,11 +211,11 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 	if manifest.Issue != 2055 {
 		t.Fatalf("manifest should stay bound to #2055, got #%d", manifest.Issue)
 	}
-	if manifest.Version < 4 {
-		t.Fatalf("browser-authenticated Chat acceptance pack must be version 4 or newer, got %d", manifest.Version)
+	if manifest.Version < 5 {
+		t.Fatalf("Chat-managed integration acceptance pack must be version 5 or newer, got %d", manifest.Version)
 	}
-	if len(manifest.Specs) != 22 {
-		t.Fatalf("browser-authenticated Chat acceptance pack must contain exactly 22 specs, got %d", len(manifest.Specs))
+	if len(manifest.Specs) != 23 {
+		t.Fatalf("Chat-managed integration acceptance pack must contain exactly 23 specs, got %d", len(manifest.Specs))
 	}
 
 	required := map[string]bool{
@@ -266,6 +266,7 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 		"cypress/e2e/chats/cabinet-agent-collection-workflows/spec.cy.ts":    "agent_primary",
 		"cypress/e2e/chats/assistant-acquisition-workflows/spec.cy.ts":       "agent_primary",
 		"cypress/e2e/chats/assistant-workspace-dashboard-summary/spec.cy.ts": "agent_primary",
+		"cypress/e2e/chats/chat-integration-management/spec.cy.ts":            "agent_primary",
 	} {
 		foundCategory := ""
 		for _, spec := range manifest.Specs {
