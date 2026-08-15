@@ -109,6 +109,7 @@ function parseWishlistImportCsv(text: string): WishlistEntryDraft[] {
       priority: cells[columnIndex('priority')]?.trim() || 'medium',
       notes: cells[columnIndex('notes')]?.trim() ?? '',
       targetPrice: cells[columnIndex('target_price')]?.trim() ?? '',
+      currency: cells[columnIndex('currency')]?.trim().toUpperCase() || 'USD',
       owned: false,
       delivered: false,
       pricePaid: '',
@@ -171,7 +172,7 @@ export function TasksImportDialog({
           </DialogTitle>
           <DialogDescription>
             {isWishlistRoute
-              ? 'Import wishlist entries from CSV. Supported columns: title, part_number, category, priority, notes, target_price.'
+              ? 'Import wishlist entries from CSV. Supported columns: title, part_number, category, priority, notes, target_price, currency.'
               : 'Import tasks quickly from a CSV file.'}
           </DialogDescription>
         </DialogHeader>

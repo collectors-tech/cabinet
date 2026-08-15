@@ -7608,6 +7608,11 @@ components:
       properties:
         item_id: { type: string }
         target_price: { type: number }
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+          default: USD
+          description: ISO 4217 currency code for target and purchase amounts. Legacy entries default to USD.
         priority: { type: string }
         notes: { type: string }
         highlight_hit: { type: boolean }

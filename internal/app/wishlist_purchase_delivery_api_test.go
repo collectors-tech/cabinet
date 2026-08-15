@@ -42,7 +42,7 @@ func TestWishlistPurchasedDeliveredSyncsCommerceAndInventoryState(t *testing.T) 
 		t.Fatalf("expected created wishlist item with category, got %+v", item)
 	}
 
-	createWish := doRequest(t, a, http.MethodPost, "/api/wishlist", strings.NewReader(`{"item_id":"`+item.ID+`","target_price":42,"priority":"high","notes":"wishlist provenance","owned":true,"price_paid":37.5,"purchase_url":"https://example.test/order","purchase_date":"2026-04-27","purchase_condition":"sealed","quantity":2,"needed_quantity":2}`), map[string]string{"Content-Type": "application/json"})
+	createWish := doRequest(t, a, http.MethodPost, "/api/wishlist", strings.NewReader(`{"item_id":"`+item.ID+`","target_price":42,"currency":"AUD","priority":"high","notes":"wishlist provenance","owned":true,"price_paid":37.5,"purchase_url":"https://example.test/order","purchase_date":"2026-04-27","purchase_condition":"sealed","quantity":2,"needed_quantity":2}`), map[string]string{"Content-Type": "application/json"})
 	if createWish.Code != http.StatusCreated {
 		t.Fatalf("create purchased wishlist status=%d body=%s", createWish.Code, createWish.Body.String())
 	}
@@ -50,11 +50,12 @@ func TestWishlistPurchasedDeliveredSyncsCommerceAndInventoryState(t *testing.T) 
 		ID        string `json:"id"`
 		Owned     bool   `json:"owned"`
 		Delivered bool   `json:"delivered"`
+		Currency  string `json:"currency"`
 	}
 	if err := json.NewDecoder(createWish.Body).Decode(&createdWish); err != nil {
 		t.Fatalf("decode purchased wishlist: %v", err)
 	}
-	if createdWish.ID == "" || !createdWish.Owned || createdWish.Delivered {
+	if createdWish.ID == "" || !createdWish.Owned || createdWish.Delivered || createdWish.Currency != "AUD" {
 		t.Fatalf("expected purchased but undelivered wishlist response, got %+v", createdWish)
 	}
 
@@ -69,6 +70,7 @@ func TestWishlistPurchasedDeliveredSyncsCommerceAndInventoryState(t *testing.T) 
 			ExternalRef       string  `json:"external_ref"`
 			Quantity          int     `json:"quantity"`
 			Amount            float64 `json:"amount"`
+			Currency          string  `json:"currency"`
 			ExpectedArrivalID string  `json:"expected_arrival_id"`
 		} `json:"items"`
 	}
@@ -78,7 +80,7 @@ func TestWishlistPurchasedDeliveredSyncsCommerceAndInventoryState(t *testing.T) 
 	if len(lifecyclePayload.Items) != 1 {
 		t.Fatalf("expected one wishlist purchase lifecycle entry, got %+v", lifecyclePayload.Items)
 	}
-	if lifecyclePayload.Items[0].State != "purchase" || lifecyclePayload.Items[0].Source != "wishlist" || lifecyclePayload.Items[0].ExternalRef != createdWish.ID || lifecyclePayload.Items[0].Quantity != 2 || lifecyclePayload.Items[0].Amount != 37.5 || lifecyclePayload.Items[0].ExpectedArrivalID == "" {
+	if lifecyclePayload.Items[0].State != "purchase" || lifecyclePayload.Items[0].Source != "wishlist" || lifecyclePayload.Items[0].ExternalRef != createdWish.ID || lifecyclePayload.Items[0].Quantity != 2 || lifecyclePayload.Items[0].Amount != 37.5 || lifecyclePayload.Items[0].Currency != "AUD" || lifecyclePayload.Items[0].ExpectedArrivalID == "" {
 		t.Fatalf("unexpected purchase lifecycle entry: %+v", lifecyclePayload.Items[0])
 	}
 
@@ -93,14 +95,15 @@ func TestWishlistPurchasedDeliveredSyncsCommerceAndInventoryState(t *testing.T) 
 	}
 	var wishPayload struct {
 		Items []struct {
-			Owned     bool `json:"owned"`
-			Delivered bool `json:"delivered"`
+			Owned     bool   `json:"owned"`
+			Delivered bool   `json:"delivered"`
+			Currency  string `json:"currency"`
 		} `json:"items"`
 	}
 	if err := json.NewDecoder(listWish.Body).Decode(&wishPayload); err != nil {
 		t.Fatalf("decode wishlist after delivery: %v", err)
 	}
-	if len(wishPayload.Items) != 1 || !wishPayload.Items[0].Owned || !wishPayload.Items[0].Delivered {
+	if len(wishPayload.Items) != 1 || !wishPayload.Items[0].Owned || !wishPayload.Items[0].Delivered || wishPayload.Items[0].Currency != "AUD" {
 		t.Fatalf("expected delivery to imply purchased and persist delivered state, got %+v", wishPayload.Items)
 	}
 
@@ -112,12 +115,13 @@ func TestWishlistPurchasedDeliveredSyncsCommerceAndInventoryState(t *testing.T) 
 		Items []struct {
 			Status               string `json:"status"`
 			ReconciledInstanceID string `json:"reconciled_instance_id"`
+			Currency             string `json:"currency"`
 		} `json:"items"`
 	}
 	if err := json.NewDecoder(listDeliveredArrivals.Body).Decode(&arrivalsPayload); err != nil {
 		t.Fatalf("decode delivered arrivals: %v", err)
 	}
-	if len(arrivalsPayload.Items) != 1 || arrivalsPayload.Items[0].Status != "delivered" || arrivalsPayload.Items[0].ReconciledInstanceID == "" {
+	if len(arrivalsPayload.Items) != 1 || arrivalsPayload.Items[0].Status != "delivered" || arrivalsPayload.Items[0].ReconciledInstanceID == "" || arrivalsPayload.Items[0].Currency != "AUD" {
 		t.Fatalf("expected delivered arrival linked to inventory instance, got %+v", arrivalsPayload.Items)
 	}
 

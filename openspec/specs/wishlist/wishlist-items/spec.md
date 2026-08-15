@@ -55,3 +55,23 @@ Cabinet SHALL treat wishlist `owned`/Purchased state as purchase intent evidence
 - **AND** Cabinet MUST create or update one inventory instance with purchase condition, quantity, acquisition price, and acquisition date from wishlist purchase details
 - **AND** Cabinet MUST mark the canonical item lifecycle status as `active`
 - **AND** the canonical item category MUST remain unchanged for Inventory visibility
+
+### Requirement WISHLIST-ITEMS-004: Wishlist monetary values SHALL preserve their ISO currency
+
+Cabinet SHALL persist a three-letter ISO currency with each wishlist entry, default historical entries and omitted legacy input to `USD`, and preserve the same currency through Chat-managed preview/apply, API reads, edits, purchase lifecycle, and expected-arrival synchronization.
+
+#### Scenario: Create a currency-specific wishlist entry through Chat
+
+- **GIVEN** Browser Auth Chat prepares a confirmation-gated wishlist entry with target price `61` and currency `AUD`
+- **WHEN** the user confirms the durable Agent preview
+- **THEN** Cabinet MUST persist the wishlist entry with `target_price=61` and `currency=AUD`
+- **AND** the governed Chat apply result MUST report the confirmed currency
+- **AND** subsequent wishlist edits MUST preserve that currency unless the user supplies a valid replacement code
+- **AND** purchase lifecycle and expected-arrival monetary records MUST use the wishlist entry currency
+
+#### Scenario: Migrate historical wishlist entries
+
+- **GIVEN** a Cabinet database predates wishlist currency persistence
+- **WHEN** Cabinet migrates the database
+- **THEN** historical wishlist entries MUST receive `currency=USD` to preserve the prior USD-only display behavior
+- **AND** invalid non-three-letter currency input MUST fail without persistence

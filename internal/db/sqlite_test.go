@@ -449,6 +449,13 @@ func TestOpenAndMigratePreservesRepresentativeLegacyReleaseData(t *testing.T) {
 	if displayOrder != 0 {
 		t.Fatalf("expected migrated photo display_order default 0, got %d", displayOrder)
 	}
+	var wishlistCurrency string
+	if err := conn.QueryRow(`SELECT currency FROM wishlist_entries WHERE id = 'wish-1'`).Scan(&wishlistCurrency); err != nil {
+		t.Fatalf("read upgraded wishlist currency: %v", err)
+	}
+	if wishlistCurrency != "USD" {
+		t.Fatalf("expected legacy wishlist currency to preserve historical USD display semantics, got %q", wishlistCurrency)
+	}
 	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json) VALUES ('watch-2', 'profile-main', 'AFX Watch 2', '["afx"]')`); err != nil {
 		t.Fatalf("insert second upgraded query set: %v", err)
 	}

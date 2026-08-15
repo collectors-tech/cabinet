@@ -385,7 +385,7 @@ func TestChatAgentPlannerNormalizesSchemaRefWrappedProviderParameters(t *testing
 	if apply.Code != http.StatusOK {
 		t.Fatalf("generated Browser Auth apply status=%d body=%s", apply.Code, apply.Body.String())
 	}
-	for _, token := range []string{`"skill_id":"cabinet.wishlist.create_entry"`, `"mutation_applied":true`, `"operation":"wishlist.entry.create"`} {
+	for _, token := range []string{`"skill_id":"cabinet.wishlist.create_entry"`, `"mutation_applied":true`, `"operation":"wishlist.entry.create"`, `"currency":"AUD"`} {
 		if !strings.Contains(apply.Body.String(), token) {
 			t.Fatalf("generated Browser Auth apply response missing %s: %s", token, apply.Body.String())
 		}

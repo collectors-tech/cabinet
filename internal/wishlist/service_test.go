@@ -30,6 +30,7 @@ func TestWishlistCRUDAndBelowTarget(t *testing.T) {
 	created, err := svc.Create(context.Background(), Entry{
 		ItemID:       "i1",
 		TargetPrice:  50,
+		Currency:     "aud",
 		Priority:     "high",
 		Notes:        "want soon",
 		HighlightHit: true,
@@ -41,7 +42,7 @@ func TestWishlistCRUDAndBelowTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(all) != 1 || all[0].ID != created.ID {
+	if len(all) != 1 || all[0].ID != created.ID || all[0].Currency != "AUD" {
 		t.Fatalf("unexpected list: %+v", all)
 	}
 	if !all[0].BelowTargetNow {
@@ -58,10 +59,18 @@ func TestWishlistCRUDAndBelowTarget(t *testing.T) {
 		ID:          created.ID,
 		ItemID:      "i1",
 		TargetPrice: 40,
+		Currency:    "nzd",
 		Priority:    "low",
 		Notes:       "later",
 	}); err != nil {
 		t.Fatalf("Update() error = %v", err)
+	}
+	updated, err := svc.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID() after currency update error = %v", err)
+	}
+	if updated.Currency != "NZD" {
+		t.Fatalf("expected normalized updated currency NZD, got %+v", updated)
 	}
 	if err := svc.Delete(context.Background(), created.ID); err != nil {
 		t.Fatalf("Delete() error = %v", err)
@@ -125,5 +134,35 @@ func TestWishlistCRUDAndBelowTarget(t *testing.T) {
 	}
 	if instanceCount != 1 {
 		t.Fatalf("expected permanent wishlist delete to preserve inventory instances, got %d", instanceCount)
+	}
+}
+
+func TestWishlistCurrencyDefaultsLegacyInputAndRejectsInvalidCode(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES ('legacy-item','AFX','Slot','LEGACY-CURRENCY','Legacy Currency')`); err != nil {
+		t.Fatalf("seed legacy item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES ('invalid-item','AFX','Slot','INVALID-CURRENCY','Invalid Currency')`); err != nil {
+		t.Fatalf("seed invalid item: %v", err)
+	}
+
+	svc := NewService(conn)
+	legacy, err := svc.Create(context.Background(), Entry{ItemID: "legacy-item", TargetPrice: 25})
+	if err != nil {
+		t.Fatalf("Create() legacy-default currency error = %v", err)
+	}
+	if legacy.Currency != "USD" {
+		t.Fatalf("expected backward-compatible USD default, got %+v", legacy)
+	}
+
+	if _, err := svc.Create(context.Background(), Entry{ItemID: "invalid-item", TargetPrice: 25, Currency: "dollars"}); err == nil {
+		t.Fatal("expected invalid non-ISO currency to fail")
 	}
 }

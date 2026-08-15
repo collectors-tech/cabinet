@@ -241,6 +241,58 @@ describe("ui-screen-wishlist", () => {
     );
   });
 
+  it("UI-SCREEN-WISHLIST-025/#2176 persists and renders the requested target-price currency after reload", () => {
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.request("POST", "/api/items", {
+        brand: "Unknown",
+        category: "Wishlist",
+        part_number: "WISHLIST-CURRENCY-AUD-2176",
+        title: "Wishlist Currency AUD Proof",
+        status: "wishlist",
+      }).then(({ body: item }) => {
+        cy.request("POST", "/api/wishlist", {
+          item_id: item.id,
+          target_price: 61,
+          currency: "AUD",
+          priority: "medium",
+        }).then(({ body: entry }) => {
+          expect(entry.currency).to.eq("AUD");
+        });
+      });
+
+      cy.useBootstrappedProfile(profile_id, profile_name, {
+        path: "/wishlist/",
+      });
+    });
+
+    cy.contains("tr", "Wishlist Currency AUD Proof", { timeout: 20000 })
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid^="wishlist-cost-input-"]')
+          .scrollIntoView()
+          .should("be.visible")
+          .and("have.value", "61");
+        cy.get('[data-testid^="wishlist-cost-currency-"]')
+          .should("be.visible")
+          .and("have.text", "AUD");
+      });
+
+    cy.reload();
+    cy.contains("tr", "Wishlist Currency AUD Proof", { timeout: 20000 })
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid^="wishlist-cost-input-"]')
+          .scrollIntoView()
+          .should("be.visible")
+          .and("have.value", "61");
+        cy.get('[data-testid^="wishlist-cost-currency-"]')
+          .should("be.visible")
+          .and("have.text", "AUD");
+      });
+  });
+
   it("UI-SCREEN-WISHLIST-018 renders compact deterministic row thumbnails", () => {
     signInToWishlist();
 

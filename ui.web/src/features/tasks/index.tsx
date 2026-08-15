@@ -131,6 +131,7 @@ type WishlistEntryPayload = {
   notes?: string
   below_target_now?: boolean
   target_price?: number
+  currency?: string
   highlight_hit?: boolean
   owned?: boolean
   delivered?: boolean
@@ -179,6 +180,14 @@ function normalizeTargetPrice(raw: string) {
     throw new Error('invalid_target_price')
   }
   return parsed
+}
+
+function normalizeCurrency(raw: string) {
+  const normalized = raw.trim().toUpperCase()
+  if (!/^[A-Z]{3}$/.test(normalized)) {
+    throw new Error('invalid_currency')
+  }
+  return normalized
 }
 
 function normalizeOptionalMoney(raw: string) {
@@ -375,6 +384,7 @@ function buildWishlistCsv(tasksToExport: Task[]) {
       'priority',
       'notes',
       'target_price',
+      'currency',
     ].join(','),
     ...tasksToExport.map((task) =>
       [
@@ -384,6 +394,7 @@ function buildWishlistCsv(tasksToExport: Task[]) {
         escapeCell(task.priority),
         escapeCell(task.notes),
         escapeCell(task.targetPrice ?? ''),
+        escapeCell(task.currency ?? 'USD'),
       ].join(',')
     ),
   ].join('\n')
@@ -782,6 +793,7 @@ export function Tasks({
             typeof wishlistEntry?.target_price === 'number'
               ? wishlistEntry.target_price
               : undefined,
+          currency: wishlistEntry?.currency?.trim().toUpperCase() || 'USD',
           marketPrice: pricingSummary.marketPrice,
           priceTrend: pricingSummary.priceTrend,
           priceHistory: pricingSummary.priceHistory,
@@ -973,6 +985,7 @@ export function Tasks({
           priority: normalizeWishlistPriority(draft.priority),
           notes: draft.notes,
           target_price: normalizeTargetPrice(draft.targetPrice),
+          currency: normalizeCurrency(draft.currency),
           owned: draft.owned,
           delivered: draft.delivered,
           price_paid: normalizeOptionalMoney(draft.pricePaid),
@@ -1093,6 +1106,7 @@ export function Tasks({
         changes.priority ?? currentTask.priority
       )
       let nextTargetPrice = changes.targetPrice ?? currentTask.targetPrice ?? 0
+      let nextCurrency = currentTask.currency ?? 'USD'
       const nextOwned = changes.owned ?? currentTask.owned ?? false
       const nextDelivered = changes.delivered ?? currentTask.delivered ?? false
       const nextPricePaid = changes.pricePaid ?? currentTask.pricePaid ?? 0
@@ -1120,6 +1134,9 @@ export function Tasks({
             if (typeof latestEntry?.target_price === 'number') {
               nextTargetPrice = latestEntry.target_price
             }
+            if (latestEntry?.currency?.trim()) {
+              nextCurrency = latestEntry.currency.trim().toUpperCase()
+            }
           }
         } catch {
           // Keep the local row value if the latest entry cannot be read.
@@ -1132,6 +1149,7 @@ export function Tasks({
               ...candidate,
               priority: nextPriority,
               targetPrice: nextTargetPrice,
+              currency: nextCurrency,
               owned: nextOwned,
               delivered: nextDelivered,
               pricePaid: nextPricePaid,
@@ -1151,6 +1169,7 @@ export function Tasks({
                 ...candidate,
                 priority: nextPriority,
                 targetPrice: nextTargetPrice,
+                currency: nextCurrency,
                 owned: nextOwned,
                 delivered: nextDelivered,
                 pricePaid: nextPricePaid,
@@ -1169,6 +1188,7 @@ export function Tasks({
           id: wishlistEntryID,
           item_id: task.itemID,
           priority: nextPriority,
+          currency: nextCurrency,
         }
         if (changes.targetPrice !== undefined) {
           requestBody.target_price = nextTargetPrice
@@ -1406,6 +1426,7 @@ export function Tasks({
               priority: normalizeWishlistPriority(priority),
               notes: task.notes ?? '',
               target_price: task.targetPrice ?? 0,
+              currency: task.currency ?? 'USD',
               highlight_hit: task.highlightHit ?? false,
             }),
           })
@@ -1459,6 +1480,7 @@ export function Tasks({
               priority: normalizeWishlistPriority(task.priority),
               notes: task.notes ?? '',
               target_price: task.targetPrice ?? 0,
+              currency: task.currency ?? 'USD',
               highlight_hit: task.highlightHit ?? false,
               below_target_now: belowTargetNow,
             }),
@@ -1611,6 +1633,7 @@ export function Tasks({
       priority: 'medium',
       notes: content,
       targetPrice: '',
+      currency: 'USD',
       owned: false,
       delivered: false,
       pricePaid: '',
@@ -1668,6 +1691,7 @@ export function Tasks({
         priority: 'medium',
         notes: 'Created from screenshot.',
         targetPrice: '',
+        currency: 'USD',
         owned: false,
         delivered: false,
         pricePaid: '',
@@ -1742,6 +1766,7 @@ export function Tasks({
           priority: 'medium',
           notes: `Created from dropped image: ${file.name}`,
           targetPrice: '',
+          currency: 'USD',
           owned: false,
           delivered: false,
           pricePaid: '',
@@ -1881,6 +1906,7 @@ export function Tasks({
         priority: 'medium',
         notes: `Created from barcode ${barcode}.`,
         targetPrice: '',
+        currency: 'USD',
         owned: false,
         delivered: false,
         pricePaid: '',
