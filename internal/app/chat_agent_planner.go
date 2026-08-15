@@ -107,6 +107,7 @@ func normalizeChatAgentSkillSelection(selection chatAgentSkillSelection, exposed
 		if !plannerSkillExposed(selection.SkillID, exposedSkills) {
 			return plannerRejection("skill_unavailable", "That Cabinet skill is disabled, unavailable, or not exposed for this request.", "Choose an enabled Cabinet skill or adjust Agent Skill settings before retrying.", selection)
 		}
+		selection.Parameters = normalizePlannerSchemaRefParameters(selection.SkillID, selection.Parameters, exposedSkills)
 		if strings.TrimSpace(selection.Message) == "" {
 			selection.Message = "I selected a governed Cabinet skill for this request. Cabinet still controls dispatch and confirmation."
 		}
@@ -156,20 +157,21 @@ func plannerSkillMetadata(skills []agentskills.Skill) []map[string]any {
 			continue
 		}
 		out = append(out, map[string]any{
-			"id":                    skill.ID,
-			"display_name":          skill.DisplayName,
-			"description":           skill.Description,
-			"status":                string(skill.Status),
-			"safety_level":          string(skill.SafetyLevel),
-			"safety_declaration":    plannerSkillSafetyDeclaration(skill),
-			"required_context":      skill.RequiredContext,
-			"required_actions":      plannerSkillRequiredActions(skill),
-			"capabilities":          skill.Capabilities,
-			"input_schema_refs":     skill.InputSchemaRefs,
-			"input_schema":          plannerSkillInputSchema(skill),
-			"permissions":           skill.Permissions,
-			"audit_behavior":        skill.AuditBehavior,
-			"confirmation_required": skill.Permissions.RequiresConfirm,
+			"id":                         skill.ID,
+			"display_name":               skill.DisplayName,
+			"description":                skill.Description,
+			"status":                     string(skill.Status),
+			"safety_level":               string(skill.SafetyLevel),
+			"safety_declaration":         plannerSkillSafetyDeclaration(skill),
+			"required_context":           skill.RequiredContext,
+			"required_actions":           plannerSkillRequiredActions(skill),
+			"capabilities":               skill.Capabilities,
+			"input_schema_refs":          skill.InputSchemaRefs,
+			"optional_input_schema_refs": skill.OptionalInputSchemaRefs,
+			"input_schema":               plannerSkillInputSchema(skill),
+			"permissions":                skill.Permissions,
+			"audit_behavior":             skill.AuditBehavior,
+			"confirmation_required":      skill.Permissions.RequiresConfirm,
 		})
 	}
 	return out
@@ -178,6 +180,9 @@ func plannerSkillMetadata(skills []agentskills.Skill) []map[string]any {
 func plannerSkillRequiredActions(skill agentskills.Skill) []string {
 	if len(skill.RequiredActions) > 0 {
 		return append([]string{}, skill.RequiredActions...)
+	}
+	if len(skill.IntegrationWorkflows) > 0 {
+		return append([]string{}, skill.IntegrationWorkflows...)
 	}
 	return append([]string{}, skill.Capabilities...)
 }
@@ -192,6 +197,15 @@ func plannerSkillInputSchema(skill agentskills.Skill) map[string]any {
 		}
 		properties[key] = plannerSchemaPropertyForKey(key)
 		required = append(required, key)
+	}
+	for _, ref := range skill.OptionalInputSchemaRefs {
+		key := strings.TrimSpace(ref)
+		if key == "" {
+			continue
+		}
+		if _, exists := properties[key]; !exists {
+			properties[key] = plannerSchemaPropertyForKey(key)
+		}
 	}
 	if len(properties) == 0 && skill.SafetyLevel == agentskills.SafetyReadOnly && strings.Contains(skill.ID, ".search") {
 		properties["query"] = map[string]any{
@@ -248,6 +262,60 @@ func plannerSkillExposed(skillID string, exposed []map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func normalizePlannerSchemaRefParameters(skillID string, parameters map[string]any, exposed []map[string]any) map[string]any {
+	if len(parameters) == 0 {
+		return map[string]any{}
+	}
+
+	normalized := make(map[string]any, len(parameters))
+	for key, value := range parameters {
+		normalized[key] = value
+	}
+	for _, skill := range exposed {
+		if strings.TrimSpace(fmt.Sprint(skill["id"])) != strings.TrimSpace(skillID) {
+			continue
+		}
+		refs, _ := skill["input_schema_refs"].([]string)
+		if optional, ok := skill["optional_input_schema_refs"].([]string); ok {
+			refs = append(append([]string{}, refs...), optional...)
+		}
+		if actions, ok := skill["required_actions"].([]string); ok {
+			refs = append(append([]string{}, refs...), actions...)
+		}
+		for _, ref := range refs {
+			ref = strings.TrimSpace(ref)
+			wrapped, exists := normalized[ref]
+			if ref == "" || !exists {
+				continue
+			}
+			decoded := map[string]any{}
+			switch value := wrapped.(type) {
+			case string:
+				if err := json.Unmarshal([]byte(strings.TrimSpace(value)), &decoded); err != nil {
+					continue
+				}
+			case map[string]any:
+				for key, nestedValue := range value {
+					decoded[key] = nestedValue
+				}
+			default:
+				continue
+			}
+			if len(decoded) == 0 {
+				continue
+			}
+			delete(normalized, ref)
+			for key, nestedValue := range decoded {
+				if _, explicit := normalized[key]; !explicit {
+					normalized[key] = nestedValue
+				}
+			}
+		}
+		break
+	}
+	return normalized
 }
 
 func plannerProviderTrace(resp ai.AssistantTurnResponse) map[string]string {
@@ -797,6 +865,9 @@ func previewLocalWritePlannerSelection(ctx context.Context, conn *sql.DB, chatSv
 		if err != nil {
 			return nil, review, fmt.Errorf("create Agent Skill preview for %s: %w", selection.SkillID, err)
 		}
+		if clarification, blocked := plannerPreviewBlockerClarification(preview); blocked {
+			return clarification, review, nil
+		}
 		record, err := createDurableAgentSkillPreview(ctx, conn, req, preview)
 		if err != nil {
 			return nil, review, fmt.Errorf("persist Agent Skill preview for %s: %w", selection.SkillID, err)
@@ -823,6 +894,25 @@ func previewLocalWritePlannerSelection(ctx context.Context, conn *sql.DB, chatSv
 		"mutation_applied":      false,
 		"next_action":           "Review the preview and confirm through the existing Chat confirmation endpoint before Cabinet applies this local change.",
 	}, review, nil
+}
+
+func plannerPreviewBlockerClarification(preview agentskills.PreviewResponse) (map[string]any, bool) {
+	blocker := strings.TrimSpace(preview.Blocker)
+	if blocker != "wishlist_item_context_required" {
+		return nil, false
+	}
+	nextAction := strings.TrimSpace(preview.NextAction)
+	if nextAction == "" {
+		nextAction = "Provide the missing Cabinet record or requested details, then retry before applying any change."
+	}
+	return map[string]any{
+		"decision":        "clarify",
+		"message":         "I need the required Cabinet details before creating an actionable preview.",
+		"error":           map[string]any{"code": "missing_context", "message": "Cabinet rejected an incomplete Agent Skill preview before any mutation."},
+		"missing_context": []string{blocker},
+		"clarification":   map[string]string{blocker: nextAction},
+		"next_action":     nextAction,
+	}, true
 }
 
 func genericPlannerAgentSkillPreview(preview agentskills.PreviewResponse, req agentskills.PreviewRequest, review agentskills.AgentAuthorityReview) map[string]any {

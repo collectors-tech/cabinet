@@ -15,7 +15,7 @@ test('Cabinet 0.1 beta disclosure has one governed source and required release b
   assert.equal(disclosure.schema_version, 1)
   assert.equal(disclosure.product, 'Cabinet')
   assert.equal(disclosure.release_channel, 'private-beta')
-  assert.equal(disclosure.release_version, '0.1.0-beta.2')
+  assert.equal(disclosure.release_version, '0.1.0-beta.3')
   assert.match(disclosure.generated_heading, /Cabinet 0\.1 private beta capabilities and limitations/)
   assert.ok(Array.isArray(disclosure.statements))
 

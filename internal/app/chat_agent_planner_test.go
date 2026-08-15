@@ -303,6 +303,125 @@ func TestChatAgentPlannerUsesDeterministicFakeProviderSkillSelection(t *testing.
 	}
 }
 
+func TestChatAgentPlannerNormalizesSchemaRefWrappedProviderParameters(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Browser Auth Planner Parameters"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Browser Auth Planner Parameters"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	provider := &captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.wishlist.create_entry","parameters":{"wishlist.entry.create":"{\"part_number\":\"CHAT-WISH-BROWSER-AUTH\",\"title\":\"Browser Auth Wishlist\",\"target_price\":37,\"currency\":\"AUD\"}"},"message":"I prepared the wishlist preview."}`}
+	result, handled := dispatchChatAgentProviderPlanner(
+		context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(provider),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Prepare a wishlist entry named Browser Auth Wishlist with target price AUD 37.",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "gpt-5.6-luna"},
+			"agent_context": map[string]any{
+				"profile_id": profile.ID, "thread_id": thread.ID, "route_id": "/chats/",
+				"surface_id": "chats.main", "source_channel": "in-app", "setup_state": "ready",
+				"permission_state": "ask_before_local_changes",
+			},
+		},
+		"message-browser-auth-parameters",
+	)
+	if !handled {
+		t.Fatal("expected Browser Auth wishlist request to enter provider planner")
+	}
+	exposedSkills, _ := provider.req.Context["skills"].([]map[string]any)
+	var wishlistSchema map[string]any
+	for _, exposedSkill := range exposedSkills {
+		if exposedSkill["id"] == "cabinet.wishlist.create_entry" {
+			wishlistSchema, _ = exposedSkill["input_schema"].(map[string]any)
+			break
+		}
+	}
+	properties, _ := wishlistSchema["properties"].(map[string]any)
+	required, _ := wishlistSchema["required"].([]string)
+	if properties["part_number"] == nil || properties["title"] == nil || properties["target_price"] == nil || properties["currency"] == nil ||
+		!slices.Contains(required, "part_number") || !slices.Contains(required, "title") || slices.Contains(required, "target_price") {
+		t.Fatalf("Browser Auth planner schema must expose required identity and optional wishlist planning fields, got %+v", wishlistSchema)
+	}
+	preview, ok := result["preview_result"].(map[string]any)
+	if !ok || preview["blocker"] != "confirmation_required" {
+		t.Fatalf("expected executable wishlist preview from schema-ref parameters, got %+v", result)
+	}
+	parameters, _ := preview["parameters"].(map[string]any)
+	if parameters["part_number"] != "CHAT-WISH-BROWSER-AUTH" || parameters["title"] != "Browser Auth Wishlist" || fmt.Sprint(parameters["target_price"]) != "37" || parameters["currency"] != "AUD" {
+		t.Fatalf("expected flattened Browser Auth parameters, got %+v", parameters)
+	}
+	if _, wrapped := parameters["wishlist.entry.create"]; wrapped {
+		t.Fatalf("schema-ref wrapper must not reach the durable preview: %+v", parameters)
+	}
+	applyRequest, _ := preview["apply_request"].(map[string]any)
+	applyBody, err := json.Marshal(applyRequest)
+	if err != nil {
+		t.Fatalf("marshal generated apply request: %v", err)
+	}
+	apply := doRequest(t, a, http.MethodPost, "/api/agent/skills/apply", strings.NewReader(string(applyBody)), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("generated Browser Auth apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	for _, token := range []string{`"skill_id":"cabinet.wishlist.create_entry"`, `"mutation_applied":true`, `"operation":"wishlist.entry.create"`} {
+		if !strings.Contains(apply.Body.String(), token) {
+			t.Fatalf("generated Browser Auth apply response missing %s: %s", token, apply.Body.String())
+		}
+	}
+
+	incomplete, handled := dispatchChatAgentProviderPlanner(
+		context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.wishlist.create_entry","parameters":{"wishlist.entry.create":"{\"name\":\"Incomplete Browser Auth Wishlist\",\"target_price\":37,\"currency\":\"AUD\"}"},"message":"I prepared the wishlist preview."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Prepare a wishlist entry named Incomplete Browser Auth Wishlist with target price AUD 37.",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "gpt-5.6-luna"},
+			"agent_context": map[string]any{
+				"profile_id": profile.ID, "thread_id": thread.ID, "route_id": "/chats/",
+				"surface_id": "chats.main", "source_channel": "in-app", "setup_state": "ready",
+				"permission_state": "ask_before_local_changes",
+			},
+		},
+		"message-browser-auth-incomplete-parameters",
+	)
+	if !handled {
+		t.Fatal("expected incomplete Browser Auth wishlist request to enter provider planner")
+	}
+	if incomplete["preview_result"] != nil || incomplete["decision"] != "clarify" {
+		t.Fatalf("incomplete Browser Auth parameters must ask for context without an actionable preview: %+v", incomplete)
+	}
+	errPayload, _ := incomplete["error"].(map[string]any)
+	if errPayload["code"] != "missing_context" {
+		t.Fatalf("incomplete Browser Auth parameters must expose missing_context, got %+v", incomplete)
+	}
+}
+
 func TestChatAgentPlannerRejectsOrClarifiesUnsafeSelections(t *testing.T) {
 	t.Parallel()
 
