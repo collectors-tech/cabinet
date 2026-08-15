@@ -31,10 +31,12 @@ describe('collections-sorting-no-mutation', () => {
     },
   ]
 
-  function rowTestIDs(selector: string) {
-    return cy.get(selector).then(($rows) =>
-      [...$rows].map((row) => row.getAttribute('data-testid'))
-    )
+  function expectRowTestIDs(selector: string, expected: string[]) {
+    cy.get(selector).should(($rows) => {
+      expect(
+        [...$rows].map((row) => row.getAttribute('data-testid'))
+      ).to.deep.equal(expected)
+    })
   }
 
   function sortColumnDescending(tableSelector: string, columnName: string) {
@@ -109,26 +111,28 @@ describe('collections-sorting-no-mutation', () => {
       'contain.text',
       'All Items'
     )
-    rowTestIDs(
-      '[data-testid="collections-shared-table"] tbody tr[data-testid^="collections-row-"]'
-    ).should('deep.equal', [
-      'collections-row-all-items',
-      'collections-row-alpha-bin',
-      'collections-row-middle-shelf',
-      'collections-row-zulu-vault',
-    ])
+    expectRowTestIDs(
+      '[data-testid="collections-shared-table"] tbody tr[data-testid^="collections-row-"]',
+      [
+        'collections-row-all-items',
+        'collections-row-alpha-bin',
+        'collections-row-middle-shelf',
+        'collections-row-zulu-vault',
+      ]
+    )
     cy.get('[data-testid="collections-members-table"]').should('not.exist')
     cy.get('@saveCollectionSettings.all').should('have.length', 0)
 
     sortColumnDescending('[data-testid="collections-shared-table"]', 'Collection')
-    rowTestIDs(
-      '[data-testid="collections-shared-table"] tbody tr[data-testid^="collections-row-"]'
-    ).should('deep.equal', [
-      'collections-row-zulu-vault',
-      'collections-row-middle-shelf',
-      'collections-row-alpha-bin',
-      'collections-row-all-items',
-    ])
+    expectRowTestIDs(
+      '[data-testid="collections-shared-table"] tbody tr[data-testid^="collections-row-"]',
+      [
+        'collections-row-zulu-vault',
+        'collections-row-middle-shelf',
+        'collections-row-alpha-bin',
+        'collections-row-all-items',
+      ]
+    )
     cy.get('[data-testid="collections-active-context"]').should(
       'contain.text',
       'All Items'
