@@ -15,9 +15,9 @@ const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 
 const cabinetFixture = async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cabinet-release-package-'))
-  const filename = 'cabinet-0.1.0-beta.5-windows-amd64-portable.zip'
+  const filename = 'cabinet-0.1.0-beta.6-windows-amd64-portable.zip'
   const checksumFilename = `${filename}.sha256`
-  const notesFilename = 'cabinet-0.1.0-beta.5-release-notes.md'
+  const notesFilename = 'cabinet-0.1.0-beta.6-release-notes.md'
   const packageEntries = new Map([
     ['README.md', Buffer.from('r')],
     ['WINDOWS-PORTABLE-BETA.md', Buffer.from('w')],
@@ -30,12 +30,12 @@ const cabinetFixture = async () => {
   const disclosureNotes = renderBetaDisclosureMarkdown(disclosure, { format: 'release-notes' })
   await writeFile(join(directory, filename), archive)
   await writeFile(join(directory, checksumFilename), `${checksum}  ${filename}\n`)
-  await writeFile(join(directory, notesFilename), `# Cabinet 0.1.0-beta.5\n\nCommit: ${sourceCommit}\n\nWindows portable package; not an installer.\n\n${disclosureNotes}`)
+  await writeFile(join(directory, notesFilename), `# Cabinet 0.1.0-beta.6\n\nCommit: ${sourceCommit}\n\nWindows portable package; not an installer.\n\n${disclosureNotes}`)
   const manifest = {
     schema_version: 1,
     product: 'Cabinet',
     channel: 'private-beta',
-    version: '0.1.0-beta.5',
+    version: '0.1.0-beta.6',
     source_commit: sourceCommit,
     build_date: '2026-08-06T00:00:00Z',
     publication_state: 'private_candidate_not_published',
@@ -70,7 +70,7 @@ test('creates one source-bound non-publishing Cabinet and companion bundle', asy
     schema_version: 1,
     product: 'Cabinet Browser Companion',
     channel: 'private-beta',
-    version_name: '0.1.0-beta.5.gcccccccccccc',
+    version_name: '0.1.0-beta.6.gcccccccccccc',
     source_commit: sourceCommit,
     publication_state: 'private_candidate_not_published',
     protocol_compatibility: { minimum: '1', maximum: '1' },
