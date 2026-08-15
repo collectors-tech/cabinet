@@ -232,6 +232,13 @@ func TestWishlistAndCollectionsSkillsExposePreviewBoundaries(t *testing.T) {
 	if createEntry.Allowed || createEntry.Blocker != "wishlist_item_context_required" {
 		t.Fatalf("expected Wishlist item context blocker, got %+v", createEntry)
 	}
+	createWishlistSkill, ok := registry.Resolve("cabinet.wishlist.create_entry")
+	if !ok || !slices.Contains(createWishlistSkill.InputSchemaRefs, "part_number") ||
+		!slices.Contains(createWishlistSkill.InputSchemaRefs, "title") ||
+		!slices.Contains(createWishlistSkill.OptionalInputSchemaRefs, "target_price") ||
+		!slices.Contains(createWishlistSkill.OptionalInputSchemaRefs, "currency") {
+		t.Fatalf("Wishlist create should expose required identity and optional planning fields, got %+v", createWishlistSkill)
+	}
 
 	searchCollections, ok := registry.Resolve("cabinet.collections.search")
 	if !ok {
