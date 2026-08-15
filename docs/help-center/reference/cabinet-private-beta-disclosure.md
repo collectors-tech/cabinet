@@ -1,7 +1,7 @@
 # Cabinet 0.1 private beta capabilities and limitations
 
 Release channel: private-beta
-Release version: 0.1.0-beta.3
+Release version: 0.1.0-beta.4
 
 This article is generated from the governed release disclosure source so the product UI and release notes stay aligned.
 
