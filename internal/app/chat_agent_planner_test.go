@@ -359,8 +359,10 @@ func TestNormalizeIntegrationPlannerParametersCanonicalizesLiveBrowserAuthProse(
 
 	profileID := "c5f12408-10b1-4532-8b46-1fbdead1442f"
 	parameters := normalizeIntegrationPlannerParameters("cabinet.integrations.configure_provider", map[string]any{
-		"provider_id":   "voglers",
-		"setup_payload": "Configure Voglers for its public catalogue and enable it for profile " + profileID + "; do not use or request an API key or secret.",
+		"provider_id":     "voglers",
+		"setup_payload":   "Configure Voglers for its public catalogue and enable it for profile " + profileID + "; do not use or request an API key or secret.",
+		"provider_secret": "  ",
+		"api_key":         nil,
 	})
 	for key, want := range map[string]any{
 		"provider_id": "voglers", "setup_payload": "public_catalogue", "setup_step": "public_catalogue", "marketplace": "public",
@@ -374,6 +376,17 @@ func TestNormalizeIntegrationPlannerParametersCanonicalizesLiveBrowserAuthProse(
 		if strings.Contains(strings.ToLower(serialized), forbidden) {
 			t.Fatalf("live prompt prose reached normalized provider parameters (%s): %+v", forbidden, parameters)
 		}
+	}
+	if containsSensitiveAgentSkillPreviewValue(parameters) {
+		t.Fatalf("empty optional secret fields must not route a Browser Auth preview through secure storage: %+v", parameters)
+	}
+	nonEmptySecret := normalizeIntegrationPlannerParameters("cabinet.integrations.configure_provider", map[string]any{
+		"provider_id":     "voglers",
+		"setup_payload":   "public_catalogue",
+		"provider_secret": "must-remain-governed",
+	})
+	if !containsSensitiveAgentSkillPreviewValue(nonEmptySecret) || nonEmptySecret["provider_secret"] != "must-remain-governed" {
+		t.Fatalf("non-empty provider secret was not retained for governed secure handling: %+v", nonEmptySecret)
 	}
 
 	a := newTestApp(t)

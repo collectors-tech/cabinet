@@ -175,13 +175,19 @@ func TestSyntheticAgentProviderRegistrationAndTelegramCompatibility(t *testing.T
 			t.Fatalf("%s provider turn: %v", testCase.name, err)
 		}
 		var plan struct {
-			SkillID string `json:"skill_id"`
+			SkillID    string         `json:"skill_id"`
+			Parameters map[string]any `json:"parameters"`
 		}
 		if err := json.Unmarshal([]byte(response.Text), &plan); err != nil || plan.SkillID != testCase.wantSkill {
 			t.Fatalf("%s plan=%+v err=%v response=%+v", testCase.name, plan, err, response)
 		}
 		if response.Metadata["network"] != "disabled" || response.Metadata["test_provider"] != "true" || response.Metadata["live_provider"] != "false" {
 			t.Fatalf("%s provider provenance=%+v", testCase.name, response.Metadata)
+		}
+		if testCase.name == "live integration prose" {
+			if plan.Parameters["provider_secret"] != "" || plan.Parameters["api_key"] != nil {
+				t.Fatalf("live integration fixture must reproduce empty optional secret fields: %+v", plan.Parameters)
+			}
 		}
 	}
 
