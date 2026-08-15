@@ -15,7 +15,7 @@ describe("Cabinet beta packaging contract", () => {
     assert.equal(existsSync(versionPath), true);
 
     const payload = JSON.parse(readFileSync(versionPath, "utf8"));
-    assert.equal(payload.version, "0.1.0-beta.8");
+    assert.equal(payload.version, "0.1.0-beta.9");
     assert.match(payload.channel, /^private-beta$/);
   });
 
@@ -122,14 +122,14 @@ describe("Cabinet beta packaging contract", () => {
   it("keeps the non-publishing artifact validation checklist bound to the beta release gate", () => {
     const checklist = readRepoFile("release/windows-portable-artifact-validation.md");
 
-    assert.match(checklist, /cabinet-0\.1\.0-beta\.8-windows-amd64-portable\.zip/);
-    assert.match(checklist, /cabinet-0\.1\.0-beta\.8-windows-amd64-portable\.zip\.sha256/);
-    assert.match(checklist, /cabinet-0\.1\.0-beta\.8-release-notes\.md/);
+    assert.match(checklist, /cabinet-0\.1\.0-beta\.9-windows-amd64-portable\.zip/);
+    assert.match(checklist, /cabinet-0\.1\.0-beta\.9-windows-amd64-portable\.zip\.sha256/);
+    assert.match(checklist, /cabinet-0\.1\.0-beta\.9-release-notes\.md/);
     assert.match(checklist, /WINDOWS-PORTABLE-BETA\.md/);
     assert.match(checklist, /cabinet-mcp\.exe/);
     assert.match(checklist, /\/healthz/);
     assert.match(checklist, /\/api\/runtime/);
-    assert.match(checklist, /app_version=0\.1\.0-beta\.8/);
+    assert.match(checklist, /app_version=0\.1\.0-beta\.9/);
     assert.match(checklist, /build_revision.*source_commit/i);
     assert.match(checklist, /#1864 approval/);
     assert.match(checklist, /must not publish/i);
@@ -138,14 +138,14 @@ describe("Cabinet beta packaging contract", () => {
   it("keeps the install and existing-data upgrade validation checklist bound to the beta release gate", () => {
     const checklist = readRepoFile("release/windows-portable-upgrade-validation.md");
 
-    assert.match(checklist, /cabinet-0\.1\.0-beta\.8-windows-amd64-portable\.zip/);
+    assert.match(checklist, /cabinet-0\.1\.0-beta\.9-windows-amd64-portable\.zip/);
     assert.match(checklist, /\.sha256/);
     assert.match(checklist, /clean install and start/i);
     assert.match(checklist, /existing data directory upgrade/i);
     assert.match(checklist, /backup before replacing or reusing the existing data directory/i);
     assert.match(checklist, /\/healthz/);
     assert.match(checklist, /\/api\/runtime/);
-    assert.match(checklist, /app_version=0\.1\.0-beta\.8/);
+    assert.match(checklist, /app_version=0\.1\.0-beta\.9/);
     assert.match(checklist, /build_revision.*source_commit/i);
     assert.match(checklist, /inventory item count/i);
     assert.match(checklist, /wishlist item count/i);
