@@ -1606,6 +1606,8 @@ func applyAgentWishlistSkill(ctx context.Context, conn *sql.DB, skillID, profile
 		result["created_item"] = createdItem
 		result["wishlist_entry_id"] = entry.ID
 		result["wishlist_entry"] = entry
+		result["target_price"] = entry.TargetPrice
+		result["currency"] = entry.Currency
 		result["wishlist_persisted"] = true
 		result["next_action"] = "Open Wishlist to review the persisted entry before purchase or delete actions."
 	case "cabinet.wishlist.update_entry", "cabinet.wishlist.mark_purchased":
@@ -1634,6 +1636,8 @@ func applyAgentWishlistSkill(ctx context.Context, conn *sql.DB, skillID, profile
 		result["item_id"] = reloaded.ItemID
 		result["wishlist_entry_id"] = reloaded.ID
 		result["wishlist_entry"] = reloaded
+		result["target_price"] = reloaded.TargetPrice
+		result["currency"] = reloaded.Currency
 		result["wishlist_persisted"] = true
 		if skillID == "cabinet.wishlist.mark_purchased" {
 			result["purchase_sync_provenance"] = true
@@ -1744,6 +1748,9 @@ func agentWishlistEntryFromParams(params map[string]any, base wishlist.Entry) wi
 	}
 	if value, ok := params["target_price"]; ok && value != nil {
 		out.TargetPrice = floatMapParam(params, "target_price")
+	}
+	if currency := stringMapParam(params, "currency"); currency != "" {
+		out.Currency = currency
 	}
 	if priority := stringMapParam(params, "priority"); priority != "" {
 		out.Priority = priority

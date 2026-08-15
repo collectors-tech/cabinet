@@ -475,6 +475,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			profile_id TEXT NOT NULL DEFAULT '',
 			item_id TEXT NOT NULL UNIQUE,
 			target_price REAL NOT NULL DEFAULT 0,
+			currency TEXT NOT NULL DEFAULT 'USD',
 			priority TEXT NOT NULL DEFAULT 'normal',
 			notes TEXT NOT NULL DEFAULT '',
 			highlight_hit INTEGER NOT NULL DEFAULT 1,
@@ -924,6 +925,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "currency", "TEXT NOT NULL DEFAULT 'USD'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.currency: %w", err)
 	}
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "below_target_now", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()

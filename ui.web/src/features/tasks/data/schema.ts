@@ -19,6 +19,7 @@ export const taskSchema = z.object({
   notes: z.string().optional(),
   belowTargetNow: z.boolean().optional(),
   targetPrice: z.number().optional(),
+  currency: z.string().optional(),
   marketPrice: z.number().optional(),
   priceTrend: z.enum(['up', 'steady', 'down', 'unknown']).optional(),
   priceHistory: z.array(z.number()).optional(),

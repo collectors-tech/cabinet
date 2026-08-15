@@ -243,6 +243,18 @@ and require an explicit permanent-delete confirmation from the Deleted view.
 - **AND** the modal MUST explain that inventory records already created from the wishlist item will not be deleted
 - **AND** Cabinet MUST NOT permanently delete the row until the user confirms the modal
 
+### Requirement UI-SCREEN-WISHLIST-025: Wishlist SHALL preserve and display monetary currency
+
+Wishlist SHALL display the persisted three-letter currency beside target and purchase amounts, expose currency in create/edit planning, and preserve it across reload and CSV import/export.
+
+#### Scenario: Display Chat-managed target-price currency after reload
+
+- **GIVEN** a wishlist entry is persisted with target price `61` and currency `AUD`
+- **WHEN** the user opens Wishlist and reloads the route
+- **THEN** the same row MUST visibly identify `AUD` and `61.00`
+- **AND** the create/edit panel MUST expose an understandable three-letter currency field
+- **AND** export and import MUST retain the currency instead of silently converting it to USD
+
 ## Use-Case IDs and E2E Mapping
 
 | UC ID     | Flow                             | Expected Result                                                                                                        | E2E Mapping                                                                                                                                            |
@@ -256,3 +268,4 @@ and require an explicit permanent-delete confirmation from the Deleted view.
 | UC-WSH-24 | Show compact card thumbnails     | Cards render media thumbnails or a no-asset placeholder in a compact responsive grid                                    | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-024 renders compact card thumbnails and placeholders`    |
 | UC-WSH-19 | Create title-only wishlist entry | Title-only drafts persist with generated metadata and no generic failure copy                                           | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-019 creates a title-only wishlist entry`                  |
 | UC-WSH-22 | Navigate edit panel entries      | Previous/Next updates the side-panel form in place and moves the active row highlight                                  | implemented: `ui.web/cypress/e2e/wishlist/wishlist-row-side-panel/spec.cy.ts` `opens a right-side edit panel on double click and navigates visible records` |
+| UC-WSH-25 | Preserve monetary currency       | API-backed currency remains visible after reload and survives edit/import/export                                        | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-025/#2176 persists and renders the requested target-price currency after reload` |

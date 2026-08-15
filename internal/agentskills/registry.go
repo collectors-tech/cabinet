@@ -572,7 +572,7 @@ func (r Registry) Preview(req PreviewRequest) (PreviewResponse, error) {
 	if strings.HasPrefix(skill.ID, "cabinet.wishlist.") {
 		resp.Allowed = skill.SafetyLevel == SafetyReadOnly
 		resp.Blocker = previewWishlistBlocker(skill.ID, params)
-		resp.Target = previewTarget(params, "wishlist_entry_id", "entry_id", "item_id", "title", "part_number", "priority", "owned", "delivered", "quantity", "needed_quantity")
+		resp.Target = previewTarget(params, "wishlist_entry_id", "entry_id", "item_id", "title", "part_number", "target_price", "currency", "priority", "owned", "delivered", "quantity", "needed_quantity")
 		if resp.Blocker == "" && !resp.Allowed {
 			resp.Blocker = "confirmation_required"
 		}

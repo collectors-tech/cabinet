@@ -855,7 +855,7 @@ func isBoundedAgentSkillPreviewResultKey(key string) bool {
 	for _, exact := range []string{
 		"operation", "profile_id", "item_id", "wishlist_id", "wishlist_entry_id", "collection_id", "collection_name",
 		"media_id", "discovery_id", "result_id", "watch_id", "order_id", "line_item_id", "provider_id", "user_id",
-		"removed_user_id", "setting_key", "part_number", "title", "status", "route", "next_action", "mutation_applied",
+		"removed_user_id", "setting_key", "part_number", "title", "target_price", "currency", "status", "route", "next_action", "mutation_applied",
 		"destructive_confirmation", "restore_drill_verified", "profile_isolated", "profile_scope", "integrity_check",
 		"selected_backup_redacted", "raw_payload_redacted", "restored_manifest_sha256", "restored_manifest_bytes",
 		"pre_restore_backup_taken", "restore_recovery_available",

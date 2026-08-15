@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SelectDropdown } from '@/components/select-dropdown'
 import { priorities } from '../data/data'
 import { type Task } from '../data/schema'
+import { formatMoney } from './tasks-column-formatters'
 
 export type WishlistEntryDraft = {
   title: string
@@ -37,6 +38,7 @@ export type WishlistEntryDraft = {
   priority: string
   notes: string
   targetPrice: string
+  currency: string
   owned: boolean
   delivered: boolean
   pricePaid: string
@@ -90,6 +92,10 @@ const wishlistFormSchema = z.object({
     }
     return !Number.isNaN(Number(value)) && Number(value) >= 0
   }, 'Target price must be a positive number.'),
+  currency: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z]{3}$/, 'Currency must be a three-letter code.'),
   pricePaid: z.string().refine((value) => {
     if (value.trim() === '') {
       return true
@@ -137,6 +143,7 @@ function wishlistDefaults(currentRow?: Task): WishlistForm {
       typeof currentRow?.targetPrice === 'number' && currentRow.targetPrice > 0
         ? String(currentRow.targetPrice)
         : '',
+    currency: currentRow?.currency ?? 'USD',
     pricePaid: formatMoneyDraft(currentRow?.pricePaid),
     purchaseUrl: currentRow?.purchaseUrl ?? '',
     purchaseDate: currentRow?.purchaseDate ?? '',
@@ -144,16 +151,6 @@ function wishlistDefaults(currentRow?: Task): WishlistForm {
     quantity: formatIntegerDraft(currentRow?.quantity, 0),
     neededQuantity: formatIntegerDraft(currentRow?.neededQuantity, 1),
   }
-}
-
-function formatDisplayMoney(value: number | undefined) {
-  if (typeof value !== 'number' || value <= 0) {
-    return '-'
-  }
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
 }
 
 export function TasksMutateDrawer({
@@ -223,6 +220,7 @@ export function TasksMutateDrawer({
         priority: data.priority.trim(),
         notes: data.notes.trim(),
         targetPrice: data.targetPrice.trim(),
+        currency: data.currency.trim().toUpperCase(),
         owned: data.owned || data.delivered,
         delivered: data.delivered,
         pricePaid: data.pricePaid.trim(),
@@ -505,7 +503,7 @@ export function TasksMutateDrawer({
                       className='font-medium'
                       data-testid='wishlist-edit-market-price'
                     >
-                      {formatDisplayMoney(currentRow.marketPrice)}
+                      {formatMoney(currentRow.marketPrice)}
                     </p>
                   </div>
                   <div data-testid='wishlist-edit-price-graph'>
@@ -525,25 +523,48 @@ export function TasksMutateDrawer({
                   </div>
                 </div>
               ) : null}
-              <FormField
-                control={wishlistForm.control}
-                name='targetPrice'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Target Price</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type='number'
-                        min='0'
-                        step='0.01'
-                        placeholder='Optional target price'
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className='grid gap-4 sm:grid-cols-[1fr_8rem]'>
+                <FormField
+                  control={wishlistForm.control}
+                  name='targetPrice'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Target Price</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='0'
+                          step='0.01'
+                          placeholder='Optional target price'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='currency'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Currency</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          maxLength={3}
+                          autoCapitalize='characters'
+                          placeholder='USD'
+                          onChange={(event) =>
+                            field.onChange(event.target.value.toUpperCase())
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <div className='grid gap-4 sm:grid-cols-2'>
                 <FormField
                   control={wishlistForm.control}

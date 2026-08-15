@@ -1,12 +1,18 @@
 import { type Task } from '../data/schema'
 
-export function formatMoney(value: number | undefined) {
+export function normalizeCurrencyCode(value: string | undefined) {
+  const normalized = value?.trim().toUpperCase() ?? ''
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : 'USD'
+}
+
+export function formatMoney(value: number | undefined, currency?: string) {
   if (typeof value !== 'number' || value <= 0) {
     return '-'
   }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: normalizeCurrencyCode(currency),
+    currencyDisplay: currency ? 'code' : 'symbol',
   }).format(value)
 }
 

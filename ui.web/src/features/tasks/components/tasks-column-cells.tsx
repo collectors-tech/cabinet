@@ -327,10 +327,16 @@ export function WishlistCostCell({
   return (
     <div
       data-testid={`wishlist-cost-stepper-${task.id}`}
-      className='flex w-[8.75rem] items-center'
+      className='relative flex w-[8.75rem] items-center'
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
+      <span
+        className='absolute -top-3 left-8 text-[10px] leading-none font-semibold text-muted-foreground'
+        data-testid={`wishlist-cost-currency-${task.id}`}
+      >
+        {task.currency ?? 'USD'}
+      </span>
       <Button
         type='button'
         variant='outline'
@@ -462,7 +468,7 @@ export function WishlistPricePaidCell({ task }: { task: Task }) {
       className='min-w-[76px] font-medium'
       data-testid={`wishlist-price-paid-value-${task.id}`}
     >
-      {formatMoney(task.pricePaid)}
+      {formatMoney(task.pricePaid, task.currency)}
     </span>
   )
 }
