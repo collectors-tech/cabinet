@@ -168,6 +168,7 @@ func TestSyntheticAgentProviderRegistrationAndTelegramCompatibility(t *testing.T
 		{name: "durable preview", prompt: "Add wishlist entry AGENT-2097-SYNTHETIC title Synthetic title", wantSkill: "cabinet.wishlist.create_entry"},
 		{name: "Telegram preview", prompt: "Create item TG-E2E-2086", wantSkill: "cabinet.inventory.create_item"},
 		{name: "destructive user preview", prompt: "Remove user AGENT-2089-SYNTHETIC target invited-user-001", wantSkill: "cabinet.users.remove_user"},
+		{name: "live integration prose", prompt: "Configure provider Voglers AGENT-2185-SYNTHETIC for its public catalogue", wantSkill: "cabinet.integrations.configure_provider"},
 	} {
 		response, err := provider.RunAssistantTurn(t.Context(), ai.AssistantTurnRequest{Messages: []ai.AssistantTurnMessage{{Role: "user", Content: testCase.prompt}}})
 		if err != nil {

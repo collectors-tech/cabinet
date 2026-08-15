@@ -354,6 +354,47 @@ func TestChatAgentPlannerNormalizesFriendlyIntegrationConfiguration(t *testing.T
 	}
 }
 
+func TestNormalizeIntegrationPlannerParametersCanonicalizesLiveBrowserAuthProse(t *testing.T) {
+	t.Parallel()
+
+	profileID := "c5f12408-10b1-4532-8b46-1fbdead1442f"
+	parameters := normalizeIntegrationPlannerParameters("cabinet.integrations.configure_provider", map[string]any{
+		"provider_id":   "voglers",
+		"setup_payload": "Configure Voglers for its public catalogue and enable it for profile " + profileID + "; do not use or request an API key or secret.",
+	})
+	for key, want := range map[string]any{
+		"provider_id": "voglers", "setup_payload": "public_catalogue", "setup_step": "public_catalogue", "marketplace": "public",
+	} {
+		if got := parameters[key]; got != want {
+			t.Fatalf("normalized live Browser Auth parameter %s=%v, want %v; all=%+v", key, got, want, parameters)
+		}
+	}
+	serialized := fmt.Sprint(parameters)
+	for _, forbidden := range []string{profileID, "api key", "secret"} {
+		if strings.Contains(strings.ToLower(serialized), forbidden) {
+			t.Fatalf("live prompt prose reached normalized provider parameters (%s): %+v", forbidden, parameters)
+		}
+	}
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Live Browser Auth Canonicalization"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, _, err := persistAgentProviderSettings(context.Background(), a.db, profile.ID, "voglers", parameters); err != nil {
+		t.Fatalf("persist canonical Browser Auth provider settings: %v", err)
+	}
+	assertProfileSetting(t, a, profile.ID, "integration.voglers.enabled", "true")
+	assertProfileSetting(t, a, profile.ID, "integration.voglers.setup_step", "public_catalogue")
+	assertProfileSetting(t, a, profile.ID, "integration.voglers.marketplace", "public")
+}
+
 func TestChatAgentPlannerNormalizesSchemaRefWrappedProviderParameters(t *testing.T) {
 	t.Parallel()
 
