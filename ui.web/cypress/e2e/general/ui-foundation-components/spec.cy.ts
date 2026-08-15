@@ -8,8 +8,11 @@ describe('general/ui-foundation-components', () => {
 
   it('UI-FOUNDATION-COMPONENTS-001 exposes explicit foundation component contract surface on settings profile', () => {
     bootstrapAndSignIn('/settings/profile')
+    cy.get('[data-testid="settings-header-title"]').should(
+      'contain.text',
+      'Profile Settings'
+    )
     cy.get('main').within(() => {
-      cy.contains('h1', /^\s*Settings\s*$/).should('be.visible')
       cy.get('input[placeholder="cabinet-user"]').should('be.visible')
       cy.contains('button', 'Update profile').should('be.visible')
     })
@@ -85,6 +88,8 @@ describe('general/ui-foundation-components', () => {
     cy.contains('button', 'Update profile').should('be.visible')
     cy.get('[aria-label="Open theme settings"]').should('be.visible')
     cy.visit('/users')
-    cy.contains('Users').should('be.visible')
+    cy.get('[data-testid="users-header-title"]').should('contain.text', 'Users')
+    cy.get('[data-testid="users-workspace"]').should('be.visible')
+    cy.get('input[placeholder="Filter users..."]').should('be.visible')
   })
 })
