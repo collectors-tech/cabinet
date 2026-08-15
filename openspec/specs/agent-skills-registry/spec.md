@@ -215,6 +215,12 @@ Cabinet Agent SHALL let natural-language Chat configure integration providers th
 - **AND** profile identifiers, prompt prose, API-key wording, and secret wording SHALL NOT enter persisted provider setup fields
 - **AND** confirmed apply and replay protection SHALL retain the same governed token-only behavior
 
+#### Scenario: Discard empty optional secret fields from Browser Auth plans
+- **GIVEN** a Browser Auth provider selects `cabinet.integrations.configure_provider` and includes an empty or null optional secret-shaped field
+- **WHEN** Cabinet normalizes the provider plan before durable preview creation
+- **THEN** Cabinet SHALL discard the empty field so a credential-free Browser Auth preview does not invoke secure secret storage
+- **AND** any non-empty secret value SHALL remain governed, write-only, redacted from evidence, and stored only through the secure secret boundary
+
 ### Requirement: Marketplace behavior SHALL remain explicitly deferred
 Cabinet SHALL not treat local skill import support as a public marketplace implementation.
 

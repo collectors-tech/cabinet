@@ -63,8 +63,10 @@ func (e2eSyntheticAgentProvider) RunAssistantTurn(ctx context.Context, req ai.As
 			"decision": "select_skill",
 			"skill_id": "cabinet.integrations.configure_provider",
 			"parameters": map[string]any{
-				"provider_id":   "voglers",
-				"setup_payload": "Configure Voglers for its public catalogue and enable it for profile e2e-profile-001; do not use or request an API key or secret.",
+				"provider_id":     "voglers",
+				"setup_payload":   "Configure Voglers for its public catalogue and enable it for profile e2e-profile-001; do not use or request an API key or secret.",
+				"provider_secret": "",
+				"api_key":         nil,
 			},
 			"message": "I prepared the Voglers public catalogue configuration for governed review.",
 		}

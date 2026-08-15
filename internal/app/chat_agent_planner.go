@@ -138,6 +138,9 @@ func normalizeIntegrationPlannerParameters(skillID string, parameters map[string
 
 	normalized := make(map[string]any, len(parameters)+4)
 	for key, value := range parameters {
+		if isSensitiveAgentSkillPreviewKey(key) && emptyPlannerOptionalSecretValue(value) {
+			continue
+		}
 		normalized[key] = value
 	}
 	providerID := strings.ToLower(strings.TrimSpace(fmt.Sprint(normalized["provider_id"])))
@@ -183,6 +186,14 @@ func normalizeIntegrationPlannerParameters(skillID string, parameters map[string
 	delete(normalized, "provider_name")
 	delete(normalized, "catalogue")
 	return normalized
+}
+
+func emptyPlannerOptionalSecretValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	text, ok := value.(string)
+	return ok && strings.TrimSpace(text) == ""
 }
 
 func integrationParameterMentionsPublicCatalogue(value any) bool {
