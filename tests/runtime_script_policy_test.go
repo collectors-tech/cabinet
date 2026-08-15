@@ -55,6 +55,28 @@ func TestCypressScriptDisablesBrowserAutoOpenForManagedRuns(t *testing.T) {
 	}
 }
 
+func TestCypressScriptForcesManagedRuntimeLoopbackBind(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "cypress.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read cypress script: %v", err)
+	}
+	content := string(raw)
+	for _, snippet := range []string{
+		`CABINET_BIND_MODE = "local"`,
+		`CABINET_HOST = "127.0.0.1"`,
+		`CABINET_PORT = "$runtimePort"`,
+		`CABINET_WEBAUTHN_RP_ID = "127.0.0.1"`,
+		`CABINET_WEBAUTHN_ORIGIN = $BaseUrl`,
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected managed Cypress runtime to force loopback bind snippet %q", snippet)
+		}
+	}
+}
+
 func TestCypressScriptFailsOnStaleRuntimeAppVersion(t *testing.T) {
 	t.Parallel()
 
