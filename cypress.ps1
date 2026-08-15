@@ -688,6 +688,11 @@ try {
         Write-Step "Runtime executable resolved: $resolvedRuntimeExecutablePath"
         $serverEnv = @{
           CABINET_E2E_MODE = "1"
+          CABINET_BIND_MODE = "local"
+          CABINET_HOST = "127.0.0.1"
+          CABINET_PORT = "$runtimePort"
+          CABINET_WEBAUTHN_RP_ID = "127.0.0.1"
+          CABINET_WEBAUTHN_ORIGIN = $BaseUrl
           CABINET_ALLOW_INSECURE_SECRET_FALLBACK = "1"
           CABINET_FALLBACK_SECRET_PEPPER = "cypress-e2e-secret-fallback"
         }
@@ -703,6 +708,11 @@ try {
         Write-Step "Runtime executable resolved: go run ./cmd/cabinet (project-local bin executable missing)"
         $serverEnv = @{
           CABINET_E2E_MODE = "1"
+          CABINET_BIND_MODE = "local"
+          CABINET_HOST = "127.0.0.1"
+          CABINET_PORT = "$runtimePort"
+          CABINET_WEBAUTHN_RP_ID = "127.0.0.1"
+          CABINET_WEBAUTHN_ORIGIN = $BaseUrl
           CABINET_ALLOW_INSECURE_SECRET_FALLBACK = "1"
           CABINET_FALLBACK_SECRET_PEPPER = "cypress-e2e-secret-fallback"
         }
