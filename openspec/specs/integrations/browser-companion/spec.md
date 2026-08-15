@@ -46,6 +46,12 @@ One extension installation SHALL establish trust through a short-lived request, 
 - **AND** Cabinet MUST persist only a credential verifier
 - **AND** every subsequent exchange attempt for that request MUST fail as replayed.
 
+#### Scenario: Startup reconnect cannot block popup command handling
+- **GIVEN** a paired Browser Companion service worker starts while the Cabinet reconnect request remains pending
+- **WHEN** the popup sends `host:get-state`
+- **THEN** the worker MUST answer immediately with the persisted local Cabinet URL and bounded connection state
+- **AND** startup reconnect MUST continue asynchronously without blocking popup commands.
+
 ### Requirement INTEGRATION-068: Companion sessions MUST be isolated and revocable
 Every session SHALL be bound to one Cabinet instance, profile, extension origin, device identity, protocol version, expiry and capability set.
 

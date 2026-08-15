@@ -48,3 +48,79 @@ test('popup provider projection is Cabinet-driven rather than hardcoded', async 
   assert.match(popup, /modules/i)
   assert.match(popup, /integration_instance_id/)
 })
+
+test('service worker answers host state while startup reconnect is pending', async () => {
+  const previousChrome = globalThis.chrome
+  const previousFetch = globalThis.fetch
+  const listeners = { onMessage: [], onStartup: [], onInstalled: [], onAlarm: [] }
+  const storage = {
+    'cabinet.companion.credential.v1': 'stored-credential',
+    'cabinet.companion.host-state.v1': {
+      cabinet_url: 'http://127.0.0.1:19010/',
+      connection: 'connected',
+      modules: [],
+    },
+  }
+  const addListener = (name) => (listener) => listeners[name].push(listener)
+
+  globalThis.chrome = {
+    action: {
+      setBadgeBackgroundColor: (_details) => {},
+      setBadgeText: (_details) => {},
+    },
+    alarms: {
+      create: (_name, _options) => {},
+      onAlarm: { addListener: addListener('onAlarm') },
+    },
+    permissions: {
+      contains: () => false,
+      remove: () => true,
+      request: () => true,
+    },
+    runtime: {
+      getManifest: () => ({ version: '0.0.0-test' }),
+      onInstalled: { addListener: addListener('onInstalled') },
+      onMessage: { addListener: addListener('onMessage') },
+      onStartup: { addListener: addListener('onStartup') },
+    },
+    scripting: { executeScript: () => {} },
+    storage: {
+      local: {
+        get: (key) => ({ [key]: storage[key] }),
+        remove: (key) => { delete storage[key] },
+        set: (items) => Object.assign(storage, items),
+        setAccessLevel: (_details) => {},
+      },
+    },
+    tabs: {
+      create: (_details) => ({}),
+      query: (_query) => [],
+      sendMessage: (_tabID, _message) => ({}),
+      update: (_tabID, _update) => ({}),
+    },
+  }
+  globalThis.fetch = () => new Promise(() => {})
+
+  try {
+    await Promise.race([
+      import(`../background/service-worker.mjs?mv3-startup-${Date.now()}`),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('service_worker_startup_blocked_by_reconnect')), 150)),
+    ])
+
+    assert.equal(listeners.onMessage.length, 1)
+    const response = await new Promise((resolve) => {
+      const keepChannelOpen = listeners.onMessage[0]({ type: 'host:get-state' }, {}, resolve)
+      assert.equal(keepChannelOpen, true)
+    })
+    assert.equal(response.ok, true)
+    assert.equal(response.result.cabinet_url, 'http://127.0.0.1:19010/')
+    assert.equal(response.result.connection, 'connected')
+  } finally {
+    if (previousChrome === undefined) {
+      delete globalThis.chrome
+    } else {
+      globalThis.chrome = previousChrome
+    }
+    globalThis.fetch = previousFetch
+  }
+})

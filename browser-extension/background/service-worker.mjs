@@ -121,6 +121,10 @@ const reconnect = async () => {
   }
 }
 
+const scheduleReconnect = () => {
+  void reconnect()
+}
+
 const openOrFocus = async (url, patterns = [`${new URL(url).origin}/*`]) => {
   const matches = await browserPlatform.tabs.query({ url: patterns })
   if (matches[0]?.id !== undefined) {
@@ -350,12 +354,12 @@ browserPlatform.runtime.onMessage((message, _sender, sendResponse) => {
   return true
 })
 
-browserPlatform.runtime.onStartup(reconnect)
-browserPlatform.runtime.onInstalled(() => reconnect())
+browserPlatform.runtime.onStartup(scheduleReconnect)
+browserPlatform.runtime.onInstalled(scheduleReconnect)
 browserPlatform.alarms.onAlarm((alarm) => {
   if (alarm.name === 'cabinet-companion-queue') processQueue()
 })
 await browserPlatform.alarms.create('cabinet-companion-queue', { periodInMinutes: 1 })
-await reconnect()
+scheduleReconnect()
 
 export { moduleForURL }
