@@ -20,6 +20,16 @@ Cabinet SHALL make local-device mode explicit and SHALL NOT present local passwo
 - **AND** UI MUST state that it does not verify password, passkey, cloud account, or encrypted-at-rest lock protection
 - **AND** UI MUST NOT store or trust `mock-access-token` or `mock-passkey-access-token`
 
+### Requirement UI-LOGIN-PASSWORD-MANAGER-001: Local-device sign-in SHALL not expose password-manager credential autofill fields
+Cabinet SHALL not render username/password autofill controls on the local-device sign-in surface when no password-backed authentication ceremony is active.
+
+#### Scenario: Local-device sign-in avoids credential autofill markup
+- **GIVEN** setup is complete and local identity mode is active
+- **WHEN** the user opens `/sign-in`
+- **THEN** UI MUST expose the local-device workspace entry and identity-mode indicator
+- **AND** UI MUST state that local-device mode does not verify a password
+- **AND** UI MUST NOT render a `form`, `input[name="email"]`, or `input[name="password"]` for password-manager autofill on that local-device surface
+
 ### Requirement UI-LOGIN-SESSION-003: Session entry SHALL support profile-aware activation
 Cabinet SHALL support selecting/activating profile context after successful authentication when multiple profiles exist.
 

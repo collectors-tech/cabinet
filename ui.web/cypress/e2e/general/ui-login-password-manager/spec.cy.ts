@@ -7,26 +7,21 @@ describe("ui-login-password-manager", () => {
     cy.e2eEnsureSignedOut();
   });
 
-  it("UI-LOGIN-PASSWORD-MANAGER-001 exposes standard sign-in autofill markup", () => {
+  it("UI-LOGIN-PASSWORD-MANAGER-001 keeps local-device sign-in out of password-manager autofill", () => {
     cy.visit("/sign-in");
 
-    cy.get("form").within(() => {
-      cy.get('input[name="email"]')
-        .should("have.attr", "id", "email")
-        .and("have.attr", "type", "email")
-        .and("have.attr", "autocomplete", "username")
-        .and("be.visible");
-
-      cy.get('label[for="email"]').should("contain", "Email");
-
-      cy.get('input[name="password"]')
-        .should("have.attr", "id", "password")
-        .and("have.attr", "type", "password")
-        .and("have.attr", "autocomplete", "current-password")
-        .and("be.visible");
-
-      cy.get('label[for="password"]').should("contain", "Password");
-      cy.contains("button[type='submit']", "Sign in").should("be.visible");
-    });
+    cy.get('[data-testid="local-device-auth-boundary"]')
+      .should("be.visible")
+      .and("contain.text", "Local device mode")
+      .and("contain.text", "does not verify a")
+      .and("contain.text", "password");
+    cy.contains("button", "Open local workspace").should("be.visible");
+    cy.get('[data-testid="identity-mode-indicator"]').should(
+      "contain.text",
+      "local-device"
+    );
+    cy.get("form").should("not.exist");
+    cy.get('input[name="email"]').should("not.exist");
+    cy.get('input[name="password"]').should("not.exist");
   });
 });
