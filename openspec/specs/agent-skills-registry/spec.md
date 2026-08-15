@@ -208,6 +208,13 @@ Cabinet Agent SHALL let natural-language Chat configure integration providers th
 - **AND** confirmed apply SHALL persist enabled provider setup metadata for the active profile, omit secrets from response/log evidence, and reject replay or cross-profile confirmation without a second mutation
 - **AND** read-only integration provider search and explanation skills SHALL remain non-mutating and unchanged by configure-provider normalization
 
+#### Scenario: Canonicalize live Browser Auth setup prose before preview persistence
+- **GIVEN** a Browser Auth provider selects `cabinet.integrations.configure_provider` but returns a friendly setup sentence containing profile context or a negated API-key instruction
+- **WHEN** that sentence clearly requests a provider's public catalogue
+- **THEN** Cabinet SHALL canonicalize it to `setup_payload=public_catalogue`, `setup_step=public_catalogue`, and `marketplace=public` before durable preview creation
+- **AND** profile identifiers, prompt prose, API-key wording, and secret wording SHALL NOT enter persisted provider setup fields
+- **AND** confirmed apply and replay protection SHALL retain the same governed token-only behavior
+
 ### Requirement: Marketplace behavior SHALL remain explicitly deferred
 Cabinet SHALL not treat local skill import support as a public marketplace implementation.
 

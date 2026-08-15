@@ -152,6 +152,16 @@ func normalizeIntegrationPlannerParameters(skillID string, parameters map[string
 	if catalogue == "<nil>" {
 		catalogue = ""
 	}
+	if integrationParameterMentionsPublicCatalogue(catalogue) ||
+		integrationParameterMentionsPublicCatalogue(normalized["setup_payload"]) ||
+		integrationParameterMentionsPublicCatalogue(normalized["setup_step"]) {
+		normalized["setup_payload"] = "public_catalogue"
+		normalized["setup_step"] = "public_catalogue"
+		normalized["marketplace"] = "public"
+		delete(normalized, "provider_name")
+		delete(normalized, "catalogue")
+		return normalized
+	}
 	catalogueName := strings.TrimSpace(strings.TrimSuffix(catalogue, " catalogue"))
 	setupPayload := strings.ToLower(strings.TrimSpace(fmt.Sprint(normalized["setup_payload"])))
 	if setupPayload == "" || setupPayload == "<nil>" {
@@ -173,6 +183,16 @@ func normalizeIntegrationPlannerParameters(skillID string, parameters map[string
 	delete(normalized, "provider_name")
 	delete(normalized, "catalogue")
 	return normalized
+}
+
+func integrationParameterMentionsPublicCatalogue(value any) bool {
+	text := strings.ToLower(strings.TrimSpace(fmt.Sprint(value)))
+	if text == "" || text == "<nil>" {
+		return false
+	}
+	text = strings.NewReplacer("_", " ", "-", " ").Replace(text)
+	text = strings.Join(strings.Fields(text), " ")
+	return strings.Contains(text, "public catalogue") || strings.Contains(text, "public catalog")
 }
 
 func plannerClarification(code, message, nextAction string, selection chatAgentSkillSelection) chatAgentSkillSelection {
