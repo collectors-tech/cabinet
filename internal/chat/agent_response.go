@@ -46,20 +46,36 @@ type AgentResponsePreview struct {
 	Payload map[string]any `json:"payload,omitempty"`
 }
 
+type AgentResponseResultItem struct {
+	ID         string `json:"id,omitempty"`
+	PartNumber string `json:"part_number,omitempty"`
+	Title      string `json:"title,omitempty"`
+	Status     string `json:"status,omitempty"`
+	Category   string `json:"category,omitempty"`
+	Brand      string `json:"brand,omitempty"`
+}
+
+type AgentResponseResultSummary struct {
+	Kind  string                    `json:"kind"`
+	Total int                       `json:"total"`
+	Items []AgentResponseResultItem `json:"items"`
+}
+
 // AgentResponse is the server-owned, presentation-neutral contract used by
 // every Chat surface. Clients render this value; they do not infer success by
 // scanning earlier planner, preview, or capability messages.
 type AgentResponse struct {
-	State          AgentResponseState    `json:"state"`
-	Outcome        string                `json:"outcome"`
-	Title          string                `json:"title"`
-	Message        string                `json:"message"`
-	Retryable      bool                  `json:"retryable"`
-	OriginalIntent string                `json:"original_intent,omitempty"`
-	Skill          AgentResponseSkill    `json:"skill"`
-	Source         AgentResponseSource   `json:"source"`
-	NextAction     *AgentResponseAction  `json:"next_action,omitempty"`
-	Preview        *AgentResponsePreview `json:"preview,omitempty"`
+	State          AgentResponseState          `json:"state"`
+	Outcome        string                      `json:"outcome"`
+	Title          string                      `json:"title"`
+	Message        string                      `json:"message"`
+	Retryable      bool                        `json:"retryable"`
+	OriginalIntent string                      `json:"original_intent,omitempty"`
+	Skill          AgentResponseSkill          `json:"skill"`
+	Source         AgentResponseSource         `json:"source"`
+	NextAction     *AgentResponseAction        `json:"next_action,omitempty"`
+	Preview        *AgentResponsePreview       `json:"preview,omitempty"`
+	ResultSummary  *AgentResponseResultSummary `json:"result_summary,omitempty"`
 }
 
 func NewAgentResponse(state AgentResponseState, message, originalIntent, skillID, skillName, surface, channel string) (AgentResponse, error) {

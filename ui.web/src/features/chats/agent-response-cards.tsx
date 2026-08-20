@@ -113,6 +113,18 @@ export type NormalizedAgentResponse = {
     status?: string
     payload?: Record<string, unknown>
   }
+  result_summary?: {
+    kind?: string
+    total?: number
+    items?: Array<{
+      id?: string
+      part_number?: string
+      title?: string
+      status?: string
+      category?: string
+      brand?: string
+    }>
+  }
 }
 
 export type AgentResponseMessage = {
@@ -168,6 +180,39 @@ function NormalizedAgentResponseCard({
         {response.state.replace(/_/g, ' ')}
       </p>
       <p className='mt-2'>{response.message}</p>
+      {response.state === 'read_result' && response.result_summary ? (
+        <div
+          className='mt-3 rounded-md border border-cyan-500/30 bg-cyan-950/20 p-2'
+          data-testid={`${testID}-result-summary`}
+        >
+          <p className='text-xs text-cyan-100'>
+            {response.result_summary.total === 0
+              ? 'No matching records.'
+              : `${response.result_summary.total ?? response.result_summary.items?.length ?? 0} matching record${(response.result_summary.total ?? response.result_summary.items?.length ?? 0) === 1 ? '' : 's'}`}
+          </p>
+          {response.result_summary.items?.length ? (
+            <ul className='mt-2 space-y-2'>
+              {response.result_summary.items.map((item, index) => (
+                <li
+                  key={item.id || `${item.part_number || 'result'}-${index}`}
+                  className='rounded border border-slate-700 bg-slate-950/60 p-2'
+                >
+                  <p className='font-medium text-slate-100'>
+                    {[item.part_number, item.title].filter(Boolean).join(' - ')}
+                  </p>
+                  {[item.brand, item.category, item.status].some(Boolean) ? (
+                    <p className='mt-1 text-xs text-slate-400'>
+                      {[item.brand, item.category, item.status]
+                        .filter(Boolean)
+                        .join(' / ')}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {response.skill?.name || response.skill?.id ? (
         <p className='mt-2 text-xs text-slate-400'>
           Skill: {response.skill.name || response.skill.id}

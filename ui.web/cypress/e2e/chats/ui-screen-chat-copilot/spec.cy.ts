@@ -268,6 +268,77 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-tool-card-container"]').should('not.exist')
   })
 
+  it('CHATS-WORKSPACE-015/#2332 surfaces the server-owned inventory read result in Chat', () => {
+    openChatsWithAssistantDefaults('fake', 'cabinet-e2e-planner')
+    createThread('E2E Agent Read Result')
+    cy.request('POST', '/api/items', {
+      part_number: 'CHAT-READ-2332',
+      title: 'Exact Agent Read Result',
+      brand: 'Cabinet Acceptance',
+      category: 'General',
+      status: 'active',
+    }).its('status').should('eq', 201)
+    cy.intercept('POST', '/api/chat/messages').as('agentReadMessage')
+
+    cy.get('[data-testid="chat-compose-input"]').type(
+      'Find inventory part number CHAT-READ-2332 and tell me its exact title.'
+    )
+    cy.get('[data-testid="chat-send-button"]').click()
+
+    cy.wait('@agentReadMessage').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.agent_planner.skill_id).to.eq(
+        'cabinet.inventory.search_items'
+      )
+      expect(
+        response?.body.agent_planner.thread_message.context.agent_response
+          .result_summary.items[0].part_number
+      ).to.eq('CHAT-READ-2332')
+      expect(
+        response?.body.agent_planner.thread_message.context.agent_response
+          .result_summary.items[0].title
+      ).to.eq('Exact Agent Read Result')
+    })
+
+    cy.get('[data-testid="chat-agent-response-state"]')
+      .should('have.attr', 'data-agent-state', 'read_result')
+      .and('contain', 'CHAT-READ-2332')
+      .and('contain', 'Exact Agent Read Result')
+    cy.get('[data-testid="chat-agent-response-state"]')
+      .find('button')
+      .should('not.exist')
+
+    cy.reload()
+    cy.get('[data-testid="chat-agent-response-state"]')
+      .should('contain', 'CHAT-READ-2332')
+      .and('contain', 'Exact Agent Read Result')
+
+    cy.request('/api/chat/threads?profile_id=e2e-profile-001')
+      .its('body.threads')
+      .then((threads: Array<{ id: string; title: string }>) => {
+        const thread = threads.find(
+          (candidate) => candidate.title === 'E2E Agent Read Result'
+        )
+        expect(thread?.id, 'read-result thread id').to.be.a('string').and.not.eq('')
+        cy.get('[data-testid="shell-chat-toggle"]')
+          .should('be.visible')
+          .and('not.be.disabled')
+          .click()
+        cy.get('[data-testid="shell-assistant-thread-select"]', {
+          timeout: 20000,
+        }).select(String(thread?.id))
+        cy.get('[data-testid="shell-assistant-thread-id"]')
+          .should('have.text', thread?.id)
+      })
+    cy.get('[data-testid="shell-assistant-agent-response-state"]')
+      .should('have.attr', 'data-agent-state', 'read_result')
+      .and('contain', 'CHAT-READ-2332')
+      .and('contain', 'Exact Agent Read Result')
+    cy.get('[data-testid="shell-assistant-agent-response-state"]')
+      .find('button')
+      .should('not.exist')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure', () => {
     cy.viewport(1400, 900)
     openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')

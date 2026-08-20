@@ -12,6 +12,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/chat"
+	"github.com/collectors-tech/cabinet/internal/collection"
 )
 
 type chatAgentPlannerInput struct {
@@ -617,6 +618,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 func plannerAgentResponse(registry agentskills.Registry, selection chatAgentSkillSelection, result map[string]any, status, originalIntent string, agentCtx map[string]any) chat.AgentResponse {
 	state := chat.AgentResponseUnsupported
 	message := strings.TrimSpace(selection.Message)
+	var readResultSummary *chat.AgentResponseResultSummary
 	if message == "" {
 		message = "Cabinet cannot safely complete that Agent request."
 	}
@@ -633,8 +635,18 @@ func plannerAgentResponse(registry agentskills.Registry, selection chatAgentSkil
 	}
 	if execution, _ := result["execution_result"].(map[string]any); execution != nil {
 		state = chat.AgentResponseReadResult
+		readResultSummary = plannerAgentReadResultSummary(selection.SkillID, execution)
 		message = strings.TrimSpace(selection.Message)
-		if message == "" {
+		if readResultSummary != nil {
+			switch readResultSummary.Total {
+			case 0:
+				message = "Cabinet found no matching inventory items."
+			case 1:
+				message = "Cabinet found 1 matching inventory item."
+			default:
+				message = fmt.Sprintf("Cabinet found %d matching inventory items.", readResultSummary.Total)
+			}
+		} else if message == "" {
 			message = "Cabinet completed the governed read-only Agent request."
 		}
 	}
@@ -687,7 +699,55 @@ func plannerAgentResponse(registry agentskills.Registry, selection chatAgentSkil
 			Payload: plannerNonSecretActionPayload(previewPayload),
 		}
 	}
+	response.ResultSummary = readResultSummary
 	return response
+}
+
+const (
+	plannerAgentReadResultItemLimit = 5
+	plannerAgentReadResultTextLimit = 160
+)
+
+func plannerAgentReadResultSummary(skillID string, execution map[string]any) *chat.AgentResponseResultSummary {
+	if strings.TrimSpace(skillID) != "cabinet.inventory.search_items" || execution == nil {
+		return nil
+	}
+	rawItems, ok := execution["items"].([]collection.Item)
+	if !ok {
+		return nil
+	}
+	total := len(rawItems)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(rawItems)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, item := range rawItems[:limit] {
+		items = append(items, chat.AgentResponseResultItem{
+			ID:         plannerBoundedReadResultText(item.ID),
+			PartNumber: plannerBoundedReadResultText(item.PartNumber),
+			Title:      plannerBoundedReadResultText(item.Title),
+			Status:     plannerBoundedReadResultText(item.Status),
+			Category:   plannerBoundedReadResultText(item.Category),
+			Brand:      plannerBoundedReadResultText(item.Brand),
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "inventory_items",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerBoundedReadResultText(value string) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) > plannerAgentReadResultTextLimit {
+		runes = runes[:plannerAgentReadResultTextLimit]
+	}
+	return string(runes)
 }
 
 func plannerProviderSetupRequired(result map[string]any) bool {
