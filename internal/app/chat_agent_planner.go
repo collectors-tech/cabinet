@@ -745,6 +745,8 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching integration providers.", summary.Total)
 		}
+	case "data_export_bundle":
+		return "Cabinet prepared a bounded data export readiness summary without creating or changing data."
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -772,6 +774,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentCollectionsReadResultSummary(execution)
 	case "cabinet.integrations.search_providers":
 		return plannerAgentIntegrationProvidersReadResultSummary(execution)
+	case "cabinet.data.export_bundle":
+		return plannerAgentDataExportBundleReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1007,6 +1011,32 @@ func plannerAgentIntegrationProvidersReadResultSummary(execution map[string]any)
 		Kind:  "integration_providers",
 		Total: total,
 		Items: items,
+	}
+}
+
+func plannerAgentDataExportBundleReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	status := plannerBoundedReadResultText(plannerReadResultString(execution["status"]))
+	exportScope := plannerBoundedReadResultText(plannerReadResultString(execution["export_scope"]))
+	if status == "" && exportScope == "" {
+		return nil
+	}
+	if exportScope == "" {
+		exportScope = "default"
+	}
+	if status == "" {
+		status = "ready"
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "data_export_bundle",
+		Total: 1,
+		Items: []chat.AgentResponseResultItem{
+			{
+				ID:       "data-export-bundle",
+				Title:    "Data export bundle",
+				Status:   status,
+				Category: "Scope: " + exportScope,
+			},
+		},
 	}
 }
 
