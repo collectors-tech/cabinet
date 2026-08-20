@@ -185,3 +185,10 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST distinguish unavailable Dashboard dependencies from empty or no-attention states
 - **AND** the summary MUST contain no write action or confirmation control
 - **AND** Cabinet MUST exclude cross-profile records, provider secrets, raw provider payloads, private source URLs, seller details, stack traces, and execution internals
+
+#### Scenario: Storage status returns typed safe operational facts
+
+- **GIVEN** the active profile can ask for storage and backup readiness from Chat
+- **WHEN** the user asks Chat to show current storage or backup status
+- **THEN** Cabinet MUST execute the profile-scoped read-only Storage skill and persist a `storage_status` result summary with bounded storage and backup state facts
+- **AND** the summary MUST contain no write action, confirmation control, backup target path, provider secret, raw provider payload, stack trace, or execution internals

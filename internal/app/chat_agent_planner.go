@@ -715,6 +715,8 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 			return "Cabinet found no Dashboard activity records available for that read-only request."
 		}
 		return "Cabinet summarised the current Dashboard snapshot with bounded attention signals and recent records."
+	case "storage_status":
+		return "Cabinet read the current storage and backup status without changing settings."
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -734,6 +736,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentInventoryReadResultSummary(execution)
 	case "cabinet.dashboard.summarise_activity":
 		return plannerAgentDashboardReadResultSummary(execution)
+	case "cabinet.storage.show_status":
+		return plannerAgentStorageStatusReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -812,6 +816,28 @@ func plannerAgentDashboardReadResultSummary(execution map[string]any) *chat.Agen
 		Total:   len(metrics) + len(items),
 		Items:   items,
 		Metrics: metrics,
+	}
+}
+
+func plannerAgentStorageStatusReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	storageStatus := plannerBoundedReadResultText(plannerReadResultString(execution["storage_status"]))
+	backupStatus := plannerBoundedReadResultText(plannerReadResultString(execution["backup_status"]))
+	if storageStatus == "" && backupStatus == "" {
+		return nil
+	}
+	item := chat.AgentResponseResultItem{
+		ID:       "storage-status",
+		Title:    "Storage status",
+		Status:   storageStatus,
+		Category: "Backup: " + backupStatus,
+	}
+	if backupStatus == "" {
+		item.Category = "Backup status unavailable"
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "storage_status",
+		Total: 1,
+		Items: []chat.AgentResponseResultItem{item},
 	}
 }
 

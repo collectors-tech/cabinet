@@ -917,6 +917,115 @@ func TestChatAgentPlannerRoutesDashboardActivitySummaryFromMainChat(t *testing.T
 	}
 }
 
+func TestChatAgentPlannerRoutesStorageStatusSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Storage"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Storage"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.storage.show_status","parameters":{"provider_secret":"sk-planner-storage-secret"},"message":"Checking storage status."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Show my storage and backup status",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Show my storage and backup status",
+			},
+		},
+		"message-storage-status-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Storage status request")
+	}
+	if result["skill_id"] != "cabinet.storage.show_status" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Storage skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["profile_id"] != profile.ID || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only profile-scoped Storage execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal storage planner result: %v", err)
+	}
+	bodyText := string(body)
+	for _, want := range []string{
+		`"operation":"storage.status.show"`,
+		`"storage_status":"available"`,
+		`"backup_status":"not_configured"`,
+	} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("storage planner response missing %s: body=%s", want, bodyText)
+		}
+	}
+	if strings.Contains(bodyText, "sk-planner-storage-secret") || strings.Contains(bodyText, "preview_id") {
+		t.Fatalf("storage planner response leaked secret or preview token: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("storage planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal storage Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode storage Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "storage_status" {
+		t.Fatalf("storage response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("storage summary must expose one bounded status record: %+v", agentResponse.ResultSummary)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal storage result summary: %v", err)
+	}
+	for _, want := range []string{"Storage status", "available", "Backup: not_configured"} {
+		if !strings.Contains(string(summaryJSON), want) {
+			t.Fatalf("storage result summary missing %q: %s", want, summaryJSON)
+		}
+	}
+	for _, forbidden := range []string{"sk-planner-storage-secret", "preview_id", "backup_path", "backup_target"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("storage result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
 	t.Parallel()
 
