@@ -661,7 +661,7 @@ func TestChatAgentPlannerExecutesReadOnlySelectionWithProfileIsolation(t *testin
 	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
 		t.Fatalf("decode profile B: %v", err)
 	}
-	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority) VALUES (?, ?, 'AFX', 'Slot', 'PLAN-READ-1', 'Visible Planner Item', 'active', 'medium')`, "planner-read-visible", profileA.ID); err != nil {
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority, notes, source_urls_json) VALUES (?, ?, 'AFX', 'Slot', 'PLAN-READ-1', 'Visible Planner Item', 'active', 'medium', 'sk-read-result-must-not-leak', '["https://private.example.test/item"]')`, "planner-read-visible", profileA.ID); err != nil {
 		t.Fatalf("seed profile A item: %v", err)
 	}
 	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority) VALUES (?, ?, 'AFX', 'Slot', 'PLAN-READ-HIDDEN', 'Hidden Planner Item', 'active', 'medium')`, "planner-read-hidden", profileB.ID); err != nil {
@@ -712,6 +712,37 @@ func TestChatAgentPlannerExecutesReadOnlySelectionWithProfileIsolation(t *testin
 	}
 	if !strings.Contains(string(body), "Visible Planner Item") || strings.Contains(string(body), "Hidden Planner Item") {
 		t.Fatalf("read-only planner result must be grounded and profile-isolated, body=%s", string(body))
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal persisted Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode persisted Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil {
+		t.Fatalf("assistant response missing server-owned read result summary: %+v", threadMessage.Context)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("read result summary = %+v, want one bounded item", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.PartNumber != "PLAN-READ-1" || item.Title != "Visible Planner Item" {
+		t.Fatalf("read result summary item = %+v, want exact part number and title", item)
+	}
+	responseJSON, err := json.Marshal(agentResponse)
+	if err != nil {
+		t.Fatalf("marshal normalized Agent response: %v", err)
+	}
+	for _, forbidden := range []string{"sk-read-result-must-not-leak", "private.example.test", "Hidden Planner Item"} {
+		if strings.Contains(string(responseJSON), forbidden) {
+			t.Fatalf("normalized read result leaked %q: %s", forbidden, responseJSON)
+		}
 	}
 }
 

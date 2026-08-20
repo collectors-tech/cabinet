@@ -163,3 +163,16 @@ Cabinet MUST distinguish literal response instructions from governed Cabinet ope
 - **GIVEN** the user intends Cabinet to inspect or change managed product data
 - **WHEN** the user directly asks Cabinet to restore, delete, import, export, upload, or otherwise manage Cabinet data
 - **THEN** Cabinet MUST continue to classify the request for server-owned Agent planning and governed execution
+
+### Requirement CHATS-WORKSPACE-015: Read-only Agent results SHALL surface bounded server-owned facts
+
+When Cabinet executes a read-only Agent skill from Chat, the resulting assistant message SHALL include a presentation-neutral, server-owned summary of the matching records instead of merely repeating the provider's plan text.
+
+#### Scenario: Inventory lookup returns exact safe record facts
+
+- **GIVEN** the active profile contains an inventory item with a known part number and title
+- **WHEN** the user asks Chat to find that item and report its exact title
+- **THEN** Cabinet MUST execute the profile-scoped read skill and render the matching part number and title in both full and contextual Chat
+- **AND** the summary MUST survive reload and thread handoff
+- **AND** the summary MUST contain no write action or confirmation control
+- **AND** Cabinet MUST cap the number and length of rendered fields and exclude notes, URLs, credentials, secrets, and raw provider or execution blobs
