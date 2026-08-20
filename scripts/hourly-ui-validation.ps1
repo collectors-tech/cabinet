@@ -42,8 +42,8 @@ function ConvertTo-SafeLogSegment([string]$value) {
   if ([string]::IsNullOrWhiteSpace($segment)) {
     return "spec"
   }
-  if ($segment.Length -gt 120) {
-    return $segment.Substring(0, 120)
+  if ($segment.Length -gt 80) {
+    return $segment.Substring(0, 80)
   }
   return $segment
 }
@@ -248,7 +248,12 @@ try {
     $spec = $specFiles[$specIndex]
     $relativeSpec = $spec.FullName.Substring((Join-Path $repoRoot "ui.web").Length).TrimStart('\').Replace('\', '/')
     $safeSpec = ConvertTo-SafeLogSegment $relativeSpec
-    $logName = "hourly-{0:D3}-{1}" -f ($specIndex + 1), $safeSpec
+    $logNamePrefix = "hourly-{0:D3}-" -f ($specIndex + 1)
+    $safeSpecMaxLength = 80 - $logNamePrefix.Length
+    if ($safeSpec.Length -gt $safeSpecMaxLength) {
+      $safeSpec = $safeSpec.Substring(0, $safeSpecMaxLength)
+    }
+    $logName = "$logNamePrefix$safeSpec"
     Write-Step "Running spec: $relativeSpec"
     $cypressArgs = @(
       "-NoLogo",

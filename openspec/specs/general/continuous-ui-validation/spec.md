@@ -185,6 +185,7 @@ Cabinet hourly UI validation SHALL start one workflow-built exact runtime for th
 - **WHEN** a completed Cypress spec reports assertion failures
 - **THEN** the report SHALL preserve that result as a product failure and continue with the next selected spec.
 - **AND** when a timeout, missing summary, stale revision, or other runner failure occurs, the run SHALL stop before launching another spec and record the runner phase, timeout state, revision, exit code, and evidence path.
+- **AND** hourly validation SHALL generate Cypress log names with the same safe segment length as `cypress.ps1` so long spec paths still resolve the emitted `*.summary.json` artifact instead of becoming false `missing_summary` runner failures.
 
 #### Scenario: Skip duplicate same-revision validation
 - **GIVEN** scheduled Windows runners are ephemeral
