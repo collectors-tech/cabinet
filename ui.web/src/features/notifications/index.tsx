@@ -461,10 +461,20 @@ export function NotificationInbox() {
 
   useEffect(() => {
     setSelectedItemId((current) => {
-      if (filteredItems.some((item) => item.id === current)) {
+      const currentItem = filteredItems.find((item) => item.id === current)
+      const firstItem = filteredItems[0]
+      if (
+        currentItem &&
+        !(
+          isLocalToastItem(currentItem) &&
+          firstItem &&
+          firstItem.id !== currentItem.id &&
+          !isLocalToastItem(firstItem)
+        )
+      ) {
         return current
       }
-      return filteredItems[0]?.id ?? ''
+      return firstItem?.id ?? ''
     })
   }, [filteredItems])
 
