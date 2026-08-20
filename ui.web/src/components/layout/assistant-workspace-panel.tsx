@@ -630,6 +630,13 @@ function latestAppControl(messages: Message[]) {
   return latestAssistantMessage?.context?.app_control
 }
 
+function latestAgentResponse(messages: Message[]) {
+  const latestAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role.trim().toLowerCase() === 'assistant')
+  return latestAssistantMessage?.context?.agent_response
+}
+
 async function loadAssistantDefaultSettings(profileId: string) {
   const response = await fetch(`/api/profiles/${profileId}/settings`)
   if (!response.ok) {
@@ -758,14 +765,20 @@ export function AssistantWorkspacePanel() {
     [provider]
   )
   const appControl = useMemo(() => latestAppControl(messages), [messages])
+  const agentResponse = useMemo(() => latestAgentResponse(messages), [messages])
   const guidedWorkflow = appControl?.guided_workflow
+  const hasPendingActionPreview = Boolean(
+    actionPreview?.id || appControl?.preview?.id || agentResponse?.preview?.id
+  )
   const backendNavigationAction = useMemo(
     () => navigationActionFromAppControl(appControl),
     [appControl]
   )
   const displayedNavigationAction = navigationAction ?? backendNavigationAction
-  const displayedPermissionGuidance = appControl?.setup_needed
-    ? 'Provider setup is needed before Cabinet can run this assistant action.'
+  const displayedPermissionGuidance = hasPendingActionPreview
+    ? 'Cabinet created this preview from the assistant thread. Review and confirm before any mutation is applied.'
+    : appControl?.setup_needed
+      ? 'Provider setup is needed before Cabinet can run this assistant action.'
     : permissionGuidance
   const selectedThreadTitle = useMemo(
     () =>
