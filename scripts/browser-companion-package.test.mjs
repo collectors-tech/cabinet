@@ -37,7 +37,7 @@ test('packages reproducible Chrome and Edge private-beta archives from one exact
 
   assert.equal(first.releaseManifest.source_commit, sourceCommit)
   assert.equal(first.releaseManifest.source_date_epoch, sourceDateEpoch)
-  assert.equal(first.releaseManifest.version_name, '0.1.0-beta.9.gaaaaaaaaaaaa')
+  assert.equal(first.releaseManifest.version_name, '0.1.0-beta.10.gaaaaaaaaaaaa')
   assert.equal(first.releaseManifest.channel, 'private-beta')
   assert.deepEqual(first.releaseManifest.protocol_compatibility, { minimum: '1', maximum: '1' })
   assert.deepEqual(first.releaseManifest.artifacts.map((item) => item.target), ['chrome', 'edge'])
@@ -47,7 +47,7 @@ test('packages reproducible Chrome and Edge private-beta archives from one exact
   )
 
   for (const artifact of first.releaseManifest.artifacts) {
-    assert.match(artifact.filename, /^cabinet-browser-companion-0\.1\.0-beta\.9\.ga{12}-(chrome|edge)\.zip$/)
+    assert.match(artifact.filename, /^cabinet-browser-companion-0\.1\.0-beta\.10\.ga{12}-(chrome|edge)\.zip$/)
     assert.match(artifact.sha256, /^[a-f0-9]{64}$/)
     assert.equal(artifact.sha256_filename, `${artifact.filename}.sha256`)
     assert.ok(artifact.files.every((file) => /^[a-f0-9]{64}$/.test(file.sha256)))
@@ -67,7 +67,7 @@ test('production archives are explicit, minimal, CSP-bound and distinct from dev
     const channel = JSON.parse(archive.get('release-channel.json').toString('utf8'))
     assert.equal(manifest.name, 'Cabinet Browser Companion')
     assert.equal(manifest.version, '0.1.0')
-    assert.equal(manifest.version_name, '0.1.0-beta.9.gaaaaaaaaaaaa')
+    assert.equal(manifest.version_name, '0.1.0-beta.10.gaaaaaaaaaaaa')
     assert.deepEqual(manifest.content_security_policy, { extension_pages: "script-src 'self'; object-src 'self'" })
     assert.deepEqual(manifest.host_permissions, ['http://127.0.0.1/*', 'http://localhost/*', 'http://[::1]/*'])
     assert.deepEqual(manifest.optional_host_permissions, ['https://*/*'])
