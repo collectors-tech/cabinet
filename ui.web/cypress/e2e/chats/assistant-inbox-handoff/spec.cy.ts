@@ -21,13 +21,14 @@ describe('chats/assistant-inbox-handoff', () => {
     cy.wait('@assistantMessage').its('response.statusCode').should('eq', 201)
     cy.contains('[data-testid="shell-assistant-message-list"]', 'Assistant handoff queued in Inbox.').should('exist')
 
-    cy.get('[data-testid="shell-workspace-inbox"]').click()
-    cy.get('[data-testid="shell-inbox-workspace"]').should('be.visible')
-    cy.get('[data-testid="shell-inbox-notification-card"]').first().scrollIntoView().within(() => {
+    cy.get('[data-testid="shell-workspace-bell"]').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+    cy.get('[data-testid="notification-inbox-page"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-row"]').first().scrollIntoView().click()
+    cy.get('[data-testid="notification-inbox-detail-pane"]').within(() => {
       cy.contains('Assistant handoff queued').should('be.visible')
-      cy.get('[data-testid="shell-inbox-item-status"]').should('contain', 'unread')
       cy.contains('check this inventory route asynchronously').should('be.visible')
-      cy.get('[data-testid="shell-inbox-open-assistant"]').click()
+      cy.get('[data-testid="notification-inbox-open-agent"]').click()
     })
 
     cy.get('[data-testid="shell-workspace-assistant"]').should('have.attr', 'data-active', 'true')

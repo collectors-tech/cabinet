@@ -6543,7 +6543,9 @@ func New(cfg config.Config) (*App, error) {
 				if assistantContext, ok := messageContext["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
 					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
 						response["app_control"] = appControl
-					} else if chatMessageRequiresAssistantHandoff(req.Content) && !chatMessageNeedsNaturalLanguageAgentPlanning(req.Content) {
+					} else if chatMessageRequiresAssistantHandoff(req.Content) &&
+						(!chatMessageNeedsNaturalLanguageAgentPlanning(req.Content) ||
+							chatMessageExplicitlyRequestsAsyncHandoff(req.Content)) {
 						inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
 							ProfileID: req.ProfileID,
 							ThreadID:  req.ThreadID,

@@ -591,6 +591,26 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 		t.Fatalf("normal hello must not create default assistant Inbox linkage, body=%s", inboxList.Body.String())
 	}
 
+	asyncThreadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Async Inventory Thread","metadata":{"provider":"openai","model":"gpt-4o-mini"}}`), map[string]string{"Content-Type": "application/json"})
+	if asyncThreadResp.Code != http.StatusCreated {
+		t.Fatalf("create async thread status=%d body=%s", asyncThreadResp.Code, asyncThreadResp.Body.String())
+	}
+	var asyncThread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(asyncThreadResp.Body).Decode(&asyncThread); err != nil {
+		t.Fatalf("decode async thread: %v", err)
+	}
+	asyncResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+asyncThread.ID+`","role":"user","content":"check this inventory route asynchronously","context":{"route":{"pathname":"/inventory"},"profile":{"id":"`+p.ID+`"},"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if asyncResp.Code != http.StatusCreated {
+		t.Fatalf("async handoff message status=%d body=%s", asyncResp.Code, asyncResp.Body.String())
+	}
+	if !strings.Contains(asyncResp.Body.String(), `"assistant_handoff"`) ||
+		!strings.Contains(asyncResp.Body.String(), `Assistant handoff queued in Inbox.`) ||
+		strings.Contains(asyncResp.Body.String(), `"mode":"provider_failure"`) {
+		t.Fatalf("explicit async inventory request must queue Inbox handoff without provider setup failure, body=%s", asyncResp.Body.String())
+	}
+
 	// Must reject attachment calls that do not include explicit multipart file input.
 	badAttachment := doRequest(t, a, http.MethodPost, "/api/chat/attachments", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","path":"C:\\secret.txt"}`), map[string]string{"Content-Type": "application/json"})
 	if badAttachment.Code != http.StatusBadRequest {
