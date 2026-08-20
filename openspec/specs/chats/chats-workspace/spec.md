@@ -192,3 +192,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **WHEN** the user asks Chat to show current storage or backup status
 - **THEN** Cabinet MUST execute the profile-scoped read-only Storage skill and persist a `storage_status` result summary with bounded storage and backup state facts
 - **AND** the summary MUST contain no write action, confirmation control, backup target path, provider secret, raw provider payload, stack trace, or execution internals
+
+#### Scenario: Wishlist search returns typed safe entry facts
+
+- **GIVEN** the active profile contains wishlist entries with planning and purchase metadata
+- **WHEN** the user asks Chat to find matching wishlist entries
+- **THEN** Cabinet MUST execute the profile-scoped read-only Wishlist skill and persist a `wishlist_entries` result summary with bounded entry identifiers, priority, and purchase-state facts
+- **AND** the summary MUST exclude notes, purchase URLs, provider secrets, raw provider payloads, stack traces, execution internals, and cross-profile wishlist records
+- **AND** the summary MUST contain no write action or confirmation control

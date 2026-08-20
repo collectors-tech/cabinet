@@ -1026,6 +1026,113 @@ func TestChatAgentPlannerRoutesStorageStatusSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesWishlistSearchSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Wishlist A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Wishlist B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != 201 || createB.Code != 201 {
+		t.Fatalf("create profiles status A=%d B=%d body A=%s body B=%s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status)
+		VALUES
+			('planner-wishlist-item-a', ?, 'AFX', 'Slot', 'PWA-1', 'Planner Wishlist A Camaro', 'wishlist'),
+			('planner-wishlist-item-b', ?, 'AFX', 'Slot', 'PWB-1', 'Planner Wishlist B Porsche', 'wishlist');
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, currency, priority, notes, highlight_hit, below_target_now, purchase_url)
+		VALUES
+			('planner-wishlist-entry-a', ?, 'planner-wishlist-item-a', 30, 'AUD', 'high', 'private wishlist note must not render', 1, 1, 'https://private.example/wishlist-a'),
+			('planner-wishlist-entry-b', ?, 'planner-wishlist-item-b', 30, 'AUD', 'high', 'other profile note', 1, 1, 'https://private.example/wishlist-b');
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed wishlist planner data: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Wishlist"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.wishlist.search_entries","parameters":{"query":"planner-wishlist-entry","provider_secret":"sk-planner-wishlist-secret"},"message":"Searching wishlist entries."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Find my wishlist entries for planner wishlist",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Find my wishlist entries for planner wishlist",
+			},
+		},
+		"message-wishlist-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Wishlist search request")
+	}
+	if result["skill_id"] != "cabinet.wishlist.search_entries" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Wishlist skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["profile_id"] != profileA.ID || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only profile-scoped Wishlist execution result, got %+v", result)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("wishlist planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal wishlist Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode wishlist Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "wishlist_entries" {
+		t.Fatalf("wishlist response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("wishlist summary must expose one bounded active-profile entry: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "planner-wishlist-entry-a" || item.Title != "planner-wishlist-item-a" || item.Status != "below_target" || item.Category != "high" {
+		t.Fatalf("wishlist summary item = %+v, want bounded active-profile facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal wishlist result summary: %v", err)
+	}
+	for _, forbidden := range []string{"planner-wishlist-entry-b", "planner-wishlist-item-b", "private wishlist note", "other profile note", "https://private.example", "sk-planner-wishlist-secret", "preview_id"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("wishlist result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
 	t.Parallel()
 
