@@ -2497,6 +2497,8 @@ func applyAgentSettingsDataSkill(ctx context.Context, conn *sql.DB, skillID, pro
 		result["operation"] = "maintenance.safe_check"
 		result["read_only"] = true
 		result["status"] = "healthy"
+		result["maintenance_check"] = stringMapParam(params, "maintenance_check")
+		result["check_level"] = stringMapParam(params, "check_level")
 	}
 	return result, "", nil
 }

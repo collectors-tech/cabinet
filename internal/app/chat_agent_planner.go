@@ -747,6 +747,8 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		}
 	case "data_export_bundle":
 		return "Cabinet prepared a bounded data export readiness summary without creating or changing data."
+	case "maintenance_safe_check":
+		return "Cabinet completed a bounded maintenance safe-check summary without changing data."
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -776,6 +778,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentIntegrationProvidersReadResultSummary(execution)
 	case "cabinet.data.export_bundle":
 		return plannerAgentDataExportBundleReadResultSummary(execution)
+	case "cabinet.maintenance.run_safe_check":
+		return plannerAgentMaintenanceSafeCheckReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1035,6 +1039,37 @@ func plannerAgentDataExportBundleReadResultSummary(execution map[string]any) *ch
 				Title:    "Data export bundle",
 				Status:   status,
 				Category: "Scope: " + exportScope,
+			},
+		},
+	}
+}
+
+func plannerAgentMaintenanceSafeCheckReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	status := plannerBoundedReadResultText(plannerReadResultString(execution["status"]))
+	maintenanceCheck := plannerBoundedReadResultText(plannerReadResultString(execution["maintenance_check"]))
+	checkLevel := plannerBoundedReadResultText(plannerReadResultString(execution["check_level"]))
+	if status == "" && maintenanceCheck == "" && checkLevel == "" {
+		return nil
+	}
+	if status == "" {
+		status = "checked"
+	}
+	if maintenanceCheck == "" {
+		maintenanceCheck = "safe"
+	}
+	category := "Check: " + maintenanceCheck
+	if checkLevel != "" {
+		category = category + " / " + checkLevel
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "maintenance_safe_check",
+		Total: 1,
+		Items: []chat.AgentResponseResultItem{
+			{
+				ID:       "maintenance-safe-check",
+				Title:    "Maintenance safe check",
+				Status:   status,
+				Category: category,
 			},
 		},
 	}
