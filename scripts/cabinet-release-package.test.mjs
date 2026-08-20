@@ -13,14 +13,16 @@ import { loadBetaDisclosure, renderBetaDisclosureMarkdown } from './render-beta-
 const sourceCommit = 'c'.repeat(40)
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 
-const cabinetFixture = async () => {
+const cabinetFixture = async ({
+  portableGuide = '# Cabinet Windows Portable Beta\n\nCabinet `0.1.0-beta.10` is packaged as a Windows portable ZIP.\n\nExtract `cabinet-0.1.0-beta.10-windows-amd64-portable.zip`.\n',
+} = {}) => {
   const directory = await mkdtemp(join(tmpdir(), 'cabinet-release-package-'))
   const filename = 'cabinet-0.1.0-beta.10-windows-amd64-portable.zip'
   const checksumFilename = `${filename}.sha256`
   const notesFilename = 'cabinet-0.1.0-beta.10-release-notes.md'
   const packageEntries = new Map([
     ['README.md', Buffer.from('r')],
-    ['WINDOWS-PORTABLE-BETA.md', Buffer.from('w')],
+    ['WINDOWS-PORTABLE-BETA.md', Buffer.from(portableGuide)],
     ['cabinet-mcp.exe', Buffer.from('m')],
     ['cabinet.exe', Buffer.from('c')],
   ])
@@ -60,6 +62,20 @@ test('verifies exact Cabinet package identity, checksum, notes and required file
   await assert.rejects(
     () => verifyCabinetReleasePackage(fixture.manifestPath, { repositoryRoot: resolve('.'), expectedSourceCommit: sourceCommit }),
     /cabinet_artifact_checksum_mismatch/,
+  )
+})
+
+test('rejects an embedded portable guide whose version and filename drift from the manifest', async () => {
+  const fixture = await cabinetFixture({
+    portableGuide: '# Cabinet Windows Portable Beta\n\nCabinet `0.1.0-beta.1` is packaged as a Windows portable ZIP.\n\nExtract `cabinet-0.1.0-beta.1-windows-amd64-portable.zip`.\n',
+  })
+
+  await assert.rejects(
+    () => verifyCabinetReleasePackage(fixture.manifestPath, {
+      repositoryRoot: resolve('.'),
+      expectedSourceCommit: sourceCommit,
+    }),
+    /cabinet_portable_guide_version_mismatch/,
   )
 })
 

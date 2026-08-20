@@ -103,6 +103,12 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
   }
   const archivedFiles = readZipEntries(archive)
   if ([...archivedFiles.keys()].sort().join('\n') !== [...paths].sort().join('\n')) throw new Error('cabinet_zip_file_inventory_mismatch')
+  const portableGuide = archivedFiles.get('WINDOWS-PORTABLE-BETA.md').toString('utf8')
+  if (!portableGuide.includes(`Cabinet \`${release.version}\``) ||
+      !portableGuide.includes(`\`${expectedFilename}\``) ||
+      /\{\{CABINET_[A-Z_]+\}\}/.test(portableGuide)) {
+    throw new Error('cabinet_portable_guide_version_mismatch')
+  }
   for (const [path, data] of archivedFiles) {
     const recorded = recordedFiles.get(path)
     if (recorded.size_bytes !== data.length || recorded.sha256 !== createHash('sha256').update(data).digest('hex')) {

@@ -1,10 +1,10 @@
 # Cabinet Windows Portable Beta
 
-Cabinet `0.1.0-beta.1` is packaged as a Windows portable ZIP until a signed installer is validated.
+Cabinet `{{CABINET_BETA_VERSION}}` is packaged as a Windows portable ZIP until a signed installer is validated.
 
 ## Install and Start
 
-1. Extract `cabinet-0.1.0-beta.1-windows-amd64-portable.zip` into a writable folder.
+1. Extract `{{CABINET_PORTABLE_FILENAME}}` into a writable folder.
 2. Run `cabinet.exe`.
 3. Open the printed local runtime URL if the browser does not open automatically.
 
