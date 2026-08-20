@@ -111,7 +111,16 @@ finally {
 }
 
 Copy-Item -Path (Join-Path $root "README.md") -Destination (Join-Path $stage "README.md") -Force
-Copy-Item -Path (Join-Path $root "openspec\migration\windows-portable-beta.md") -Destination (Join-Path $stage "WINDOWS-PORTABLE-BETA.md") -Force
+$portableGuideTemplate = Get-Content -LiteralPath (Join-Path $root "openspec\migration\windows-portable-beta.md") -Raw
+$portableGuide = $portableGuideTemplate.Replace("{{CABINET_BETA_VERSION}}", $resolvedVersion).Replace("{{CABINET_PORTABLE_FILENAME}}", $packageName)
+if ($portableGuide -match '\{\{CABINET_[A-Z_]+\}\}') {
+  throw "Windows portable guide contains an unresolved release placeholder."
+}
+[System.IO.File]::WriteAllText(
+  (Join-Path $stage "WINDOWS-PORTABLE-BETA.md"),
+  $portableGuide,
+  [System.Text.UTF8Encoding]::new($false)
+)
 
 $disclosureNotes = & node (Join-Path $root "scripts\render-beta-disclosure.mjs") --format release-notes --source $disclosurePath
 if ($LASTEXITCODE -ne 0) {
