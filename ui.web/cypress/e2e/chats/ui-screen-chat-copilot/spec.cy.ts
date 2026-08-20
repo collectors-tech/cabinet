@@ -1,9 +1,23 @@
 describe('chats/ui-screen-chat-copilot', () => {
   function signInToChats() {
-    cy.visit('/sign-in?redirect=%2Fchats%2F')
-    cy.get('input[name="email"]').clear().type('e2e-chats@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap({ minimalProfile: true }).then((bootstrap) => {
+      cy.request('PUT', '/api/profiles/active', { profile_id: bootstrap.profile_id })
+        .its('status')
+        .should('eq', 200)
+      cy.visit('/sign-in?redirect=%2Fchats%2F', {
+        onBeforeLoad(win) {
+          win.localStorage.setItem(`cabinet.workspace.${bootstrap.profile_id}`, '1')
+        },
+      })
+      cy.contains('button', 'Open local workspace').click()
+      cy.get('body').then(($body) => {
+        const profileButton = `Use ${bootstrap.profile_name}`
+        if ($body.text().includes(profileButton)) {
+          cy.contains('button', profileButton).click()
+        }
+      })
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
   }
 
@@ -51,15 +65,22 @@ describe('chats/ui-screen-chat-copilot', () => {
   }
 
   function createThread(title: string) {
+    cy.get('[data-testid="chat-new-chat-button"]')
+      .should('be.visible')
+      .and('not.be.disabled')
+      .click()
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('be.visible')
     cy.get('[data-testid="chat-new-thread-input"]').clear().type(title)
     cy.get('[data-testid="chat-create-thread-button"]').click()
-    cy.get('[data-testid="chat-thread-item"]').contains(title).click()
     cy.get('[data-testid="chat-thread-title"]').should('contain', title)
   }
 
   it('CHAT-COPILOT-001 toggles assistant workspace from the header without route context loss', () => {
     openInventory()
-    cy.get('[data-testid="active-profile-name"]').should('be.visible')
+    cy.get('[data-testid="active-profile-name"]').should(
+      'contain',
+      'E2E Local'
+    )
     cy.get('[data-testid="shell-workspace-navigation"]')
       .should('have.attr', 'data-active', 'true')
     cy.location('pathname').then((initialPathname) => {
@@ -106,8 +127,8 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.wait('@activeProfileMissing')
     cy.get('[data-testid="chat-bootstrap-error"]').should('be.visible')
     cy.contains('active_profile_404').should('be.visible')
-    cy.get('[data-testid="chat-new-thread-input"]').should('be.disabled')
-    cy.get('[data-testid="chat-create-thread-button"]').should('be.disabled')
+    cy.get('[data-testid="chat-empty-workspace-action"]').should('be.disabled')
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('not.exist')
     cy.get('@createThread.all').should('have.length', 0)
   })
 

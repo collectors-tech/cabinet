@@ -49,7 +49,8 @@ Chats workspace MUST let users start a new durable thread from both the empty wo
 - **WHEN** user creates multiple chat threads and filters the conversation rail
 - **THEN** matching thread rows MUST remain visible
 - **AND** non-matching thread rows MUST be hidden
-- **AND** New Chat / Start a conversation affordances MUST keep the new-thread entry available without changing the active route
+- **AND** New Chat / Start a conversation affordances MUST open a labeled new-thread dialog at desktop and compact widths without changing the active route
+- **AND** a successfully created thread MUST close the dialog and become the active conversation without requiring access to the conversation rail
 - **AND** created threads MUST persist through the Cabinet chat thread API for the active profile
 
 ### Requirement CHATS-WORKSPACE-006: `/chats` SHALL closely follow the assistant-ui example chat surface

@@ -30,6 +30,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -221,6 +229,7 @@ export function Chats() {
   const [threadSearch, setThreadSearch] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [threadTitle, setThreadTitle] = useState('')
+  const [newThreadDialogOpen, setNewThreadDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -501,8 +510,10 @@ export function Chats() {
       setSendError(`chat_thread_create_${response.status}`)
       return
     }
+    const createdThread = (await response.json()) as ChatThread
     setThreadTitle('')
-    await loadThreads(activeProfileId, false)
+    setNewThreadDialogOpen(false)
+    await loadThreads(activeProfileId, false, createdThread.id)
   }
 
   const sendMessageContent = useCallback(
@@ -836,13 +847,7 @@ export function Chats() {
               type='button'
               data-testid='chat-new-thread-action'
               className='mb-3 w-full justify-start gap-2 bg-slate-100 text-slate-950 hover:bg-white'
-              onClick={() =>
-                document
-                  .querySelector<HTMLInputElement>(
-                    '[data-testid="chat-new-thread-input"]'
-                  )
-                  ?.focus()
-              }
+              onClick={() => setNewThreadDialogOpen(true)}
               disabled={threadCreationDisabled}
             >
               <Plus className='h-4 w-4' />
@@ -857,25 +862,6 @@ export function Chats() {
                 onChange={(event) => setThreadSearch(event.target.value)}
                 className='border-slate-800 bg-slate-900 ps-9 text-slate-100 placeholder:text-slate-500'
               />
-            </div>
-            <div className='mb-3 flex gap-2'>
-              <Input
-                data-testid='chat-new-thread-input'
-                placeholder='New thread title'
-                value={threadTitle}
-                onChange={(event) => setThreadTitle(event.target.value)}
-                disabled={threadCreationDisabled}
-                className='border-slate-800 bg-slate-900 text-slate-100 placeholder:text-slate-500'
-              />
-              <Button
-                data-testid='chat-create-thread-button'
-                onClick={() => void createThread()}
-                disabled={threadCreationDisabled || !threadTitle.trim()}
-                variant='outline'
-                className='border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800'
-              >
-                Create
-              </Button>
             </div>
             <ScrollArea className='min-h-0 flex-1'>
               <div data-testid='chat-thread-list' className='space-y-1'>
@@ -943,13 +929,8 @@ export function Chats() {
                     type='button'
                     className='mt-4'
                     data-testid='chat-empty-workspace-action'
-                    onClick={() =>
-                      document
-                        .querySelector<HTMLInputElement>(
-                          '[data-testid="chat-new-thread-input"]'
-                        )
-                        ?.focus()
-                    }
+                    onClick={() => setNewThreadDialogOpen(true)}
+                    disabled={threadCreationDisabled}
                   >
                     Start a conversation
                   </Button>
@@ -983,13 +964,8 @@ export function Chats() {
                         size='sm'
                         data-testid='chat-new-chat-button'
                         className='gap-2 bg-slate-100 text-slate-950 hover:bg-white'
-                        onClick={() =>
-                          document
-                            .querySelector<HTMLInputElement>(
-                              '[data-testid="chat-new-thread-input"]'
-                            )
-                            ?.focus()
-                        }
+                        onClick={() => setNewThreadDialogOpen(true)}
+                        disabled={threadCreationDisabled}
                       >
                         <Plus className='h-4 w-4' />
                         New Chat
@@ -1427,6 +1403,51 @@ export function Chats() {
             </AlertDialogAction>
           </AlertDialogFooter>
       </AlertDialogContent>
+      <Dialog
+        open={newThreadDialogOpen}
+        onOpenChange={(open) => {
+          setNewThreadDialogOpen(open)
+          if (!open) {
+            setThreadTitle('')
+          }
+        }}
+      >
+        <DialogContent data-testid='chat-new-thread-dialog'>
+          <DialogHeader>
+            <DialogTitle>Start a new Chat</DialogTitle>
+            <DialogDescription>
+              Name the conversation so Cabinet can keep its messages, context,
+              attachments, and governed actions together.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className='space-y-4'
+            onSubmit={(event) => {
+              event.preventDefault()
+              void createThread()
+            }}
+          >
+            <Input
+              data-testid='chat-new-thread-input'
+              aria-label='Chat title'
+              autoFocus
+              placeholder='For example, organise my latest purchases'
+              value={threadTitle}
+              onChange={(event) => setThreadTitle(event.target.value)}
+              disabled={threadCreationDisabled}
+            />
+            <DialogFooter>
+              <Button
+                type='submit'
+                data-testid='chat-create-thread-button'
+                disabled={threadCreationDisabled || !threadTitle.trim()}
+              >
+                Create Chat
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AlertDialog>
   )
 }

@@ -12,14 +12,16 @@ describe('chats/cabinet-agent-collection-workflows', () => {
       'match',
       /^\/chats\/?$/
     )
+    cy.get('[data-testid="chat-new-thread-action"]').click()
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('be.visible')
     cy.get('[data-testid="chat-new-thread-input"]')
       .clear()
       .type('E2E Collection Agent Contract')
     cy.get('[data-testid="chat-create-thread-button"]').click()
-    cy.contains(
-      '[data-testid="chat-thread-item"]',
+    cy.get('[data-testid="chat-thread-title"]').should(
+      'contain',
       'E2E Collection Agent Contract'
-    ).click()
+    )
   }
 
   it('AGENT-COLLECTION-WORKFLOWS-001/#2082 routes collection-domain natural language through the shared governed planner contract', () => {

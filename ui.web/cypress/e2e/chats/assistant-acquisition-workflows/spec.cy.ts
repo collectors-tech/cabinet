@@ -13,14 +13,12 @@ describe('chats/assistant-acquisition-workflows', () => {
       /^\/chats\/?$/
     )
 
+    cy.get('[data-testid="chat-new-thread-action"]').click()
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('be.visible')
     cy.get('[data-testid="chat-new-thread-input"]')
       .clear()
       .type('E2E acquisition Agent')
     cy.get('[data-testid="chat-create-thread-button"]').click()
-    cy.contains(
-      '[data-testid="chat-thread-item"]',
-      'E2E acquisition Agent'
-    ).click()
     cy.get('[data-testid="chat-thread-title"]').should(
       'contain',
       'E2E acquisition Agent'
