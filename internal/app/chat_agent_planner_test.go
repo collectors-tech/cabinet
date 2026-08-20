@@ -880,6 +880,41 @@ func TestChatAgentPlannerRoutesDashboardActivitySummaryFromMainChat(t *testing.T
 		strings.Contains(bodyText, "preview_id") {
 		t.Fatalf("dashboard planner response leaked wrong profile, secret, or preview token: body=%s", bodyText)
 	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("dashboard planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal dashboard Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode dashboard Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "dashboard_activity" {
+		t.Fatalf("dashboard response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if len(agentResponse.ResultSummary.Metrics) == 0 || len(agentResponse.ResultSummary.Items) == 0 {
+		t.Fatalf("dashboard summary must include bounded signals and recent records: %+v", agentResponse.ResultSummary)
+	}
+	if agentResponse.ResultSummary.Items[0].Title != "Planner Dashboard A Camaro" {
+		t.Fatalf("dashboard summary recent item = %+v, want profile A record", agentResponse.ResultSummary.Items[0])
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal dashboard result summary: %v", err)
+	}
+	for _, want := range []string{"New discoveries", "Wishlist hits", "Price drops"} {
+		if !strings.Contains(string(summaryJSON), want) {
+			t.Fatalf("dashboard result summary missing metric %q: %s", want, summaryJSON)
+		}
+	}
+	for _, forbidden := range []string{"Planner Dashboard B Porsche", "sk-planner-dashboard-secret", "http://a.example", "seller-a"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("dashboard result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
 }
 
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {

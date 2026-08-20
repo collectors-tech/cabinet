@@ -638,14 +638,7 @@ func plannerAgentResponse(registry agentskills.Registry, selection chatAgentSkil
 		readResultSummary = plannerAgentReadResultSummary(selection.SkillID, execution)
 		message = strings.TrimSpace(selection.Message)
 		if readResultSummary != nil {
-			switch readResultSummary.Total {
-			case 0:
-				message = "Cabinet found no matching inventory items."
-			case 1:
-				message = "Cabinet found 1 matching inventory item."
-			default:
-				message = fmt.Sprintf("Cabinet found %d matching inventory items.", readResultSummary.Total)
-			}
+			message = plannerAgentReadResultMessage(readResultSummary)
 		} else if message == "" {
 			message = "Cabinet completed the governed read-only Agent request."
 		}
@@ -703,15 +696,50 @@ func plannerAgentResponse(registry agentskills.Registry, selection chatAgentSkil
 	return response
 }
 
+func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) string {
+	if summary == nil {
+		return ""
+	}
+	switch summary.Kind {
+	case "inventory_items":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching inventory items."
+		case 1:
+			return "Cabinet found 1 matching inventory item."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching inventory items.", summary.Total)
+		}
+	case "dashboard_activity":
+		if summary.Total == 0 {
+			return "Cabinet found no Dashboard activity records available for that read-only request."
+		}
+		return "Cabinet summarised the current Dashboard snapshot with bounded attention signals and recent records."
+	default:
+		return "Cabinet completed the governed read-only Agent request."
+	}
+}
+
 const (
 	plannerAgentReadResultItemLimit = 5
 	plannerAgentReadResultTextLimit = 160
 )
 
 func plannerAgentReadResultSummary(skillID string, execution map[string]any) *chat.AgentResponseResultSummary {
-	if strings.TrimSpace(skillID) != "cabinet.inventory.search_items" || execution == nil {
+	if execution == nil {
 		return nil
 	}
+	switch strings.TrimSpace(skillID) {
+	case "cabinet.inventory.search_items":
+		return plannerAgentInventoryReadResultSummary(execution)
+	case "cabinet.dashboard.summarise_activity":
+		return plannerAgentDashboardReadResultSummary(execution)
+	default:
+		return nil
+	}
+}
+
+func plannerAgentInventoryReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
 	rawItems, ok := execution["items"].([]collection.Item)
 	if !ok {
 		return nil
@@ -742,12 +770,114 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 	}
 }
 
+func plannerAgentDashboardReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	signals := plannerReadResultMapSlice(execution["attention_signals"])
+	recentItems := plannerReadResultMapSlice(execution["recent_items"])
+	if len(signals) == 0 && len(recentItems) == 0 {
+		if unavailable, _ := plannerReadResultBool(plannerReadResultMapValue(execution["dependency_state"], "status"), "unavailable"); unavailable {
+			return &chat.AgentResponseResultSummary{Kind: "dashboard_activity", Total: 0}
+		}
+		return nil
+	}
+
+	limit := len(signals)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	metrics := make([]chat.AgentResponseResultMetric, 0, limit)
+	for _, signal := range signals[:limit] {
+		metrics = append(metrics, chat.AgentResponseResultMetric{
+			ID:    plannerBoundedReadResultText(plannerReadResultString(signal["id"])),
+			Label: plannerBoundedReadResultText(plannerReadResultString(signal["label"])),
+			Value: plannerReadResultInt(signal["count"]),
+			Route: plannerBoundedReadResultText(plannerReadResultString(signal["destination_link"])),
+		})
+	}
+
+	itemLimit := len(recentItems)
+	if itemLimit > plannerAgentReadResultItemLimit {
+		itemLimit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, itemLimit)
+	for _, item := range recentItems[:itemLimit] {
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(plannerReadResultString(item["item_id"])),
+			Title:    plannerBoundedReadResultText(plannerReadResultString(item["title"])),
+			Category: "Recent Dashboard item",
+		})
+	}
+
+	return &chat.AgentResponseResultSummary{
+		Kind:    "dashboard_activity",
+		Total:   len(metrics) + len(items),
+		Items:   items,
+		Metrics: metrics,
+	}
+}
+
 func plannerBoundedReadResultText(value string) string {
 	runes := []rune(strings.TrimSpace(value))
 	if len(runes) > plannerAgentReadResultTextLimit {
 		runes = runes[:plannerAgentReadResultTextLimit]
 	}
 	return string(runes)
+}
+
+func plannerReadResultMapSlice(value any) []map[string]any {
+	typed, ok := value.([]map[string]any)
+	if ok {
+		return typed
+	}
+	raw, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	items := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if mapped, ok := item.(map[string]any); ok {
+			items = append(items, mapped)
+		}
+	}
+	return items
+}
+
+func plannerReadResultString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func plannerReadResultInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err == nil {
+			return int(parsed)
+		}
+	}
+	return 0
+}
+
+func plannerReadResultMapValue(value any, key string) any {
+	if mapped, ok := value.(map[string]any); ok {
+		return mapped[key]
+	}
+	return nil
+}
+
+func plannerReadResultBool(value any, expected string) (bool, bool) {
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" {
+		return false, false
+	}
+	return strings.EqualFold(text, expected), true
 }
 
 func plannerProviderSetupRequired(result map[string]any) bool {

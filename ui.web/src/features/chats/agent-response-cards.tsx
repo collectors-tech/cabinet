@@ -116,6 +116,12 @@ export type NormalizedAgentResponse = {
   result_summary?: {
     kind?: string
     total?: number
+    metrics?: Array<{
+      id?: string
+      label?: string
+      value?: number
+      route?: string
+    }>
     items?: Array<{
       id?: string
       part_number?: string
@@ -190,6 +196,19 @@ function NormalizedAgentResponseCard({
               ? 'No matching records.'
               : `${response.result_summary.total ?? response.result_summary.items?.length ?? 0} matching record${(response.result_summary.total ?? response.result_summary.items?.length ?? 0) === 1 ? '' : 's'}`}
           </p>
+          {response.result_summary.metrics?.length ? (
+            <dl className='mt-2 grid gap-2 sm:grid-cols-2'>
+              {response.result_summary.metrics.map((metric, index) => (
+                <div
+                  key={metric.id || `${metric.label || 'metric'}-${index}`}
+                  className='rounded border border-slate-700 bg-slate-950/60 p-2'
+                >
+                  <dt className='text-xs text-slate-400'>{metric.label || metric.id}</dt>
+                  <dd className='mt-1 font-medium text-slate-100'>{metric.value ?? 0}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
           {response.result_summary.items?.length ? (
             <ul className='mt-2 space-y-2'>
               {response.result_summary.items.map((item, index) => (

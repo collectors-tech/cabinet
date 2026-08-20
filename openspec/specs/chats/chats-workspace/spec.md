@@ -176,3 +176,12 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST survive reload and thread handoff
 - **AND** the summary MUST contain no write action or confirmation control
 - **AND** Cabinet MUST cap the number and length of rendered fields and exclude notes, URLs, credentials, secrets, and raw provider or execution blobs
+
+#### Scenario: Dashboard summary returns typed safe activity facts
+
+- **GIVEN** the active profile has Dashboard totals, attention signals, and recent item identifiers
+- **WHEN** the user asks Chat to summarise current Dashboard activity
+- **THEN** Cabinet MUST execute the profile-scoped read-only Dashboard skill and persist a `dashboard_activity` result summary with bounded attention metrics and recent record labels
+- **AND** the summary MUST distinguish unavailable Dashboard dependencies from empty or no-attention states
+- **AND** the summary MUST contain no write action or confirmation control
+- **AND** Cabinet MUST exclude cross-profile records, provider secrets, raw provider payloads, private source URLs, seller details, stack traces, and execution internals
