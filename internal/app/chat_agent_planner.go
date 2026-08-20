@@ -736,6 +736,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching collection records.", summary.Total)
 		}
+	case "integration_providers":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching integration providers."
+		case 1:
+			return "Cabinet found 1 matching integration provider."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching integration providers.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -761,6 +770,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentWishlistReadResultSummary(execution)
 	case "cabinet.collections.search":
 		return plannerAgentCollectionsReadResultSummary(execution)
+	case "cabinet.integrations.search_providers":
+		return plannerAgentIntegrationProvidersReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -951,6 +962,49 @@ func plannerAgentCollectionsReadResultSummary(execution map[string]any) *chat.Ag
 
 	return &chat.AgentResponseResultSummary{
 		Kind:  "collections",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerAgentIntegrationProvidersReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	providers := plannerReadResultMapSlice(execution["providers"])
+	if len(providers) == 0 {
+		return &chat.AgentResponseResultSummary{Kind: "integration_providers", Total: 0}
+	}
+	total := len(providers)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(providers)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, provider := range providers[:limit] {
+		id := plannerBoundedReadResultText(plannerReadResultString(provider["id"]))
+		status := plannerBoundedReadResultText(plannerReadResultString(provider["status"]))
+		setupRequired, setupKnown := plannerReadResultBool(provider["setup_required"], "true")
+		category := "Integration provider"
+		if setupKnown {
+			if setupRequired {
+				category = "Setup required"
+			} else {
+				category = "Ready"
+			}
+		}
+		if id == "" && status == "" {
+			continue
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       id,
+			Title:    id,
+			Status:   status,
+			Category: category,
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "integration_providers",
 		Total: total,
 		Items: items,
 	}

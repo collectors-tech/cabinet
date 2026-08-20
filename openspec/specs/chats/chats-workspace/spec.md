@@ -208,3 +208,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the profile-scoped read-only Collections skill and persist a `collections` result summary with bounded collection names, assigned item identifiers, assigned item titles, and collection membership names
 - **AND** the summary MUST exclude workspace item detail text, provider secrets, raw provider payloads, stack traces, execution internals, and cross-profile collection workspace records
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Integration provider search returns typed safe provider facts
+
+- **GIVEN** the active profile can ask Chat to find configured or available integration providers
+- **WHEN** the user asks Chat to search integration providers
+- **THEN** Cabinet MUST execute the read-only Integrations provider search skill and persist an `integration_providers` result summary with bounded provider identifiers, availability status, and setup-required state
+- **AND** the summary MUST exclude provider secrets, raw provider payloads, execution internals, write-claim evidence, preview tokens, stack traces, and configuration payloads
+- **AND** the summary MUST contain no write action or confirmation control
