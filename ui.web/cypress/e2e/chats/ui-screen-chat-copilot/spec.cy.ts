@@ -75,6 +75,33 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-thread-title"]').should('contain', title)
   }
 
+  function openActionPreview(
+    threadTitle: string,
+    action: string,
+    payload: Record<string, string>
+  ) {
+    cy.request('/api/chat/threads?profile_id=e2e-profile-001')
+      .its('body.threads')
+      .then((threads: Array<{ id: string; title: string }>) => {
+        const thread = threads.find((candidate) => candidate.title === threadTitle)
+        expect(thread?.id, `thread ${threadTitle}`).to.be.a('string').and.not.eq('')
+        cy.request('POST', '/api/chat/actions/preview', {
+          profile_id: 'e2e-profile-001',
+          thread_id: thread?.id,
+          action,
+          payload,
+        }).then(({ body, status }) => {
+          expect(status).to.eq(200)
+          cy.visit(
+            `/chats/?thread_id=${encodeURIComponent(String(thread?.id))}&preview_id=${encodeURIComponent(String(body.id))}`
+          )
+        })
+      })
+    cy.get('[data-testid="chat-action-preview"]', { timeout: 20000 })
+      .scrollIntoView()
+      .should('be.visible')
+  }
+
   it('CHAT-COPILOT-001 toggles assistant workspace from the header without route context loss', () => {
     openInventory()
     cy.get('[data-testid="active-profile-name"]').should(
@@ -184,6 +211,7 @@ describe('chats/ui-screen-chat-copilot', () => {
   })
 
   it('UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure', () => {
+    cy.viewport(1400, 900)
     openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
     createThread('E2E Dark Shell Thread')
 
@@ -241,10 +269,10 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-send-button"]').click()
     cy.get('[data-testid="chat-message-list"]').should('contain', 'Please create this item')
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
-    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-007-INV')
-    cy.get('[data-testid="chat-preview-title"]').clear().type('Copilot Inventory Create')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview(threadTitle, 'create_inventory_item', {
+      part_number: 'CP-007-INV',
+      title: 'Copilot Inventory Create',
+    })
     cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_inventory_item')
     cy.get('[data-testid="chat-apply-action-button"]').click()
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
@@ -261,17 +289,11 @@ describe('chats/ui-screen-chat-copilot', () => {
       const created = items.find((item) => item.part_number === 'CP-007-INV')
       expect(created, 'created inventory item').to.not.equal(undefined)
 
-      cy.get('[data-testid="chat-preview-action-mode"]').select('update_inventory_item')
-      cy.get('[data-testid="chat-preview-target-item-id"]')
-        .clear()
-        .type(created?.id ?? '')
-      cy.get('[data-testid="chat-preview-part-number"]')
-        .clear()
-        .type('CP-007-INV-UPD')
-      cy.get('[data-testid="chat-preview-title"]')
-        .clear()
-        .type('Copilot Inventory Updated')
-      cy.get('[data-testid="chat-preview-action-button"]').click()
+      openActionPreview(threadTitle, 'update_inventory_item', {
+        item_id: created?.id ?? '',
+        part_number: 'CP-007-INV-UPD',
+        title: 'Copilot Inventory Updated',
+      })
       cy.get('[data-testid="chat-action-preview"]')
         .should('contain', 'update_inventory_item')
         .and('contain', 'CP-007-INV-UPD')
@@ -291,10 +313,10 @@ describe('chats/ui-screen-chat-copilot', () => {
         .and('contain', 'title=Copilot Inventory Updated')
     })
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select('create_wishlist_entry')
-    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-007-WISH')
-    cy.get('[data-testid="chat-preview-title"]').clear().type('Copilot Wishlist Create')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview(threadTitle, 'create_wishlist_entry', {
+      part_number: 'CP-007-WISH',
+      title: 'Copilot Wishlist Create',
+    })
     cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_wishlist_entry')
     cy.get('[data-testid="chat-apply-action-button"]').click()
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
@@ -347,10 +369,9 @@ describe('chats/ui-screen-chat-copilot', () => {
     openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
     createThread('E2E Copilot Provider Defaults Thread')
 
-    cy.get('[data-testid="chat-assistant-defaults"]').should(
-      'contain',
-      'anthropic / claude-3-7-sonnet'
-    )
+    cy.get('[data-testid="chat-model-selector-row"]')
+      .should('contain', 'anthropic')
+      .and('contain', 'claude-3-7-sonnet')
     cy.get('[data-testid="chat-compose-input"]').clear().type('Draft this with the active assistant defaults')
     cy.get('[data-testid="chat-send-button"]').click()
     cy.get('[data-testid="chat-message-list"]').should(
@@ -358,10 +379,12 @@ describe('chats/ui-screen-chat-copilot', () => {
       'Draft this with the active assistant defaults'
     )
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
-    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-012-PROVIDER')
-    cy.get('[data-testid="chat-preview-title"]').clear().type('Provider Default Preview')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview('E2E Copilot Provider Defaults Thread', 'create_inventory_item', {
+      part_number: 'CP-012-PROVIDER',
+      title: 'Provider Default Preview',
+      assistant_provider: 'anthropic',
+      assistant_model: 'claude-3-7-sonnet',
+    })
     cy.get('[data-testid="chat-action-preview"]').should(
       'contain',
       'anthropic / claude-3-7-sonnet'
@@ -386,22 +409,18 @@ describe('chats/ui-screen-chat-copilot', () => {
       'Assign this item to the retail collection'
     )
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select(
-      'assign_collection_item'
+    openActionPreview(
+      'E2E Copilot Collection Preview Thread',
+      'assign_collection_item',
+      {
+        item_id: 'e2e-item-001',
+        part_number: 'CP-013-COLLECT',
+        title: 'E2E Starter Car',
+        collection_name: 'Store 1',
+        assistant_provider: 'openai',
+        assistant_model: 'gpt-4.1-mini',
+      }
     )
-    cy.get('[data-testid="chat-preview-target-item-id"]')
-      .clear()
-      .type('e2e-item-001')
-    cy.get('[data-testid="chat-preview-part-number"]')
-      .clear()
-      .type('CP-013-COLLECT')
-    cy.get('[data-testid="chat-preview-title"]')
-      .clear()
-      .type('E2E Starter Car')
-    cy.get('[data-testid="chat-preview-collection-name"]')
-      .clear()
-      .type('Store 1')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
 
     cy.get('[data-testid="chat-action-preview"]')
       .should('contain', 'assign_collection_item')
@@ -429,9 +448,10 @@ describe('chats/ui-screen-chat-copilot', () => {
       'contain',
       'Store 1'
     )
-    cy.get(
-      '[data-testid="collections-member-current-e2e-starter-car"]'
-    ).should('contain', 'Store 1')
+    cy.get('[data-testid="collections-row-count-store-1"]').should(
+      'have.text',
+      '1'
+    )
   })
 
   it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating inventory and records history', () => {
@@ -442,22 +462,15 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-send-button"]').click()
     cy.get('[data-testid="chat-message-list"]').should('contain', 'Draft this item only')
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select('update_inventory_item')
-    cy.get('[data-testid="chat-preview-target-item-id"]')
-      .clear()
-      .type('e2e-item-001')
-    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-011-CANCEL')
-    cy.get('[data-testid="chat-preview-title"]').clear().type('Copilot Cancel Preview')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview('E2E Copilot Cancel Apply Thread', 'update_inventory_item', {
+      item_id: 'e2e-item-001',
+      part_number: 'CP-011-CANCEL',
+      title: 'Copilot Cancel Preview',
+    })
     cy.get('[data-testid="chat-action-preview"]')
       .should('contain', 'update_inventory_item')
       .and('contain', 'pending')
-    cy.get('[data-testid="chat-apply-action-button"]').click()
-    cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
-    cy.get('[data-testid="chat-apply-confirm-summary"]')
-      .should('contain', 'target=e2e-item-001')
-      .and('contain', 'CP-011-CANCEL')
-    cy.get('[data-testid="chat-apply-confirm-cancel"]').click()
+    cy.get('[data-testid="chat-cancel-action-button"]').click()
 
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('not.exist')
     cy.get('[data-testid="chat-action-preview"]')
@@ -515,19 +528,11 @@ describe('chats/ui-screen-chat-copilot', () => {
       ).to.eq(false)
     })
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select(
-      'update_inventory_item'
-    )
-    cy.get('[data-testid="chat-preview-target-item-id"]')
-      .clear()
-      .type('missing-chat-update-target')
-    cy.get('[data-testid="chat-preview-part-number"]')
-      .clear()
-      .type('CP-014-MISSING')
-    cy.get('[data-testid="chat-preview-title"]')
-      .clear()
-      .type('Missing Update Target')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview('E2E Copilot Failed Update Thread', 'update_inventory_item', {
+      item_id: 'missing-chat-update-target',
+      part_number: 'CP-014-MISSING',
+      title: 'Missing Update Target',
+    })
     cy.get('[data-testid="chat-action-preview"]')
       .should('contain', 'update_inventory_item')
       .and('contain', 'missing-chat-update-target')
@@ -581,21 +586,14 @@ describe('chats/ui-screen-chat-copilot', () => {
       'Draft a preview that must stay scoped to this thread'
     )
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select(
-      'create_inventory_item'
-    )
-    cy.get('[data-testid="chat-preview-part-number"]')
-      .clear()
-      .type('CP-015-STALE')
-    cy.get('[data-testid="chat-preview-title"]')
-      .clear()
-      .type('Thread Scoped Preview')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview('E2E Copilot Thread Context A', 'create_inventory_item', {
+      part_number: 'CP-015-STALE',
+      title: 'Thread Scoped Preview',
+    })
     cy.get('[data-testid="chat-action-preview"]')
       .should('contain', 'create_inventory_item')
       .and('contain', 'CP-015-STALE')
-    cy.get('[data-testid="chat-apply-action-button"]').click()
-    cy.get('[data-testid="chat-apply-confirm-cancel"]').click()
+    cy.get('[data-testid="chat-cancel-action-button"]').click()
     cy.get('[data-testid="chat-action-apply-notice"]').should(
       'contain',
       'Action apply canceled; no mutation applied.'
@@ -625,16 +623,10 @@ describe('chats/ui-screen-chat-copilot', () => {
       'Keep this pending preview available while I check another route'
     )
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select(
-      'create_inventory_item'
-    )
-    cy.get('[data-testid="chat-preview-part-number"]')
-      .clear()
-      .type('CP-016-RETURN')
-    cy.get('[data-testid="chat-preview-title"]')
-      .clear()
-      .type('Route Return Preview')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview('E2E Copilot Route Return Thread', 'create_inventory_item', {
+      part_number: 'CP-016-RETURN',
+      title: 'Route Return Preview',
+    })
     cy.get('[data-testid="chat-action-preview"]')
       .should('contain', 'create_inventory_item')
       .and('contain', 'CP-016-RETURN')
@@ -685,9 +677,6 @@ describe('chats/ui-screen-chat-copilot', () => {
       },
       { force: true }
     )
-    cy.get('[data-testid="chat-upload-attachment-button"]').click({
-      force: true,
-    })
     cy.wait('@chatAttachment').then(({ response }) => {
       expect(response?.statusCode).to.eq(201)
       expect(response?.body.filename).to.eq('mobile-remove-me.txt')
@@ -700,32 +689,19 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-remove-attachment-button"]').click({
       force: true,
     })
-    cy.get('[data-testid="chat-attachment-list"]').should(
-      'not.contain',
-      'mobile-remove-me.txt'
-    )
+    cy.get('[data-testid="chat-attachment-list"]').should('not.exist')
 
     cy.get('[data-testid="chat-attachment-input"]').selectFile(
-      {
-        contents: Cypress.Buffer.from('fake-image-data'),
-        fileName: 'mobile-chat-photo.jpg',
-        mimeType: 'image/jpeg',
-      },
+      'public/images/favicon.png',
       { force: true }
     )
-    cy.get('[data-testid="chat-upload-attachment-button"]').click({
-      force: true,
-    })
     cy.wait('@chatAttachment').then(({ response }) => {
       expect(response?.statusCode).to.eq(201)
-      expect(response?.body.filename).to.eq('mobile-chat-photo.jpg')
+      expect(response?.body.filename).to.eq('favicon.png')
       keptAttachmentId = String(response?.body.id)
       expect(keptAttachmentId).not.to.eq(removedAttachmentId)
     })
-    cy.get('[data-testid="chat-attachment-list"]').should(
-      'contain',
-      'mobile-chat-photo.jpg'
-    )
+    cy.get('[data-testid="chat-attachment-list"]').should('contain', 'favicon.png')
     cy.get('[data-testid="chat-compose-input"]')
       .clear()
       .type('Use the attached photo to create an item')
@@ -740,10 +716,10 @@ describe('chats/ui-screen-chat-copilot', () => {
       'Use the attached photo to create an item'
     )
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
-    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-008-MOBILE')
-    cy.get('[data-testid="chat-preview-title"]').clear().type('Mobile Image Suggestion')
-    cy.get('[data-testid="chat-preview-action-button"]').click()
+    openActionPreview('E2E Mobile Copilot Thread', 'create_inventory_item', {
+      part_number: 'CP-008-MOBILE',
+      title: 'Mobile Image Suggestion',
+    })
     cy.get('[data-testid="chat-action-preview"]').should('be.visible')
     cy.get('[data-testid="chat-apply-action-button"]').click()
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
