@@ -44,7 +44,7 @@ describe("ui-keyboard-shortcuts", () => {
   function dispatchShortcut(key: string) {
     cy.document().then((doc) => {
       const win = doc.defaultView;
-      expect(win, "application window").to.exist;
+      expect(win, "application window").not.to.eq(null);
       const eventInit: KeyboardEventInit = {
         key,
         code: `Key${key.toUpperCase()}`,
