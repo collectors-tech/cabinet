@@ -1,5 +1,6 @@
 describe('chats/chats-workspace', () => {
   function openChats() {
+    cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap({ minimalProfile: true })
     cy.e2eSetSetupState('present')
@@ -8,9 +9,22 @@ describe('chats/chats-workspace', () => {
   }
 
   function createThread(title: string) {
+    cy.get('body').then(($body) => {
+      if (
+        $body.find('[data-testid="chat-new-thread-dialog"]:visible').length === 0
+      ) {
+        cy.get(
+          '[data-testid="chat-new-chat-button"], [data-testid="chat-empty-workspace-action"], [data-testid="chat-new-thread-action"]'
+        )
+          .filter(':visible')
+          .first()
+          .click()
+      }
+    })
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('be.visible')
     cy.get('[data-testid="chat-new-thread-input"]').clear().type(title)
     cy.get('[data-testid="chat-create-thread-button"]').click()
-    cy.contains('[data-testid="chat-thread-item"]', title).click()
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('not.exist')
     cy.get('[data-testid="chat-thread-title"]').should('contain', title)
   }
 
@@ -144,12 +158,14 @@ describe('chats/chats-workspace', () => {
     openChats()
 
     cy.get('[data-testid="chat-empty-workspace-action"]').click()
-    cy.get('[data-testid="chat-new-thread-input"]').should('not.be.disabled')
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('be.visible')
+    cy.get('[data-testid="chat-new-thread-input"]').should('be.enabled')
     cy.location('pathname').should('match', /^\/chats\/?$/)
 
     createThread('E2E Alpha Search Thread')
     cy.get('[data-testid="chat-new-chat-button"]').click()
-    cy.get('[data-testid="chat-new-thread-input"]').should('not.be.disabled')
+    cy.get('[data-testid="chat-new-thread-dialog"]').should('be.visible')
+    cy.get('[data-testid="chat-new-thread-input"]').should('be.enabled')
     createThread('E2E Beta Search Thread')
 
     cy.get('[data-testid="chat-conversation-search"]').clear().type('Alpha')
