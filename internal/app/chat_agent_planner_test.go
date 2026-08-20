@@ -1133,6 +1133,112 @@ func TestChatAgentPlannerRoutesWishlistSearchSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesCollectionsSearchSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Collections A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Collections B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != 201 || createB.Code != 201 {
+		t.Fatalf("create profiles status A=%d B=%d body A=%s body B=%s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	workspaceA := `{"collections":["All Items","Planner Shelf A"],"activeCollection":"Planner Shelf A","items":[{"id":"planner-collection-item-a","name":"Planner Collection A Camaro","detail":"private collection detail must not render","collectionName":"Planner Shelf A"}]}`
+	workspaceB := `{"collections":["All Items","Planner Shelf B"],"activeCollection":"Planner Shelf B","items":[{"id":"planner-collection-item-b","name":"Planner Collection B Porsche","detail":"other profile private detail","collectionName":"Planner Shelf B"}]}`
+	if _, err := a.db.Exec(`
+		INSERT INTO profile_settings(profile_id, key, value)
+		VALUES
+			(?, 'collections.workspace.v1', ?),
+			(?, 'collections.workspace.v1', ?)
+	`, profileA.ID, workspaceA, profileB.ID, workspaceB); err != nil {
+		t.Fatalf("seed collections workspace state: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Collections"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.collections.search","parameters":{"query":"planner","provider_secret":"sk-planner-collections-secret"},"message":"Searching collections."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Find my planner collections",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Find my planner collections",
+			},
+		},
+		"message-collections-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Collections search request")
+	}
+	if result["skill_id"] != "cabinet.collections.search" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Collections skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["profile_id"] != profileA.ID || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only profile-scoped Collections execution result, got %+v", result)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("collections planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal collections Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode collections Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "collections" {
+		t.Fatalf("collections response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 2 || len(agentResponse.ResultSummary.Items) != 2 {
+		t.Fatalf("collections summary must expose bounded active-profile records: %+v", agentResponse.ResultSummary)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal collections result summary: %v", err)
+	}
+	for _, want := range []string{"Planner Shelf A", "Planner Collection A Camaro", "planner-collection-item-a", "assigned"} {
+		if !strings.Contains(string(summaryJSON), want) {
+			t.Fatalf("collections result summary missing %q: %s", want, summaryJSON)
+		}
+	}
+	for _, forbidden := range []string{"Planner Shelf B", "Planner Collection B Porsche", "private collection detail", "other profile private detail", "sk-planner-collections-secret", "preview_id"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("collections result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
 	t.Parallel()
 
