@@ -1026,6 +1026,115 @@ func TestChatAgentPlannerRoutesStorageStatusSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesDataExportSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Data Export"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Data Export"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.data.export_bundle","parameters":{"export_scope":"all","provider_secret":"sk-planner-export-secret","backup_path":"C:/private/cabinet.db"},"message":"Preparing an export summary."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Export all Cabinet data",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/settings/storage",
+				"surface_id":     "settings.data.export",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Export all Cabinet data",
+			},
+		},
+		"message-data-export-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Data export request")
+	}
+	if result["skill_id"] != "cabinet.data.export_bundle" || result["preview_result"] != nil {
+		t.Fatalf("expected non-mutating Data export execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["profile_id"] != profile.ID || execution["mutation_applied"] == true {
+		t.Fatalf("expected profile-scoped non-mutating Data export execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal data export planner result: %v", err)
+	}
+	bodyText := string(body)
+	for _, want := range []string{
+		`"operation":"data.export.bundle"`,
+		`"export_scope":"all"`,
+		`"status":"ready"`,
+	} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("data export planner response missing %s: body=%s", want, bodyText)
+		}
+	}
+	if strings.Contains(bodyText, "sk-planner-export-secret") || strings.Contains(bodyText, "preview_id") {
+		t.Fatalf("data export planner response leaked secret or preview token: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("data export planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal data export Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode data export Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "data_export_bundle" {
+		t.Fatalf("data export response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("data export summary must expose one bounded readiness record: %+v", agentResponse.ResultSummary)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal data export result summary: %v", err)
+	}
+	for _, want := range []string{"Data export bundle", "ready", "Scope: all"} {
+		if !strings.Contains(string(summaryJSON), want) {
+			t.Fatalf("data export result summary missing %q: %s", want, summaryJSON)
+		}
+	}
+	for _, forbidden := range []string{"sk-planner-export-secret", "preview_id", "backup_path", "C:/private", "raw_payload"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("data export result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesWishlistSearchSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 

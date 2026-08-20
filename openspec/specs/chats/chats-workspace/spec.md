@@ -216,3 +216,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the read-only Integrations provider search skill and persist an `integration_providers` result summary with bounded provider identifiers, availability status, and setup-required state
 - **AND** the summary MUST exclude provider secrets, raw provider payloads, execution internals, write-claim evidence, preview tokens, stack traces, and configuration payloads
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Data export preparation returns typed safe readiness facts
+
+- **GIVEN** the active profile can ask Chat to prepare a non-mutating Cabinet data export bundle
+- **WHEN** the user asks Chat to export Cabinet data
+- **THEN** Cabinet MUST execute the profile-scoped export preparation path and persist a `data_export_bundle` result summary with bounded export scope and readiness status facts
+- **AND** the summary MUST exclude provider secrets, raw provider payloads, backup paths, export artifact paths, preview tokens, stack traces, and execution internals
+- **AND** the summary MUST contain no write action or confirmation control
