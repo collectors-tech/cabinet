@@ -367,6 +367,8 @@ func chatMessageRequiresAssistantHandoff(content string) bool {
 		return false
 	}
 	handoffPhrases := []string{
+		"async",
+		"asynchronously",
 		"follow up",
 		"handoff",
 		"queue",
@@ -377,6 +379,24 @@ func chatMessageRequiresAssistantHandoff(content string) bool {
 		"when ready",
 	}
 	for _, phrase := range handoffPhrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func chatMessageExplicitlyRequestsAsyncHandoff(content string) bool {
+	normalized := normalizePlannerText(content)
+	if normalized == "" {
+		return false
+	}
+	for _, phrase := range []string{
+		"async",
+		"asynchronously",
+		"background",
+		"when ready",
+	} {
 		if strings.Contains(normalized, phrase) {
 			return true
 		}
