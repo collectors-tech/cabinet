@@ -335,7 +335,7 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE profile_id = ? AND thread_id = ?
-		ORDER BY created_at ASC
+		ORDER BY created_at ASC, rowid ASC
 	`, profileID, threadID)
 	if err != nil {
 		return nil, err

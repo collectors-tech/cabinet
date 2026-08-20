@@ -99,8 +99,8 @@ Chats workspace MUST expose deterministic app-control outcomes from normal chat 
 - **WHEN** user sends a provider-backed request that cannot run without provider readiness
 - **THEN** the workspace MUST show visible setup-needed guidance instead of pretending success
 
-### Requirement CHATS-WORKSPACE-011: Chat messages SHALL answer normal text without default Inbox handoff noise
-Chats workspace and shell Assistant messages MUST produce a direct assistant response for ordinary non-action text and MUST reserve durable Inbox handoffs for background, review-required, queued, or failure work.
+### Requirement CHATS-WORKSPACE-011: Chat messages SHALL answer normal text through the selected assistant provider without default Inbox handoff noise
+Chats workspace and shell Assistant messages MUST dispatch ordinary non-action text through the selected usable assistant provider, persist provider/model provenance, and MUST reserve durable Inbox handoffs for background, review-required, queued, or failure work. A selected provider failure MUST remain an explicit provider failure or setup state rather than a deterministic success response.
 
 #### Scenario: Respond to greeting without durable Inbox item
 - **GIVEN** user sends `hello` with profile, thread, route, and assistant context
@@ -108,6 +108,20 @@ Chats workspace and shell Assistant messages MUST produce a direct assistant res
 - **THEN** the response MUST include a direct `assistant_response` thread message
 - **AND** the assistant thread MUST show the direct response instead of `Assistant handoff queued in Inbox.`
 - **AND** `/api/chat/inbox` MUST NOT receive an `assistant_handoff` item for that normal message
+
+#### Scenario: Use the selected provider for an ordinary conversation turn
+- **GIVEN** the active profile selects a usable assistant provider and model
+- **WHEN** the user sends ordinary non-action text through `/api/chat/messages`
+- **THEN** Cabinet MUST send bounded profile/thread conversation history to that provider
+- **AND** the provider MUST receive no Cabinet tool, database, filesystem, browser, plugin, or mutation authority
+- **AND** Cabinet MUST persist the provider response with exact provider/model provenance
+- **AND** Cabinet MUST NOT replace the provider response with `deterministic_chat_fallback`
+
+#### Scenario: Fail closed when the selected provider cannot reply
+- **GIVEN** the active profile selects a provider whose adapter, authentication, model, or transport is unavailable
+- **WHEN** the user sends ordinary non-action text
+- **THEN** Cabinet MUST persist a normalized setup-required or retryable failure response
+- **AND** Cabinet MUST NOT present the deterministic fallback copy as a successful provider reply
 
 #### Scenario: Preserve explicit handoff durability
 - **GIVEN** user sends a message that asks Cabinet to follow up, queue, review, notify, or run background work

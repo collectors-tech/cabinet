@@ -75,11 +75,13 @@ Cabinet MUST use ChatGPT browser authentication only as the language-provider tr
 
 #### Scenario: Run a browser-authenticated Chat turn
 - **GIVEN** ChatGPT Browser Auth is verified for the active profile
-- **WHEN** Cabinet runs an assistant turn
+- **WHEN** the user sends ordinary non-action text in Cabinet Chat
 - **THEN** the provider runtime MUST receive bounded profile/thread conversation context
+- **AND** Cabinet Chat MUST persist and render the returned ChatGPT text with OpenAI provider/model provenance
 - **AND** the provider runtime MUST run without Cabinet tool or mutation authority
 - **AND** Cabinet MUST continue to own preview, confirmation, apply, cancel, and audit behavior
 - **AND** provider errors MUST remain classified and redacted
+- **AND** Cabinet MUST NOT silently replace a selected-provider failure with deterministic success copy
 
 ### Requirement PROVIDER-OPENAI-UX-007: API key setup SHALL save secrets separately from profile settings
 Cabinet MUST keep OpenAI API-key entry write-only and store the key through the profile secrets API while storing non-secret OpenAI defaults in profile settings.
