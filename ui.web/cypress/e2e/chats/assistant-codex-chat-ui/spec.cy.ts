@@ -20,9 +20,9 @@ describe('chats/assistant-codex-chat-ui', () => {
       'have.value',
       'openai'
     )
-    cy.get('[data-testid="shell-assistant-selected-collection"]').should(
+    cy.get('[data-testid="shell-assistant-selection-context"]').should(
       'contain',
-      'All Items'
+      'Collection: All Items'
     )
 
     cy.get('[data-testid="shell-assistant-compose-input"]').type(
