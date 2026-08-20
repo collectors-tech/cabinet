@@ -55,10 +55,18 @@ type AgentResponseResultItem struct {
 	Brand      string `json:"brand,omitempty"`
 }
 
+type AgentResponseResultMetric struct {
+	ID    string `json:"id,omitempty"`
+	Label string `json:"label,omitempty"`
+	Value int    `json:"value"`
+	Route string `json:"route,omitempty"`
+}
+
 type AgentResponseResultSummary struct {
-	Kind  string                    `json:"kind"`
-	Total int                       `json:"total"`
-	Items []AgentResponseResultItem `json:"items"`
+	Kind    string                      `json:"kind"`
+	Total   int                         `json:"total"`
+	Items   []AgentResponseResultItem   `json:"items,omitempty"`
+	Metrics []AgentResponseResultMetric `json:"metrics,omitempty"`
 }
 
 // AgentResponse is the server-owned, presentation-neutral contract used by
