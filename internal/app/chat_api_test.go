@@ -559,8 +559,13 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if strings.Contains(msgResp.Body.String(), `"assistant_handoff"`) {
 		t.Fatalf("normal hello must not create assistant handoff payload, body=%s", msgResp.Body.String())
 	}
-	if !strings.Contains(msgResp.Body.String(), `"assistant_response"`) || !strings.Contains(msgResp.Body.String(), `"mode":"direct"`) {
-		t.Fatalf("expected direct assistant response payload for normal hello, body=%s", msgResp.Body.String())
+	if !strings.Contains(msgResp.Body.String(), `"assistant_response"`) ||
+		!strings.Contains(msgResp.Body.String(), `"mode":"provider_failure"`) ||
+		!strings.Contains(msgResp.Body.String(), `"state":"setup_required"`) {
+		t.Fatalf("expected explicit selected-provider setup failure for normal hello, body=%s", msgResp.Body.String())
+	}
+	if strings.Contains(msgResp.Body.String(), `"deterministic_chat_fallback"`) {
+		t.Fatalf("unconfigured selected provider must not surface deterministic success, body=%s", msgResp.Body.String())
 	}
 
 	msgList := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
@@ -573,8 +578,9 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if strings.Contains(msgList.Body.String(), `Assistant handoff queued in Inbox.`) {
 		t.Fatalf("normal hello must not surface queued handoff state, body=%s", msgList.Body.String())
 	}
-	if !strings.Contains(msgList.Body.String(), `I can help with Cabinet inventory, media, integrations, purchases, settings, and guided actions from this chat.`) {
-		t.Fatalf("expected assistant thread to surface direct normal-text response, body=%s", msgList.Body.String())
+	if !strings.Contains(msgList.Body.String(), `The assistant provider needs setup before Cabinet can reply.`) ||
+		strings.Contains(msgList.Body.String(), `I can help with Cabinet inventory, media, integrations, purchases, settings, and guided actions from this chat.`) {
+		t.Fatalf("expected assistant thread to surface provider setup without deterministic false success, body=%s", msgList.Body.String())
 	}
 
 	inboxList := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)

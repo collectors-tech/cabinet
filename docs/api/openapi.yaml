@@ -2967,7 +2967,12 @@ paths:
         planner, provider and dispatchers exclusively persist assistant/system
         messages and trusted planner, capability, app-control, handoff or
         assistant-response evidence. Users-administration dispatch also requires
-        server-derived authority for the active profile.
+        server-derived authority for the active profile. Ordinary non-action
+        text is dispatched to the selected usable assistant provider with
+        bounded thread history and no Cabinet tool authority. The created
+        response includes provider/model provenance, or an explicit redacted
+        provider setup/retry failure; it does not report deterministic fallback
+        copy as a successful selected-provider reply.
       requestBody:
         required: true
         content:

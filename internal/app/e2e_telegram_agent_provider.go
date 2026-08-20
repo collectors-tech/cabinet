@@ -19,6 +19,18 @@ func (e2eSyntheticAgentProvider) RunAssistantTurn(ctx context.Context, req ai.As
 	if err := ctx.Err(); err != nil {
 		return ai.AssistantTurnResponse{}, err
 	}
+	if req.Metadata["entry_point"] == "chat.direct_conversation" {
+		return ai.AssistantTurnResponse{
+			Provider: "fake",
+			Model:    strings.TrimSpace(req.Model),
+			Text:     "E2E direct provider response",
+			Metadata: map[string]string{
+				"network":       "disabled",
+				"test_provider": "true",
+				"live_provider": "false",
+			},
+		}, nil
+	}
 	text := ""
 	for i := len(req.Messages) - 1; i >= 0; i-- {
 		if strings.EqualFold(req.Messages[i].Role, "user") {

@@ -6579,6 +6579,8 @@ func New(cfg config.Config) (*App, error) {
 						}
 					} else if agentPlanner, handled := dispatchChatAgentProviderPlanner(r.Context(), conn, chatSvc, assistantProviders, agentSkillRegistry(req.ProfileID), req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
 						response["agent_planner"] = agentPlanner
+					} else if assistantResponse, handled := dispatchChatDirectAssistantProvider(r.Context(), chatSvc, assistantProviders, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
+						response["assistant_response"] = assistantResponse
 					} else {
 						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", directAssistantChatResponse(req.Content), map[string]any{
 							"assistant_response": map[string]any{

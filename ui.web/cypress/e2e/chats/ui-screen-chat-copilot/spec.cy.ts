@@ -210,6 +210,38 @@ describe('chats/ui-screen-chat-copilot', () => {
     )
   })
 
+  it('CHATS-WORKSPACE-011/#2313 renders an ordinary selected-provider reply without deterministic fallback', () => {
+    openChatsWithAssistantDefaults('fake', 'cabinet-e2e-direct')
+    createThread('E2E Direct Provider Conversation')
+    cy.intercept('POST', '/api/chat/messages').as('directProviderMessage')
+
+    cy.get('[data-testid="chat-compose-input"]').type(
+      'Tell me something helpful about my Cabinet workspace.'
+    )
+    cy.get('[data-testid="chat-send-button"]').click()
+
+    cy.wait('@directProviderMessage').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.assistant_response.mode).to.eq('provider')
+      expect(response?.body.assistant_response.provider).to.eq('fake')
+      expect(response?.body.assistant_response.model).to.eq(
+        'cabinet-e2e-direct'
+      )
+      expect(response?.body.assistant_response.thread_message.content).to.eq(
+        'E2E direct provider response'
+      )
+      expect(
+        response?.body.assistant_response.provider_trace
+          .cabinet_tool_authority
+      ).to.eq('none')
+    })
+
+    cy.get('[data-testid="chat-message-list"]')
+      .should('contain', 'E2E direct provider response')
+      .and('not.contain', 'I can help with Cabinet inventory')
+    cy.get('[data-testid="chat-tool-card-container"]').should('not.exist')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure', () => {
     cy.viewport(1400, 900)
     openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
