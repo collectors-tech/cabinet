@@ -1135,6 +1135,116 @@ func TestChatAgentPlannerRoutesDataExportSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesMaintenanceSafeCheckSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Maintenance"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Maintenance"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.maintenance.run_safe_check","parameters":{"maintenance_check":"database","check_level":"safe","provider_secret":"sk-planner-maintenance-secret","backup_path":"C:/private/cabinet.db"},"message":"Checking Cabinet maintenance health."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Run a safe Cabinet maintenance health check",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/settings/storage",
+				"surface_id":     "settings.maintenance",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Run a safe Cabinet maintenance health check",
+			},
+		},
+		"message-maintenance-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Maintenance safe-check request")
+	}
+	if result["skill_id"] != "cabinet.maintenance.run_safe_check" || result["preview_result"] != nil {
+		t.Fatalf("expected non-mutating Maintenance execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["profile_id"] != profile.ID || execution["mutation_applied"] == true {
+		t.Fatalf("expected profile-scoped non-mutating Maintenance execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal maintenance planner result: %v", err)
+	}
+	bodyText := string(body)
+	for _, want := range []string{
+		`"operation":"maintenance.safe_check"`,
+		`"maintenance_check":"database"`,
+		`"check_level":"safe"`,
+		`"status":"healthy"`,
+	} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("maintenance planner response missing %s: body=%s", want, bodyText)
+		}
+	}
+	if strings.Contains(bodyText, "sk-planner-maintenance-secret") || strings.Contains(bodyText, "preview_id") {
+		t.Fatalf("maintenance planner response leaked secret or preview token: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("maintenance planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal maintenance Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode maintenance Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "maintenance_safe_check" {
+		t.Fatalf("maintenance response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("maintenance summary must expose one bounded health record: %+v", agentResponse.ResultSummary)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal maintenance result summary: %v", err)
+	}
+	for _, want := range []string{"Maintenance safe check", "healthy", "Check: database / safe"} {
+		if !strings.Contains(string(summaryJSON), want) {
+			t.Fatalf("maintenance result summary missing %q: %s", want, summaryJSON)
+		}
+	}
+	for _, forbidden := range []string{"sk-planner-maintenance-secret", "preview_id", "backup_path", "C:/private", "raw_payload"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("maintenance result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesWishlistSearchSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 
