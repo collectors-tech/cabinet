@@ -149,3 +149,17 @@ The public `/api/chat/messages` endpoint MUST accept only user-authored messages
 - **WHEN** a `role=user` request carries `agent_planner`, `agent_capabilities`, preview, execution, authority, assistant response, assistant handoff, admin-session, or success evidence in public context fields
 - **THEN** Cabinet MUST reject the request before storing a chat message
 - **AND** a normal user message MAY still trigger server-owned planner/provider/dispatcher persistence for trusted assistant evidence
+
+### Requirement CHATS-WORKSPACE-014: Literal response instructions SHALL remain ordinary provider Chat
+Cabinet MUST distinguish literal response instructions from governed Cabinet operation requests before dispatching a user message. A requested literal value MAY contain words that otherwise identify an Agent operation, but those words MUST NOT grant or invoke Cabinet tool authority.
+
+#### Scenario: Return literal text containing an operation word
+- **GIVEN** ordinary Chat has a selected assistant provider
+- **WHEN** the user asks the provider to reply, respond, say, return, or echo an exact non-empty value containing an Agent action word such as `restore`, `delete`, `import`, or `upload`
+- **THEN** Cabinet MUST dispatch the message through the ordinary selected-provider conversation path
+- **AND** Cabinet MUST NOT create an Agent planner result or governed action preview
+
+#### Scenario: Preserve genuine governed operations
+- **GIVEN** the user intends Cabinet to inspect or change managed product data
+- **WHEN** the user directly asks Cabinet to restore, delete, import, export, upload, or otherwise manage Cabinet data
+- **THEN** Cabinet MUST continue to classify the request for server-owned Agent planning and governed execution

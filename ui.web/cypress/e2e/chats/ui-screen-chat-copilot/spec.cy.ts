@@ -242,6 +242,32 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-tool-card-container"]').should('not.exist')
   })
 
+  it('CHATS-WORKSPACE-014/#2329 keeps literal response text containing an Agent action word in provider Chat', () => {
+    openChatsWithAssistantDefaults('fake', 'cabinet-e2e-direct')
+    createThread('E2E Literal Response Routing')
+    cy.intercept('POST', '/api/chat/messages').as('literalProviderMessage')
+
+    cy.get('[data-testid="chat-compose-input"]').type(
+      'Reply with exactly: CABINET_BROWSER_AUTH_AFTER_RESTORE_OK'
+    )
+    cy.get('[data-testid="chat-send-button"]').click()
+
+    cy.wait('@literalProviderMessage').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.agent_planner).to.eq(undefined)
+      expect(response?.body.assistant_response.mode).to.eq('provider')
+      expect(response?.body.assistant_response.provider).to.eq('fake')
+      expect(response?.body.assistant_response.thread_message.content).to.eq(
+        'E2E direct provider response'
+      )
+    })
+
+    cy.get('[data-testid="chat-message-list"]')
+      .should('contain', 'E2E direct provider response')
+      .and('not.contain', 'Cabinet does not support that Agent request')
+    cy.get('[data-testid="chat-tool-card-container"]').should('not.exist')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure', () => {
     cy.viewport(1400, 900)
     openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
