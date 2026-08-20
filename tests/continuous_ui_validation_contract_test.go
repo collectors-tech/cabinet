@@ -151,6 +151,43 @@ func TestHourlyUIValidationReusesOneBoundedExactRuntime(t *testing.T) {
 	}
 }
 
+func TestHourlyUIValidationUsesCypressSafeLogNameLength(t *testing.T) {
+	t.Parallel()
+
+	hourlyPath := filepath.Join("..", "scripts", "hourly-ui-validation.ps1")
+	hourlyRaw, err := os.ReadFile(hourlyPath)
+	if err != nil {
+		t.Fatalf("read hourly validation script: %v", err)
+	}
+	cypressPath := filepath.Join("..", "cypress.ps1")
+	cypressRaw, err := os.ReadFile(cypressPath)
+	if err != nil {
+		t.Fatalf("read cypress wrapper script: %v", err)
+	}
+	hourly := string(hourlyRaw)
+	cypress := string(cypressRaw)
+
+	if !strings.Contains(cypress, "if ($safe.Length -gt 80)") {
+		t.Fatalf("expected cypress wrapper to cap safe log segments at 80 characters")
+	}
+	if !strings.Contains(hourly, "if ($segment.Length -gt 80)") {
+		t.Fatalf("hourly validation must use the cypress wrapper safe log segment length when later locating summary files")
+	}
+	for _, fragment := range []string{
+		`$logNamePrefix = "hourly-{0:D3}-"`,
+		"$safeSpecMaxLength = 80 - $logNamePrefix.Length",
+		"$safeSpec = $safeSpec.Substring(0, $safeSpecMaxLength)",
+		`$logName = "$logNamePrefix$safeSpec"`,
+	} {
+		if !strings.Contains(hourly, fragment) {
+			t.Fatalf("hourly validation must cap the full cypress LogName before summary lookup; missing %q", fragment)
+		}
+	}
+	if strings.Contains(hourly, "if ($segment.Length -gt 120)") {
+		t.Fatalf("hourly validation must not use a longer safe log segment than cypress.ps1")
+	}
+}
+
 func TestHourlyUIValidationDeduplicatesSameRevisionIssues(t *testing.T) {
 	t.Parallel()
 
