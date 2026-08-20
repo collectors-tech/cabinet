@@ -1391,9 +1391,27 @@ func chatMessageNeedsNaturalLanguageAgentPlanning(content string) bool {
 	return ok
 }
 
+func chatMessageRequestsLiteralProviderResponse(normalized string) bool {
+	for _, prefix := range []string{
+		"reply with exactly:",
+		"respond with exactly:",
+		"say exactly:",
+		"return exactly:",
+		"echo exactly:",
+	} {
+		if strings.HasPrefix(normalized, prefix) && strings.TrimSpace(strings.TrimPrefix(normalized, prefix)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func chatAgentIntentDomain(content string) (string, bool) {
 	normalized := normalizePlannerText(content)
 	if normalized == "" {
+		return "", false
+	}
+	if chatMessageRequestsLiteralProviderResponse(normalized) {
 		return "", false
 	}
 	dashboardSummaryIntent := (strings.Contains(normalized, "summarise") ||

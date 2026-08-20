@@ -1165,6 +1165,40 @@ func TestChatAgentIntentDomainRecognisesCollectionWorkflows(t *testing.T) {
 	}
 }
 
+func TestChatAgentIntentDomainKeepsLiteralResponseInstructionsInProviderChat(t *testing.T) {
+	t.Parallel()
+
+	for _, prompt := range []string{
+		"Reply with exactly: CABINET_BROWSER_AUTH_AFTER_RESTORE_OK",
+		"Respond with exactly: DELETE_IMPORT_EXPORT_OK",
+		"Say exactly: restore the backup",
+		"Return exactly: remove inventory item",
+		"Echo exactly: upload attachment",
+	} {
+		if got, ok := chatAgentIntentDomain(prompt); ok || got != "" {
+			t.Fatalf("literal provider prompt classified as Agent domain: prompt=%q domain=%q ok=%v", prompt, got, ok)
+		}
+	}
+}
+
+func TestChatAgentIntentDomainPreservesGenuineGovernedOperations(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"Restore the latest Cabinet backup":         "admin",
+		"Import my Cabinet data from this backup":   "admin",
+		"Delete inventory item AFX-22020":           "inventory",
+		"Remove this item from my wishlist":         "wishlist",
+		"Upload this photo to the selected item":    "media",
+		"Export the current Cabinet workspace data": "admin",
+	}
+	for prompt, want := range tests {
+		if got, ok := chatAgentIntentDomain(prompt); !ok || got != want {
+			t.Fatalf("governed operation classification: prompt=%q domain=%q ok=%v want=%q", prompt, got, ok, want)
+		}
+	}
+}
+
 func TestChatAgentPlannerPreviewsExternalWriteSelectionWithoutApplyAuthority(t *testing.T) {
 	t.Parallel()
 
