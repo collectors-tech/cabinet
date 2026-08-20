@@ -176,3 +176,18 @@ Cabinet hourly UI validation SHALL run each selected Cypress spec through the pr
 - **WHEN** it invokes `cypress.ps1`
 - **THEN** the invocation MUST include `-RequireE2EHooks` and `-ApiContractSmoke`
 - **AND** the hourly report MUST record `api_contract_smoke`, `require_e2e_hooks`, and `allow_stale_runtime_version` for the spec result.
+
+### Requirement CONT-UI-CAB-013: Hourly validation SHALL own a bounded reusable runtime lifecycle
+Cabinet hourly UI validation SHALL start one workflow-built exact runtime for the selected spec set, reuse it without rebuilding dependencies or runtime assets, run Cypress with zero retries and a bounded per-spec watchdog, and stop only that owned runtime after report generation.
+
+#### Scenario: Separate product failures from runner exhaustion
+- **GIVEN** an hourly run executes multiple selected specs against one exact runtime revision
+- **WHEN** a completed Cypress spec reports assertion failures
+- **THEN** the report SHALL preserve that result as a product failure and continue with the next selected spec.
+- **AND** when a timeout, missing summary, stale revision, or other runner failure occurs, the run SHALL stop before launching another spec and record the runner phase, timeout state, revision, exit code, and evidence path.
+
+#### Scenario: Skip duplicate same-revision validation
+- **GIVEN** scheduled Windows runners are ephemeral
+- **WHEN** a validated revision is scheduled again
+- **THEN** the workflow SHALL restore the persisted revision state and record `no-change` without starting Cabinet or Cypress.
+- **AND** if state restoration is unavailable, failure handling SHALL avoid creating another open hourly issue whose body already records the same commit.

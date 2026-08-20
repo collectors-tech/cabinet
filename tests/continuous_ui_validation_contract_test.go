@@ -27,6 +27,37 @@ func TestContinuousUIValidationWorkflowContract(t *testing.T) {
 	}
 }
 
+func TestContinuousUIValidationPersistsRevisionStateAndPreventsOverlap(t *testing.T) {
+	t.Parallel()
+
+	workflowPath := filepath.Join("..", ".github", "workflows", "continuous-ui-validation.yml")
+	raw, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("read workflow: %v", err)
+	}
+	content := string(raw)
+
+	requiredFragments := []string{
+		"concurrency:",
+		"group: continuous-ui-validation-${{ github.ref }}",
+		"cancel-in-progress: false",
+		"timeout-minutes: 240",
+		"actions/cache/restore@v4",
+		"id: hourly-state",
+		".logs/hourly-ui-validation-state.json",
+		"hourly-ui-validation-state-${{ runner.os }}-${{ github.sha }}",
+		"restore-keys:",
+		"actions/cache/save@v4",
+		"if: always()",
+		"steps.hourly-state.outputs.cache-hit != 'true'",
+	}
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(content, fragment) {
+			t.Fatalf("expected continuous UI validation workflow to contain fragment %q", fragment)
+		}
+	}
+}
+
 func TestContinuousUIValidationUsesCanonicalCabinetBuild(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +115,97 @@ func TestHourlyUIValidationScriptContract(t *testing.T) {
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {
 			t.Fatalf("expected hourly validation script to contain fragment %q", fragment)
+		}
+	}
+}
+
+func TestHourlyUIValidationReusesOneBoundedExactRuntime(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "scripts", "hourly-ui-validation.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(raw)
+
+	requiredFragments := []string{
+		"Start-HourlyValidationRuntime",
+		"Stop-HourlyValidationRuntime",
+		`"-ReuseServer"`,
+		`"-SkipRuntimeBuild"`,
+		`"-SkipDependencyPrep"`,
+		`"-Retries", "0"`,
+		`"-ExecutionTimeoutSec", "300"`,
+		`"-LogDir", $reportDir`,
+		`"-LogName", $logName`,
+		"runtime_revision",
+		"runner_phase",
+		"execution_timed_out",
+		"runner_failures",
+	}
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(content, fragment) {
+			t.Fatalf("expected hourly validation exact-runtime contract fragment %q", fragment)
+		}
+	}
+}
+
+func TestHourlyUIValidationDeduplicatesSameRevisionIssues(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "scripts", "hourly-ui-validation.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(raw)
+
+	requiredFragments := []string{
+		"Find-ExistingValidationIssue",
+		"- commit: $currentCommit",
+		"Existing open validation issue",
+	}
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(content, fragment) {
+			t.Fatalf("expected hourly validation issue-deduplication fragment %q", fragment)
+		}
+	}
+}
+
+func TestHourlyUIValidationRunnerLifecycleIsTraceable(t *testing.T) {
+	t.Parallel()
+
+	specPath := filepath.Join("..", "openspec", "specs", "general", "continuous-ui-validation", "spec.md")
+	specRaw, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatalf("read continuous UI validation spec: %v", err)
+	}
+	tracePath := filepath.Join("..", "openspec", "traceability.md")
+	traceRaw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	for _, fragment := range []string{
+		"CONT-UI-CAB-013",
+		"one workflow-built exact runtime",
+		"zero retries",
+		"runner failure",
+		"same-revision",
+	} {
+		if !strings.Contains(string(specRaw), fragment) {
+			t.Fatalf("expected continuous UI validation lifecycle requirement fragment %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"CONT-UI-CAB-013",
+		"#2307",
+		"TestHourlyUIValidationReusesOneBoundedExactRuntime",
+		"TestHourlyUIValidationDeduplicatesSameRevisionIssues",
+	} {
+		if !strings.Contains(string(traceRaw), fragment) {
+			t.Fatalf("expected continuous UI validation traceability fragment %q", fragment)
 		}
 	}
 }
