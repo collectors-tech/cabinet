@@ -200,3 +200,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the profile-scoped read-only Wishlist skill and persist a `wishlist_entries` result summary with bounded entry identifiers, priority, and purchase-state facts
 - **AND** the summary MUST exclude notes, purchase URLs, provider secrets, raw provider payloads, stack traces, execution internals, and cross-profile wishlist records
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Collections search returns typed safe collection facts
+
+- **GIVEN** the active profile contains workspace collections and assigned collection item membership
+- **WHEN** the user asks Chat to find matching collections
+- **THEN** Cabinet MUST execute the profile-scoped read-only Collections skill and persist a `collections` result summary with bounded collection names, assigned item identifiers, assigned item titles, and collection membership names
+- **AND** the summary MUST exclude workspace item detail text, provider secrets, raw provider payloads, stack traces, execution internals, and cross-profile collection workspace records
+- **AND** the summary MUST contain no write action or confirmation control

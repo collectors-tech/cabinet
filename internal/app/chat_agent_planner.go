@@ -727,6 +727,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching wishlist entries.", summary.Total)
 		}
+	case "collections":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching collections."
+		case 1:
+			return "Cabinet found 1 matching collection record."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching collection records.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -750,6 +759,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentStorageStatusReadResultSummary(execution)
 	case "cabinet.wishlist.search_entries":
 		return plannerAgentWishlistReadResultSummary(execution)
+	case "cabinet.collections.search":
+		return plannerAgentCollectionsReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -899,6 +910,52 @@ func plannerWishlistEntryStatus(entry wishlist.Entry) string {
 	}
 }
 
+func plannerAgentCollectionsReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	collections := plannerReadResultStringSlice(execution["collections"])
+	workspaceItems, _ := execution["items"].([]agentCollectionsWorkspaceItem)
+	if len(collections) == 0 && len(workspaceItems) == 0 {
+		return &chat.AgentResponseResultSummary{Kind: "collections", Total: 0}
+	}
+	total := len(collections) + len(workspaceItems)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value + len(workspaceItems)
+	}
+
+	items := make([]chat.AgentResponseResultItem, 0, plannerAgentReadResultItemLimit)
+	for _, name := range collections {
+		if len(items) >= plannerAgentReadResultItemLimit {
+			break
+		}
+		name = plannerBoundedReadResultText(name)
+		if name == "" {
+			continue
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText("collection:" + name),
+			Title:    name,
+			Status:   "available",
+			Category: "Collection",
+		})
+	}
+	for _, item := range workspaceItems {
+		if len(items) >= plannerAgentReadResultItemLimit {
+			break
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(item.ID),
+			Title:    plannerBoundedReadResultText(item.Name),
+			Status:   "assigned",
+			Category: plannerBoundedReadResultText(item.CollectionName),
+		})
+	}
+
+	return &chat.AgentResponseResultSummary{
+		Kind:  "collections",
+		Total: total,
+		Items: items,
+	}
+}
+
 func plannerBoundedReadResultText(value string) string {
 	runes := []rune(strings.TrimSpace(value))
 	if len(runes) > plannerAgentReadResultTextLimit {
@@ -923,6 +980,20 @@ func plannerReadResultMapSlice(value any) []map[string]any {
 		}
 	}
 	return items
+}
+
+func plannerReadResultStringSlice(value any) []string {
+	raw, ok := value.([]string)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func plannerReadResultString(value any) string {
