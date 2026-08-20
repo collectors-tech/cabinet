@@ -13,6 +13,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
+	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
 
 type chatAgentPlannerInput struct {
@@ -717,6 +718,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		return "Cabinet summarised the current Dashboard snapshot with bounded attention signals and recent records."
 	case "storage_status":
 		return "Cabinet read the current storage and backup status without changing settings."
+	case "wishlist_entries":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching wishlist entries."
+		case 1:
+			return "Cabinet found 1 matching wishlist entry."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching wishlist entries.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -738,6 +748,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentDashboardReadResultSummary(execution)
 	case "cabinet.storage.show_status":
 		return plannerAgentStorageStatusReadResultSummary(execution)
+	case "cabinet.wishlist.search_entries":
+		return plannerAgentWishlistReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -838,6 +850,52 @@ func plannerAgentStorageStatusReadResultSummary(execution map[string]any) *chat.
 		Kind:  "storage_status",
 		Total: 1,
 		Items: []chat.AgentResponseResultItem{item},
+	}
+}
+
+func plannerAgentWishlistReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawEntries, ok := execution["entries"].([]wishlist.Entry)
+	if !ok {
+		return nil
+	}
+	total := len(rawEntries)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(rawEntries)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, entry := range rawEntries[:limit] {
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(entry.ID),
+			Title:    plannerBoundedReadResultText(entry.ItemID),
+			Status:   plannerWishlistEntryStatus(entry),
+			Category: plannerBoundedReadResultText(entry.Priority),
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "wishlist_entries",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerWishlistEntryStatus(entry wishlist.Entry) string {
+	switch {
+	case entry.Deleted:
+		return "deleted"
+	case entry.Delivered:
+		return "delivered"
+	case entry.Owned:
+		return "purchased"
+	case entry.BelowTargetNow:
+		return "below_target"
+	case entry.HighlightHit:
+		return "highlighted"
+	default:
+		return "watching"
 	}
 }
 
