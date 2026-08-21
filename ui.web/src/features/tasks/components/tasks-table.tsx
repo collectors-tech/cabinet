@@ -637,6 +637,23 @@ export function TasksTable({
     if (record) {
       onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
     }
+    if (
+      (isInventoryRoute || routePath === '/_authenticated/wishlist/') &&
+      record &&
+      onOpenDetailsRow
+    ) {
+      setSelectedRecordContext(id)
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current)
+      }
+      clickTimerRef.current = window.setTimeout(() => {
+        onOpenDetailsRow(
+          record,
+          table.getRowModel().rows.map((row) => row.original)
+        )
+      }, 180)
+      return
+    }
     if (isInventoryRoute || routePath === '/_authenticated/wishlist/') {
       return
     }
@@ -660,15 +677,15 @@ export function TasksTable({
       window.clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
     }
-    if (record && onOpenDetailsRow) {
-      onOpenDetailsRow(
+    if (record && onEditRow) {
+      onEditRow(
         record,
         table.getRowModel().rows.map((row) => row.original)
       )
       return
     }
-    if (record && onEditRow) {
-      onEditRow(
+    if (record && onOpenDetailsRow) {
+      onOpenDetailsRow(
         record,
         table.getRowModel().rows.map((row) => row.original)
       )
