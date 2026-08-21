@@ -71,11 +71,11 @@ describe('general/ui-shell-workspaces', () => {
     cy.get('[data-testid="shell-search-nav-results"]').should('be.visible')
     cy.get('[data-testid="shell-search-nav-result"]')
       .first()
-      .should('contain', 'Dashboard')
+      .should('contain', 'Home')
       .and('contain', 'General')
     cy.get('[data-testid="shell-search-nav-result"]').should(
       'contain',
-      'Settings / Profile'
+      'Profile Settings'
     )
     cy.location('pathname').should('match', /^\/inventory\/?$/)
 
@@ -227,8 +227,8 @@ describe('general/ui-shell-workspaces', () => {
       .type('appearance')
     cy.get('[data-testid="shell-search-nav-result"]')
       .should('have.length', 1)
-      .and('contain', 'Settings / Appearance')
-      .and('contain', 'Other · /settings/appearance')
+      .and('contain', 'Appearance Settings')
+      .and('contain', 'Settings · /settings/appearance')
       .click()
 
     cy.location('pathname', { timeout: 15000 }).should(
