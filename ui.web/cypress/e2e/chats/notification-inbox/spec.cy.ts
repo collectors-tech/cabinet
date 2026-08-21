@@ -188,9 +188,6 @@ describe('chats/notification-inbox', () => {
       body: { items: baseItems },
     }).as('loadNotifications')
 
-    cy.visit('/sign-in?redirect=%2Fdashboard')
-    cy.get('input[name="email"]').clear().type('e2e-inbox-nav@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
     cy.window().then((win) => {
       win.localStorage.setItem(
         'cabinet.toastHistory.v1',
@@ -205,12 +202,15 @@ describe('chats/notification-inbox', () => {
         ])
       )
     })
-    cy.contains('button', 'Sign in').click()
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/dashboard/',
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/)
 
     cy.get('[data-testid="sidebar-nav-link-inbox"]')
       .should('be.visible')
-      .and('contain', 'Inbox')
+      .and('have.attr', 'aria-label', 'Notification Inbox')
+      .and('have.attr', 'title', 'Notification Inbox')
       .click()
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
     cy.wait('@loadNotifications')
@@ -424,10 +424,9 @@ describe('chats/notification-inbox', () => {
       timeout: 5000,
     }).should('be.visible')
 
-    cy.visit('/sign-in?redirect=%2Finbox')
-    cy.get('input[name="email"]').clear().type('e2e-inbox-toast@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox/',
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
     cy.wait('@loadNotifications')
 
