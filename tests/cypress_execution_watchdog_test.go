@@ -101,8 +101,15 @@ func TestCypressExecutionWatchdogFailsClosedAndPreservesUnrelatedProcess(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(source), "@($KnownChildProcessIds)") {
-		t.Fatal("cleanup targets historical PIDs")
+	for _, required := range []string{
+		"ObservedChildProcessIds",
+		"Test-CypressObservedCleanupCandidate",
+		"current command-line evidence",
+		"Cypress\\\\cy\\\\production\\\\browsers",
+	} {
+		if !strings.Contains(string(source), required) {
+			t.Fatalf("watchdog cleanup missing guarded observed-process contract %q", required)
+		}
 	}
 	for _, pid := range append([]int{result.RootPID}, result.ChildPIDs...) {
 		assertWatchdogProcessStopped(t, pid)

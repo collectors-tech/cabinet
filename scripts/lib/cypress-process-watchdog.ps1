@@ -78,9 +78,27 @@ function Get-CypressOutputTail([string]$StandardOutputPath, [string]$StandardErr
   return @(Protect-CypressSummaryOutput $lines)
 }
 
-function Stop-CypressOwnedProcessTree([int]$RootProcessId) {
-  # Historical PIDs are evidence only because a completed child PID can be reused.
+function Test-CypressObservedCleanupCandidate([int]$ProcessId, [int[]]$CurrentOwnedProcessIds) {
+  if ($ProcessId -le 0 -or $ProcessId -eq $PID) { return $false }
+  if ($CurrentOwnedProcessIds -contains $ProcessId) { return $true }
+  try {
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
+    $commandLine = [string]$process.CommandLine
+    if ([string]::IsNullOrWhiteSpace($commandLine)) { return $false }
+    return $commandLine -match '(?i)(\\cypress\\|/cypress/|cypress-runtime-|Cypress\\cy\\production\\browsers|cypress\.config\.runtime\.cjs|run-cypress\.mjs)'
+  }
+  catch {
+    return $false
+  }
+}
+
+function Stop-CypressOwnedProcessTree([int]$RootProcessId, [int[]]$ObservedChildProcessIds = @()) {
+  # Observed PIDs are guarded by current command-line evidence before cleanup to avoid killing reused PIDs.
   $ownedIds = @(Get-CypressOwnedProcessIds $RootProcessId | Where-Object { $_ -gt 0 -and $_ -ne $PID } | Select-Object -Unique)
+  $observedLiveIds = @($ObservedChildProcessIds | Where-Object {
+    Test-CypressObservedCleanupCandidate -ProcessId $_ -CurrentOwnedProcessIds $ownedIds
+  } | Select-Object -Unique)
+  $ownedIds = @($ownedIds + $observedLiveIds | Select-Object -Unique)
   [array]::Reverse($ownedIds)
   $targets = @($ownedIds) + @($RootProcessId)
   $stopped = @()
@@ -124,7 +142,7 @@ function Invoke-CypressOwnedProcess(
   $cleanupResult = "not_required"
   if ($timedOut) {
     $observedChildIds = @($observedChildIds + @(Get-CypressOwnedProcessIds $process.Id) | Select-Object -Unique)
-    $cleanupResult = Stop-CypressOwnedProcessTree $process.Id
+    $cleanupResult = Stop-CypressOwnedProcessTree -RootProcessId $process.Id -ObservedChildProcessIds $observedChildIds
     try { $process.WaitForExit(5000) | Out-Null } catch { $cleanupResult = "$cleanupResult; process_handle_wait_failed" }
   } else { $process.WaitForExit() }
   $rootProcessId = $process.Id
