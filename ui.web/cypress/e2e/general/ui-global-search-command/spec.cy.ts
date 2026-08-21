@@ -2,10 +2,14 @@ describe('ui-global-search-command', () => {
   const commandInputSelector = 'input[placeholder="Type a command or search..."]'
 
   function signInToHome() {
-    cy.visit('/sign-in?redirect=%2F')
-    cy.get('input[name="email"]').clear().type('e2e-command@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eBootstrap({ minimalProfile: true }).then((state) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(state.profile_id)
+      cy.useBootstrappedProfile(state.profile_id, state.profile_name, {
+        path: '/dashboard',
+      })
+      cy.wait('@localServerSession')
+    })
     cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard')
     cy.contains('button', /search/i).should('be.visible')
   }
@@ -19,8 +23,8 @@ describe('ui-global-search-command', () => {
   }
 
   beforeEach(() => {
-    cy.clearCookies()
-    cy.clearLocalStorage()
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
     signInToHome()
   })
 
