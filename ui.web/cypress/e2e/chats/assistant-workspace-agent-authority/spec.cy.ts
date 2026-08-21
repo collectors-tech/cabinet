@@ -120,6 +120,12 @@ describe('chats/assistant-workspace-agent-authority', () => {
       .should('be.visible')
       .click()
     openAgent()
+    cy.get('body').should('not.have.css', 'pointer-events', 'none')
+    cy.get('[data-testid="shell-assistant-compose-input"]').should(
+      'not.have.css',
+      'pointer-events',
+      'none'
+    )
 
     const intent = 'find inventory item with part number CTX-1714-ROW'
     cy.intercept('POST', '/api/chat/messages', (request) => {
