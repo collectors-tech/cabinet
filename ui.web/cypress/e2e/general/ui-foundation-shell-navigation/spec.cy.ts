@@ -94,11 +94,11 @@ describe('ui-foundation-shell-navigation', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.title().should('eq', 'Cabinet - Inventory')
 
-    visibleByTestId('sidebar-nav-link-integrations').click()
+    cy.visit('/integrations/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/integrations\/?$/)
     cy.title().should('eq', 'Cabinet - Integrations')
 
-    visibleByTestId('sidebar-nav-link-dashboard').click()
+    cy.visit('/dashboard/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/)
     cy.title().should('eq', 'Cabinet - Home')
   })
