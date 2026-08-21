@@ -216,6 +216,91 @@ func TestE2EResetEndpointClearsWishlistPurchaseDeliveryState(t *testing.T) {
 	assertTableEmpty(t, a, "canonical_items")
 }
 
+func TestE2EResetEndpointClearsProfileSwitcherSeedState(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+
+	reset := doRequest(t, a, http.MethodPost, "/api/test/reset", nil, nil)
+	if reset.Code != http.StatusOK {
+		t.Fatalf("initial reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+	primary := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Primary DB"}`), map[string]string{"Content-Type": "application/json"})
+	if primary.Code != http.StatusCreated {
+		t.Fatalf("primary profile status=%d body=%s", primary.Code, primary.Body.String())
+	}
+	showcase := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Showcase DB"}`), map[string]string{"Content-Type": "application/json"})
+	if showcase.Code != http.StatusCreated {
+		t.Fatalf("showcase profile status=%d body=%s", showcase.Code, showcase.Body.String())
+	}
+	var primaryPayload struct {
+		ID string `json:"id"`
+	}
+	var showcasePayload struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(primary.Body.Bytes(), &primaryPayload); err != nil {
+		t.Fatalf("decode primary profile: %v", err)
+	}
+	if err := json.Unmarshal(showcase.Body.Bytes(), &showcasePayload); err != nil {
+		t.Fatalf("decode showcase profile: %v", err)
+	}
+
+	activatePrimary := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+primaryPayload.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activatePrimary.Code != http.StatusOK {
+		t.Fatalf("activate primary status=%d body=%s", activatePrimary.Code, activatePrimary.Body.String())
+	}
+	primaryItem := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"PRI-001","title":"Primary Item","brand":"AFX","category":"Cars"}`), map[string]string{"Content-Type": "application/json"})
+	if primaryItem.Code != http.StatusCreated {
+		t.Fatalf("primary item status=%d body=%s", primaryItem.Code, primaryItem.Body.String())
+	}
+	activateShowcase := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+showcasePayload.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activateShowcase.Code != http.StatusOK {
+		t.Fatalf("activate showcase status=%d body=%s", activateShowcase.Code, activateShowcase.Body.String())
+	}
+	showcaseItem := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"SHW-001","title":"Showcase Item","brand":"AFX","category":"Cars"}`), map[string]string{"Content-Type": "application/json"})
+	if showcaseItem.Code != http.StatusCreated {
+		t.Fatalf("showcase item status=%d body=%s", showcaseItem.Code, showcaseItem.Body.String())
+	}
+
+	reset = doRequest(t, a, http.MethodPost, "/api/test/reset", nil, nil)
+	if reset.Code != http.StatusOK {
+		t.Fatalf("reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+	assertTableEmpty(t, a, "canonical_items")
+	assertTableEmpty(t, a, "profiles")
+}
+
+func TestE2EResetEndpointClearsCollectionWorkspaceSnapshotState(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+
+	reset := doRequest(t, a, http.MethodPost, "/api/test/reset", nil, nil)
+	if reset.Code != http.StatusOK {
+		t.Fatalf("initial reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+	bootstrap := doRequest(t, a, http.MethodPost, "/api/test/bootstrap", nil, nil)
+	if bootstrap.Code != http.StatusOK {
+		t.Fatalf("bootstrap status=%d body=%s", bootstrap.Code, bootstrap.Body.String())
+	}
+	var bootstrapPayload e2eBootstrapResponse
+	if err := json.Unmarshal(bootstrap.Body.Bytes(), &bootstrapPayload); err != nil {
+		t.Fatalf("decode bootstrap: %v", err)
+	}
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+bootstrapPayload.ProfileID+"/settings", strings.NewReader(`{"settings":{"inventory.folder-tree.v2":"[{\"id\":\"quick-create-shelf\",\"name\":\"Quick Create Shelf\",\"children\":[]}]"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	reset = doRequest(t, a, http.MethodPost, "/api/test/reset", nil, nil)
+	if reset.Code != http.StatusOK {
+		t.Fatalf("reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+	assertTableEmpty(t, a, "profile_settings")
+	assertTableEmpty(t, a, "profiles")
+}
+
 func TestE2EBootstrapEndpointSeedsWishlistFixtures(t *testing.T) {
 	t.Parallel()
 

@@ -41,6 +41,8 @@ declare global {
 }
 
 const AUTH_COOKIE_NAMES = ["thisisjustarandomstring", "cabinet_auth_user"] as const;
+const E2E_RESET_MAX_ATTEMPTS = 6;
+const E2E_RESET_RETRY_DELAY_MS = 1000;
 
 function expireAuthCookies(win: Window) {
   AUTH_COOKIE_NAMES.forEach((name) => {
@@ -49,7 +51,29 @@ function expireAuthCookies(win: Window) {
 }
 
 Cypress.Commands.add("e2eReset", () => {
-  cy.request("POST", "/api/test/reset", {}).its("status").should("eq", 200);
+  function resetWithRetry(attempt: number): Cypress.Chainable<void> {
+    return cy
+      .request({
+        method: "POST",
+        url: "/api/test/reset",
+        body: {},
+        failOnStatusCode: false,
+      })
+      .then((resp) => {
+        if (resp.status === 200) {
+          return;
+        }
+        if (attempt >= E2E_RESET_MAX_ATTEMPTS) {
+          expect(resp.status, "E2E reset status").to.eq(200);
+          return;
+        }
+        return cy
+          .wait(E2E_RESET_RETRY_DELAY_MS, { log: false })
+          .then(() => resetWithRetry(attempt + 1));
+      });
+  }
+
+  return resetWithRetry(1);
 });
 
 Cypress.Commands.add("e2eEnsureSignedOut", () => {
