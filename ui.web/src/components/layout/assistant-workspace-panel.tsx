@@ -567,6 +567,13 @@ function loadInboxAgentContext(
   }
 }
 
+function sidePanelSurfaceForRoute(routePath: string) {
+  if (routeMatchesAgentSelectedRecord('/inventory', routePath)) {
+    return 'inventory.item.detail'
+  }
+  return 'chats.side-panel'
+}
+
 function defaultModelForProvider(provider: string) {
   return (
     assistantProviderOptions.find((option) => option.provider === provider)
@@ -728,7 +735,9 @@ export function AssistantWorkspacePanel() {
       profile_id: activeProfileId,
       workspace_id: profileScope,
       route_id: inboxAgentContext?.route_id || routeContext.pathname,
-      surface_id: inboxAgentContext?.surface_id || 'chats.side-panel',
+      surface_id:
+        inboxAgentContext?.surface_id ||
+        sidePanelSurfaceForRoute(routeContext.pathname),
       selected_record: selectedAgentRecordContext
         ? {
             type: selectedAgentRecordContext.type,
