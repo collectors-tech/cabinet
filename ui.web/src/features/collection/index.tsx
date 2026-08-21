@@ -6258,6 +6258,7 @@ export function Collection({
                     </DialogContent>
                   </Dialog>
                   <Sheet
+                    modal={false}
                     open={itemEditorOpen && itemEditorSurface === 'panel'}
                     onOpenChange={(open) => {
                       setItemEditorOpen(open)
