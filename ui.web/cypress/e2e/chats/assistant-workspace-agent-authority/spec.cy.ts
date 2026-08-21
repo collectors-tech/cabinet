@@ -90,7 +90,7 @@ describe('chats/assistant-workspace-agent-authority', () => {
       })
   })
 
-  it('AGENT-CONTEXT-003/#1714 sends selected inventory context with natural conversation', () => {
+  it('AGENT-CONTEXT-003/#1714/#2359 sends selected inventory detail context with natural conversation', () => {
     cy.intercept('GET', '/api/items*', {
       statusCode: 200,
       body: {
@@ -137,7 +137,9 @@ describe('chats/assistant-workspace-agent-authority', () => {
     cy.wait('@selectedContext').then(({ request, response }) => {
       expect(request.body.content).to.eq(intent)
       expect(request.body.agent_context.route_id).to.match(/^\/inventory\/?$/)
-      expect(request.body.agent_context.surface_id).to.eq('chats.side-panel')
+      expect(request.body.agent_context.surface_id).to.eq(
+        'inventory.item.detail'
+      )
       expect(request.body.agent_context.source_channel).to.eq('in-app')
       expect(request.body.agent_context.selected_record).to.deep.eq({
         type: 'inventory_item',
