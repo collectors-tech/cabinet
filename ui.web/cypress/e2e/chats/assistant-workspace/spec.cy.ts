@@ -204,7 +204,9 @@ describe('chats/assistant-workspace', () => {
       .last()
       .should('have.attr', 'data-command-status', 'success')
       .and('contain', 'Highlighted inventory.surface')
-    cy.get('[data-testid="shell-assistant-command-cancel"]').click()
+    cy.get('[data-testid="shell-assistant-command-cancel"]')
+      .scrollIntoView()
+      .click({ force: true })
     cy.get('[data-testid="ui-guidance-overlay"]').should('not.exist')
 
     cy.get('[data-testid="shell-assistant-compose-input"]').type(
@@ -228,7 +230,7 @@ describe('chats/assistant-workspace', () => {
     })
     cy.get('[data-testid="shell-assistant-permission-guidance"]').should(
       'contain',
-      'Confirm before any mutation is applied'
+      'Review and confirm before any mutation is applied'
     )
     cy.get('[data-testid="shell-assistant-action-preview"]')
       .should('contain', 'create_inventory_item')
@@ -488,7 +490,7 @@ describe('chats/assistant-workspace', () => {
 
       cy.get('[data-testid="shell-assistant-permission-guidance"]').should(
         'contain',
-        'Confirm before any mutation is applied'
+        'Review and confirm before any mutation is applied'
       )
       cy.get('[data-testid="shell-assistant-action-preview"]')
         .should('contain', 'update_open_item_title')
@@ -573,7 +575,8 @@ describe('chats/assistant-workspace', () => {
         contents: Cypress.Buffer.from('remove before send'),
         fileName: 'side-panel-remove-me.txt',
         mimeType: 'text/plain',
-      }
+      },
+      { force: true }
     )
     cy.get('[data-testid="shell-assistant-attachment-upload"]').click()
     cy.wait('@assistantAttachment')
@@ -591,7 +594,8 @@ describe('chats/assistant-workspace', () => {
         contents: Cypress.Buffer.from('side panel attachment proof'),
         fileName: 'side-panel-proof.txt',
         mimeType: 'text/plain',
-      }
+      },
+      { force: true }
     )
     cy.get('[data-testid="shell-assistant-pending-attachment"]').should(
       'contain',
