@@ -49,7 +49,9 @@ describe('chats/assistant-workspace-agent-skills', () => {
         expect(request.body.agent_context.profile_id).to.eq('e2e-profile-001')
         expect(request.body.agent_context.thread_id).to.be.a('string').and.not.eq('')
         expect(request.body.agent_context.route_id).to.match(/^\/inventory\/?$/)
-        expect(request.body.agent_context.surface_id).to.eq('chats.side-panel')
+        expect(request.body.agent_context.surface_id).to.eq(
+          'inventory.item.detail'
+        )
         expect(request.body.agent_context.selected_record).to.eq(undefined)
         expect(request.body.agent_context.source_channel).to.eq('in-app')
         expect(request.body.content).to.eq(intent)
@@ -57,7 +59,7 @@ describe('chats/assistant-workspace-agent-skills', () => {
         expect(response?.statusCode).to.eq(201)
         expect(response?.body.agent_planner.intent_domain).to.eq(expectedDomain)
         expect(response?.body.agent_planner.source_surface).to.eq(
-          'chats.side-panel'
+          'inventory.item.detail'
         )
         expect(response?.body.agent_planner.error.code).to.eq(
           'assistant_provider_adapter_unavailable'
@@ -71,7 +73,7 @@ describe('chats/assistant-workspace-agent-skills', () => {
         expect(agentResponse.retryable).to.eq(true)
         expect(agentResponse.original_intent).to.eq(intent)
         expect(agentResponse.source).to.deep.eq({
-          surface: 'chats.side-panel',
+          surface: 'inventory.item.detail',
           channel: 'in-app',
         })
         expect(agentResponse.next_action).to.deep.eq({
@@ -90,7 +92,7 @@ describe('chats/assistant-workspace-agent-skills', () => {
       .should('have.attr', 'data-agent-state', 'provider_unavailable')
       .and('have.attr', 'data-agent-outcome', 'failed')
       .and('contain', 'Provider unavailable')
-      .and('contain', 'Source: chats.side-panel / in-app')
+      .and('contain', 'Source: inventory.item.detail / in-app')
       .and('contain', 'Retry')
       .and('not.contain', 'cabinet.')
   })
