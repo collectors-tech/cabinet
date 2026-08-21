@@ -534,7 +534,7 @@ describe('ui-foundation-shell-navigation', () => {
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-009 switches active DB profile and reloads active data context', () => {
-    cy.request('POST', '/api/test/reset', {})
+    cy.e2eReset()
     cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
       expect(primaryResp.status).to.eq(201)
       const primaryID = primaryResp.body.id as string
@@ -579,7 +579,7 @@ describe('ui-foundation-shell-navigation', () => {
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-010 provides Showcase DB profile with seeded demo context', () => {
-    cy.request('POST', '/api/test/reset', {})
+    cy.e2eReset()
     cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
       const primaryID = primaryResp.body.id as string
       cy.request('POST', '/api/profiles', { name: 'Showcase DB' }).then((showcaseResp) => {
