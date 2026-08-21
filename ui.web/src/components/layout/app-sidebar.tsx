@@ -35,6 +35,7 @@ import {
 import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
+import { InboxWorkspacePanel } from './inbox-workspace-panel'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { SearchWorkspacePanel } from './search-workspace-panel'
@@ -81,6 +82,13 @@ export function AppSidebar() {
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const isCollapsedSidebar = sidebarState === 'collapsed' && !isMobile
   const authUser = useAuthStore((state) => state.auth.user)
+
+  useEffect(() => {
+    if (activeWorkspace !== 'navigation') {
+      setOpen(true)
+    }
+  }, [activeWorkspace, setOpen])
+
   const sidebarUser = authUser
     ? {
         name: authUser.accountNo || sidebarData.user.name,
@@ -150,12 +158,6 @@ export function AppSidebar() {
       cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    if (activeWorkspace === 'inbox') {
-      setActiveWorkspace('navigation')
-    }
-  }, [activeWorkspace, setActiveWorkspace])
 
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
@@ -402,7 +404,8 @@ export function AppSidebar() {
     setActiveWorkspace('navigation')
     void navigate({ to: '/settings/display' })
   }
-  const inboxActive = location.pathname.startsWith('/inbox')
+  const inboxRouteActive = location.pathname.startsWith('/inbox')
+  const inboxActive = inboxRouteActive || activeWorkspace === 'inbox'
   const navigationActive = !inboxActive && activeWorkspace === 'navigation'
   const searchActive = !inboxActive && activeWorkspace === 'search'
   const assistantActive = !inboxActive && activeWorkspace === 'assistant'
@@ -681,6 +684,8 @@ export function AppSidebar() {
           ))
         ) : activeWorkspace === 'search' ? (
           <SearchWorkspacePanel />
+        ) : activeWorkspace === 'inbox' ? (
+          <InboxWorkspacePanel />
         ) : null}
         {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
       </SidebarContent>
