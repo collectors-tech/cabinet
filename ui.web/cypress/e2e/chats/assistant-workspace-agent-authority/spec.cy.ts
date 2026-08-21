@@ -36,79 +36,56 @@ describe('chats/assistant-workspace-agent-authority', () => {
       .invoke('text')
       .then((rawThreadID) => {
         const threadID = rawThreadID.trim()
-        cy.request('POST', '/api/agent/skills/preview', {
+        cy.request('POST', '/api/chat/messages', {
           profile_id: profileID,
-          skill_id: 'cabinet.inventory.create_item',
-          source_surface: 'chats.side-panel',
-          source_channel: 'in-app',
-          source_thread_id: threadID,
-          source_message_id: 'authority-natural-review',
-          parameters: {
-            part_number: 'INV-1932-BYPASS',
-            title: 'Policy recheck proof',
+          thread_id: threadID,
+          role: 'user',
+          content:
+            'Add wishlist entry AGENT-2097-SYNTHETIC title Authority policy recheck',
+          context: {
+            route: { pathname: '/inventory/' },
+            workspace: { id: 'inventory' },
+            setup: { state: 'ready' },
+            assistant: {
+              provider: 'fake',
+              model: 'cabinet-e2e-planner',
+            },
           },
-        }).then(({ body: preview }) => {
-          expect(preview.preview_id).to.match(/^asp_[a-f0-9]+$/)
-          cy.request('POST', '/api/chat/messages', {
-            profile_id: profileID,
-            thread_id: threadID,
-            role: 'assistant',
-            content: 'I prepared the inventory change for your review.',
-            context: {
-              agent_planner: {
-                mode: 'provider_planner',
-                provider: 'openai',
-                decision: 'select_skill',
-                message: 'I prepared the inventory change for your review.',
-                confirmation_state: 'preview_required',
-                preview_result: {
-                  kind: 'agent_skill_preview',
-                  preview_id: preview.preview_id,
-                  preview_status: 'previewed',
-                  confirmation_required: true,
-                  mutation_applied: false,
-                  apply_endpoint: '/api/agent/skills/apply',
-                  apply_request: {
-                    profile_id: profileID,
-                    preview_id: preview.preview_id,
-                    confirm: true,
-                  },
-                  cancel_endpoint: '/api/agent/skills/cancel',
-                  cancel_request: {
-                    profile_id: profileID,
-                    preview_id: preview.preview_id,
-                  },
-                  retrieval_endpoint: '/api/agent/skills/preview',
-                },
-              },
+        }).then(({ body: messageResponse }) => {
+          const previewID = messageResponse.agent_planner.preview_result
+            .preview_id as string
+          expect(previewID).to.match(/^asp_[a-f0-9]+$/)
+
+          cy.request('PUT', `/api/profiles/${profileID}/settings`, {
+            settings: {
+              'agent.authority.external_write_approved': 'false',
+              'agent.authority.mode': 'read_only',
             },
           })
-        })
-
-        cy.request('PUT', `/api/profiles/${profileID}/settings`, {
-          settings: {
-            'agent.authority.external_write_approved': 'false',
-            'agent.authority.mode': 'read_only',
-          },
-        })
-        cy.reload()
-        openAgent()
-        cy.intercept('POST', '/api/agent/skills/apply').as('policyRecheck')
-        cy.get('[data-testid="shell-assistant-agent-preview-apply"]').click()
-        cy.wait('@policyRecheck').then(({ request, response }) => {
-          expect(Object.keys(request.body).sort()).to.deep.eq([
-            'confirm',
-            'preview_id',
-            'profile_id',
-          ])
-          expect(response?.statusCode).to.eq(409)
-          expect(response?.body.error).to.eq('agent_authority_read_only')
-        })
-        cy.get('[data-testid="shell-assistant-agent-planner-card"]')
-          .should('contain', 'agent_authority_read_only')
-          .and('not.contain', 'cabinet.inventory.create_item')
-        cy.request('/api/items?profile_id=e2e-profile-001').then(({ body }) => {
-          expect(JSON.stringify(body)).not.to.include('INV-1932-BYPASS')
+          cy.reload()
+          openAgent()
+          cy.intercept('POST', '/api/agent/skills/apply').as('policyRecheck')
+          cy.get('[data-testid="shell-assistant-agent-preview-apply"]').click()
+          cy.wait('@policyRecheck').then(({ request, response }) => {
+            expect(Object.keys(request.body).sort()).to.deep.eq([
+              'confirm',
+              'preview_id',
+              'profile_id',
+            ])
+            expect(request.body.preview_id).to.eq(previewID)
+            expect(response?.statusCode).to.eq(409)
+            expect(response?.body.error).to.eq('agent_authority_read_only')
+          })
+          cy.get('[data-testid="shell-assistant-agent-planner-card"]')
+            .should('contain', 'agent_authority_read_only')
+            .and('not.contain', 'cabinet.wishlist.create_entry')
+          cy.request('/api/items?profile_id=e2e-profile-001').then(
+            ({ body }) => {
+              expect(JSON.stringify(body)).not.to.include(
+                'AGENT-2097-SYNTHETIC'
+              )
+            }
+          )
         })
       })
   })
@@ -144,10 +121,15 @@ describe('chats/assistant-workspace-agent-authority', () => {
       .click()
     openAgent()
 
-    const intent = 'rename this item to Agent Context Row renamed'
+    const intent = 'find inventory item with part number CTX-1714-ROW'
     cy.intercept('POST', '/api/chat/messages', (request) => {
-      request.body.context.assistant.provider = 'anthropic'
-      request.body.context.assistant.model = 'contract-only'
+      request.body.context = {
+        ...(request.body.context ?? {}),
+        assistant: {
+          provider: 'fake',
+          model: 'cabinet-e2e-planner',
+        },
+      }
       request.continue()
     }).as('selectedContext')
     cy.get('[data-testid="shell-assistant-compose-input"]').type(intent)
