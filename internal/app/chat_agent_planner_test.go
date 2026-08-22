@@ -1568,6 +1568,115 @@ func TestChatAgentPlannerRoutesIntegrationProviderSearchSummaryFromMainChat(t *t
 	}
 }
 
+func TestChatAgentPlannerRoutesIntegrationSetupExplanationSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Integration Setup"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Integration Setup"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.integrations.explain_required_setup","parameters":{"provider_id":"openai","api_key":"sk-planner-setup-secret","setup_payload":{"api_key":"sk-nested-secret"}},"message":"Explain provider setup."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Explain what setup OpenAI needs",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Explain what setup OpenAI needs",
+			},
+		},
+		"message-integration-setup-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Integrations setup explanation request")
+	}
+	if result["skill_id"] != "cabinet.integrations.explain_required_setup" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Integrations setup explanation without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only Integrations setup execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal integrations setup planner result: %v", err)
+	}
+	bodyText := string(body)
+	for _, want := range []string{
+		`"operation":"integrations.provider.explain_setup"`,
+		`"provider_id":"openai"`,
+		`"setup_required":true`,
+		`"next_action":"Open Integrations settings for provider-specific credential and permission setup."`,
+	} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("integrations setup planner response missing %s: body=%s", want, bodyText)
+		}
+	}
+	if strings.Contains(bodyText, "sk-planner-setup-secret") || strings.Contains(bodyText, "sk-nested-secret") || strings.Contains(bodyText, "preview_id") {
+		t.Fatalf("integrations setup planner response leaked secret or preview token: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("integrations setup planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal integrations setup Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode integrations setup Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "integration_setup_explanation" {
+		t.Fatalf("integrations setup response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("integrations setup summary must expose one bounded provider setup record: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "openai" || item.Title != "openai" || item.Status != "setup_required" || item.Category != "Open Integrations settings for provider-specific credential and permission setup." {
+		t.Fatalf("integrations setup summary item = %+v, want bounded setup facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal integrations setup result summary: %v", err)
+	}
+	for _, forbidden := range []string{"sk-planner-setup-secret", "sk-nested-secret", "preview_id", "secret_redacted", "external_write_claimed", "setup_payload", "raw_provider_payload"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("integrations setup result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesMediaSearchSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 

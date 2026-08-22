@@ -749,6 +749,8 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching integration providers.", summary.Total)
 		}
+	case "integration_setup_explanation":
+		return "Cabinet read the provider setup requirements without changing integration configuration."
 	case "data_export_bundle":
 		return "Cabinet prepared a bounded data export readiness summary without creating or changing data."
 	case "maintenance_safe_check":
@@ -854,6 +856,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentCollectionsReadResultSummary(execution)
 	case "cabinet.integrations.search_providers":
 		return plannerAgentIntegrationProvidersReadResultSummary(execution)
+	case "cabinet.integrations.explain_required_setup":
+		return plannerAgentIntegrationSetupExplanationReadResultSummary(execution)
 	case "cabinet.data.export_bundle":
 		return plannerAgentDataExportBundleReadResultSummary(execution)
 	case "cabinet.maintenance.run_safe_check":
@@ -1149,6 +1153,41 @@ func plannerAgentIntegrationProvidersReadResultSummary(execution map[string]any)
 		Kind:  "integration_providers",
 		Total: total,
 		Items: items,
+	}
+}
+
+func plannerAgentIntegrationSetupExplanationReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	providerID := plannerBoundedReadResultText(plannerReadResultString(execution["provider_id"]))
+	setupRequired, setupKnown := plannerReadResultBool(execution["setup_required"], "true")
+	nextAction := plannerBoundedReadResultText(plannerReadResultString(execution["next_action"]))
+	if providerID == "" && !setupKnown && nextAction == "" {
+		return nil
+	}
+	status := "setup_state_unknown"
+	if setupKnown {
+		if setupRequired {
+			status = "setup_required"
+		} else {
+			status = "setup_ready"
+		}
+	}
+	title := providerID
+	if title == "" {
+		title = "Integration provider"
+	}
+	category := "Provider setup"
+	if nextAction != "" {
+		category = nextAction
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "integration_setup_explanation",
+		Total: 1,
+		Items: []chat.AgentResponseResultItem{{
+			ID:       providerID,
+			Title:    title,
+			Status:   status,
+			Category: category,
+		}},
 	}
 }
 
