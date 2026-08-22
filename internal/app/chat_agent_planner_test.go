@@ -2165,6 +2165,123 @@ func TestChatAgentPlannerRoutesMarketWatchSearchSummaryFromMainChat(t *testing.T
 	}
 }
 
+func TestChatAgentPlannerRoutesMarketWatchResultsSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Market Watch Results A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Market Watch Results B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != http.StatusCreated || createB.Code != http.StatusCreated {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Market Watch Results"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, provider_scope_json, enabled)
+		VALUES
+			('planner-market-results-visible-watch', ?, 'Visible Market results watch', '["visible"]', '["ebay"]', 1),
+			('planner-market-results-hidden-watch', ?, 'Hidden Market results watch', '["visible"]', '["ebay"]', 1);
+		INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, reviewer_notes, source_result_url)
+		VALUES
+			('planner-market-result-visible', ?, 'planner-market-results-visible-watch', 'MW-VISIBLE-1', 'Visible planner market result', 55, 'AUD', 9, 'https://example.test/private-visible-market', 'https://example.test/private-visible-market.jpg', 'private-market-seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 2, 'private market note', 'https://example.test/private-source-market'),
+			('planner-market-result-hidden', ?, 'planner-market-results-hidden-watch', 'MW-HIDDEN-1', 'Hidden planner market result', 77, 'AUD', 4, 'https://example.test/private-hidden-market', '', 'private-hidden-market-seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 1, 'hidden market note', 'https://example.test/private-hidden-source-market');
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed market watch result planner data: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.market_watch.review_results","parameters":{"provider_id":"ebay","watch_id":"planner-market-results-visible-watch","provider_secret":"sk-planner-market-result-secret"},"message":"Reviewing Market Watch results."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Review Market Watch results for planner-market-results-visible-watch on ebay",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner-market-watch-results",
+				"thread_id":      thread.ID,
+				"route_id":       "/scanner",
+				"surface_id":     "market-watch.workspace",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-market-watch-results-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Market Watch results request")
+	}
+	if result["skill_id"] != "cabinet.market_watch.review_results" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Market Watch results skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only Market Watch results execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal market watch results planner result: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, `"operation":"market_watch.results.review"`) || !strings.Contains(bodyText, `"id":"planner-market-result-visible"`) {
+		t.Fatalf("market watch results planner response missing expected active-profile result: body=%s", bodyText)
+	}
+	if strings.Contains(bodyText, "planner-market-result-hidden") || strings.Contains(bodyText, "sk-planner-market-result-secret") {
+		t.Fatalf("market watch results planner response leaked cross-profile record or secret: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("market watch results planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal market watch results Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode market watch results Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "market_watch_results" {
+		t.Fatalf("market watch results response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("market watch results summary must expose one bounded active-profile result: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "planner-market-result-visible" || item.Title != "Visible planner market result" || item.Status != "new" || item.Category != "ebay / in_stock" {
+		t.Fatalf("market watch results summary item = %+v, want bounded result id/title/status/provider facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal market watch results summary: %v", err)
+	}
+	for _, forbidden := range []string{"https://example.test/private", "private-market-seller", "private market note", "planner-market-result-hidden", "sk-planner-market-result-secret", "provider_secret", "execution_result", "mutation_applied", "source_result_url", "price", "shipping"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("market watch results summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
 	t.Parallel()
 

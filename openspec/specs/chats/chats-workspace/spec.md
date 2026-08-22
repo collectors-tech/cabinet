@@ -305,3 +305,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the profile-scoped read-only Market Watch search skill and persist a `market_watch_watches` result summary with bounded saved-watch identifiers, display names, enabled state, provider-scope count, and last-result count facts
 - **AND** the summary MUST exclude search keywords, exclusions, provider health internals, listing URLs, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile saved watches
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Market Watch result review returns typed safe result facts
+
+- **GIVEN** the active profile contains Market Watch provider results for a saved watch
+- **WHEN** the user asks Chat to review results for that saved watch
+- **THEN** Cabinet MUST execute the profile-scoped read-only Market Watch result-review skill and persist a `market_watch_results` result summary with bounded result identifiers, display titles, result status, provider label, and stock state
+- **AND** the summary MUST exclude listing URLs, source result URLs, sellers, prices, shipping, reviewer notes, provider health internals, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile Market Watch results
+- **AND** the summary MUST contain no write action or confirmation control
