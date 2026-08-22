@@ -249,6 +249,15 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST exclude notification body/summary text, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile Inbox records
 - **AND** the summary MUST contain no write action or confirmation control
 
+#### Scenario: Inbox unhandled summary returns typed safe triage facts
+
+- **GIVEN** the active profile contains unread, queued, handled, and cross-profile Inbox notification records
+- **WHEN** the user asks Chat to summarise unhandled Inbox notifications
+- **THEN** Cabinet MUST execute the profile-scoped read-only Inbox unhandled summary skill and persist an `inbox_unhandled` result summary with bounded unhandled notification identifiers, titles, statuses, and source labels
+- **AND** the summary MUST include only unread or queued active-profile Inbox records
+- **AND** the summary MUST exclude handled Inbox records, notification body/summary text, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile Inbox records
+- **AND** the summary MUST contain no write action or confirmation control
+
 #### Scenario: Workspace user search returns typed safe authority facts
 
 - **GIVEN** an authorized active profile can ask Chat to inspect workspace users
