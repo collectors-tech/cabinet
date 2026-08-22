@@ -63,6 +63,13 @@ func (e2eSyntheticAgentProvider) RunAssistantTurn(ctx context.Context, req ai.As
 			"parameters": map[string]any{"part_number": "AGENT-2097-SYNTHETIC", "title": syntheticPlannerTitle(text), "category": "Slot Cars"},
 			"message":    "I prepared the wishlist entry for governed review.",
 		}
+	} else if strings.Contains(normalized, "chat-wish-2334") && strings.Contains(normalized, "wishlist") && (strings.Contains(normalized, "find") || strings.Contains(normalized, "search")) {
+		plan = map[string]any{
+			"decision":   "select_skill",
+			"skill_id":   "cabinet.wishlist.search_entries",
+			"parameters": map[string]any{"query": "CHAT-WISH-2334"},
+			"message":    "Here are the matching Cabinet wishlist entries.",
+		}
 	} else if strings.Contains(normalized, "agent-2089-synthetic") && strings.Contains(normalized, "remove user") {
 		plan = map[string]any{
 			"decision":   "select_skill",
