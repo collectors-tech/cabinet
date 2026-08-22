@@ -749,6 +749,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		return "Cabinet prepared a bounded data export readiness summary without creating or changing data."
 	case "maintenance_safe_check":
 		return "Cabinet completed a bounded maintenance safe-check summary without changing data."
+	case "inbox_notifications":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching Inbox notifications."
+		case 1:
+			return "Cabinet found 1 matching Inbox notification."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching Inbox notifications.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -780,6 +789,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentDataExportBundleReadResultSummary(execution)
 	case "cabinet.maintenance.run_safe_check":
 		return plannerAgentMaintenanceSafeCheckReadResultSummary(execution)
+	case "cabinet.inbox.search_notifications", "cabinet.inbox.summarise_unhandled":
+		return plannerAgentInboxNotificationsReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1072,6 +1083,46 @@ func plannerAgentMaintenanceSafeCheckReadResultSummary(execution map[string]any)
 				Category: category,
 			},
 		},
+	}
+}
+
+func plannerAgentInboxNotificationsReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawItems := plannerReadResultMapSlice(execution["items"])
+	if len(rawItems) == 0 {
+		if count := plannerReadResultInt(execution["item_count"]); count == 0 {
+			return &chat.AgentResponseResultSummary{Kind: "inbox_notifications", Total: 0}
+		}
+		return nil
+	}
+	total := len(rawItems)
+	if _, ok := execution["item_count"]; ok {
+		value := plannerReadResultInt(execution["item_count"])
+		total = value
+	}
+	limit := len(rawItems)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, rawItem := range rawItems[:limit] {
+		id := plannerBoundedReadResultText(plannerReadResultString(rawItem["id"]))
+		title := plannerBoundedReadResultText(plannerReadResultString(rawItem["title"]))
+		status := plannerBoundedReadResultText(plannerReadResultString(rawItem["status"]))
+		source := plannerBoundedReadResultText(plannerReadResultString(rawItem["source"]))
+		if id == "" && title == "" && status == "" && source == "" {
+			continue
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       id,
+			Title:    title,
+			Status:   status,
+			Category: source,
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "inbox_notifications",
+		Total: total,
+		Items: items,
 	}
 }
 
