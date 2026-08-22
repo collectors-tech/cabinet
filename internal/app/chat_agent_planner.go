@@ -807,6 +807,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching discovery results.", summary.Total)
 		}
+	case "chat_action_timeline":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no governed action timeline entries for this Chat thread."
+		case 1:
+			return "Cabinet found 1 governed action timeline entry for this Chat thread."
+		default:
+			return fmt.Sprintf("Cabinet found %d governed action timeline entries for this Chat thread.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -822,6 +831,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return nil
 	}
 	switch strings.TrimSpace(skillID) {
+	case "cabinet.chat.action_timeline.view":
+		return plannerAgentChatActionTimelineReadResultSummary(execution)
 	case "cabinet.inventory.search_items":
 		return plannerAgentInventoryReadResultSummary(execution)
 	case "cabinet.dashboard.summarise_activity":
@@ -852,6 +863,48 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentDiscoveryResultsReadResultSummary(execution)
 	default:
 		return nil
+	}
+}
+
+func plannerAgentChatActionTimelineReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawEntries := plannerReadResultMapSlice(execution["timeline_entries"])
+	if len(rawEntries) == 0 {
+		if count := plannerReadResultInt(execution["timeline_entry_count"]); count == 0 {
+			return &chat.AgentResponseResultSummary{Kind: "chat_action_timeline", Total: 0}
+		}
+		return nil
+	}
+	total := len(rawEntries)
+	if _, ok := execution["timeline_entry_count"]; ok {
+		total = plannerReadResultInt(execution["timeline_entry_count"])
+	}
+	limit := len(rawEntries)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, entry := range rawEntries[:limit] {
+		id := plannerBoundedReadResultText(plannerReadResultString(entry["workflow_run_id"]))
+		title := plannerBoundedReadResultText(plannerReadResultString(entry["capability_id"]))
+		status := plannerBoundedReadResultText(plannerReadResultString(entry["status"]))
+		category := plannerBoundedReadResultText(plannerReadResultString(entry["confirmation_state"]))
+		if operation := plannerBoundedReadResultText(plannerReadResultString(entry["operation"])); operation != "" {
+			category = operation
+		}
+		if id == "" && title == "" && status == "" && category == "" {
+			continue
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       id,
+			Title:    title,
+			Status:   status,
+			Category: category,
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "chat_action_timeline",
+		Total: total,
+		Items: items,
 	}
 }
 

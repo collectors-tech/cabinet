@@ -177,6 +177,14 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST contain no write action or confirmation control
 - **AND** Cabinet MUST cap the number and length of rendered fields and exclude notes, URLs, credentials, secrets, and raw provider or execution blobs
 
+#### Scenario: Chat action timeline returns typed safe workflow facts
+
+- **GIVEN** the active profile has governed Agent workflow runs in a Chat thread
+- **WHEN** the user asks Chat to show that thread's governed action timeline
+- **THEN** Cabinet MUST execute the thread-scoped read-only Chat timeline skill and persist a `chat_action_timeline` result summary with bounded workflow run identifiers, capability identifiers, execution status, and operation labels
+- **AND** the summary MUST exclude raw input prompts, provider traces, bulk item payloads, source message identifiers, authority details, mutation evidence, timestamps, preview tokens, provider secrets, stack traces, execution internals, and cross-thread timeline entries
+- **AND** the summary MUST contain no write action or confirmation control
+
 #### Scenario: Dashboard summary returns typed safe activity facts
 
 - **GIVEN** the active profile has Dashboard totals, attention signals, and recent item identifiers
