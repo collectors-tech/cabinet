@@ -1567,6 +1567,127 @@ func TestChatAgentPlannerRoutesIntegrationProviderSearchSummaryFromMainChat(t *t
 	}
 }
 
+func TestChatAgentPlannerRoutesMediaSearchSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Media A"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != 201 {
+		t.Fatalf("create profile A status=%d body=%s", createA.Code, createA.Body.String())
+	}
+	var profileA struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Media B"}`), map[string]string{"Content-Type": "application/json"})
+	if createB.Code != 201 {
+		t.Fatalf("create profile B status=%d body=%s", createB.Code, createB.Body.String())
+	}
+	var profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Media"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO chat_threads(id, profile_id, title)
+		VALUES ('planner-media-thread-a', ?, 'Media A'), ('planner-media-thread-b', ?, 'Media B');
+		INSERT INTO chat_attachments(id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES
+			('planner-media-visible', ?, 'planner-media-thread-a', 'loose-reference.jpg', 'image/jpeg', 123, 'https://example.test/private/loose-reference.jpg'),
+			('planner-media-hidden', ?, 'planner-media-thread-b', 'hidden-reference.jpg', 'image/jpeg', 456, 'https://example.test/private/hidden-reference.jpg');
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed media planner data: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.media.search","parameters":{"query":"loose-reference","provider_secret":"sk-planner-media-secret"},"message":"Searching media assets."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Find media asset loose-reference",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner-media",
+				"thread_id":      thread.ID,
+				"route_id":       "/media",
+				"surface_id":     "media.workspace",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-media-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Media search request")
+	}
+	if result["skill_id"] != "cabinet.media.search" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Media skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true || execution["profile_id"] != profileA.ID {
+		t.Fatalf("expected read-only Media execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal media planner result: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, `"operation":"media.search"`) || !strings.Contains(bodyText, `"filename":"loose-reference.jpg"`) {
+		t.Fatalf("media planner response missing expected active-profile asset: body=%s", bodyText)
+	}
+	if strings.Contains(bodyText, "hidden-reference.jpg") || strings.Contains(bodyText, "sk-planner-media-secret") {
+		t.Fatalf("media planner response leaked cross-profile record or secret: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("media planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal media Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode media Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "media_assets" {
+		t.Fatalf("media response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("media summary must expose one bounded active-profile media asset: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "planner-media-visible" || item.Title != "loose-reference.jpg" || item.Status != "unlinked" || item.Category != "Chat attachment" {
+		t.Fatalf("media summary item = %+v, want bounded media id/title/linkage/source facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal media result summary: %v", err)
+	}
+	for _, forbidden := range []string{"https://example.test/private", "hidden-reference.jpg", "sk-planner-media-secret", "provider_secret", "execution_result", "mutation_applied", "stored_path"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("media read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
 	t.Parallel()
 

@@ -248,3 +248,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the profile-scoped read-only Users skill and persist a `workspace_users` result summary with bounded user identifiers, display labels, statuses, and role labels
 - **AND** the summary MUST exclude email addresses, phone numbers, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile workspace users
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Media search returns typed safe asset facts
+
+- **GIVEN** the active profile contains workspace media assets from Chat attachments or inventory photos
+- **WHEN** the user asks Chat to find matching media assets
+- **THEN** Cabinet MUST execute the profile-scoped read-only Media skill and persist a `media_assets` result summary with bounded media identifiers, display titles, linkage states, and source labels
+- **AND** the summary MUST exclude stored paths, private source URLs, notes, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile media records
+- **AND** the summary MUST contain no write action or confirmation control
