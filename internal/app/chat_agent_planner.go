@@ -13,6 +13,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
+	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
 
@@ -767,6 +768,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching workspace users.", summary.Total)
 		}
+	case "media_assets":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching media assets."
+		case 1:
+			return "Cabinet found 1 matching media asset."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching media assets.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -802,6 +812,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentInboxNotificationsReadResultSummary(execution)
 	case "cabinet.users.search":
 		return plannerAgentWorkspaceUsersReadResultSummary(execution)
+	case "cabinet.media.search", "cabinet.media.review_unlinked":
+		return plannerAgentMediaAssetsReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1176,6 +1188,47 @@ func plannerAgentWorkspaceUsersReadResultSummary(execution map[string]any) *chat
 	}
 	return &chat.AgentResponseResultSummary{
 		Kind:  "workspace_users",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerAgentMediaAssetsReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawAssets, ok := execution["assets"].([]media.WorkspaceAsset)
+	if !ok {
+		return nil
+	}
+	total := len(rawAssets)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(rawAssets)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, asset := range rawAssets[:limit] {
+		title := plannerBoundedReadResultText(asset.Title)
+		if title == "" {
+			title = plannerBoundedReadResultText(asset.Filename)
+		}
+		status := plannerBoundedReadResultText(asset.LinkageState)
+		if status == "" {
+			status = plannerBoundedReadResultText(asset.AnalysisStatus)
+		}
+		category := plannerBoundedReadResultText(asset.Source)
+		if category == "" {
+			category = "Media asset"
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(asset.ID),
+			Title:    title,
+			Status:   status,
+			Category: category,
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "media_assets",
 		Total: total,
 		Items: items,
 	}
