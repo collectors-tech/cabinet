@@ -15,6 +15,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/media"
+	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
 
@@ -787,6 +788,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching purchase orders.", summary.Total)
 		}
+	case "market_watch_watches":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching Market Watch saved watches."
+		case 1:
+			return "Cabinet found 1 matching Market Watch saved watch."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching Market Watch saved watches.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -826,6 +836,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentMediaAssetsReadResultSummary(execution)
 	case "cabinet.purchases.search_orders":
 		return plannerAgentPurchaseOrdersReadResultSummary(execution)
+	case "cabinet.market_watch.search_watches":
+		return plannerAgentMarketWatchWatchesReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1277,6 +1289,46 @@ func plannerAgentPurchaseOrdersReadResultSummary(execution map[string]any) *chat
 	}
 	return &chat.AgentResponseResultSummary{
 		Kind:  "purchase_orders",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerAgentMarketWatchWatchesReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawWatches, ok := execution["watches"].([]scanner.QuerySet)
+	if !ok {
+		return nil
+	}
+	total := len(rawWatches)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(rawWatches)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, watch := range rawWatches[:limit] {
+		status := "paused"
+		if watch.Enabled {
+			status = "enabled"
+		}
+		category := "Market Watch"
+		if len(watch.ProviderScope) > 0 {
+			category = fmt.Sprintf("%s / %d providers", category, len(watch.ProviderScope))
+		}
+		if watch.LastCandidateCount > 0 {
+			category = fmt.Sprintf("%s / %d last results", category, watch.LastCandidateCount)
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(watch.ID),
+			Title:    plannerBoundedReadResultText(watch.Name),
+			Status:   plannerBoundedReadResultText(status),
+			Category: plannerBoundedReadResultText(category),
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "market_watch_watches",
 		Total: total,
 		Items: items,
 	}

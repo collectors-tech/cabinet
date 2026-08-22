@@ -14,6 +14,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/chat"
+	"github.com/collectors-tech/cabinet/internal/scanner"
 )
 
 type captureAssistantProvider struct {
@@ -1805,6 +1806,131 @@ func TestChatAgentPlannerRoutesPurchaseOrdersSummaryFromMainChat(t *testing.T) {
 	for _, forbidden := range []string{"private-seller", "TRACK-PRIVATE", "hidden-seller", "order-hidden-1", "sk-planner-purchase-secret", "provider_secret", "execution_result", "mutation_applied", "expected_arrival_id", "amount", "currency"} {
 		if strings.Contains(string(summaryJSON), forbidden) {
 			t.Fatalf("purchase read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
+func TestChatAgentPlannerRoutesMarketWatchSearchSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Market Watch A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Market Watch B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != http.StatusCreated || createB.Code != http.StatusCreated {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Market Watch"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	scannerSvc := scanner.NewService(a.db)
+	visible, err := scannerSvc.CreateQuerySetForProfile(context.Background(), profileA.ID, scanner.QuerySet{
+		Name:               "Planner A Slot Search",
+		Keywords:           []string{"AFX", "secret-keyword"},
+		Exclusions:         []string{"private-exclusion"},
+		ProviderScope:      []string{"ebay"},
+		Enabled:            true,
+		LastCandidateCount: 3,
+	})
+	if err != nil {
+		t.Fatalf("seed visible market watch: %v", err)
+	}
+	if _, err := scannerSvc.CreateQuerySetForProfile(context.Background(), profileB.ID, scanner.QuerySet{
+		Name:          "Planner B Hidden Watch",
+		Keywords:      []string{"AFX"},
+		ProviderScope: []string{"ebay"},
+		Enabled:       true,
+	}); err != nil {
+		t.Fatalf("seed hidden market watch: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.market_watch.search_watches","parameters":{"provider_id":"ebay","query":"Planner A","provider_secret":"sk-planner-market-watch-secret"},"message":"Searching saved watches."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Find Market Watch saved watches for Planner A on ebay",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner-market-watch",
+				"thread_id":      thread.ID,
+				"route_id":       "/scanner",
+				"surface_id":     "market-watch.workspace",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-market-watch-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Market Watch search request")
+	}
+	if result["skill_id"] != "cabinet.market_watch.search_watches" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Market Watch skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only Market Watch execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal market watch planner result: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, `"operation":"market_watch.watch.search"`) || !strings.Contains(bodyText, visible.ID) {
+		t.Fatalf("market watch planner response missing expected active-profile watch: body=%s", bodyText)
+	}
+	if strings.Contains(bodyText, "Planner B Hidden Watch") || strings.Contains(bodyText, "sk-planner-market-watch-secret") {
+		t.Fatalf("market watch planner response leaked cross-profile record or secret: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("market watch planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal market watch Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode market watch Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "market_watch_watches" {
+		t.Fatalf("market watch response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("market watch summary must expose one bounded active-profile watch: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != visible.ID || item.Title != "Planner A Slot Search" || item.Status != "enabled" || item.Category != "Market Watch / 1 providers" {
+		t.Fatalf("market watch summary item = %+v, want bounded saved-watch id/name/status/provider-count facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal market watch result summary: %v", err)
+	}
+	for _, forbidden := range []string{"secret-keyword", "private-exclusion", "Planner B Hidden Watch", "sk-planner-market-watch-secret", "provider_secret", "execution_result", "mutation_applied", "provider_health", "external_write_claimed"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("market watch read result summary leaked %q: %s", forbidden, summaryJSON)
 		}
 	}
 }
