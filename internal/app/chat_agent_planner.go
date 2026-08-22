@@ -751,6 +751,8 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		}
 	case "integration_setup_explanation":
 		return "Cabinet read the provider setup requirements without changing integration configuration."
+	case "integration_connection_status":
+		return "Cabinet checked the provider connection status without changing integration configuration."
 	case "data_export_bundle":
 		return "Cabinet prepared a bounded data export readiness summary without creating or changing data."
 	case "maintenance_safe_check":
@@ -881,6 +883,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentIntegrationProvidersReadResultSummary(execution)
 	case "cabinet.integrations.explain_required_setup":
 		return plannerAgentIntegrationSetupExplanationReadResultSummary(execution)
+	case "cabinet.integrations.test_connection":
+		return plannerAgentIntegrationConnectionStatusReadResultSummary(execution)
 	case "cabinet.data.export_bundle":
 		return plannerAgentDataExportBundleReadResultSummary(execution)
 	case "cabinet.maintenance.run_safe_check":
@@ -1215,6 +1219,36 @@ func plannerAgentIntegrationSetupExplanationReadResultSummary(execution map[stri
 			ID:       providerID,
 			Title:    title,
 			Status:   status,
+			Category: category,
+		}},
+	}
+}
+
+func plannerAgentIntegrationConnectionStatusReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	providerID := plannerBoundedReadResultText(plannerReadResultString(execution["provider_id"]))
+	connectionStatus := plannerBoundedReadResultText(plannerReadResultString(execution["connection_status"]))
+	nextAction := plannerBoundedReadResultText(plannerReadResultString(execution["next_action"]))
+	if providerID == "" && connectionStatus == "" && nextAction == "" {
+		return nil
+	}
+	if connectionStatus == "" {
+		connectionStatus = "not_checked"
+	}
+	title := providerID
+	if title == "" {
+		title = "Integration provider"
+	}
+	category := "Provider connection"
+	if nextAction != "" {
+		category = nextAction
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "integration_connection_status",
+		Total: 1,
+		Items: []chat.AgentResponseResultItem{{
+			ID:       providerID,
+			Title:    title,
+			Status:   connectionStatus,
 			Category: category,
 		}},
 	}
@@ -1855,11 +1889,15 @@ func executeReadOnlyPlannerSelection(ctx context.Context, conn *sql.DB, chatSvc 
 }
 
 func plannerSafePreviewExecutionSkill(skill agentskills.Skill) bool {
-	return skill.ID == "cabinet.data.export_bundle" &&
-		skill.SafetyLevel == agentskills.SafetyPreviewOnly &&
-		!skill.Permissions.LocalWrite &&
-		!skill.Permissions.ExternalWrite &&
-		!skill.Permissions.Destructive
+	switch skill.ID {
+	case "cabinet.data.export_bundle", "cabinet.integrations.test_connection":
+		return skill.SafetyLevel == agentskills.SafetyPreviewOnly &&
+			!skill.Permissions.LocalWrite &&
+			!skill.Permissions.ExternalWrite &&
+			!skill.Permissions.Destructive
+	default:
+		return false
+	}
 }
 
 func previewLocalWritePlannerSelection(ctx context.Context, conn *sql.DB, chatSvc *chat.Service, registry agentskills.Registry, profileID, threadID string, selection chatAgentSkillSelection, envelope map[string]any, sourceMessageID string) (map[string]any, agentskills.AgentAuthorityReview, error) {
