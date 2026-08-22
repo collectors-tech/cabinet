@@ -168,6 +168,13 @@ Cabinet MUST distinguish literal response instructions from governed Cabinet ope
 
 When Cabinet executes a read-only Agent skill from Chat, the resulting assistant message SHALL include a presentation-neutral, server-owned summary of the matching records instead of merely repeating the provider's plan text.
 
+#### Scenario: Registry-derived read execution coverage remains complete
+
+- **GIVEN** Cabinet's Agent registry exposes executable read-only skills and explicitly approved non-mutating preview execution paths
+- **WHEN** Chat planner read-result coverage is validated
+- **THEN** every executable read-only skill and explicitly approved non-mutating preview execution path MUST have a typed `result_summary` mapping with a documented summary kind
+- **AND** adding a new executable read skill without a corresponding Chat result-summary mapping MUST fail focused planner validation
+
 #### Scenario: Inventory lookup returns exact safe record facts
 
 - **GIVEN** the active profile contains an inventory item with a known part number and title

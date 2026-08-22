@@ -14,7 +14,12 @@ import (
 	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/chat"
+	"github.com/collectors-tech/cabinet/internal/collection"
+	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/discovery"
+	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/scanner"
+	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
 
 type captureAssistantProvider struct {
@@ -76,6 +81,134 @@ func TestChatAgentPlannerRecognisesDiscoveryAndAcquisitionLanguage(t *testing.T)
 	} {
 		if !chatMessageNeedsNaturalLanguageAgentPlanning(request) {
 			t.Fatalf("expected acquisition request to require provider planning: %q", request)
+		}
+	}
+}
+
+func TestChatAgentPlannerReadSummaryCoverageTracksExecutableReadRegistry(t *testing.T) {
+	t.Parallel()
+
+	summaryFixtures := map[string]struct {
+		execution map[string]any
+		kind      string
+	}{
+		"cabinet.chat.action_timeline.view": {
+			execution: map[string]any{"timeline_entries": []map[string]any{{"workflow_run_id": "run-1", "capability_id": "cabinet.inventory.search_items", "status": "completed", "operation": "inventory.item.search"}}},
+			kind:      "chat_action_timeline",
+		},
+		"cabinet.inventory.search_items": {
+			execution: map[string]any{"items": []collection.Item{{ID: "item-1", PartNumber: "AFX-1", Title: "Visible item", Status: "active", Category: "Slot", Brand: "AFX"}}},
+			kind:      "inventory_items",
+		},
+		"cabinet.dashboard.summarise_activity": {
+			execution: map[string]any{"attention_signals": []map[string]any{{"id": "signal-1", "label": "Needs review", "count": 1}}},
+			kind:      "dashboard_activity",
+		},
+		"cabinet.storage.show_status": {
+			execution: map[string]any{"storage_status": "ready", "backup_status": "configured"},
+			kind:      "storage_status",
+		},
+		"cabinet.wishlist.search_entries": {
+			execution: map[string]any{"entries": []wishlist.Entry{{ID: "wish-1", ItemID: "item-1", Priority: "high", HighlightHit: true}}},
+			kind:      "wishlist_entries",
+		},
+		"cabinet.collections.search": {
+			execution: map[string]any{"collections": []string{"Ready collection"}},
+			kind:      "collections",
+		},
+		"cabinet.integrations.search_providers": {
+			execution: map[string]any{"providers": []map[string]any{{"id": "openai", "status": "ready", "setup_required": false}}},
+			kind:      "integration_providers",
+		},
+		"cabinet.integrations.explain_required_setup": {
+			execution: map[string]any{"provider_id": "openai", "setup_required": true, "next_action": "Add credentials"},
+			kind:      "integration_setup_explanation",
+		},
+		"cabinet.integrations.test_connection": {
+			execution: map[string]any{"provider_id": "openai", "connection_status": "ready", "next_action": "none"},
+			kind:      "integration_connection_status",
+		},
+		"cabinet.data.export_bundle": {
+			execution: map[string]any{"status": "ready", "export_scope": "all"},
+			kind:      "data_export_bundle",
+		},
+		"cabinet.maintenance.run_safe_check": {
+			execution: map[string]any{"status": "healthy", "maintenance_check": "storage", "check_level": "safe"},
+			kind:      "maintenance_safe_check",
+		},
+		"cabinet.inbox.search_notifications": {
+			execution: map[string]any{"items": []map[string]any{{"id": "inbox-1", "title": "Review", "status": "unread", "source": "notification_history"}}},
+			kind:      "inbox_notifications",
+		},
+		"cabinet.inbox.summarise_unhandled": {
+			execution: map[string]any{"items": []map[string]any{{"id": "inbox-1", "title": "Review", "status": "unread", "source": "notification_history"}}},
+			kind:      "inbox_unhandled",
+		},
+		"cabinet.users.search": {
+			execution: map[string]any{"users": []map[string]any{{"id": "user-1", "display_name": "Visible User", "status": "active", "role": "admin"}}},
+			kind:      "workspace_users",
+		},
+		"cabinet.media.search": {
+			execution: map[string]any{"assets": []media.WorkspaceAsset{{ID: "asset-1", Title: "Visible asset", LinkageState: "unlinked", Source: "upload"}}},
+			kind:      "media_assets",
+		},
+		"cabinet.media.review_unlinked": {
+			execution: map[string]any{"assets": []media.WorkspaceAsset{{ID: "asset-1", Title: "Visible asset", LinkageState: "unlinked", Source: "upload"}}},
+			kind:      "unlinked_media_assets",
+		},
+		"cabinet.discoveries.search": {
+			execution: map[string]any{"items": []discovery.Item{{CandidateID: "discovery-1", Title: "Visible discovery", Status: "new", SourceProvider: "ebay"}}},
+			kind:      "discovery_results",
+		},
+		"cabinet.discoveries.review_result": {
+			execution: map[string]any{"item": discovery.Item{CandidateID: "discovery-1", Title: "Visible discovery", Status: "new", SourceProvider: "ebay"}},
+			kind:      "discovery_results",
+		},
+		"cabinet.purchases.search_orders": {
+			execution: map[string]any{"orders": []commerce.PurchaseOrder{{OrderID: "po-1", Status: "open", Source: "manual", LineItemCount: 1}}},
+			kind:      "purchase_orders",
+		},
+		"cabinet.purchases.review_purchase": {
+			execution: map[string]any{"order_id": "po-1", "review_status": "needs_attention"},
+			kind:      "purchase_review",
+		},
+		"cabinet.market_watch.search_watches": {
+			execution: map[string]any{"watches": []scanner.QuerySet{{ID: "watch-1", Name: "AFX watch", Enabled: true, ProviderScope: []string{"ebay"}, LastCandidateCount: 1}}},
+			kind:      "market_watch_watches",
+		},
+		"cabinet.market_watch.review_results": {
+			execution: map[string]any{"candidates": []scanner.Candidate{{ID: "candidate-1", Title: "Visible candidate", Status: "new", Source: "ebay", StockState: "available"}}},
+			kind:      "market_watch_results",
+		},
+	}
+
+	registry := agentskills.NewRegistry(nil)
+	for _, skill := range registry.List() {
+		if skill.SafetyLevel != agentskills.SafetyReadOnly && !plannerSafePreviewExecutionSkill(skill) {
+			continue
+		}
+		if !skill.Executable {
+			continue
+		}
+		fixture, ok := summaryFixtures[skill.ID]
+		if !ok {
+			t.Fatalf("executable read skill %s lacks a Chat result_summary fixture and contract mapping", skill.ID)
+		}
+		summary := plannerAgentReadResultSummary(skill.ID, fixture.execution)
+		if summary == nil {
+			t.Fatalf("executable read skill %s did not produce a Chat result_summary", skill.ID)
+		}
+		if summary.Kind != fixture.kind {
+			t.Fatalf("executable read skill %s summary kind=%q, want %q", skill.ID, summary.Kind, fixture.kind)
+		}
+	}
+	for skillID := range summaryFixtures {
+		skill, ok := registry.Resolve(skillID)
+		if !ok {
+			t.Fatalf("summary fixture references unknown Agent skill %s", skillID)
+		}
+		if skill.SafetyLevel != agentskills.SafetyReadOnly && !plannerSafePreviewExecutionSkill(skill) {
+			t.Fatalf("summary fixture %s is not an executable read-summary skill", skillID)
 		}
 	}
 }
