@@ -298,6 +298,14 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST exclude sellers, tracking codes, private notes, amounts, arrival identifiers, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile purchase records
 - **AND** the summary MUST contain no write action or confirmation control
 
+#### Scenario: Purchase review returns typed safe review facts
+
+- **GIVEN** the active profile can ask Chat to review purchase/order evidence for a target order
+- **WHEN** the user asks Chat to review that purchase order
+- **THEN** Cabinet MUST execute the profile-scoped read-only Purchases review skill and persist a `purchase_review` result summary with bounded order identifier and review-status facts
+- **AND** the summary MUST exclude sellers, tracking codes, private notes, amounts, arrival identifiers, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile purchase records
+- **AND** the summary MUST contain no write action or confirmation control
+
 #### Scenario: Market Watch saved-watch search returns typed safe watch facts
 
 - **GIVEN** the active profile contains Market Watch saved-watch definitions

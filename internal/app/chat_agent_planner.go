@@ -800,6 +800,11 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching purchase orders.", summary.Total)
 		}
+	case "purchase_review":
+		if summary.Total == 0 {
+			return "Cabinet found no purchase review evidence for that order."
+		}
+		return "Cabinet found purchase review evidence for that order."
 	case "market_watch_watches":
 		switch summary.Total {
 		case 0:
@@ -881,6 +886,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentMediaAssetsReadResultSummary(execution)
 	case "cabinet.purchases.search_orders":
 		return plannerAgentPurchaseOrdersReadResultSummary(execution)
+	case "cabinet.purchases.review_purchase":
+		return plannerAgentPurchaseReviewReadResultSummary(execution)
 	case "cabinet.market_watch.search_watches":
 		return plannerAgentMarketWatchWatchesReadResultSummary(execution)
 	case "cabinet.market_watch.review_results":
@@ -1420,6 +1427,33 @@ func plannerAgentPurchaseOrdersReadResultSummary(execution map[string]any) *chat
 		Kind:  "purchase_orders",
 		Total: total,
 		Items: items,
+	}
+}
+
+func plannerAgentPurchaseReviewReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	orderID := plannerBoundedReadResultText(plannerReadResultString(execution["order_id"]))
+	reviewStatus := plannerBoundedReadResultText(plannerReadResultString(execution["review_status"]))
+	if orderID == "" && reviewStatus == "" {
+		return nil
+	}
+	if reviewStatus == "" {
+		reviewStatus = "review_requested"
+	}
+	title := orderID
+	if title == "" {
+		title = "Purchase review"
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "purchase_review",
+		Total: 1,
+		Items: []chat.AgentResponseResultItem{
+			{
+				ID:       orderID,
+				Title:    title,
+				Status:   reviewStatus,
+				Category: "Purchase review",
+			},
+		},
 	}
 }
 
