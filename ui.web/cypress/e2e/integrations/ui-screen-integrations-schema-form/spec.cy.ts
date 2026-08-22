@@ -1,9 +1,8 @@
 describe('ui-screen-integrations-schema-form', () => {
   function signIn() {
+    cy.stubLocalServerSession('profile-e2e-001')
     cy.visit('/sign-in?redirect=%2Fintegrations%2F')
-    cy.get('input[name="email"]').clear().type('e2e-inventory@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/integrations\/?$/
