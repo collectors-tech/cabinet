@@ -791,6 +791,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching media assets.", summary.Total)
 		}
+	case "unlinked_media_assets":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no unlinked media assets."
+		case 1:
+			return "Cabinet found 1 unlinked media asset."
+		default:
+			return fmt.Sprintf("Cabinet found %d unlinked media assets.", summary.Total)
+		}
 	case "purchase_orders":
 		switch summary.Total {
 		case 0:
@@ -882,8 +891,10 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentInboxNotificationsReadResultSummary(execution, "inbox_unhandled")
 	case "cabinet.users.search":
 		return plannerAgentWorkspaceUsersReadResultSummary(execution)
-	case "cabinet.media.search", "cabinet.media.review_unlinked":
+	case "cabinet.media.search":
 		return plannerAgentMediaAssetsReadResultSummary(execution)
+	case "cabinet.media.review_unlinked":
+		return plannerAgentMediaAssetsReadResultSummary(execution, "unlinked_media_assets")
 	case "cabinet.purchases.search_orders":
 		return plannerAgentPurchaseOrdersReadResultSummary(execution)
 	case "cabinet.purchases.review_purchase":
@@ -1353,7 +1364,7 @@ func plannerAgentWorkspaceUsersReadResultSummary(execution map[string]any) *chat
 	}
 }
 
-func plannerAgentMediaAssetsReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+func plannerAgentMediaAssetsReadResultSummary(execution map[string]any, kindOverride ...string) *chat.AgentResponseResultSummary {
 	rawAssets, ok := execution["assets"].([]media.WorkspaceAsset)
 	if !ok {
 		return nil
@@ -1387,8 +1398,12 @@ func plannerAgentMediaAssetsReadResultSummary(execution map[string]any) *chat.Ag
 			Category: category,
 		})
 	}
+	kind := "media_assets"
+	if len(kindOverride) > 0 && strings.TrimSpace(kindOverride[0]) != "" {
+		kind = strings.TrimSpace(kindOverride[0])
+	}
 	return &chat.AgentResponseResultSummary{
-		Kind:  "media_assets",
+		Kind:  kind,
 		Total: total,
 		Items: items,
 	}
