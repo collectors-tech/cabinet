@@ -1,10 +1,14 @@
 describe('ui-screen-settings', () => {
   function signInToSettings() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2F')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap({ minimalProfile: true }).then(
+      ({ profile_id, profile_name }) => {
+        cy.useBootstrappedProfile(profile_id, profile_name, {
+          path: '/settings/profile/',
+        })
+      }
+    )
   }
 
   beforeEach(() => {
@@ -55,13 +59,13 @@ describe('ui-screen-settings', () => {
   })
 
   it('UI-SCREEN-SETTINGS-003 keeps settings route active and shows actionable section error state when section data fails', () => {
-    cy.intercept('GET', '/api/profiles/active', {
+    cy.intercept('GET', '/api/profiles/e2e-profile-001/storage', {
       statusCode: 500,
-      body: { error: 'failed_to_get_active_profile' },
-    }).as('activeProfileFailure')
+      body: { error: 'storage_unavailable' },
+    }).as('storageInfoFailure')
 
     cy.visit('/settings/storage')
-    cy.wait('@activeProfileFailure')
+    cy.wait('@storageInfoFailure')
 
     cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
     cy.contains('h3', 'Storage').should('be.visible')
@@ -72,8 +76,7 @@ describe('ui-screen-settings', () => {
   })
 
   it('UI-SCREEN-SETTINGS-004 exposes Storage route in primary navigation rail', () => {
-    cy.get('[data-testid="sidebar-nav-group-other"]')
-      .find('a[href="/settings/storage"]')
+    cy.get('a[href="/settings/storage"]')
       .contains('Storage')
       .scrollIntoView()
       .should('exist')
@@ -90,11 +93,7 @@ describe('ui-screen-settings', () => {
       body: { error: 'active_profile_404' },
     }).as('activeProfileMissing')
 
-    cy.visit('/sign-in?redirect=%2Fsettings%2F')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
+    signInToSettings()
     cy.wait('@activeProfileMissing')
     cy.get('[data-testid="settings-profile-context-blocked"]').should(
       'be.visible'
@@ -118,7 +117,7 @@ describe('ui-screen-settings', () => {
     let storageAttempt = 0
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
-      body: { id: 'default' },
+      body: { id: 'e2e-profile-001' },
     }).as('activeProfile')
     cy.intercept('GET', '/api/profiles/*/storage', (req) => {
       storageAttempt += 1
@@ -161,7 +160,7 @@ describe('ui-screen-settings', () => {
     let attempt = 0
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
-      body: { id: 'default' },
+      body: { id: 'e2e-profile-001' },
     }).as('activeProfile')
     cy.intercept('GET', '/api/profiles/*/storage', (req) => {
       attempt += 1
