@@ -2146,6 +2146,127 @@ func TestChatAgentPlannerRoutesDiscoveriesSearchSummaryFromMainChat(t *testing.T
 	}
 }
 
+func TestChatAgentPlannerRoutesDiscoveriesReviewResultSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Discovery Review A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Discovery Review B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != http.StatusCreated || createB.Code != http.StatusCreated {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Discovery Review"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, provider_scope_json, enabled)
+		VALUES
+			('planner-discovery-review-visible-watch', ?, 'Visible discovery review watch', '["visible"]', '["ebay"]', 1),
+			('planner-discovery-review-hidden-watch', ?, 'Hidden discovery review watch', '["visible"]', '["ebay"]', 1);
+		INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, reviewer_notes, source_result_url)
+		VALUES
+			('planner-discovery-review-visible', ?, 'planner-discovery-review-visible-watch', 'DISC-REVIEW-VISIBLE-1', 'Visible planner discovery review', 31, 'AUD', 5, 'https://example.test/private-review-listing', 'https://example.test/private-review-image.jpg', 'private-review-seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 2, 'private review note', 'https://example.test/private-review-source'),
+			('planner-discovery-review-hidden', ?, 'planner-discovery-review-hidden-watch', 'DISC-REVIEW-HIDDEN-1', 'Hidden planner discovery review', 88, 'AUD', 6, 'https://example.test/private-hidden-review-listing', '', 'private-hidden-review-seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 1, 'hidden review note', 'https://example.test/private-hidden-review-source');
+		INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+		VALUES
+			('planner-discovery-review-visible', '', 'not_in_collection', 0.91, 1, 'PRIVATE-REVIEW-PART', CURRENT_TIMESTAMP),
+			('planner-discovery-review-hidden', '', 'not_in_collection', 0.66, 1, 'PRIVATE-HIDDEN-REVIEW-PART', CURRENT_TIMESTAMP);
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed discovery review planner data: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.discoveries.review_result","parameters":{"provider_id":"ebay","result_id":"planner-discovery-review-visible","provider_secret":"sk-planner-discovery-review-secret","source_result_url":"https://example.test/private-review-source"},"message":"Reviewing discovery result."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Review discovery result planner-discovery-review-visible",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner-discovery-review",
+				"thread_id":      thread.ID,
+				"route_id":       "/discovery",
+				"surface_id":     "discoveries.workspace",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-discovery-review-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Discoveries review request")
+	}
+	if result["skill_id"] != "cabinet.discoveries.review_result" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Discoveries review skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["operation"] != "discoveries.review_result" || execution["read_only"] != true || execution["mutation_applied"] == true || execution["profile_id"] != profileA.ID {
+		t.Fatalf("expected read-only Discoveries review execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal discovery review planner result: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, `"candidate_id":"planner-discovery-review-visible"`) || !strings.Contains(bodyText, `"provenance_preserved":true`) {
+		t.Fatalf("discovery review planner response missing expected active-profile review result: body=%s", bodyText)
+	}
+	if strings.Contains(bodyText, "planner-discovery-review-hidden") || strings.Contains(bodyText, "sk-planner-discovery-review-secret") {
+		t.Fatalf("discovery review planner response leaked cross-profile record or secret: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("discovery review planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal discovery review Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode discovery review Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "discovery_results" {
+		t.Fatalf("discovery review response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("discovery review summary must expose one bounded active-profile result: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "planner-discovery-review-visible" || item.Title != "Visible planner discovery review" || item.Status != "new" || item.Category != "ebay / needs review" {
+		t.Fatalf("discovery review summary item = %+v, want bounded candidate id/title/status/provider facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal discovery review result summary: %v", err)
+	}
+	for _, forbidden := range []string{"https://example.test/private", "private-review-seller", "private review note", "PRIVATE-REVIEW-PART", "planner-discovery-review-hidden", "sk-planner-discovery-review-secret", "provider_secret", "execution_result", "mutation_applied", "source_result_url", "price", "shipping", "confidence"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("discovery review read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesPurchaseOrdersSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 
