@@ -2326,6 +2326,37 @@ func TestChatAgentPlannerRoutesGovernedAdminReadsAndPreviews(t *testing.T) {
 	if !strings.Contains(string(usersJSON), "alice@example.test") || strings.Contains(string(usersJSON), "hidden@example.test") {
 		t.Fatalf("users planner read must remain profile-isolated, body=%s", string(usersJSON))
 	}
+	usersThreadMessage, ok := usersResult["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("users planner result missing trusted assistant thread message: %+v", usersResult)
+	}
+	usersAgentResponseJSON, err := json.Marshal(usersThreadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal persisted users Agent response: %v", err)
+	}
+	var usersAgentResponse chat.AgentResponse
+	if err := json.Unmarshal(usersAgentResponseJSON, &usersAgentResponse); err != nil {
+		t.Fatalf("decode persisted users Agent response: %v", err)
+	}
+	if usersAgentResponse.ResultSummary == nil || usersAgentResponse.ResultSummary.Kind != "workspace_users" {
+		t.Fatalf("users response missing typed read result summary: %+v", usersAgentResponse)
+	}
+	if usersAgentResponse.ResultSummary.Total != 1 || len(usersAgentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("users summary must expose one bounded active-profile workspace user: %+v", usersAgentResponse.ResultSummary)
+	}
+	usersSummaryItem := usersAgentResponse.ResultSummary.Items[0]
+	if usersSummaryItem.ID == "" || usersSummaryItem.Title != "Invited User" || usersSummaryItem.Status != "invited" || usersSummaryItem.Category != "admin" {
+		t.Fatalf("users summary item = %+v, want bounded user id/display/status/role", usersSummaryItem)
+	}
+	usersSummaryJSON, err := json.Marshal(usersAgentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal users result summary: %v", err)
+	}
+	for _, forbidden := range []string{"alice@example.test", "hidden@example.test", "provider_secret", "execution_result", "mutation_applied", "created_at", "updated_at"} {
+		if strings.Contains(string(usersSummaryJSON), forbidden) {
+			t.Fatalf("users read result summary leaked %q: %s", forbidden, usersSummaryJSON)
+		}
+	}
 
 	previewContext := map[string]any{
 		"assistant": baseContext["assistant"],
