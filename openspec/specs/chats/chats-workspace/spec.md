@@ -213,6 +213,7 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **GIVEN** the active profile contains wishlist entries with planning and purchase metadata
 - **WHEN** the user asks Chat to find matching wishlist entries
 - **THEN** Cabinet MUST execute the profile-scoped read-only Wishlist skill and persist a `wishlist_entries` result summary with bounded entry identifiers, priority, and purchase-state facts
+- **AND** the Wishlist result summary MUST render in both full and contextual Chat and survive reload and thread handoff
 - **AND** the summary MUST exclude notes, purchase URLs, provider secrets, raw provider payloads, stack traces, execution internals, and cross-profile wishlist records
 - **AND** the summary MUST contain no write action or confirmation control
 

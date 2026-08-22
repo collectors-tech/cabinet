@@ -339,6 +339,97 @@ describe('chats/ui-screen-chat-copilot', () => {
       .should('not.exist')
   })
 
+  it('CHATS-WORKSPACE-015/#2334 surfaces a cross-domain wishlist read result in Chat', () => {
+    openChatsWithAssistantDefaults('fake', 'cabinet-e2e-planner')
+    createThread('E2E Agent Wishlist Read Result')
+    cy.request('POST', '/api/items', {
+      part_number: 'CHAT-WISH-2334',
+      title: 'CHAT-WISH-2334 Exact Wishlist Read Result',
+      brand: 'Cabinet Acceptance',
+      category: 'General',
+      status: 'wishlist',
+    })
+      .its('body.id')
+      .then((itemId) => {
+        cy.request('POST', '/api/wishlist', {
+          item_id: itemId,
+          target_price: 42,
+          currency: 'AUD',
+          priority: 'high',
+          notes: 'CHAT-WISH-2334 private wishlist note must not render',
+          highlight_hit: true,
+          below_target_now: true,
+          purchase_url: 'https://private.example.test/wishlist-2334',
+        }).its('status').should('eq', 201)
+      })
+    cy.intercept('POST', '/api/chat/messages').as('agentWishlistReadMessage')
+
+    cy.get('[data-testid="chat-compose-input"]').type(
+      'Find wishlist entry CHAT-WISH-2334 and tell me the exact priority.'
+    )
+    cy.get('[data-testid="chat-send-button"]').click()
+
+    cy.wait('@agentWishlistReadMessage').then(({ response }) => {
+      expect(response?.statusCode).to.eq(201)
+      expect(response?.body.agent_planner.skill_id).to.eq(
+        'cabinet.wishlist.search_entries'
+      )
+      const summary =
+        response?.body.agent_planner.thread_message.context.agent_response
+          .result_summary
+      expect(summary.kind).to.eq('wishlist_entries')
+      expect(summary.items[0].id).to.be.a('string').and.not.eq('')
+      expect(summary.items[0].title).to.be.a('string').and.not.eq('')
+      expect(summary.items[0].category).to.eq('high')
+      expect(summary.items[0].status).to.eq('below_target')
+      expect(JSON.stringify(summary)).not.to.contain('private wishlist note')
+      expect(JSON.stringify(summary)).not.to.contain('private.example.test')
+    })
+
+    cy.get('[data-testid="chat-agent-response-state"]')
+      .should('have.attr', 'data-agent-state', 'read_result')
+      .and('contain', 'high')
+      .and('contain', 'below_target')
+      .and('not.contain', 'private wishlist note')
+      .and('not.contain', 'private.example.test')
+    cy.get('[data-testid="chat-agent-response-state"]')
+      .find('button')
+      .should('not.exist')
+
+    cy.reload()
+    cy.get('[data-testid="chat-agent-response-state"]')
+      .should('contain', 'high')
+      .and('contain', 'below_target')
+      .and('not.contain', 'private wishlist note')
+
+    cy.request('/api/chat/threads?profile_id=e2e-profile-001')
+      .its('body.threads')
+      .then((threads: Array<{ id: string; title: string }>) => {
+        const thread = threads.find(
+          (candidate) => candidate.title === 'E2E Agent Wishlist Read Result'
+        )
+        expect(thread?.id, 'wishlist read-result thread id')
+          .to.be.a('string')
+          .and.not.eq('')
+        cy.get('[data-testid="shell-chat-toggle"]')
+          .should('be.visible')
+          .and('not.be.disabled')
+          .click()
+        cy.get('[data-testid="shell-assistant-thread-select"]', {
+          timeout: 20000,
+        }).select(String(thread?.id))
+        cy.get('[data-testid="shell-assistant-thread-id"]')
+          .should('have.text', thread?.id)
+      })
+    cy.get('[data-testid="shell-assistant-agent-response-state"]')
+      .should('have.attr', 'data-agent-state', 'read_result')
+      .and('contain', 'high')
+      .and('contain', 'below_target')
+    cy.get('[data-testid="shell-assistant-agent-response-state"]')
+      .find('button')
+      .should('not.exist')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure', () => {
     cy.viewport(1400, 900)
     openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
