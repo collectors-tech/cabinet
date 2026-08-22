@@ -194,6 +194,22 @@ func normalizeIntegrationPlannerParameters(skillID string, parameters map[string
 	return normalized
 }
 
+func plannerSafeExecutionParameters(skillID string, parameters map[string]any) map[string]any {
+	if len(parameters) == 0 {
+		return parameters
+	}
+	switch skillID {
+	case "cabinet.data.export_bundle":
+		out := map[string]any{}
+		if scope, ok := parameters["export_scope"]; ok {
+			out["export_scope"] = scope
+		}
+		return out
+	default:
+		return parameters
+	}
+}
+
 func emptyPlannerOptionalSecretValue(value any) bool {
 	if value == nil {
 		return true
@@ -504,6 +520,7 @@ func dispatchChatAgentProviderPlanner(ctx context.Context, conn *sql.DB, chatSvc
 	} else {
 		result["decision"] = selection.Decision
 		result["skill_id"] = selection.SkillID
+		selection.Parameters = plannerSafeExecutionParameters(selection.SkillID, selection.Parameters)
 		result["parameters"] = redactPlannerEvidenceMap(selection.Parameters)
 		result["message"] = selection.Message
 		if selection.ErrorCode != "" {

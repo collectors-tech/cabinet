@@ -1099,8 +1099,10 @@ func TestChatAgentPlannerRoutesDataExportSummaryFromMainChat(t *testing.T) {
 			t.Fatalf("data export planner response missing %s: body=%s", want, bodyText)
 		}
 	}
-	if strings.Contains(bodyText, "sk-planner-export-secret") || strings.Contains(bodyText, "preview_id") {
-		t.Fatalf("data export planner response leaked secret or preview token: body=%s", bodyText)
+	for _, forbidden := range []string{"sk-planner-export-secret", "preview_id", "backup_path", "C:/private", "export_artifact_path", "configuration_payload"} {
+		if strings.Contains(bodyText, forbidden) {
+			t.Fatalf("data export planner response leaked %q: body=%s", forbidden, bodyText)
+		}
 	}
 	threadMessage, ok := result["thread_message"].(chat.Message)
 	if !ok {
@@ -1113,6 +1115,9 @@ func TestChatAgentPlannerRoutesDataExportSummaryFromMainChat(t *testing.T) {
 	var agentResponse chat.AgentResponse
 	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
 		t.Fatalf("decode data export Agent response: %v", err)
+	}
+	if agentResponse.State != chat.AgentResponseReadResult || agentResponse.Preview != nil || agentResponse.NextAction != nil {
+		t.Fatalf("data export response must be a read result without preview/apply controls: %+v", agentResponse)
 	}
 	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "data_export_bundle" {
 		t.Fatalf("data export response missing typed server-owned summary: %+v", agentResponse)
@@ -1129,7 +1134,7 @@ func TestChatAgentPlannerRoutesDataExportSummaryFromMainChat(t *testing.T) {
 			t.Fatalf("data export result summary missing %q: %s", want, summaryJSON)
 		}
 	}
-	for _, forbidden := range []string{"sk-planner-export-secret", "preview_id", "backup_path", "C:/private", "raw_payload"} {
+	for _, forbidden := range []string{"sk-planner-export-secret", "preview_id", "backup_path", "C:/private", "raw_payload", "export_artifact_path", "configuration_payload", "apply"} {
 		if strings.Contains(string(summaryJSON), forbidden) {
 			t.Fatalf("data export result summary leaked %q: %s", forbidden, summaryJSON)
 		}
