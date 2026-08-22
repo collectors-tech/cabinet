@@ -1,20 +1,17 @@
 describe('settings billing screen', () => {
-  function signInToBilling() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2Fbilling')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/settings\/billing\/?$/
-    )
-  }
-
-  beforeEach(() => {
+  function openBilling() {
     cy.clearCookies()
     cy.clearLocalStorage()
-    signInToBilling()
-  })
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap({ minimalProfile: true }).then(
+      ({ profile_id, profile_name }) => {
+        cy.useBootstrappedProfile(profile_id, profile_name, {
+          path: '/settings/billing/',
+        })
+      }
+    )
+  }
 
   it('UI-SCREEN-SETTINGS-BILLING-001 renders disabled static billing state without portal mutation', () => {
     cy.intercept('GET', '/api/auth/cloud/session/effective', {
@@ -32,7 +29,7 @@ describe('settings billing screen', () => {
       expires_at: '',
     }).as('licenseStatus')
 
-    cy.reload()
+    openBilling()
     cy.wait(['@effectiveSession', '@licenseStatus'])
 
     cy.contains('h3', 'Billing').should('be.visible')
