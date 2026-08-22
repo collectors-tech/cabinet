@@ -14,6 +14,7 @@ import (
 
 type Filter struct {
 	Query           string
+	ProfileID       string
 	PriceMax        float64
 	DateFrom        string
 	IncludeArchived bool
@@ -116,6 +117,10 @@ func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, er
 			AND c.status NOT IN ('ignored', 'archived')
 	`
 	args := []any{}
+	if strings.TrimSpace(f.ProfileID) != "" {
+		q += ` AND c.profile_id = ?`
+		args = append(args, strings.TrimSpace(f.ProfileID))
+	}
 	if f.IncludeArchived {
 		q = strings.Replace(q, " AND i.candidate_id IS NULL\n\t\t\tAND c.status NOT IN ('ignored', 'archived')", "", 1)
 	}

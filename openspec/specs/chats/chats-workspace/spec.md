@@ -257,6 +257,14 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST exclude stored paths, private source URLs, notes, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile media records
 - **AND** the summary MUST contain no write action or confirmation control
 
+#### Scenario: Discovery search returns typed safe result facts
+
+- **GIVEN** the active profile contains provider discovery results requiring review
+- **WHEN** the user asks Chat to find matching discovery results for a provider
+- **THEN** Cabinet MUST execute the profile-scoped read-only Discoveries skill and persist a `discovery_results` result summary with bounded candidate identifiers, display titles, triage status, provider label, and review-needed state
+- **AND** the summary MUST exclude listing URLs, source result URLs, seller labels, reviewer notes, extracted part numbers, prices, shipping, confidence scores, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile discovery records
+- **AND** the summary MUST contain no write action or confirmation control
+
 #### Scenario: Purchase order search returns typed safe order facts
 
 - **GIVEN** the active profile contains purchase order lifecycle records with line-item state
