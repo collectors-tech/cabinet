@@ -1,12 +1,13 @@
 describe('settings/categories', () => {
   function signInToCategories() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2Fcategories')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/settings\/categories\/?$/
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap({ minimalProfile: true }).then(
+      ({ profile_id, profile_name }) => {
+        cy.useBootstrappedProfile(profile_id, profile_name, {
+          path: '/settings/categories/',
+        })
+      }
     )
   }
 
@@ -16,12 +17,7 @@ describe('settings/categories', () => {
   })
 
   it('UI-SCREEN-SETTINGS-CATEGORIES-001 manages reusable taxonomy settings for the active profile', () => {
-    cy.intercept('GET', '/api/profiles/active', {
-      statusCode: 200,
-      body: { id: 'profile-categories' },
-    }).as('activeProfile')
-
-    cy.intercept('GET', '/api/profiles/profile-categories/settings', {
+    cy.intercept('GET', '/api/profiles/e2e-profile-001/settings', {
       statusCode: 200,
       body: {
         settings: {
@@ -44,7 +40,7 @@ describe('settings/categories', () => {
       },
     }).as('profileSettings')
 
-    cy.intercept('PUT', '/api/profiles/profile-categories/settings', (req) => {
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings', (req) => {
       const settings = req.body?.settings ?? {}
       const categories = JSON.parse(
         settings['inventory.category-options.v1'] ?? '[]'
@@ -65,7 +61,6 @@ describe('settings/categories', () => {
     }).as('saveProfileSettings')
 
     signInToCategories()
-    cy.wait('@activeProfile')
     cy.wait('@profileSettings')
 
     cy.contains('h3', 'Categories').should('be.visible')
@@ -87,12 +82,7 @@ describe('settings/categories', () => {
   })
 
   it('UI-SCREEN-SETTINGS-CATEGORIES-002 preserves taxonomy edits when save fails', () => {
-    cy.intercept('GET', '/api/profiles/active', {
-      statusCode: 200,
-      body: { id: 'profile-categories' },
-    }).as('activeProfile')
-
-    cy.intercept('GET', '/api/profiles/profile-categories/settings', {
+    cy.intercept('GET', '/api/profiles/e2e-profile-001/settings', {
       statusCode: 200,
       body: {
         settings: {
@@ -114,13 +104,12 @@ describe('settings/categories', () => {
       },
     }).as('profileSettings')
 
-    cy.intercept('PUT', '/api/profiles/profile-categories/settings', {
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings', {
       statusCode: 503,
       body: { error: 'taxonomy_settings_save_unavailable' },
     }).as('saveProfileSettingsFailure')
 
     signInToCategories()
-    cy.wait('@activeProfile')
     cy.wait('@profileSettings')
 
     cy.get('[data-testid="settings-categories-new"]').type('Garage Kit')
