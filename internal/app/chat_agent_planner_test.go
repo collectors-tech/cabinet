@@ -1689,6 +1689,127 @@ func TestChatAgentPlannerRoutesMediaSearchSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesDiscoveriesSearchSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Discoveries A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Discoveries B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != http.StatusCreated || createB.Code != http.StatusCreated {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Discoveries"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, provider_scope_json, enabled)
+		VALUES
+			('planner-discovery-visible-watch', ?, 'Visible discovery watch', '["visible"]', '["ebay"]', 1),
+			('planner-discovery-hidden-watch', ?, 'Hidden discovery watch', '["visible"]', '["ebay"]', 1);
+		INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, reviewer_notes, source_result_url)
+		VALUES
+			('planner-discovery-visible', ?, 'planner-discovery-visible-watch', 'DISC-VISIBLE-1', 'Visible planner discovery', 21, 'AUD', 3, 'https://example.test/private-visible-listing', 'https://example.test/private-visible-image.jpg', 'private-visible-seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 2, 'private reviewer note', 'https://example.test/private-source-result'),
+			('planner-discovery-hidden', ?, 'planner-discovery-hidden-watch', 'DISC-HIDDEN-1', 'Hidden planner discovery', 99, 'AUD', 4, 'https://example.test/private-hidden-listing', '', 'private-hidden-seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 1, 'hidden reviewer note', 'https://example.test/private-hidden-source');
+		INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+		VALUES
+			('planner-discovery-visible', '', 'not_in_collection', 0.88, 1, 'PRIVATE-PART-VISIBLE', CURRENT_TIMESTAMP),
+			('planner-discovery-hidden', '', 'not_in_collection', 0.77, 1, 'PRIVATE-PART-HIDDEN', CURRENT_TIMESTAMP);
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed discovery planner data: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.discoveries.search","parameters":{"provider_id":"ebay","query":"Visible planner","provider_secret":"sk-planner-discovery-secret"},"message":"Searching discovery results."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Find discovery result Visible planner",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner-discoveries",
+				"thread_id":      thread.ID,
+				"route_id":       "/discovery",
+				"surface_id":     "discoveries.workspace",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-discovery-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Discoveries search request")
+	}
+	if result["skill_id"] != "cabinet.discoveries.search" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Discoveries skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true || execution["profile_id"] != profileA.ID {
+		t.Fatalf("expected read-only Discoveries execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal discoveries planner result: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, `"operation":"discoveries.search"`) || !strings.Contains(bodyText, `"candidate_id":"planner-discovery-visible"`) {
+		t.Fatalf("discoveries planner response missing expected active-profile discovery result: body=%s", bodyText)
+	}
+	if strings.Contains(bodyText, "planner-discovery-hidden") || strings.Contains(bodyText, "sk-planner-discovery-secret") {
+		t.Fatalf("discoveries planner response leaked cross-profile record or secret: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("discoveries planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal discoveries Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode discoveries Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "discovery_results" {
+		t.Fatalf("discoveries response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("discoveries summary must expose one bounded active-profile discovery result: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "planner-discovery-visible" || item.Title != "Visible planner discovery" || item.Status != "new" || item.Category != "ebay / needs review" {
+		t.Fatalf("discoveries summary item = %+v, want bounded candidate id/title/status/provider facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal discoveries result summary: %v", err)
+	}
+	for _, forbidden := range []string{"https://example.test/private", "private-visible-seller", "private reviewer note", "PRIVATE-PART", "planner-discovery-hidden", "sk-planner-discovery-secret", "provider_secret", "execution_result", "mutation_applied", "source_result_url", "price", "shipping", "confidence"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("discoveries read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesPurchaseOrdersSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 

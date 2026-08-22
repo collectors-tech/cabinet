@@ -14,6 +14,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
@@ -797,6 +798,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching Market Watch saved watches.", summary.Total)
 		}
+	case "discovery_results":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching discovery results."
+		case 1:
+			return "Cabinet found 1 matching discovery result."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching discovery results.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -838,6 +848,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentPurchaseOrdersReadResultSummary(execution)
 	case "cabinet.market_watch.search_watches":
 		return plannerAgentMarketWatchWatchesReadResultSummary(execution)
+	case "cabinet.discoveries.search", "cabinet.discoveries.review_result":
+		return plannerAgentDiscoveryResultsReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1329,6 +1341,50 @@ func plannerAgentMarketWatchWatchesReadResultSummary(execution map[string]any) *
 	}
 	return &chat.AgentResponseResultSummary{
 		Kind:  "market_watch_watches",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerAgentDiscoveryResultsReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawItems, ok := execution["items"].([]discovery.Item)
+	if !ok {
+		if item, ok := execution["item"].(discovery.Item); ok {
+			rawItems = []discovery.Item{item}
+		} else {
+			return nil
+		}
+	}
+	total := len(rawItems)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(rawItems)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, result := range rawItems[:limit] {
+		status := plannerBoundedReadResultText(result.TriageStatus)
+		if status == "" {
+			status = plannerBoundedReadResultText(result.Status)
+		}
+		category := plannerBoundedReadResultText(result.SourceProvider)
+		if category == "" {
+			category = "Discovery result"
+		}
+		if result.NeedsReview {
+			category = plannerBoundedReadResultText(category + " / needs review")
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(result.CandidateID),
+			Title:    plannerBoundedReadResultText(result.Title),
+			Status:   status,
+			Category: category,
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "discovery_results",
 		Total: total,
 		Items: items,
 	}

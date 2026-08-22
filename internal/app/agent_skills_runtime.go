@@ -1438,7 +1438,7 @@ func applyAgentDiscoveriesSkill(ctx context.Context, conn *sql.DB, skillID, prof
 	}
 	switch skillID {
 	case "cabinet.discoveries.search":
-		items, err := agentDiscoveryItems(ctx, svc, providerID, stringMapParam(params, "query"), false)
+		items, err := agentDiscoveryItems(ctx, svc, profileID, providerID, stringMapParam(params, "query"), false)
 		if err != nil {
 			return nil, "discoveries_search_failed", err
 		}
@@ -1453,7 +1453,7 @@ func applyAgentDiscoveriesSkill(ctx context.Context, conn *sql.DB, skillID, prof
 		if resultID == "" {
 			return nil, "discoveries_result_required", fmt.Errorf("discovery result required")
 		}
-		item, err := findAgentDiscoveryItem(ctx, svc, providerID, resultID)
+		item, err := findAgentDiscoveryItem(ctx, svc, profileID, providerID, resultID)
 		if err != nil {
 			return nil, "discoveries_result_required", err
 		}
@@ -1492,8 +1492,8 @@ func applyAgentDiscoveriesSkill(ctx context.Context, conn *sql.DB, skillID, prof
 	return result, "", nil
 }
 
-func agentDiscoveryItems(ctx context.Context, svc *discovery.Service, providerID, query string, includeArchived bool) ([]discovery.Item, error) {
-	items, err := svc.ListNotInCollection(ctx, discovery.Filter{Query: query, IncludeArchived: includeArchived})
+func agentDiscoveryItems(ctx context.Context, svc *discovery.Service, profileID, providerID, query string, includeArchived bool) ([]discovery.Item, error) {
+	items, err := svc.ListNotInCollection(ctx, discovery.Filter{ProfileID: profileID, Query: query, IncludeArchived: includeArchived})
 	if err != nil {
 		return nil, err
 	}
@@ -1508,8 +1508,8 @@ func agentDiscoveryItems(ctx context.Context, svc *discovery.Service, providerID
 	return out, nil
 }
 
-func findAgentDiscoveryItem(ctx context.Context, svc *discovery.Service, providerID, resultID string) (discovery.Item, error) {
-	items, err := agentDiscoveryItems(ctx, svc, providerID, "", true)
+func findAgentDiscoveryItem(ctx context.Context, svc *discovery.Service, profileID, providerID, resultID string) (discovery.Item, error) {
+	items, err := agentDiscoveryItems(ctx, svc, profileID, providerID, "", true)
 	if err != nil {
 		return discovery.Item{}, err
 	}
