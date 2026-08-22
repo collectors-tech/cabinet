@@ -330,7 +330,10 @@ describe('ui-screen-integrations', () => {
     cy.wait('@settings')
 
     cy.get('[data-testid="provider-row-ebay"]').should('be.visible')
-    cy.get('[data-testid="provider-row-openai"]').should('not.exist')
+    cy.get('[data-testid="provider-row-openai"]')
+      .should('be.visible')
+      .and('contain.text', 'OpenAI / ChatGPT')
+      .and('contain.text', 'assistant_workflows')
     cy.get('[data-testid="provider-row-amazon"]').should('not.exist')
     cy.get(
       '[data-testid="provider-row-au-webshop-legacy-example-test"]'
@@ -339,9 +342,9 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="integrations-header-add"]').click()
     cy.get('[data-testid="integrations-provider-selector"]')
       .should('be.visible')
-      .and('contain', 'OpenAI / ChatGPT')
       .and('contain', 'Amazon')
       .and('contain', 'legacy.example.test')
+      .and('not.contain', 'OpenAI / ChatGPT')
 
     cy.get(
       '[data-testid="integrations-provider-selector-option-amazon"]'
