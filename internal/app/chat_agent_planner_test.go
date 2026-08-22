@@ -1688,6 +1688,127 @@ func TestChatAgentPlannerRoutesMediaSearchSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesPurchaseOrdersSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Purchases A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Purchases B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != http.StatusCreated || createB.Code != http.StatusCreated {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Purchases"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status)
+		VALUES
+			('planner-purchase-visible-item', ?, 'AFX', 'Slot Cars', 'PO-VISIBLE-1', 'Visible purchase line', 'active'),
+			('planner-purchase-hidden-item', ?, 'AFX', 'Slot Cars', 'PO-HIDDEN-1', 'Hidden purchase line', 'active');
+		INSERT INTO commerce_lifecycle_entries(id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes)
+		VALUES
+			('planner-purchase-visible-entry', ?, 'planner-purchase-visible-item', 'purchase', 'market_watch', 'order-visible-1', 2, 44.50, 'AUD', 'seller=private-seller tracking=TRACK-PRIVATE notes=keep-private'),
+			('planner-purchase-hidden-entry', ?, 'planner-purchase-hidden-item', 'purchase', 'market_watch', 'order-hidden-1', 1, 12.00, 'AUD', 'seller=hidden-seller tracking=TRACK-HIDDEN');
+		INSERT INTO expected_arrivals(id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, notes)
+		VALUES
+			('planner-purchase-visible-arrival', ?, 'planner-purchase-visible-item', 'planner-purchase-visible-entry', 'market_watch', 'order-visible-1', 2, 44.50, 'AUD', 'expected', 'private arrival note'),
+			('planner-purchase-hidden-arrival', ?, 'planner-purchase-hidden-item', 'planner-purchase-hidden-entry', 'market_watch', 'order-hidden-1', 1, 12.00, 'AUD', 'expected', 'hidden arrival note');
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed purchase planner data: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.purchases.search_orders","parameters":{"query":"order-visible","status":"all","provider_secret":"sk-planner-purchase-secret"},"message":"Searching purchase orders."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Find purchase order order-visible",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner-purchases",
+				"thread_id":      thread.ID,
+				"route_id":       "/purchases",
+				"surface_id":     "purchases.workspace",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-purchase-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Purchase order search request")
+	}
+	if result["skill_id"] != "cabinet.purchases.search_orders" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Purchase order skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true || execution["profile_id"] != profileA.ID {
+		t.Fatalf("expected read-only Purchase order execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal purchase planner result: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, `"operation":"purchases.orders.search"`) || !strings.Contains(bodyText, `"order_id":"order-visible-1"`) {
+		t.Fatalf("purchase planner response missing expected active-profile order: body=%s", bodyText)
+	}
+	if strings.Contains(bodyText, "order-hidden-1") || strings.Contains(bodyText, "sk-planner-purchase-secret") {
+		t.Fatalf("purchase planner response leaked cross-profile record or secret: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("purchase planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal purchase Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode purchase Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "purchase_orders" {
+		t.Fatalf("purchase response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("purchase summary must expose one bounded active-profile purchase order: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "order-visible-1" || item.Title != "order-visible-1" || item.Status != "active" || item.Category != "market_watch / 1 line items" {
+		t.Fatalf("purchase summary item = %+v, want bounded order id/status/source/line-count facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal purchase result summary: %v", err)
+	}
+	for _, forbidden := range []string{"private-seller", "TRACK-PRIVATE", "hidden-seller", "order-hidden-1", "sk-planner-purchase-secret", "provider_secret", "execution_result", "mutation_applied", "expected_arrival_id", "amount", "currency"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("purchase read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerConvertsLocalWriteSelectionToPreviewOnly(t *testing.T) {
 	t.Parallel()
 
