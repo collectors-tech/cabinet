@@ -240,3 +240,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the profile-scoped read-only Inbox skill and persist an `inbox_notifications` result summary with bounded notification identifiers, titles, statuses, and source labels
 - **AND** the summary MUST exclude notification body/summary text, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile Inbox records
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Workspace user search returns typed safe authority facts
+
+- **GIVEN** an authorized active profile can ask Chat to inspect workspace users
+- **WHEN** the user asks Chat to find matching workspace users
+- **THEN** Cabinet MUST execute the profile-scoped read-only Users skill and persist a `workspace_users` result summary with bounded user identifiers, display labels, statuses, and role labels
+- **AND** the summary MUST exclude email addresses, phone numbers, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile workspace users
+- **AND** the summary MUST contain no write action or confirmation control

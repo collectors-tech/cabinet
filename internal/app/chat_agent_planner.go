@@ -758,6 +758,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching Inbox notifications.", summary.Total)
 		}
+	case "workspace_users":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching workspace users."
+		case 1:
+			return "Cabinet found 1 matching workspace user."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching workspace users.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -791,6 +800,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentMaintenanceSafeCheckReadResultSummary(execution)
 	case "cabinet.inbox.search_notifications", "cabinet.inbox.summarise_unhandled":
 		return plannerAgentInboxNotificationsReadResultSummary(execution)
+	case "cabinet.users.search":
+		return plannerAgentWorkspaceUsersReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1121,6 +1132,50 @@ func plannerAgentInboxNotificationsReadResultSummary(execution map[string]any) *
 	}
 	return &chat.AgentResponseResultSummary{
 		Kind:  "inbox_notifications",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerAgentWorkspaceUsersReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawUsers := plannerReadResultMapSlice(execution["users"])
+	if len(rawUsers) == 0 {
+		if count := plannerReadResultInt(execution["user_count"]); count == 0 {
+			return &chat.AgentResponseResultSummary{Kind: "workspace_users", Total: 0}
+		}
+		return nil
+	}
+	total := len(rawUsers)
+	if _, ok := execution["user_count"]; ok {
+		total = plannerReadResultInt(execution["user_count"])
+	}
+	limit := len(rawUsers)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, rawUser := range rawUsers[:limit] {
+		id := plannerBoundedReadResultText(plannerReadResultString(rawUser["id"]))
+		displayName := plannerBoundedReadResultText(plannerReadResultString(rawUser["display_name"]))
+		username := plannerBoundedReadResultText(plannerReadResultString(rawUser["username"]))
+		status := plannerBoundedReadResultText(plannerReadResultString(rawUser["status"]))
+		role := plannerBoundedReadResultText(plannerReadResultString(rawUser["role"]))
+		title := displayName
+		if title == "" {
+			title = username
+		}
+		if id == "" && title == "" && status == "" && role == "" {
+			continue
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       id,
+			Title:    title,
+			Status:   status,
+			Category: role,
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "workspace_users",
 		Total: total,
 		Items: items,
 	}
