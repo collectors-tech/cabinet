@@ -2040,6 +2040,96 @@ func TestChatAgentPlannerRoutesPurchaseOrdersSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesPurchaseReviewSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Purchase Review"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Purchase Review"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.purchases.review_purchase","parameters":{"order_id":"purchase-review-visible-order","review_status":"needs_attention","provider_secret":"sk-planner-purchase-review-secret","amount":"99.95","tracking":"TRACK-PRIVATE"},"message":"Reviewing purchase evidence."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Review purchase order purchase-review-visible-order",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner-purchase-review",
+				"thread_id":      thread.ID,
+				"route_id":       "/purchases",
+				"surface_id":     "purchases.workspace",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-purchase-review-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Purchase review request")
+	}
+	if result["skill_id"] != "cabinet.purchases.review_purchase" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only Purchase review skill execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["operation"] != "purchases.order.review" || execution["read_only"] != true || execution["mutation_applied"] == true || execution["profile_id"] != profile.ID {
+		t.Fatalf("expected read-only Purchase review execution result, got %+v", result)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("purchase review planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal purchase review Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode purchase review Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "purchase_review" {
+		t.Fatalf("purchase review response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("purchase review summary must expose one bounded active-profile review: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "purchase-review-visible-order" || item.Title != "purchase-review-visible-order" || item.Status != "needs_attention" || item.Category != "Purchase review" {
+		t.Fatalf("purchase review summary item = %+v, want bounded order id/review status facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal purchase review result summary: %v", err)
+	}
+	for _, forbidden := range []string{"sk-planner-purchase-review-secret", "provider_secret", "execution_result", "mutation_applied", "amount", "99.95", "tracking", "TRACK-PRIVATE"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("purchase review read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesMarketWatchSearchSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 
