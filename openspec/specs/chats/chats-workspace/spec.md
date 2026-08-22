@@ -246,8 +246,8 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **GIVEN** the active profile can ask Chat to prepare a non-mutating Cabinet data export bundle
 - **WHEN** the user asks Chat to export Cabinet data
 - **THEN** Cabinet MUST execute the profile-scoped export preparation path and persist a `data_export_bundle` result summary with bounded export scope and readiness status facts
-- **AND** the summary MUST exclude provider secrets, raw provider payloads, backup paths, export artifact paths, preview tokens, stack traces, and execution internals
-- **AND** the summary MUST contain no write action or confirmation control
+- **AND** the execution result and summary MUST exclude provider secrets, raw provider payloads, backup paths, export artifact paths, configuration payloads, preview tokens, stack traces, and execution internals
+- **AND** the Chat response MUST remain a read result with no preview, write action, apply control, or confirmation control
 
 #### Scenario: Maintenance safe check returns typed safe operational facts
 
