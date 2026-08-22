@@ -741,9 +741,22 @@ func applyAgentMarketWatchSkill(ctx context.Context, conn *sql.DB, skillID, prof
 		result["total"] = len(watches)
 		result["next_action"] = "Review saved watches and provider health before running or changing a watch."
 	case "cabinet.market_watch.review_results":
+		watchID := stringMapParam(params, "watch_id")
+		var candidates []scanner.Candidate
+		var total int
+		if watchID != "" {
+			list, err := scannerSvc.ListCandidatesByProfileFiltered(ctx, strings.TrimSpace(profileID), watchID, scanner.CandidateListFilter{Provider: providerID, Page: 1, PageSize: 25})
+			if err != nil {
+				return nil, "market_watch_results_review_failed", err
+			}
+			candidates = list.Candidates
+			total = list.Total
+		}
 		result["operation"] = "market_watch.results.review"
 		result["read_only"] = true
-		result["watch_id"] = stringMapParam(params, "watch_id")
+		result["watch_id"] = watchID
+		result["candidates"] = candidates
+		result["total"] = total
 		result["next_action"] = "Select a result before dismissing or handing it off."
 	case "cabinet.market_watch.create_saved_watch":
 		query := stringMapParam(params, "watch_query")

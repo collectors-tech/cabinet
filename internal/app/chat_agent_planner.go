@@ -809,6 +809,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching Market Watch saved watches.", summary.Total)
 		}
+	case "market_watch_results":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no Market Watch results for that saved watch."
+		case 1:
+			return "Cabinet found 1 Market Watch result."
+		default:
+			return fmt.Sprintf("Cabinet found %d Market Watch results.", summary.Total)
+		}
 	case "discovery_results":
 		switch summary.Total {
 		case 0:
@@ -874,6 +883,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentPurchaseOrdersReadResultSummary(execution)
 	case "cabinet.market_watch.search_watches":
 		return plannerAgentMarketWatchWatchesReadResultSummary(execution)
+	case "cabinet.market_watch.review_results":
+		return plannerAgentMarketWatchResultsReadResultSummary(execution)
 	case "cabinet.discoveries.search", "cabinet.discoveries.review_result":
 		return plannerAgentDiscoveryResultsReadResultSummary(execution)
 	default:
@@ -1447,6 +1458,42 @@ func plannerAgentMarketWatchWatchesReadResultSummary(execution map[string]any) *
 	}
 	return &chat.AgentResponseResultSummary{
 		Kind:  "market_watch_watches",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerAgentMarketWatchResultsReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawCandidates, ok := execution["candidates"].([]scanner.Candidate)
+	if !ok {
+		return nil
+	}
+	total := len(rawCandidates)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(rawCandidates)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, candidate := range rawCandidates[:limit] {
+		category := plannerBoundedReadResultText(candidate.Source)
+		if category == "" {
+			category = "Market Watch result"
+		}
+		if candidate.StockState != "" {
+			category = plannerBoundedReadResultText(category + " / " + candidate.StockState)
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(candidate.ID),
+			Title:    plannerBoundedReadResultText(candidate.Title),
+			Status:   plannerBoundedReadResultText(candidate.Status),
+			Category: category,
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "market_watch_results",
 		Total: total,
 		Items: items,
 	}
