@@ -1798,6 +1798,121 @@ func TestChatAgentPlannerRoutesMediaSearchSummaryFromMainChat(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesUnlinkedMediaReviewSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createA := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Unlinked Media A"}`), map[string]string{"Content-Type": "application/json"})
+	createB := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Unlinked Media B"}`), map[string]string{"Content-Type": "application/json"})
+	if createA.Code != http.StatusCreated || createB.Code != http.StatusCreated {
+		t.Fatalf("create profile statuses=%d/%d bodies=%s / %s", createA.Code, createB.Code, createA.Body.String(), createB.Body.String())
+	}
+	var profileA, profileB struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createA.Body).Decode(&profileA); err != nil {
+		t.Fatalf("decode profile A: %v", err)
+	}
+	if err := json.NewDecoder(createB.Body).Decode(&profileB); err != nil {
+		t.Fatalf("decode profile B: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profileA.ID+`","title":"Planner Unlinked Media"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO chat_threads(id, profile_id, title)
+		VALUES ('planner-unlinked-media-thread-a', ?, 'Unlinked Media A'), ('planner-unlinked-media-thread-b', ?, 'Unlinked Media B');
+		INSERT INTO chat_attachments(id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES
+			('planner-unlinked-media-visible', ?, 'planner-unlinked-media-thread-a', 'orphan-reference.jpg', 'image/jpeg', 321, 'https://example.test/private/orphan-reference.jpg'),
+			('planner-unlinked-media-hidden', ?, 'planner-unlinked-media-thread-b', 'hidden-orphan.jpg', 'image/jpeg', 654, 'https://example.test/private/hidden-orphan.jpg');
+	`, profileA.ID, profileB.ID, profileA.ID, profileB.ID); err != nil {
+		t.Fatalf("seed unlinked media planner data: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.media.review_unlinked","parameters":{"query":"orphan-reference","provider_secret":"sk-planner-unlinked-media-secret"},"message":"Reviewing unlinked media."}`}),
+		agentskills.NewRegistry(nil),
+		profileA.ID,
+		thread.ID,
+		"Review unlinked media orphan-reference",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profileA.ID,
+				"workspace_id":   "workspace-planner-unlinked-media",
+				"thread_id":      thread.ID,
+				"route_id":       "/media",
+				"surface_id":     "media.workspace.unlinked",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-unlinked-media-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle unlinked Media review request")
+	}
+	if result["skill_id"] != "cabinet.media.review_unlinked" || result["preview_result"] != nil {
+		t.Fatalf("expected read-only unlinked Media execution without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true || execution["profile_id"] != profileA.ID {
+		t.Fatalf("expected read-only unlinked Media execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal unlinked media planner result: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, `"operation":"media.review_unlinked"`) || !strings.Contains(bodyText, `"filename":"orphan-reference.jpg"`) {
+		t.Fatalf("unlinked media planner response missing expected active-profile asset: body=%s", bodyText)
+	}
+	if strings.Contains(bodyText, "hidden-orphan.jpg") || strings.Contains(bodyText, "sk-planner-unlinked-media-secret") {
+		t.Fatalf("unlinked media planner response leaked cross-profile record or secret: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("unlinked media planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal unlinked media Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode unlinked media Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "unlinked_media_assets" {
+		t.Fatalf("unlinked media response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("unlinked media summary must expose one bounded active-profile media asset: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "planner-unlinked-media-visible" || item.Title != "orphan-reference.jpg" || item.Status != "unlinked" || item.Category != "Chat attachment" {
+		t.Fatalf("unlinked media summary item = %+v, want bounded media id/title/linkage/source facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal unlinked media result summary: %v", err)
+	}
+	for _, forbidden := range []string{"https://example.test/private", "hidden-orphan.jpg", "sk-planner-unlinked-media-secret", "provider_secret", "execution_result", "mutation_applied", "stored_path"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("unlinked media read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesDiscoveriesSearchSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 

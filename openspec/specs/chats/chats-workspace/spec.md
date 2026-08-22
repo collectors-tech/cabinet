@@ -282,6 +282,15 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST exclude stored paths, private source URLs, notes, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile media records
 - **AND** the summary MUST contain no write action or confirmation control
 
+#### Scenario: Unlinked media review returns typed safe asset facts
+
+- **GIVEN** the active profile contains unlinked workspace media assets from Chat attachments or inventory photos
+- **WHEN** the user asks Chat to review unlinked media assets
+- **THEN** Cabinet MUST execute the profile-scoped read-only Media unlinked-review skill and persist an `unlinked_media_assets` result summary with bounded media identifiers, display titles, linkage states, and source labels
+- **AND** the summary MUST include only active-profile unlinked media records
+- **AND** the summary MUST exclude stored paths, private source URLs, notes, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile media records
+- **AND** the summary MUST contain no write action or confirmation control
+
 #### Scenario: Discovery search returns typed safe result facts
 
 - **GIVEN** the active profile contains provider discovery results requiring review
