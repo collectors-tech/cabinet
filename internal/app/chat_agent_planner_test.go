@@ -1568,6 +1568,118 @@ func TestChatAgentPlannerRoutesIntegrationProviderSearchSummaryFromMainChat(t *t
 	}
 }
 
+func TestChatAgentPlannerRoutesIntegrationConnectionStatusSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, "POST", "/api/profiles", strings.NewReader(`{"name":"Planner Integration Connection"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != 201 {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at) VALUES ('openai', 'auth_missing', 'missing credential: configure provider API key', 0, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed provider health: %v", err)
+	}
+	threadResp := doRequest(t, a, "POST", "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Integration Connection"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != 201 {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(),
+		a.db,
+		chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments")),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.integrations.test_connection","parameters":{"provider_id":"openai","api_key":"sk-planner-connection-secret","provider_health":{"message":"raw provider health must not render"}},"message":"Test OpenAI connection."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"Test the OpenAI provider connection",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+				"intent_text":    "Test the OpenAI provider connection",
+			},
+		},
+		"message-integration-connection-summary",
+	)
+	if !handled {
+		t.Fatal("expected main Chat planner dispatch to handle Integrations connection status request")
+	}
+	if result["skill_id"] != "cabinet.integrations.test_connection" || result["preview_result"] != nil {
+		t.Fatalf("expected non-mutating Integrations test connection without preview, got %+v", result)
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["read_only"] != true || execution["mutation_applied"] == true {
+		t.Fatalf("expected read-only Integrations connection execution result, got %+v", result)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal integrations connection planner result: %v", err)
+	}
+	bodyText := string(body)
+	for _, want := range []string{
+		`"operation":"integrations.provider.test_connection"`,
+		`"provider_id":"openai"`,
+		`"connection_status":"needs_setup"`,
+		`"next_action":"review_provider_status"`,
+	} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("integrations connection planner response missing %s: body=%s", want, bodyText)
+		}
+	}
+	if strings.Contains(bodyText, "sk-planner-connection-secret") || strings.Contains(bodyText, "preview_id") {
+		t.Fatalf("integrations connection planner response leaked secret or preview token: body=%s", bodyText)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("integrations connection planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal integrations connection Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode integrations connection Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "integration_connection_status" {
+		t.Fatalf("integrations connection response missing typed server-owned summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("integrations connection summary must expose one bounded provider status record: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != "openai" || item.Title != "openai" || item.Status != "needs_setup" || item.Category != "review_provider_status" {
+		t.Fatalf("integrations connection summary item = %+v, want bounded connection facts", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal integrations connection result summary: %v", err)
+	}
+	for _, forbidden := range []string{"sk-planner-connection-secret", "missing credential", "raw provider health", "preview_id", "secret_redacted", "external_write_claimed", "provider_health", "raw_provider_payload"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("integrations connection result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func TestChatAgentPlannerRoutesIntegrationSetupExplanationSummaryFromMainChat(t *testing.T) {
 	t.Parallel()
 

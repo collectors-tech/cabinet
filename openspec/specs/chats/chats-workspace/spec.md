@@ -233,6 +233,14 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST exclude provider secrets, raw provider payloads, execution internals, write-claim evidence, preview tokens, stack traces, and configuration payloads
 - **AND** the summary MUST contain no write action or confirmation control
 
+#### Scenario: Integration connection test returns typed safe status facts
+
+- **GIVEN** the active profile can ask Chat to check a specific integration provider connection
+- **WHEN** the user asks Chat to test that provider connection
+- **THEN** Cabinet MUST execute the non-mutating Integrations test-connection skill and persist an `integration_connection_status` result summary with bounded provider identifier, connection-status state, and non-secret next-action guidance
+- **AND** the summary MUST exclude provider secrets, raw provider health maps, provider messages, execution internals, write-claim evidence, preview tokens, stack traces, and configuration payloads
+- **AND** the summary MUST contain no write action or confirmation control
+
 #### Scenario: Data export preparation returns typed safe readiness facts
 
 - **GIVEN** the active profile can ask Chat to prepare a non-mutating Cabinet data export bundle
