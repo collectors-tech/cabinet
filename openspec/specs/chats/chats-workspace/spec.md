@@ -232,3 +232,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the profile-scoped read-only Maintenance skill and persist a `maintenance_safe_check` result summary with bounded check name, check level, and health status facts
 - **AND** the summary MUST exclude provider secrets, raw provider payloads, backup paths, export artifact paths, preview tokens, stack traces, and execution internals
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Inbox notification search returns typed safe notification facts
+
+- **GIVEN** the active profile contains Inbox notification records from one or more Cabinet sources
+- **WHEN** the user asks Chat to find or summarise matching Inbox notifications
+- **THEN** Cabinet MUST execute the profile-scoped read-only Inbox skill and persist an `inbox_notifications` result summary with bounded notification identifiers, titles, statuses, and source labels
+- **AND** the summary MUST exclude notification body/summary text, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile Inbox records
+- **AND** the summary MUST contain no write action or confirmation control

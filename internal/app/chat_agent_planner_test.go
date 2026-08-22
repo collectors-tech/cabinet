@@ -2261,7 +2261,7 @@ func TestChatAgentPlannerRoutesGovernedAdminReadsAndPreviews(t *testing.T) {
 	registry := agentskills.NewRegistry(nil)
 
 	inboxResult, handled := dispatchChatAgentProviderPlanner(context.Background(), a.db, chatSvc,
-		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inbox.search_notifications","parameters":{"query":"renewal"},"message":"Searching this workspace Inbox."}`}),
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inbox.search_notifications","parameters":{"query":"renewal","provider_secret":"sk-planner-inbox-secret"},"message":"Searching this workspace Inbox."}`}),
 		registry, profileA.ID, thread.ID, "search inbox notifications for renewal", baseContext, "message-admin-inbox-read")
 	if !handled {
 		t.Fatal("expected natural-language Inbox request to enter the Agent planner")
@@ -2276,6 +2276,37 @@ func TestChatAgentPlannerRoutesGovernedAdminReadsAndPreviews(t *testing.T) {
 	}
 	if !strings.Contains(string(inboxJSON), visibleInbox.ID) || strings.Contains(string(inboxJSON), "Hidden renewal review") {
 		t.Fatalf("Inbox planner read must remain profile-isolated, body=%s", string(inboxJSON))
+	}
+	inboxThreadMessage, ok := inboxResult["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("Inbox planner result missing trusted assistant thread message: %+v", inboxResult)
+	}
+	inboxAgentResponseJSON, err := json.Marshal(inboxThreadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal persisted Inbox Agent response: %v", err)
+	}
+	var inboxAgentResponse chat.AgentResponse
+	if err := json.Unmarshal(inboxAgentResponseJSON, &inboxAgentResponse); err != nil {
+		t.Fatalf("decode persisted Inbox Agent response: %v", err)
+	}
+	if inboxAgentResponse.ResultSummary == nil || inboxAgentResponse.ResultSummary.Kind != "inbox_notifications" {
+		t.Fatalf("Inbox response missing typed read result summary: %+v", inboxAgentResponse)
+	}
+	if inboxAgentResponse.ResultSummary.Total != 1 || len(inboxAgentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("Inbox summary must expose one bounded active-profile notification: %+v", inboxAgentResponse.ResultSummary)
+	}
+	inboxSummaryItem := inboxAgentResponse.ResultSummary.Items[0]
+	if inboxSummaryItem.ID != visibleInbox.ID || inboxSummaryItem.Title != "Visible renewal review" || inboxSummaryItem.Status != "unread" || inboxSummaryItem.Category != "notification_history" {
+		t.Fatalf("Inbox summary item = %+v, want bounded notification id/title/status/source", inboxSummaryItem)
+	}
+	inboxSummaryJSON, err := json.Marshal(inboxAgentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal Inbox result summary: %v", err)
+	}
+	for _, forbidden := range []string{"Needs attention in this workspace", "Hidden renewal review", "sk-planner-inbox-secret", "provider_secret", "execution_result", "mutation_applied"} {
+		if strings.Contains(string(inboxSummaryJSON), forbidden) {
+			t.Fatalf("Inbox read result summary leaked %q: %s", forbidden, inboxSummaryJSON)
+		}
 	}
 
 	usersResult, handled := dispatchChatAgentProviderPlanner(adminContext, a.db, chatSvc,
