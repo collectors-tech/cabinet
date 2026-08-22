@@ -264,3 +264,11 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **THEN** Cabinet MUST execute the profile-scoped read-only Purchases skill and persist a `purchase_orders` result summary with bounded order identifiers, order status, source label, and line-item count facts
 - **AND** the summary MUST exclude sellers, tracking codes, private notes, amounts, arrival identifiers, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile purchase records
 - **AND** the summary MUST contain no write action or confirmation control
+
+#### Scenario: Market Watch saved-watch search returns typed safe watch facts
+
+- **GIVEN** the active profile contains Market Watch saved-watch definitions
+- **WHEN** the user asks Chat to find matching saved watches for a provider
+- **THEN** Cabinet MUST execute the profile-scoped read-only Market Watch search skill and persist a `market_watch_watches` result summary with bounded saved-watch identifiers, display names, enabled state, provider-scope count, and last-result count facts
+- **AND** the summary MUST exclude search keywords, exclusions, provider health internals, listing URLs, provider secrets, raw provider payloads, preview tokens, stack traces, execution internals, mutation evidence, and cross-profile saved watches
+- **AND** the summary MUST contain no write action or confirmation control
