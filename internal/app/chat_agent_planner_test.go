@@ -2727,6 +2727,16 @@ func TestChatAgentPlannerRoutesGovernedAdminReadsAndPreviews(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed profile B inbox: %v", err)
 	}
+	if _, err := chatSvc.CreateInboxItem(context.Background(), chat.InboxItem{
+		ProfileID: profileA.ID,
+		ThreadID:  thread.ID,
+		Source:    "notification_history",
+		Status:    "read",
+		Title:     "Handled completed notice",
+		Summary:   "Already handled in this workspace",
+	}); err != nil {
+		t.Fatalf("seed handled profile A inbox: %v", err)
+	}
 	if _, err := inviteRuntimeUser(context.Background(), a.db, profileA.ID, "alice@example.test", "admin"); err != nil {
 		t.Fatalf("seed profile A user: %v", err)
 	}
@@ -2795,6 +2805,55 @@ func TestChatAgentPlannerRoutesGovernedAdminReadsAndPreviews(t *testing.T) {
 	for _, forbidden := range []string{"Needs attention in this workspace", "Hidden renewal review", "sk-planner-inbox-secret", "provider_secret", "execution_result", "mutation_applied"} {
 		if strings.Contains(string(inboxSummaryJSON), forbidden) {
 			t.Fatalf("Inbox read result summary leaked %q: %s", forbidden, inboxSummaryJSON)
+		}
+	}
+
+	inboxUnhandledResult, handled := dispatchChatAgentProviderPlanner(context.Background(), a.db, chatSvc,
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.inbox.summarise_unhandled","parameters":{"provider_secret":"sk-planner-inbox-unhandled-secret"},"message":"Summarising unhandled Inbox notifications."}`}),
+		registry, profileA.ID, thread.ID, "summarise unhandled inbox notifications", baseContext, "message-admin-inbox-unhandled-read")
+	if !handled {
+		t.Fatal("expected natural-language Inbox unhandled request to enter the Agent planner")
+	}
+	inboxUnhandledExecution, ok := inboxUnhandledResult["execution_result"].(map[string]any)
+	if !ok || inboxUnhandledExecution["operation"] != "inbox.summarise_unhandled" || inboxUnhandledExecution["read_only"] != true || inboxUnhandledExecution["profile_id"] != profileA.ID {
+		t.Fatalf("expected governed Inbox unhandled read result, got %+v", inboxUnhandledResult)
+	}
+	inboxUnhandledJSON, err := json.Marshal(inboxUnhandledExecution)
+	if err != nil {
+		t.Fatalf("marshal Inbox unhandled execution: %v", err)
+	}
+	if !strings.Contains(string(inboxUnhandledJSON), visibleInbox.ID) || strings.Contains(string(inboxUnhandledJSON), "Handled completed notice") || strings.Contains(string(inboxUnhandledJSON), "Hidden renewal review") {
+		t.Fatalf("Inbox unhandled planner read must remain status/profile-isolated, body=%s", string(inboxUnhandledJSON))
+	}
+	inboxUnhandledThreadMessage, ok := inboxUnhandledResult["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("Inbox unhandled planner result missing trusted assistant thread message: %+v", inboxUnhandledResult)
+	}
+	inboxUnhandledAgentResponseJSON, err := json.Marshal(inboxUnhandledThreadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal persisted Inbox unhandled Agent response: %v", err)
+	}
+	var inboxUnhandledAgentResponse chat.AgentResponse
+	if err := json.Unmarshal(inboxUnhandledAgentResponseJSON, &inboxUnhandledAgentResponse); err != nil {
+		t.Fatalf("decode persisted Inbox unhandled Agent response: %v", err)
+	}
+	if inboxUnhandledAgentResponse.ResultSummary == nil || inboxUnhandledAgentResponse.ResultSummary.Kind != "inbox_unhandled" {
+		t.Fatalf("Inbox unhandled response missing typed read result summary: %+v", inboxUnhandledAgentResponse)
+	}
+	if inboxUnhandledAgentResponse.ResultSummary.Total != 1 || len(inboxUnhandledAgentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("Inbox unhandled summary must expose one bounded active-profile notification: %+v", inboxUnhandledAgentResponse.ResultSummary)
+	}
+	inboxUnhandledSummaryItem := inboxUnhandledAgentResponse.ResultSummary.Items[0]
+	if inboxUnhandledSummaryItem.ID != visibleInbox.ID || inboxUnhandledSummaryItem.Title != "Visible renewal review" || inboxUnhandledSummaryItem.Status != "unread" || inboxUnhandledSummaryItem.Category != "notification_history" {
+		t.Fatalf("Inbox unhandled summary item = %+v, want bounded unhandled notification id/title/status/source", inboxUnhandledSummaryItem)
+	}
+	inboxUnhandledSummaryJSON, err := json.Marshal(inboxUnhandledAgentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal Inbox unhandled result summary: %v", err)
+	}
+	for _, forbidden := range []string{"Needs attention in this workspace", "Already handled in this workspace", "Handled completed notice", "Hidden renewal review", "sk-planner-inbox-unhandled-secret", "provider_secret", "execution_result", "mutation_applied"} {
+		if strings.Contains(string(inboxUnhandledSummaryJSON), forbidden) {
+			t.Fatalf("Inbox unhandled result summary leaked %q: %s", forbidden, inboxUnhandledSummaryJSON)
 		}
 	}
 

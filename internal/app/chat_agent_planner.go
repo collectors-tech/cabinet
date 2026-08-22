@@ -762,6 +762,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching Inbox notifications.", summary.Total)
 		}
+	case "inbox_unhandled":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no unhandled Inbox notifications."
+		case 1:
+			return "Cabinet found 1 unhandled Inbox notification."
+		default:
+			return fmt.Sprintf("Cabinet found %d unhandled Inbox notifications.", summary.Total)
+		}
 	case "workspace_users":
 		switch summary.Total {
 		case 0:
@@ -849,8 +858,10 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentDataExportBundleReadResultSummary(execution)
 	case "cabinet.maintenance.run_safe_check":
 		return plannerAgentMaintenanceSafeCheckReadResultSummary(execution)
-	case "cabinet.inbox.search_notifications", "cabinet.inbox.summarise_unhandled":
-		return plannerAgentInboxNotificationsReadResultSummary(execution)
+	case "cabinet.inbox.search_notifications":
+		return plannerAgentInboxNotificationsReadResultSummary(execution, "inbox_notifications")
+	case "cabinet.inbox.summarise_unhandled":
+		return plannerAgentInboxNotificationsReadResultSummary(execution, "inbox_unhandled")
 	case "cabinet.users.search":
 		return plannerAgentWorkspaceUsersReadResultSummary(execution)
 	case "cabinet.media.search", "cabinet.media.review_unlinked":
@@ -1198,11 +1209,14 @@ func plannerAgentMaintenanceSafeCheckReadResultSummary(execution map[string]any)
 	}
 }
 
-func plannerAgentInboxNotificationsReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+func plannerAgentInboxNotificationsReadResultSummary(execution map[string]any, kind string) *chat.AgentResponseResultSummary {
+	if kind == "" {
+		kind = "inbox_notifications"
+	}
 	rawItems := plannerReadResultMapSlice(execution["items"])
 	if len(rawItems) == 0 {
 		if count := plannerReadResultInt(execution["item_count"]); count == 0 {
-			return &chat.AgentResponseResultSummary{Kind: "inbox_notifications", Total: 0}
+			return &chat.AgentResponseResultSummary{Kind: kind, Total: 0}
 		}
 		return nil
 	}
@@ -1232,7 +1246,7 @@ func plannerAgentInboxNotificationsReadResultSummary(execution map[string]any) *
 		})
 	}
 	return &chat.AgentResponseResultSummary{
-		Kind:  "inbox_notifications",
+		Kind:  kind,
 		Total: total,
 		Items: items,
 	}
