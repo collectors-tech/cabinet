@@ -176,8 +176,8 @@ func TestHourlyUIValidationUsesCypressSafeLogNameLength(t *testing.T) {
 	for _, fragment := range []string{
 		`$logNamePrefix = "hourly-{0:D3}-"`,
 		"$safeSpecMaxLength = 80 - $logNamePrefix.Length",
-		"$safeSpec = $safeSpec.Substring(0, $safeSpecMaxLength)",
-		`$logName = "$logNamePrefix$safeSpec"`,
+		"$safeSpec = $safeSpec.Substring(0, $safeSpecMaxLength).Trim('-')",
+		`$logName = ConvertTo-SafeLogSegment "$logNamePrefix$safeSpec"`,
 	} {
 		if !strings.Contains(hourly, fragment) {
 			t.Fatalf("hourly validation must cap the full cypress LogName before summary lookup; missing %q", fragment)

@@ -251,9 +251,9 @@ try {
     $logNamePrefix = "hourly-{0:D3}-" -f ($specIndex + 1)
     $safeSpecMaxLength = 80 - $logNamePrefix.Length
     if ($safeSpec.Length -gt $safeSpecMaxLength) {
-      $safeSpec = $safeSpec.Substring(0, $safeSpecMaxLength)
+      $safeSpec = $safeSpec.Substring(0, $safeSpecMaxLength).Trim('-')
     }
-    $logName = "$logNamePrefix$safeSpec"
+    $logName = ConvertTo-SafeLogSegment "$logNamePrefix$safeSpec"
     Write-Step "Running spec: $relativeSpec"
     $cypressArgs = @(
       "-NoLogo",
