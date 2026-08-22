@@ -225,6 +225,14 @@ When Cabinet executes a read-only Agent skill from Chat, the resulting assistant
 - **AND** the summary MUST exclude provider secrets, raw provider payloads, execution internals, write-claim evidence, preview tokens, stack traces, and configuration payloads
 - **AND** the summary MUST contain no write action or confirmation control
 
+#### Scenario: Integration setup explanation returns typed safe setup facts
+
+- **GIVEN** the active profile can ask Chat to explain setup requirements for a specific integration provider
+- **WHEN** the user asks Chat what setup that provider requires
+- **THEN** Cabinet MUST execute the read-only Integrations setup explanation skill and persist an `integration_setup_explanation` result summary with bounded provider identifier, setup-required state, and non-secret next-action guidance
+- **AND** the summary MUST exclude provider secrets, raw provider payloads, execution internals, write-claim evidence, preview tokens, stack traces, and configuration payloads
+- **AND** the summary MUST contain no write action or confirmation control
+
 #### Scenario: Data export preparation returns typed safe readiness facts
 
 - **GIVEN** the active profile can ask Chat to prepare a non-mutating Cabinet data export bundle
