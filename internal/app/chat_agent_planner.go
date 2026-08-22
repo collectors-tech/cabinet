@@ -13,6 +13,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
+	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
@@ -777,6 +778,15 @@ func plannerAgentReadResultMessage(summary *chat.AgentResponseResultSummary) str
 		default:
 			return fmt.Sprintf("Cabinet found %d matching media assets.", summary.Total)
 		}
+	case "purchase_orders":
+		switch summary.Total {
+		case 0:
+			return "Cabinet found no matching purchase orders."
+		case 1:
+			return "Cabinet found 1 matching purchase order."
+		default:
+			return fmt.Sprintf("Cabinet found %d matching purchase orders.", summary.Total)
+		}
 	default:
 		return "Cabinet completed the governed read-only Agent request."
 	}
@@ -814,6 +824,8 @@ func plannerAgentReadResultSummary(skillID string, execution map[string]any) *ch
 		return plannerAgentWorkspaceUsersReadResultSummary(execution)
 	case "cabinet.media.search", "cabinet.media.review_unlinked":
 		return plannerAgentMediaAssetsReadResultSummary(execution)
+	case "cabinet.purchases.search_orders":
+		return plannerAgentPurchaseOrdersReadResultSummary(execution)
 	default:
 		return nil
 	}
@@ -1229,6 +1241,42 @@ func plannerAgentMediaAssetsReadResultSummary(execution map[string]any) *chat.Ag
 	}
 	return &chat.AgentResponseResultSummary{
 		Kind:  "media_assets",
+		Total: total,
+		Items: items,
+	}
+}
+
+func plannerAgentPurchaseOrdersReadResultSummary(execution map[string]any) *chat.AgentResponseResultSummary {
+	rawOrders, ok := execution["orders"].([]commerce.PurchaseOrder)
+	if !ok {
+		return nil
+	}
+	total := len(rawOrders)
+	if value, ok := execution["total"].(int); ok && value >= 0 {
+		total = value
+	}
+	limit := len(rawOrders)
+	if limit > plannerAgentReadResultItemLimit {
+		limit = plannerAgentReadResultItemLimit
+	}
+	items := make([]chat.AgentResponseResultItem, 0, limit)
+	for _, order := range rawOrders[:limit] {
+		category := plannerBoundedReadResultText(order.Source)
+		if category == "" {
+			category = "Purchase order"
+		}
+		if order.LineItemCount > 0 {
+			category = fmt.Sprintf("%s / %d line items", category, order.LineItemCount)
+		}
+		items = append(items, chat.AgentResponseResultItem{
+			ID:       plannerBoundedReadResultText(order.OrderID),
+			Title:    plannerBoundedReadResultText(order.OrderID),
+			Status:   plannerBoundedReadResultText(order.Status),
+			Category: plannerBoundedReadResultText(category),
+		})
+	}
+	return &chat.AgentResponseResultSummary{
+		Kind:  "purchase_orders",
 		Total: total,
 		Items: items,
 	}
