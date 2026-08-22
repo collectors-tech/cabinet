@@ -3098,6 +3098,122 @@ func TestChatAgentPlannerPreservesSettingsAndDataBoundaries(t *testing.T) {
 	}
 }
 
+func TestChatAgentPlannerRoutesChatActionTimelineSummaryFromMainChat(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Planner Timeline"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+profile.ID+`","title":"Planner Timeline"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	createRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+profile.ID+`",
+		"workflow_id":"chat.app_control.dispatch",
+		"capability_id":"cabinet.inventory.search_items",
+		"source_channel":"in-app",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"message-planner-timeline-source",
+		"confirmation_state":"not_required",
+		"input":{"query":"private raw planner prompt"},
+		"provider_trace":{"api_key":"sk-planner-timeline-secret","preview_id":"preview-planner-timeline-secret"},
+		"bulk_items":[{"id":"timeline-step","label":"Search Inventory"}]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createRun.Code != http.StatusCreated {
+		t.Fatalf("create workflow run status=%d body=%s", createRun.Code, createRun.Body.String())
+	}
+	var run struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createRun.Body).Decode(&run); err != nil {
+		t.Fatalf("decode workflow run: %v", err)
+	}
+	completeRun := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+run.ID, strings.NewReader(`{
+		"profile_id":"`+profile.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"result":{"operation":"inventory.item.search","authority_outcome":"apply_allowed","mutation_applied":false,"preview_id":"preview-planner-timeline-secret"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if completeRun.Code != http.StatusOK {
+		t.Fatalf("complete workflow run status=%d body=%s", completeRun.Code, completeRun.Body.String())
+	}
+
+	chatSvc := chat.NewService(a.db, filepath.Join(a.cfg.DataDir, "chat-attachments"))
+	result, handled := dispatchChatAgentProviderPlanner(context.Background(), a.db, chatSvc,
+		ai.NewAssistantProviderRegistry(&captureAssistantProvider{responseText: `{"decision":"select_skill","skill_id":"cabinet.chat.action_timeline.view","parameters":{"thread_id":"` + thread.ID + `","provider_secret":"sk-planner-timeline-secret"},"message":"Reading this Chat thread action timeline."}`}),
+		agentskills.NewRegistry(nil),
+		profile.ID,
+		thread.ID,
+		"show the governed action timeline for this chat",
+		map[string]any{
+			"assistant": map[string]any{"provider": "openai", "model": "fake-planner-model"},
+			"agent_context": map[string]any{
+				"profile_id":     profile.ID,
+				"workspace_id":   "workspace-planner-timeline",
+				"thread_id":      thread.ID,
+				"route_id":       "/chats",
+				"surface_id":     "chats.main",
+				"source_channel": "in-app",
+				"setup_state":    "ready",
+			},
+		},
+		"message-planner-timeline-request")
+	if !handled {
+		t.Fatal("expected natural-language timeline request to enter the Agent planner")
+	}
+	execution, ok := result["execution_result"].(map[string]any)
+	if !ok || execution["operation"] != "chat.action_timeline.view" || execution["read_only"] != true || execution["thread_id"] != thread.ID {
+		t.Fatalf("expected governed Chat action timeline read result, got %+v", result)
+	}
+	threadMessage, ok := result["thread_message"].(chat.Message)
+	if !ok {
+		t.Fatalf("timeline planner result missing trusted assistant thread message: %+v", result)
+	}
+	agentResponseJSON, err := json.Marshal(threadMessage.Context["agent_response"])
+	if err != nil {
+		t.Fatalf("marshal persisted timeline Agent response: %v", err)
+	}
+	var agentResponse chat.AgentResponse
+	if err := json.Unmarshal(agentResponseJSON, &agentResponse); err != nil {
+		t.Fatalf("decode persisted timeline Agent response: %v", err)
+	}
+	if agentResponse.ResultSummary == nil || agentResponse.ResultSummary.Kind != "chat_action_timeline" {
+		t.Fatalf("timeline response missing typed read result summary: %+v", agentResponse)
+	}
+	if agentResponse.ResultSummary.Total != 1 || len(agentResponse.ResultSummary.Items) != 1 {
+		t.Fatalf("timeline summary must expose one bounded active-thread entry: %+v", agentResponse.ResultSummary)
+	}
+	item := agentResponse.ResultSummary.Items[0]
+	if item.ID != run.ID || item.Title != "cabinet.inventory.search_items" || item.Status != "completed" || item.Category != "inventory.item.search" {
+		t.Fatalf("timeline summary item = %+v, want bounded run/capability/status/operation", item)
+	}
+	summaryJSON, err := json.Marshal(agentResponse.ResultSummary)
+	if err != nil {
+		t.Fatalf("marshal timeline result summary: %v", err)
+	}
+	for _, forbidden := range []string{"private raw planner prompt", "sk-planner-timeline-secret", "preview-planner-timeline-secret", "provider_trace", "bulk_items", "source_message_id", "authority_outcome", "mutation_applied", "created_at", "updated_at"} {
+		if strings.Contains(string(summaryJSON), forbidden) {
+			t.Fatalf("timeline read result summary leaked %q: %s", forbidden, summaryJSON)
+		}
+	}
+}
+
 func assertRecoverablePlannerFailure(t *testing.T, result map[string]any, wantCode, wantSurface string) {
 	t.Helper()
 	errPayload, _ := result["error"].(map[string]any)
