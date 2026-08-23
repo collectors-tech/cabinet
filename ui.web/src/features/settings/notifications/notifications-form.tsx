@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -57,6 +57,7 @@ export function NotificationsForm() {
   } = useProfileSettings()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const saveStatusRef = useRef<HTMLDivElement | null>(null)
   const form = useForm<NotificationsFormValues>({
     resolver: zodResolver(notificationsFormSchema),
     defaultValues,
@@ -82,6 +83,17 @@ export function NotificationsForm() {
       security_emails: settings['notifications.security_emails'] !== 'false',
     })
   }, [form, loading, settings])
+
+  useEffect(() => {
+    if (!saveError && !saveMessage) {
+      return
+    }
+    window.requestAnimationFrame(() => {
+      saveStatusRef.current?.scrollIntoView({
+        block: 'center',
+      })
+    })
+  }, [saveError, saveMessage])
 
   const handleSubmit = async (data: NotificationsFormValues) => {
     setSaveMessage(null)
@@ -151,12 +163,20 @@ export function NotificationsForm() {
           )
         ) : null}
         {saveError ? (
-          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
+          <div
+            ref={saveStatusRef}
+            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+            role='alert'
+          >
             {saveError}
           </div>
         ) : null}
         {saveMessage ? (
-          <div className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'>
+          <div
+            ref={saveStatusRef}
+            className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'
+            role='status'
+          >
             {saveMessage}
           </div>
         ) : null}
