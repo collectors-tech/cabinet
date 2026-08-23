@@ -1,16 +1,16 @@
 describe('settings/storage export downloads', () => {
   function signInToStorage() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2Fstorage')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/settings\/storage\/?$/
+    cy.e2eBootstrap({ minimalProfile: true }).then(
+      ({ profile_id, profile_name }) => {
+        cy.useBootstrappedProfile(profile_id, profile_name, {
+          path: '/settings/storage',
+        })
+      }
     )
   }
 
   beforeEach(() => {
+    cy.e2eReset()
     cy.clearCookies()
     cy.clearLocalStorage()
   })
@@ -18,7 +18,7 @@ describe('settings/storage export downloads', () => {
   it('UI-SCREEN-SETTINGS-STORAGE-011 exposes JSON snapshot and item CSV download actions', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
-      body: { id: 'default' },
+      body: { id: 'e2e-profile-001' },
     }).as('activeProfile')
     cy.intercept('GET', '/api/profiles/*/storage', {
       statusCode: 200,
@@ -37,7 +37,7 @@ describe('settings/storage export downloads', () => {
     cy.wait('@storageInfo')
     cy.wait('@backupList')
 
-    cy.contains('Data exports').should('be.visible')
+    cy.contains('Data exports').scrollIntoView().should('be.visible')
     cy.contains('Download the active profile as a JSON snapshot or item CSV.').should(
       'be.visible'
     )
@@ -52,7 +52,7 @@ describe('settings/storage export downloads', () => {
   it('UI-SCREEN-SETTINGS-STORAGE-011 disables export downloads while storage context is degraded', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
-      body: { id: 'default' },
+      body: { id: 'e2e-profile-001' },
     }).as('activeProfile')
     cy.intercept('GET', '/api/profiles/*/storage', {
       statusCode: 503,
@@ -71,7 +71,7 @@ describe('settings/storage export downloads', () => {
     cy.contains('Storage information is unavailable right now.').should(
       'be.visible'
     )
-    cy.contains('Data exports').should('be.visible')
+    cy.contains('Data exports').scrollIntoView().should('be.visible')
     cy.contains('button', 'JSON Snapshot').should('be.disabled')
     cy.contains('button', 'Item CSV').should('be.disabled')
     cy.get('[data-testid="settings-storage-export-json"]').should('not.exist')
