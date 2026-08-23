@@ -73,7 +73,14 @@ Cypress.Commands.add("e2eReset", () => {
       });
   }
 
-  return resetWithRetry(1);
+  return cy
+    .window({ log: false })
+    .then((win) => {
+      if (win.location.href !== "about:blank") {
+        win.location.href = "about:blank";
+      }
+    })
+    .then(() => resetWithRetry(1));
 });
 
 Cypress.Commands.add("e2eEnsureSignedOut", () => {
