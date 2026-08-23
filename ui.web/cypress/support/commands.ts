@@ -80,6 +80,8 @@ Cypress.Commands.add("e2eReset", () => {
         win.location.href = "about:blank";
       }
     })
+    .location("href", { log: false, timeout: 5000 })
+    .should("eq", "about:blank")
     .then(() => resetWithRetry(1));
 });
 
