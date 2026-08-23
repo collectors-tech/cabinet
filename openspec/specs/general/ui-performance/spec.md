@@ -19,7 +19,8 @@ Key UI interactions SHALL have defined threshold targets for S2 and non-crash co
 Large-data operations SHALL expose deterministic loading, empty, error, and ready states.
 
 #### Scenario: S3 delayed response handling
-- **GIVEN** the inventory list request `GET /api/items*` is delayed by test harness
+- **GIVEN** an E2E local workspace profile is bootstrapped
+- **AND** the inventory list request `GET /api/items*` is delayed by test harness
 - **WHEN** user opens `/inventory`
 - **THEN** UI SHALL render `[data-testid="inventory-loading"]` while the request is pending
 - **AND** `[data-testid="inventory-loading"]` SHALL be removed after successful response
