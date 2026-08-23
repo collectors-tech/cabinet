@@ -1,9 +1,11 @@
 describe('integrations/default-site-search', () => {
   function signInToMarketWatch() {
-    cy.visit('/sign-in?redirect=%2Fscanner%2F')
-    cy.get('input[name="email"]').clear().type('e2e-default-search@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/scanner/',
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
   }
 
@@ -117,6 +119,7 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="market-watch-provider-single"]').select('bonzaslotcars')
     cy.get('[data-testid="scanner-new-query-name"]').type('Bonza AFX')
     cy.get('[data-testid="scanner-new-query-keywords"]').type('afx, mega g+')
+    cy.get('[data-testid="scanner-new-watch-cadence"]').select('custom')
     cy.get('[data-testid="scanner-new-query-schedule"]').clear().type('0 */4 * * *')
     cy.get('[data-testid="scanner-create-query"]').click()
     cy.wait('@createQuerySet')
@@ -124,6 +127,7 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="scanner-edit-qs-dss-1"]').click()
     cy.get('[data-testid="scanner-edit-name-qs-dss-1"]').clear().type('Bonza AFX Updated')
     cy.get('[data-testid="scanner-edit-keywords-qs-dss-1"]').clear().type('afx, mega g+, camaro')
+    cy.get('[data-testid="scanner-edit-cadence-qs-dss-1"]').select('custom')
     cy.get('[data-testid="scanner-edit-schedule-qs-dss-1"]').clear().type('0 */8 * * *')
     cy.get('[data-testid="scanner-save-qs-dss-1"]').click()
     cy.wait('@updateQuerySet')
