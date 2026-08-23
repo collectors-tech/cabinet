@@ -4,7 +4,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.e2eBootstrap({ minimalProfile: true });
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-001 locks workspace until sign-in then unlocks redirect target', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-001 locks workspace until local-device entry then unlocks redirect target', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
@@ -13,28 +13,28 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('eq', '/sign-in');
     cy.contains('Sign in').should('be.visible');
 
-    cy.get('input[name="email"]').type('e2e-onboarding@example.com');
-    cy.get('input[name="password"]').type('password123');
-    cy.contains('button', 'Sign in').click();
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.get('input[name="email"]').should('not.exist');
+    cy.get('input[name="password"]').should('not.exist');
+    cy.contains('button', 'Open local workspace').click();
 
     cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard');
     cy.contains('Home').should('be.visible');
     cy.contains('Starter Onboarding').should('not.exist');
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-003 keeps user on auth screen for invalid credentials input state', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-003 keeps local-device auth screen truthful without credential input state', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
     cy.visit('/sign-in');
 
-    cy.get('input[name="email"]').type('not-an-email');
-    cy.get('input[name="password"]').type('short');
-    cy.contains('button', 'Sign in').click();
-
     cy.location('pathname').should('eq', '/sign-in');
-    cy.contains(/invalid email|please enter your email/i).should('be.visible');
-    cy.contains('Password must be at least 7 characters long').should('be.visible');
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.contains(/does not verify a password/i).should('be.visible');
+    cy.get('input[name="email"]').should('not.exist');
+    cy.get('input[name="password"]').should('not.exist');
+    cy.contains('button', 'Sign in').should('not.exist');
   });
 
   it('UI-SCREEN-ONBOARDING-AUTH-002 resumes persisted onboarding step after reload', () => {
@@ -42,9 +42,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .its('status')
       .should('eq', 200);
     cy.visit('/sign-in?redirect=%2F');
-    cy.get('input[name="email"]').type('e2e-onboarding-resume@example.com');
-    cy.get('input[name="password"]').type('password123');
-    cy.contains('button', 'Sign in').click();
+    cy.contains('button', 'Open local workspace').click();
 
     cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard');
 
@@ -90,14 +88,15 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/forgot-password\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-010BB renders deterministic sign-in GitHub and Facebook actions', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-010BB keeps unwired GitHub and Facebook actions off the local-device sign-in boundary', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.visit('/sign-in');
-    cy.get('[data-testid="sign-in-provider-github"]').should('be.visible').and('be.disabled');
-    cy.get('[data-testid="sign-in-provider-facebook"]').should('be.visible').and('be.disabled');
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.get('[data-testid="sign-in-provider-github"]').should('not.exist');
+    cy.get('[data-testid="sign-in-provider-facebook"]').should('not.exist');
     cy.location('pathname').should('match', /^\/sign-in\/?$/);
   });
 
@@ -139,39 +138,27 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-up\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-006 renders Google, Apple, and Microsoft provider actions deterministically', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-006 keeps provider actions out of local-device sign-in mode', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.visit('/sign-in');
-    cy.get('[data-testid="provider-google"]')
-      .should('be.visible')
-      .within(() => {
-        cy.get('[data-testid="provider-google-icon"]').should('be.visible');
-        cy.get('[data-testid="provider-google-label"]').should('contain.text', 'Google');
-      });
-    cy.get('[data-testid="provider-apple"]')
-      .should('be.visible')
-      .within(() => {
-        cy.get('[data-testid="provider-apple-icon"]').should('be.visible');
-        cy.get('[data-testid="provider-apple-label"]').should('contain.text', 'Apple');
-      });
-    cy.get('[data-testid="provider-microsoft"]')
-      .should('be.visible')
-      .within(() => {
-        cy.get('[data-testid="provider-microsoft-icon"]').should('be.visible');
-        cy.get('[data-testid="provider-microsoft-label"]').should('contain.text', 'Microsoft');
-      });
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.get('[data-testid="provider-google"]').should('not.exist');
+    cy.get('[data-testid="provider-apple"]').should('not.exist');
+    cy.get('[data-testid="provider-microsoft"]').should('not.exist');
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-007 resolves identity mode and provider enablement from runtime config', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-007 resolves ZITADEL identity mode into the secure account boundary', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.request('POST', '/api/test/auth/provider-options', {
       identity_mode: 'zitadel',
+      zitadel_configured: true,
+      zitadel_login_path: '/api/auth/zitadel/login',
       providers: [
         { id: 'google', enabled: true },
         { id: 'apple', enabled: false },
@@ -182,39 +169,26 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('eq', 200);
 
     cy.visit('/sign-in');
+    cy.get('[data-testid="zitadel-auth-boundary"]').should('be.visible');
     cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'zitadel');
-    cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
-    cy.get('[data-testid="provider-apple"]').should('be.visible').and('be.disabled');
-    cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
+    cy.contains('button', 'Continue securely').should('be.enabled');
+    cy.get('input[name="email"]').should('not.exist');
+    cy.get('input[name="password"]').should('not.exist');
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-008 does not simulate passkey success in local-device mode', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
-    cy.visit('/sign-in', {
-      onBeforeLoad(win) {
-        // Minimal passkey-capable environment for deterministic E2E.
-        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
-          function PublicKeyCredential() {
-            return undefined;
-          };
-        Object.defineProperty(win.navigator, 'credentials', {
-          configurable: true,
-          value: {
-            get: () => Promise.resolve({ id: 'e2e-passkey-credential' }),
-          },
-        });
-      },
-    });
+    cy.visit('/sign-in');
 
     cy.get('[data-testid="passkey-signin"]').click();
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?|\/dashboard\/?)$/
-    );
-    cy.contains('Home').should('be.visible');
+    cy.location('pathname').should('match', /^\/sign-in\/?$/);
+    cy.get('[data-testid="passkey-error"]')
+      .should('be.visible')
+      .and('contain.text', 'Passkey sign-in is not enabled for the local beta');
+    cy.contains('button', 'Open local workspace').should('be.visible');
   });
 
   it('UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable', () => {
@@ -237,9 +211,9 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('be.visible')
       .and(
         'contain.text',
-        'Passkey sign-in is unavailable on this device. Use password or provider sign-in.'
+        'Passkey sign-in is not enabled for the local beta. Use local-device mode or a configured cloud identity provider.'
       );
-    cy.contains('button', 'Sign in').should('be.visible');
+    cy.contains('button', 'Open local workspace').should('be.visible');
   });
 
   it('UI-SCREEN-ONBOARDING-AUTH-008 normalizes passkey domain mismatch into actionable fallback guidance', () => {
@@ -247,51 +221,25 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .its('status')
       .should('eq', 200);
 
-    cy.visit('/sign-in', {
-      onBeforeLoad(win) {
-        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
-          function PublicKeyCredential() {
-            return undefined;
-          };
-        Object.defineProperty(win.navigator, 'credentials', {
-          configurable: true,
-          value: {
-            get: () => Promise.reject(new Error('This is an invalid domain.')),
-          },
-        });
-      },
-    });
+    cy.visit('/sign-in');
 
     cy.get('[data-testid="passkey-signin"]').click();
     cy.get('[data-testid="passkey-error"]')
       .should('be.visible')
-      .and(
-        'contain.text',
-        'Passkey sign-in failed. Use password or provider sign-in.'
-      )
       .and('not.contain.text', 'This is an invalid domain.');
-    cy.contains('button', 'Sign in').should('be.visible');
-    cy.get('[data-testid="provider-google"]').should('be.visible');
+    cy.contains('button', 'Open local workspace').should('be.visible');
     cy.location('pathname').should('match', /^\/sign-in\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-011B toggles sign-in password visibility deterministically', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-011B keeps local-device sign-in free of password visibility controls', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.visit('/sign-in');
-    cy.get('input[name="password"]').should('have.attr', 'type', 'password');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Show password')
-      .and('have.attr', 'aria-pressed', 'false')
-      .click();
-    cy.get('input[name="password"]').should('have.attr', 'type', 'text');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Hide password')
-      .and('have.attr', 'aria-pressed', 'true')
-      .click();
-    cy.get('input[name="password"]').should('have.attr', 'type', 'password');
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.get('input[name="password"]').should('not.exist');
+    cy.get('[data-testid="sign-in-password-toggle"]').should('not.exist');
     cy.location('pathname').should('match', /^\/sign-in\/?$/);
   });
 
@@ -360,134 +308,89 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/privacy\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-010CCD renders deterministic sign-in-2 GitHub and Facebook actions', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-010CCD keeps unwired GitHub and Facebook actions off the local-device sign-in-2 boundary', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.visit('/sign-in-2');
-    cy.get('[data-testid="sign-in-provider-github"]').should('be.visible').and('be.disabled');
-    cy.get('[data-testid="sign-in-provider-facebook"]').should('be.visible').and('be.disabled');
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.get('[data-testid="sign-in-provider-github"]').should('not.exist');
+    cy.get('[data-testid="sign-in-provider-facebook"]').should('not.exist');
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-010CCE renders deterministic sign-in-2 Google Apple and Microsoft actions', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-010CCE keeps provider actions out of local-device sign-in-2 mode', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.visit('/sign-in-2');
-    cy.get('[data-testid="provider-google"]')
-      .should('be.visible')
-      .and('not.be.disabled')
-      .find('[data-testid="provider-google-icon"]')
-      .should('be.visible');
-    cy.get('[data-testid="provider-apple"]')
-      .should('be.visible')
-      .and('not.be.disabled')
-      .find('[data-testid="provider-apple-icon"]')
-      .should('be.visible');
-    cy.get('[data-testid="provider-microsoft"]')
-      .should('be.visible')
-      .and('not.be.disabled')
-      .find('[data-testid="provider-microsoft-icon"]')
-      .should('be.visible');
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.get('[data-testid="provider-google"]').should('not.exist');
+    cy.get('[data-testid="provider-apple"]').should('not.exist');
+    cy.get('[data-testid="provider-microsoft"]').should('not.exist');
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-010CCF keeps sign-in-2 as retained route with shared auth contract parity', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-010CCF keeps sign-in-2 as retained route with current local-device boundary parity', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
-      .its('status')
-      .should('eq', 200);
-
-    cy.request('POST', '/api/test/auth/provider-options', {
-      identity_mode: 'zitadel',
-      providers: [
-        { id: 'google', enabled: true },
-        { id: 'apple', enabled: false },
-        { id: 'microsoft', enabled: true },
-      ],
-    })
       .its('status')
       .should('eq', 200);
 
     const assertSharedAuthSurface = (pathname: '/sign-in' | '/sign-in-2') => {
       cy.visit(pathname);
       cy.location('pathname').should('match', new RegExp(`^${pathname}\\/?$`));
-      cy.get('input[name="email"]').should('be.visible');
-      cy.get('input[name="password"]').should('have.attr', 'type', 'password');
-      cy.contains('button', 'Sign in').should('be.visible');
+      cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+      cy.contains('button', 'Open local workspace').should('be.visible');
       cy.get('[data-testid="passkey-signin"]').should('be.visible');
       cy.get('[data-testid="sign-in-forgot-password-link"]')
         .should('be.visible')
         .and('have.attr', 'href', '/forgot-password');
-      cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'zitadel');
-      cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
-      cy.get('[data-testid="provider-apple"]').should('be.visible').and('be.disabled');
-      cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
-      cy.get('[data-testid="sign-in-provider-github"]').should('be.visible').and('be.disabled');
-      cy.get('[data-testid="sign-in-provider-facebook"]').should('be.visible').and('be.disabled');
+      cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'local-device');
+      cy.get('input[name="email"]').should('not.exist');
+      cy.get('input[name="password"]').should('not.exist');
     };
 
     assertSharedAuthSurface('/sign-in');
     assertSharedAuthSurface('/sign-in-2');
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-011D toggles sign-in-2 password visibility deterministically', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-011D keeps local-device sign-in-2 free of password visibility controls', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.visit('/sign-in-2');
-    cy.get('input[name="password"]').should('have.attr', 'type', 'password');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Show password')
-      .and('have.attr', 'aria-pressed', 'false')
-      .click();
-    cy.get('input[name="password"]').should('have.attr', 'type', 'text');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Hide password')
-      .and('have.attr', 'aria-pressed', 'true')
-      .click();
-    cy.get('input[name="password"]').should('have.attr', 'type', 'password');
+    cy.get('[data-testid="local-device-auth-boundary"]').should('be.visible');
+    cy.get('input[name="password"]').should('not.exist');
+    cy.get('[data-testid="sign-in-password-toggle"]').should('not.exist');
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-011E signs in from sign-in-2 and honors redirect target', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-011E opens local workspace from sign-in-2 and honors redirect target', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
     cy.visit('/sign-in-2?redirect=%2Fsettings%2Fdisplay');
-    cy.get('input[name="email"]').type('e2e-signin2@example.com');
-    cy.get('input[name="password"]').type('password123');
-    cy.contains('button', 'Sign in').click();
+    cy.contains('button', 'Open local workspace').click();
 
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/display\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-011F signs in with passkey from sign-in-2 and honors redirect target', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-011F does not simulate passkey success from sign-in-2', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
 
-    cy.visit('/sign-in-2?redirect=%2Fsettings%2Fdisplay', {
-      onBeforeLoad(win) {
-        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
-          function PublicKeyCredential() {
-            return undefined;
-          };
-        Object.defineProperty(win.navigator, 'credentials', {
-          configurable: true,
-          value: {
-            get: () => Promise.resolve({ id: 'e2e-passkey-credential' }),
-          },
-        });
-      },
-    });
+    cy.visit('/sign-in-2?redirect=%2Fsettings%2Fdisplay');
 
     cy.get('[data-testid="passkey-signin"]').click();
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/display\/?$/);
+    cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
+    cy.get('[data-testid="passkey-error"]')
+      .should('be.visible')
+      .and('contain.text', 'Passkey sign-in is not enabled for the local beta');
   });
 
   it('UI-SCREEN-ONBOARDING-AUTH-011F shows deterministic fallback guidance on sign-in-2 when passkey is unavailable', () => {
@@ -511,9 +414,9 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('be.visible')
       .and(
         'contain.text',
-        'Passkey sign-in is unavailable on this device. Use password or provider sign-in.'
+        'Passkey sign-in is not enabled for the local beta. Use local-device mode or a configured cloud identity provider.'
       );
-    cy.contains('button', 'Sign in').should('be.visible');
+    cy.contains('button', 'Open local workspace').should('be.visible');
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
@@ -611,8 +514,8 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.visit('/privacy');
     cy.contains('h1', 'Privacy Policy').should('be.visible');
-    cy.contains('What Cabinet stores').should('be.visible');
-    cy.contains('Optional integrations').should('be.visible');
+    cy.contains('Local storage and data paths').should('be.visible');
+    cy.contains('Provider processing').should('be.visible');
     cy.contains(/^404$/).should('not.exist');
     cy.contains('Go Back').should('not.exist');
   });
@@ -624,8 +527,8 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.visit('/terms');
     cy.contains('h1', 'Terms of Service').should('be.visible');
-    cy.contains('Acceptable use').should('be.visible');
-    cy.contains('Account and data responsibility').should('be.visible');
+    cy.contains('Beta package and use').should('be.visible');
+    cy.contains('Data and stopping use').should('be.visible');
     cy.contains(/^404$/).should('not.exist');
     cy.contains('Go Back').should('not.exist');
   });

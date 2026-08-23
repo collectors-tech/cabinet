@@ -26,13 +26,14 @@ The screen SHALL support loading, empty, error, and ready states for profile and
 - **WHEN** auth requirements fetch fails
 - **THEN** screen SHALL show actionable error with retry and MUST NOT advance wizard state until successful fetch
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-006: Sign-in screen SHALL support Google, Apple, and Microsoft providers
-Social/enterprise sign-in options SHALL include Google, Apple, and Microsoft in addition to any existing providers.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-006: Sign-in screen SHALL keep provider controls consistent with identity mode
+Social/enterprise sign-in options SHALL be rendered only for an identity mode that supports configured provider controls. Local-device mode SHALL not show provider actions as available authentication.
 
 #### Scenario: Render provider buttons
-- **GIVEN** sign-in screen is rendered
+- **GIVEN** sign-in screen is rendered in local-device mode
 - **WHEN** provider actions are displayed
-- **THEN** UI MUST include buttons for `Google`, `Apple`, and `Microsoft` with matching provider icons and deterministic enabled/disabled state based on configuration
+- **THEN** UI MUST expose the local-device boundary
+- **AND** UI MUST NOT render `Google`, `Apple`, or `Microsoft` provider actions
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-007: Identity provider platform decision SHALL be explicit and configurable
 Authentication implementation SHALL define whether local or ZITADEL is the source-of-truth identity platform and expose provider configuration deterministically.
@@ -40,26 +41,28 @@ Authentication implementation SHALL define whether local or ZITADEL is the sourc
 #### Scenario: Resolve identity platform
 - **GIVEN** runtime auth configuration is loaded
 - **WHEN** sign-in screen initializes
-- **THEN** app MUST resolve identity platform mode (`local` or `zitadel`) and render only configured provider actions
+- **THEN** app MUST resolve identity platform mode (`local` or `zitadel`)
+- **AND** ZITADEL mode MUST render the secure account boundary without local password fields
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-008: Sign-in SHALL support passkeys (WebAuthn) for passwordless login
-Sign-in flow SHALL support passkey authentication compatible with platform authenticators and password managers (for example 1Password passkeys).
+Sign-in flow SHALL not simulate passkey authentication in local-device mode, and SHALL provide deterministic fallback guidance until a real credential ceremony is active.
 
 #### Scenario: Sign in with passkey
-- **GIVEN** user account has enrolled passkey credential
-- **WHEN** user selects passkey sign-in and completes WebAuthn prompt
-- **THEN** authentication MUST succeed without password and redirect to authenticated shell
+- **GIVEN** local-device mode is active
+- **WHEN** user selects passkey sign-in
+- **THEN** UI MUST remain on the sign-in route
+- **AND** UI MUST state that passkey sign-in is not enabled for the local beta
 
 #### Scenario: Passkey fallback behavior
 - **GIVEN** passkey is unavailable or challenge fails
 - **WHEN** passkey auth attempt fails
-- **THEN** UI MUST provide deterministic fallback to other enabled methods (password/social) with actionable error message
+- **THEN** UI MUST provide deterministic fallback to local-device mode or a configured cloud identity provider with actionable error message
 
 #### Scenario: Passkey domain or origin mismatch fallback behavior
 - **GIVEN** passkey runtime returns a domain, origin, or relying-party mismatch error during sign-in
 - **WHEN** the passkey auth attempt fails before credential completion
-- **THEN** UI MUST normalize the raw provider/browser mismatch into deterministic guidance that the current domain is not yet passkey-enabled
-- **AND** UI MUST keep password and provider sign-in methods visible as immediate fallback options
+- **THEN** UI MUST NOT surface raw browser/provider mismatch text to the user
+- **AND** UI MUST keep the local-device workspace entry visible as the immediate fallback option
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-009: Setup wizard SHALL gate sign-in when runtime setup config is missing
 Sign-in route SHALL present a full-screen setup wizard before auth controls when runtime setup config file is missing.
@@ -104,14 +107,14 @@ Sign-in SHALL expose a visible forgot-password recovery entry path that supports
 - **AND** activation by mouse or keyboard MUST navigate deterministically to `/forgot-password`
 - **AND** focus/route handoff MUST complete without side effects on `/sign-in`
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-010BB: Sign-in GitHub/Facebook actions SHALL be explicit and deterministic
-Sign-in SHALL expose GitHub and Facebook provider actions with explicit visible/disabled behavior until provider sign-in flows are implemented.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010BB: Sign-in GitHub/Facebook actions SHALL not appear in local-device mode
+Sign-in SHALL avoid presenting unwired GitHub and Facebook provider actions as local-device authentication choices.
 
 #### Scenario: Sign-in GitHub and Facebook actions
 - **GIVEN** runtime setup is complete and user is on `/sign-in`
 - **WHEN** user inspects alternative provider actions on the sign-in surface
-- **THEN** UI MUST show visible `GitHub` and `Facebook` actions
-- **AND** those actions MUST remain deterministically disabled when no sign-in provider flow is wired
+- **THEN** UI MUST expose the local-device boundary
+- **AND** UI MUST NOT render `GitHub` or `Facebook` actions
 - **AND** keyboard focus/activation MUST NOT navigate away from `/sign-in`
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-010BC: Sign-in-2 forgot-password entry SHALL be visible and deterministic
@@ -144,35 +147,35 @@ Sign-up SHALL expose visible return/legal links that support deterministic mouse
 - **AND** activation by mouse or keyboard MUST navigate deterministically to `/terms` and `/privacy`
 - **AND** route handoff MUST complete without side effects on `/sign-in-2`
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCD: Sign-in-2 GitHub/Facebook actions SHALL be explicit and deterministic
-`/sign-in-2` SHALL expose GitHub and Facebook provider actions with explicit visible/disabled behavior until provider sign-in flows are implemented.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCD: Sign-in-2 GitHub/Facebook actions SHALL not appear in local-device mode
+`/sign-in-2` SHALL avoid presenting unwired GitHub and Facebook provider actions as local-device authentication choices.
 
 #### Scenario: Sign-in-2 GitHub and Facebook actions
 - **GIVEN** runtime setup is complete and user is on `/sign-in-2`
 - **WHEN** user inspects alternative provider actions on the sign-in-2 surface
-- **THEN** UI MUST show visible `GitHub` and `Facebook` actions
-- **AND** those actions MUST remain deterministically disabled when no provider flow is wired
+- **THEN** UI MUST expose the local-device boundary
+- **AND** UI MUST NOT render `GitHub` or `Facebook` actions
 - **AND** keyboard focus/activation MUST NOT navigate away from `/sign-in-2`
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCE: Sign-in-2 Google/Apple/Microsoft actions SHALL be explicit and deterministic
-`/sign-in-2` SHALL expose Google, Apple, and Microsoft provider actions with deterministic visible/enabled state that mirrors runtime configuration.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCE: Sign-in-2 provider actions SHALL remain identity-mode scoped
+`/sign-in-2` SHALL not render cloud provider actions while local-device mode is active.
 
 #### Scenario: Sign-in-2 Google, Apple, and Microsoft actions
 - **GIVEN** runtime setup is complete and user is on `/sign-in-2`
 - **WHEN** user inspects social and enterprise provider actions on the sign-in-2 surface
-- **THEN** UI MUST show visible `Google`, `Apple`, and `Microsoft` actions with matching provider icons
-- **AND** each action MUST reflect deterministic enabled/disabled state from provider configuration
+- **THEN** UI MUST expose the local-device boundary
+- **AND** UI MUST NOT render `Google`, `Apple`, or `Microsoft` actions
 - **AND** focus/inspection MUST NOT navigate away from `/sign-in-2`
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCF: Sign-in-2 retained route SHALL preserve explicit auth-surface boundaries
-`/sign-in-2` SHALL remain an explicitly retained alternate auth route rather than an implicit dead-end or silent redirect to `/sign-in`. Local `/sign-in` SHALL present truthful local-device entry, while retained alternate/cloud auth surfaces SHALL keep provider-state and recovery-entry controls explicit instead of silently simulating credential or passkey success.
+`/sign-in-2` SHALL remain an explicitly retained alternate auth route rather than an implicit dead-end or silent redirect to `/sign-in`. Local `/sign-in` and `/sign-in-2` SHALL present truthful local-device entry instead of silently simulating credential or passkey success.
 
 #### Scenario: Sign-in and sign-in-2 shared auth parity
-- **GIVEN** runtime setup is complete and auth provider configuration resolves mixed enabled/disabled provider states
+- **GIVEN** runtime setup is complete and local-device identity mode is active
 - **WHEN** user visits `/sign-in` and `/sign-in-2`
 - **THEN** `/sign-in` MUST expose local-device workspace entry with truthful security-boundary copy
+- **AND** `/sign-in-2` MUST expose the same local-device workspace entry with recovery link parity
 - **AND** no route MAY use fixed dummy passkey challenges or mock access tokens as a production sign-in success path
-- **AND** provider enabled/disabled state MUST remain deterministic on routes that render provider controls
 - **AND** `/sign-in-2` MUST remain independently addressable at `/sign-in-2` instead of silently redirecting to `/sign-in`
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-010D: Sign-up GitHub/Facebook actions SHALL be explicit and deterministic
@@ -205,15 +208,14 @@ Sign-up flow SHALL provide a deterministic outcome after valid submission so fir
 - **THEN** the submit control MUST enter an in-flight disabled state before route handoff
 - **AND** duplicate account-creation submits MUST be blocked while the first submit is pending
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-011B: Sign-in password visibility toggle SHALL be deterministic and keyboard-accessible
-Sign-in password field SHALL expose a visibility toggle that switches the input type deterministically, updates accessible state/label, and remains keyboard-activatable.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011B: Local-device sign-in SHALL not expose password visibility controls
+Sign-in SHALL not render password controls in local-device mode because no password-backed authentication ceremony is active.
 
 #### Scenario: Sign-in password visibility toggle
 - **GIVEN** runtime setup is complete and user is on `/sign-in`
-- **WHEN** user activates the password visibility toggle by mouse or keyboard
-- **THEN** password input MUST switch deterministically between masked and text-visible modes
-- **AND** toggle accessible label/state MUST update to reflect the current mode
-- **AND** focus/activation MUST remain on the sign-in route without side effects
+- **WHEN** local-device identity mode is active
+- **THEN** UI MUST expose the local-device boundary
+- **AND** UI MUST NOT render a password input or password visibility toggle
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-011C: Sign-up password visibility toggles SHALL be deterministic and keyboard-accessible
 Sign-up password and confirm-password fields SHALL expose visibility toggles that switch deterministically, update accessible state/label, and remain keyboard-activatable.
@@ -225,40 +227,39 @@ Sign-up password and confirm-password fields SHALL expose visibility toggles tha
 - **AND** each toggle accessible label/state MUST update to reflect the current mode
 - **AND** focus/activation MUST remain on the sign-up route without side effects
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-011D: Sign-in-2 password visibility toggle SHALL be deterministic and keyboard-accessible
-The `/sign-in-2` password field SHALL expose a visibility toggle that switches deterministically, updates accessible state/label, and remains keyboard-activatable.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011D: Local-device sign-in-2 SHALL not expose password visibility controls
+The `/sign-in-2` route SHALL not render password controls in local-device mode because no password-backed authentication ceremony is active.
 
 #### Scenario: Sign-in-2 password visibility toggle
 - **GIVEN** runtime setup is complete and user is on `/sign-in-2`
-- **WHEN** user activates the password visibility toggle by mouse or keyboard
-- **THEN** password input MUST switch deterministically between masked and text-visible modes
-- **AND** toggle accessible label/state MUST update to reflect the current mode
-- **AND** focus/activation MUST remain on the `/sign-in-2` route without side effects
+- **WHEN** local-device identity mode is active
+- **THEN** UI MUST expose the local-device boundary
+- **AND** UI MUST NOT render a password input or password visibility toggle
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-011E: Sign-in-2 successful submit SHALL honor redirect outcomes
-The `/sign-in-2` password submit flow SHALL authenticate the session and honor the preserved `redirect` target, falling back to the canonical dashboard only when no redirect target exists.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011E: Sign-in-2 local workspace entry SHALL honor redirect outcomes
+The `/sign-in-2` local-device workspace entry SHALL bootstrap the session and honor the preserved `redirect` target, falling back to the canonical dashboard only when no redirect target exists.
 
 #### Scenario: Sign-in-2 successful submit with redirect target
 - **GIVEN** runtime setup is complete and user opens `/sign-in-2?redirect=%2Fsettings%2Fdisplay`
-- **WHEN** user submits valid credentials
-- **THEN** UI MUST authenticate successfully
+- **WHEN** user activates `Open local workspace`
+- **THEN** UI MUST bootstrap a local-device session successfully
 - **AND** MUST navigate deterministically to `/settings/display`
 - **AND** MUST NOT fall back to `/dashboard` when a valid redirect target is present
 
-### Requirement UI-SCREEN-ONBOARDING-AUTH-011F: Sign-in-2 passkey outcome SHALL honor redirect and fallback deterministically
-The `/sign-in-2` passkey flow SHALL preserve the same redirect semantics as password sign-in and SHALL keep alternate methods visible when passkey is unavailable.
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011F: Sign-in-2 passkey fallback SHALL avoid simulated success
+The `/sign-in-2` passkey action SHALL not simulate a credential ceremony in local-device mode and SHALL keep local-device entry visible when passkey is unavailable.
 
 #### Scenario: Sign-in-2 passkey success with redirect target
 - **GIVEN** runtime setup is complete and user opens `/sign-in-2?redirect=%2Fsettings%2Fdisplay`
-- **WHEN** user completes a valid passkey sign-in
-- **THEN** UI MUST authenticate without password prompt
-- **AND** MUST navigate deterministically to `/settings/display`
+- **WHEN** user selects passkey sign-in
+- **THEN** UI MUST remain on `/sign-in-2`
+- **AND** UI MUST state that passkey sign-in is not enabled for the local beta
 
 #### Scenario: Sign-in-2 passkey fallback behavior
 - **GIVEN** runtime setup is complete and user is on `/sign-in-2`
 - **WHEN** passkey auth attempt fails or is unavailable
 - **THEN** UI MUST show actionable fallback guidance
-- **AND** MUST keep password and provider sign-in methods visible on `/sign-in-2`
+- **AND** MUST keep local-device workspace entry visible on `/sign-in-2`
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-012: Forgot-password submit SHALL provide deterministic recovery handoff
 Forgot-password flow SHALL provide a deterministic next-step outcome after valid email submission so users are never left on a cleared form with no recovery guidance.
@@ -360,23 +361,23 @@ Public sign-up and forgot-password forms SHALL keep users on the current public 
 | UC-ONB-03 | Onboarding data empty | Guided default state appears | planned: `cypress/e2e/auth/onboarding.cy.ts` `onboarding-empty-state` |
 | UC-ONB-04 | Auth requirement error | Error + retry shown, no crash | planned: `cypress/e2e/auth/onboarding.cy.ts` `auth-error-retry` |
 | UC-ONB-05 | Setup config missing | Full-screen setup wizard shown before auth | planned: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-009 shows full-screen setup wizard before auth when setup config is missing` |
-| UC-ONB-06 | Provider actions render | Google, Apple, and Microsoft provider buttons appear deterministically | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-006 renders Google, Apple, and Microsoft provider actions deterministically` |
-| UC-ONB-07 | Identity mode resolution | Identity mode and provider enablement resolve from runtime config | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-007 resolves identity mode and provider enablement from runtime config` |
-| UC-ONB-08 | Passkey sign-in | Enrolled passkey auth redirects to authenticated shell without password prompt | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt` |
+| UC-ONB-06 | Provider actions render | Local-device sign-in does not present cloud provider actions as available auth | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-006 keeps provider actions out of local-device sign-in mode` |
+| UC-ONB-07 | Identity mode resolution | ZITADEL identity mode renders the secure account boundary without local password fields | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-007 resolves ZITADEL identity mode into the secure account boundary` |
+| UC-ONB-08 | Passkey sign-in | Local-device mode does not simulate passkey success and keeps fallback guidance visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 does not simulate passkey success in local-device mode` |
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress, blocks duplicate submits while pending, and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up with in-flight duplicate-submit guard` |
 | UC-ONB-10A | Sign-in forgot-password entry | Sign-in shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010B exposes deterministic forgot-password entry from sign-in` |
-| UC-ONB-10AA | Sign-in GitHub/Facebook actions | Sign-in shows visible GitHub/Facebook actions with deterministic disabled state until provider flows are wired | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010BB renders deterministic sign-in GitHub and Facebook actions` |
+| UC-ONB-10AA | Sign-in GitHub/Facebook actions | Local-device sign-in does not render unwired GitHub/Facebook actions as auth choices | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010BB keeps unwired GitHub and Facebook actions off the local-device sign-in boundary` |
 | UC-ONB-10AB | Sign-in-2 forgot-password entry | `/sign-in-2` shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010BC exposes deterministic forgot-password entry from sign-in-2` |
 | UC-ONB-10AC | Sign-in-2 legal links | `/sign-in-2` shows visible `Terms of Service` and `Privacy Policy` links with deterministic keyboard/mouse navigation to `/terms` and `/privacy` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010CC exposes deterministic legal links from sign-in-2` |
-| UC-ONB-10AD | Sign-in-2 GitHub/Facebook actions | `/sign-in-2` shows visible GitHub/Facebook actions with deterministic disabled state until provider flows are wired | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010CCD renders deterministic sign-in-2 GitHub and Facebook actions` |
-| UC-ONB-10AE | Sign-in-2 retained-route parity | `/sign-in-2` remains independently addressable and preserves the shared sign-in auth surface contract for credentials, passkey, recovery entry, and provider-state parity with `/sign-in` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010CCF keeps sign-in-2 as retained route with shared auth contract parity` |
-| UC-ONB-10B | Sign-in password visibility toggle | Sign-in password field toggles deterministically between masked/text modes with updated accessible state and keyboard activation | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011B toggles sign-in password visibility deterministically` |
+| UC-ONB-10AD | Sign-in-2 GitHub/Facebook actions | Local-device sign-in-2 does not render unwired GitHub/Facebook actions as auth choices | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010CCD keeps unwired GitHub and Facebook actions off the local-device sign-in-2 boundary` |
+| UC-ONB-10AE | Sign-in-2 retained-route parity | `/sign-in-2` remains independently addressable and preserves local-device entry/recovery parity with `/sign-in` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010CCF keeps sign-in-2 as retained route with current local-device boundary parity` |
+| UC-ONB-10B | Sign-in password visibility toggle | Local-device sign-in does not render password visibility controls because no password-backed auth ceremony is active | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011B keeps local-device sign-in free of password visibility controls` |
 | UC-ONB-10C | Sign-up secondary links | Sign-up shows visible sign-in/legal links with deterministic keyboard/mouse navigation to `/sign-in`, `/terms`, and `/privacy` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010C exposes deterministic sign-up secondary links` |
 | UC-ONB-10D | Sign-up GitHub/Facebook actions | Sign-up shows visible GitHub/Facebook actions with deterministic disabled state until provider flows are wired | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010D renders deterministic sign-up GitHub and Facebook actions` |
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
 | UC-ONB-11C | Sign-up password visibility toggles | Sign-up password + confirm-password fields toggle deterministically between masked/text modes with updated accessible state and keyboard activation | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011C toggles sign-up password fields deterministically` |
-| UC-ONB-11D | Sign-in-2 password visibility toggle | `/sign-in-2` password field toggles deterministically between masked/text modes with updated accessible state and keyboard activation | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011D toggles sign-in-2 password visibility deterministically` |
+| UC-ONB-11D | Sign-in-2 password visibility toggle | Local-device sign-in-2 does not render password visibility controls because no password-backed auth ceremony is active | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011D keeps local-device sign-in-2 free of password visibility controls` |
 | UC-ONB-11B | Forgot-password controls | `/forgot-password` supports keyboard submit with deterministic loading state and keyboard-activatable `/sign-up` secondary handoff | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 supports forgot-password keyboard submit and sign-up handoff` |
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |
 | UC-ONB-13 | Terms legal route | `/terms` renders public Terms of Service content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route` |
