@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent } from 'react'
-import { useLocation, useNavigate } from '@tanstack/react-router'
+import { Link, useLocation } from '@tanstack/react-router'
 import {
   ArrowDown,
   ArrowUp,
@@ -75,7 +75,6 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 
 export function AppSidebar() {
   const location = useLocation()
-  const navigate = useNavigate()
   const { collapsible, variant } = useLayout()
   const { state: sidebarState, isMobile, setOpen } = useSidebar()
   const { t } = useTranslation('nav')
@@ -399,10 +398,9 @@ export function AppSidebar() {
     }
     setActiveWorkspace('navigation')
   }
-  const openSettingsDisplay = () => {
+  const prepareSettingsDisplay = () => {
     setNavEditMode(false)
     setActiveWorkspace('navigation')
-    void navigate({ to: '/settings/display' })
   }
   const inboxRouteActive = location.pathname.startsWith('/inbox')
   const inboxActive = inboxRouteActive || activeWorkspace === 'inbox'
@@ -510,12 +508,15 @@ export function AppSidebar() {
                   <SlidersHorizontal className='h-4 w-4' aria-hidden />
                   <span>Customise Nav</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={openSettingsDisplay}
-                  data-testid='shell-workspace-menu-settings'
-                >
-                  <Settings className='h-4 w-4' aria-hidden />
-                  <span>Settings</span>
+                <DropdownMenuItem asChild>
+                  <Link
+                    to='/settings/display'
+                    onClick={prepareSettingsDisplay}
+                    data-testid='shell-workspace-menu-settings'
+                  >
+                    <Settings className='h-4 w-4' aria-hidden />
+                    <span>Settings</span>
+                  </Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
