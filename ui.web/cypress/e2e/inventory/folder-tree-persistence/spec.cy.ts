@@ -1,5 +1,5 @@
 describe('inventory-folder-tree-persistence', () => {
-  const folderTreeSettingsKey = 'inventory.folder-tree.v1'
+  const folderTreeSettingsKey = 'inventory.folder-tree.v2'
   const itemAssignmentsSettingsKey = 'inventory.folder-item-assignments.v1'
 
   function findNode(
@@ -44,6 +44,42 @@ describe('inventory-folder-tree-persistence', () => {
     }
 
     return null
+  }
+
+  function expectPersistedFolderTreeAfterMove(attempt = 1): Cypress.Chainable<void> {
+    return cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const persistedTree = JSON.parse(settings[folderTreeSettingsKey] ?? '[]') as Array<{
+        id?: string
+        name?: string
+        category?: string
+        secondaryLabel?: string
+        statusBadge?: string
+        children?: unknown
+      }>
+
+      const storeOne = findNode(persistedTree, 'store-1')
+      const warehouses = findNode(persistedTree, 'warehouses') as {
+        children?: Array<{ id?: string }>
+      } | null
+      const storeMovedToWarehouses =
+        Array.isArray(warehouses?.children) &&
+        warehouses.children.some((child) => child.id === 'store-1')
+
+      if (!storeMovedToWarehouses && attempt < 12) {
+        return cy.wait(250).then(() => expectPersistedFolderTreeAfterMove(attempt + 1))
+      }
+
+      expect(storeOne?.name).to.equal('Store 1 Persisted')
+      expect(storeOne?.category).to.equal('Warehouse')
+      expect(storeOne?.secondaryLabel).to.equal('Aisle B')
+      expect(storeOne?.statusBadge).to.equal('Cold')
+      expect(findNode(persistedTree, 'refresh-persisted')).to.not.equal(null)
+      expect(warehouses?.children).to.satisfy(
+        (children?: Array<{ id?: string }>) =>
+          Array.isArray(children) && children.some((child) => child.id === 'store-1')
+      )
+    })
   }
 
   beforeEach(() => {
@@ -94,10 +130,12 @@ describe('inventory-folder-tree-persistence', () => {
     cy.get('[data-testid="folder-tree-name-input"]').clear().type('Refresh Persisted')
     cy.get('[data-testid="folder-tree-create-submit"]').click()
     cy.wait('@saveSettings')
-    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]')
+      .scrollIntoView()
+      .should('be.visible')
 
     const moveTransfer = new DataTransfer()
-    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', {
+    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').trigger('dragstart', {
       dataTransfer: moveTransfer,
     })
     cy.get('[data-testid="folder-tree-item-warehouses"]')
@@ -109,32 +147,7 @@ describe('inventory-folder-tree-persistence', () => {
     cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
       .should('exist')
 
-    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
-      const settings = (response.body.settings ?? {}) as Record<string, string>
-      const persistedTree = JSON.parse(settings[folderTreeSettingsKey] ?? '[]') as Array<{
-        id?: string
-        name?: string
-        category?: string
-        secondaryLabel?: string
-        statusBadge?: string
-        children?: unknown
-      }>
-
-      const storeOne = findNode(persistedTree, 'store-1')
-      const warehouses = findNode(persistedTree, 'warehouses') as {
-        children?: Array<{ id?: string }>
-      } | null
-
-      expect(storeOne?.name).to.equal('Store 1 Persisted')
-      expect(storeOne?.category).to.equal('Warehouse')
-      expect(storeOne?.secondaryLabel).to.equal('Aisle B')
-      expect(storeOne?.statusBadge).to.equal('Cold')
-      expect(findNode(persistedTree, 'refresh-persisted')).to.not.equal(null)
-      expect(warehouses?.children).to.satisfy(
-        (children?: Array<{ id?: string }>) =>
-          Array.isArray(children) && children.some((child) => child.id === 'store-1')
-      )
-    })
+    expectPersistedFolderTreeAfterMove()
 
     cy.reload()
     cy.wait('@items')
@@ -142,7 +155,9 @@ describe('inventory-folder-tree-persistence', () => {
     cy.get('[data-testid="collection-folder-store-1"]').should('have.text', 'Store 1 Persisted')
     cy.get('[data-testid="folder-tree-secondary-store-1"]').should('have.text', 'Aisle B')
     cy.get('[data-testid="folder-tree-badge-store-1"]').should('have.text', 'Cold')
-    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
       .should('exist')
   })
@@ -168,7 +183,7 @@ describe('inventory-folder-tree-persistence', () => {
         string
       >
 
-      expect(assignments['e2e-item-001']).to.equal('store-1')
+      expect(assignments['e2e-item-001']).to.equal('Store 1')
     })
 
     cy.get('[data-testid="folder-tree-item-store-1"]').click()
@@ -186,7 +201,7 @@ describe('inventory-folder-tree-persistence', () => {
         string
       >
 
-      expect(assignments['e2e-item-001']).to.equal('store-1')
+      expect(assignments['e2e-item-001']).to.equal('Store 1')
     })
 
     cy.get('[data-testid="folder-tree-item-store-1"]').click()

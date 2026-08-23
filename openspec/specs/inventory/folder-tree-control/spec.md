@@ -188,6 +188,7 @@ Users MUST be able to drag inventory items onto folder rows and have the assignm
 - **THEN** the item MUST become assigned to that folder's scope
 - **AND** selecting that folder MUST show the moved item in the corresponding filtered inventory view
 - **AND** refreshing the workspace MUST preserve the assignment outcome for the same active profile
+- **AND** the persisted assignment setting MUST store the resolved folder scope used by filtering so the saved profile setting and visible folder selection remain consistent after reload
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-017: Tree SHALL provide deterministic root-level A/Z sorting
 Users MUST be able to apply a root-level alphabetical sort without disturbing child hierarchy under each root node.
