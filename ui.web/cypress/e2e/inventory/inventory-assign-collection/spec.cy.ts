@@ -25,7 +25,7 @@ describe("inventory assign to collection", () => {
     cy.wait("@items");
   }
 
-  it("assigns an inventory row to a collection and reflects it on Collections", () => {
+  it("UI-SCREEN-INVENTORY-FOLDER-TREE-016 assigns an inventory row to a collection and reflects it on Collections", () => {
     signIn();
 
     cy.get(
@@ -41,11 +41,18 @@ describe("inventory assign to collection", () => {
 
     cy.reload();
     cy.wait("@items");
-    cy.get('[data-testid="inventory-collection-filter-select"]').select("Store 1");
+    cy.get('[data-testid="folder-tree-item-store-1"]').click();
+    cy.get('[data-testid="collection-active-context"]').should("contain.text", "Store 1");
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+      "contain.text",
+      "Store 1"
+    );
     cy.contains("Assign Alpha").should("be.visible");
 
     cy.visit("/collections/");
     cy.get('[data-testid="collections-row-store-1"]').click();
-    cy.get('[data-testid="collections-member-assign-alpha"]').should("be.visible");
+    cy.get('[data-testid="collections-row-count-store-1"]').should("have.text", "1");
+    cy.get('[data-testid="collections-active-context"]').should("contain.text", "Store 1");
+    cy.get('[data-testid="collections-members-panel"]').should("not.exist");
   });
 });
