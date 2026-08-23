@@ -152,7 +152,10 @@ describe('ui-screen-settings', () => {
     )
     cy.contains('cabinet.db').should('be.visible')
     cy.contains('/default/media').should('be.visible')
-    cy.contains('Diagnostics actions are unavailable while storage info is degraded.')
+    cy.contains(
+      'Diagnostics actions are unavailable while storage info is degraded.'
+    )
+      .scrollIntoView()
       .should('be.visible')
   })
 
