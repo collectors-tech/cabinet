@@ -188,6 +188,9 @@ describe('inventory-folder-tree-persistence', () => {
 
     cy.get('[data-testid="folder-tree-item-store-1"]').click()
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Tree Item 1').should('be.visible')
     cy.contains('Tree Item 2').should('not.exist')
 
@@ -206,6 +209,9 @@ describe('inventory-folder-tree-persistence', () => {
 
     cy.get('[data-testid="folder-tree-item-store-1"]').click()
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Tree Item 1').should('be.visible')
     cy.contains('Tree Item 2').should('not.exist')
   })
