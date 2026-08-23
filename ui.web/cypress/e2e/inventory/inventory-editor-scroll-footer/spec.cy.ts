@@ -74,10 +74,9 @@ describe('inventory editor scroll footer', () => {
   it('UI-SCREEN-INVENTORY-ITEMS-013 keeps editor panel footer visible while the body scrolls', () => {
     signIn()
 
-    cy.get('[data-testid="inventory-item-row-item-scroll-alpha"]').trigger(
-      'dblclick',
-      { force: true }
-    )
+    cy.get('[data-testid="inventory-item-row-item-scroll-alpha"]')
+      .scrollIntoView()
+      .click({ force: true })
     cy.wait('@alphaPhotos')
 
     cy.get('[data-testid="inventory-item-editor-panel"]')
