@@ -1,10 +1,8 @@
 describe('general/ui-performance', () => {
   function signInToInventory() {
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-performance@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/inventory/' })
+    })
   }
 
   it('UI-PERFORMANCE-001 enforces measurable S2 interaction thresholds', () => {
