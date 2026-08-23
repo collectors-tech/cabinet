@@ -138,9 +138,20 @@ describe('inventory-folder-tree-control', () => {
       ).to.equal(null)
     })
 
-    cy.get('[data-testid="folder-tree-item-watch-list"]').focus().type('{rightarrow}')
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]')
+      .click()
+      .should('have.attr', 'aria-expanded', 'false')
+    cy.get('[data-testid="folder-tree-item-warehouses"]')
+      .focus()
+      .type('{rightarrow}')
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').should(
+      'have.attr',
+      'aria-expanded',
+      'true'
+    )
+
+    cy.get('[data-testid="folder-tree-item-watch-list"]').focus().type('{enter}')
     cy.get('[data-testid="folder-tree-item-watch-list"]').should('have.attr', 'aria-selected', 'true')
-    cy.get('[data-testid="folder-tree-item-watch-list"]').type('{enter}')
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Watch List')
     cy.get('[data-testid="folder-tree-item-watch-list"]').should('have.attr', 'role', 'treeitem')
   })
@@ -469,7 +480,9 @@ describe('inventory-folder-tree-control', () => {
 
     cy.get('[data-testid="folder-tree-item-store-1"]').click()
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
-    cy.get('[data-testid="inventory-item-row-e2e-item-001"]').should('be.visible')
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Tree Item 1').should('be.visible')
     cy.contains('Tree Item 2').should('not.exist')
 
@@ -478,7 +491,9 @@ describe('inventory-folder-tree-control', () => {
 
     cy.get('[data-testid="folder-tree-item-store-1"]').click()
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
-    cy.get('[data-testid="inventory-item-row-e2e-item-001"]').should('be.visible')
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('Tree Item 1').should('be.visible')
     cy.contains('Tree Item 2').should('not.exist')
   })
