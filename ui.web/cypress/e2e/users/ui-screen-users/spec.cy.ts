@@ -12,10 +12,10 @@ describe('ui-screen-users', () => {
   }
 
   function signInToUsers() {
-    cy.visit('/sign-in?redirect=%2Fusers%2F')
-    cy.get('input[name="email"]').clear().type('e2e-users@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/users/' })
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/users\/?$/)
   }
 
