@@ -14,7 +14,9 @@ describe('general/ui-foundation-components', () => {
     )
     cy.get('main').within(() => {
       cy.get('input[placeholder="cabinet-user"]').should('be.visible')
-      cy.contains('button', 'Update profile').should('be.visible')
+      cy.contains('button', 'Update profile')
+        .scrollIntoView()
+        .should('be.visible')
     })
 
     cy.get('[aria-label="Open theme settings"]').click()
@@ -85,7 +87,9 @@ describe('general/ui-foundation-components', () => {
 
   it('UI-FOUNDATION-COMPONENTS-005 links component contract testability artifacts to executable coverage', () => {
     bootstrapAndSignIn('/settings/profile')
-    cy.contains('button', 'Update profile').should('be.visible')
+    cy.contains('button', 'Update profile')
+      .scrollIntoView()
+      .should('be.visible')
     cy.get('[aria-label="Open theme settings"]').should('be.visible')
     cy.visit('/users')
     cy.get('[data-testid="users-header-title"]').should('contain.text', 'Users')
