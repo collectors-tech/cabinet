@@ -47,7 +47,10 @@ describe("inventory assign to collection", () => {
       "contain.text",
       "Store 1"
     );
-    cy.contains("Assign Alpha").should("be.visible");
+    cy.get('[data-testid="inventory-item-row-item-assign-alpha"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .and("contain", "Assign Alpha");
 
     cy.visit("/collections/");
     cy.get('[data-testid="collections-row-store-1"]').click();
