@@ -61,6 +61,14 @@ describe('ui-foundation-shell-navigation', () => {
     visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
   }
 
+  function inventoryTitle(title: string) {
+    return cy.contains(`span[title="${title}"]`, title, { timeout: 20000 })
+  }
+
+  function visibleInventoryTitle(title: string) {
+    return inventoryTitle(title).scrollIntoView().should('be.visible')
+  }
+
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
@@ -568,13 +576,13 @@ describe('ui-foundation-shell-navigation', () => {
       })
     })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
-    cy.contains('Primary Item').should('be.visible')
-    cy.contains('Showcase Item').should('not.exist')
+    visibleInventoryTitle('Primary Item')
+    inventoryTitle('Showcase Item').should('not.exist')
 
     visibleByTestId('team-switcher-trigger').click()
     cy.get('[data-testid="team-option-showcase-db"]').click()
-    cy.contains('Showcase Item', { timeout: 20000 }).should('be.visible')
-    cy.contains('Primary Item').should('not.exist')
+    visibleInventoryTitle('Showcase Item')
+    inventoryTitle('Primary Item').should('not.exist')
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
   })
 
@@ -613,8 +621,8 @@ describe('ui-foundation-shell-navigation', () => {
       'Showcase sample data'
     )
     cy.get('[data-testid="team-option-showcase-db"]').click()
-    cy.contains('Showcase Seed One', { timeout: 20000 }).should('be.visible')
-    cy.contains('Showcase Seed Two').should('be.visible')
+    visibleInventoryTitle('Showcase Seed One')
+    visibleInventoryTitle('Showcase Seed Two')
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
     cy.get('[data-testid="active-profile-status"]').should(
       'contain',
