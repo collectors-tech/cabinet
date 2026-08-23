@@ -68,6 +68,7 @@ export function ProfileForm() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [submitLocked, setSubmitLocked] = useState(false)
+  const saveStatusRef = useRef<HTMLDivElement | null>(null)
   const submitLockRef = useRef(false)
   const mutationLockRef = useRef(false)
   const form = useForm<ProfileFormValues>({
@@ -104,6 +105,15 @@ export function ProfileForm() {
       urls,
     })
   }, [form, loading, settings])
+
+  useEffect(() => {
+    if (saveMessage || saveError) {
+      saveStatusRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      })
+    }
+  }, [saveError, saveMessage])
 
   const handleSubmit = async (data: ProfileFormValues) => {
     if (mutationLockRef.current) {
@@ -191,12 +201,20 @@ export function ProfileForm() {
           )
         ) : null}
         {saveError ? (
-          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
+          <div
+            ref={saveStatusRef}
+            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+            role='alert'
+          >
             {saveError}
           </div>
         ) : null}
         {saveMessage ? (
-          <div className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'>
+          <div
+            ref={saveStatusRef}
+            className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'
+            role='status'
+          >
             {saveMessage}
           </div>
         ) : null}
