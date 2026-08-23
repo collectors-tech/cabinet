@@ -61,7 +61,12 @@ describe('inventory-folder-tree-presence', () => {
       'contain.text',
       'Store 1'
     )
-    cy.contains('Store One Tree Item').should('be.visible')
+    cy.get('[data-testid="inventory-item-row-item-tree-visible-1"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .within(() => {
+        cy.contains('Store One Tree Item').should('be.visible')
+      })
     cy.contains('Watch List Tree Item').should('not.exist')
   })
 })
