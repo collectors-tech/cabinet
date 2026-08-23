@@ -14,7 +14,7 @@ describe("ui-semantic-component-layer", () => {
     cy.get('[data-slot="sidebar"]').should("be.visible");
     cy.get("header").first().should("be.visible");
     cy.contains("Collection Browser").should("not.exist");
-    cy.contains(/Folders:\s*\d+/).should("be.visible");
+    cy.contains(/Folders:\s*\d+/).scrollIntoView().should("be.visible");
     cy.get('[data-testid="profile-dropdown-trigger"]:visible').first().click();
     cy.contains('[data-slot="dropdown-menu-item"]', "Sign out").click();
     cy.contains(/sign out/i).should("be.visible");
@@ -26,7 +26,10 @@ describe("ui-semantic-component-layer", () => {
     cy.get('[data-testid="inventory-new-action"]')
       .should("be.visible")
       .and("have.attr", "aria-label", "New item");
-    cy.contains(/Folders:\s*\d+/).closest('[data-slot="card"]').should("be.visible");
+    cy.contains(/Folders:\s*\d+/)
+      .scrollIntoView()
+      .closest('[data-slot="card"]')
+      .should("be.visible");
   });
 
   it("UI-SEMANTIC-COMPONENT-LAYER-003 keeps shell stable across top-level route switches", () => {
@@ -53,7 +56,9 @@ describe("ui-semantic-component-layer", () => {
 
     signInToInventory();
     cy.wait("@itemsTransitions");
-    cy.get('[data-testid="inventory-load-error"]').should("be.visible");
+    cy.get('[data-testid="inventory-load-error"]')
+      .scrollIntoView()
+      .should("be.visible");
     cy.contains("button", "Retry").click();
     cy.wait("@itemsTransitions");
     cy.get('[data-testid="inventory-load-error"]').should("not.exist");
@@ -62,7 +67,9 @@ describe("ui-semantic-component-layer", () => {
 
   it("UI-SEMANTIC-COMPONENT-LAYER-005 reuses domain blocks in inventory and wishlist", () => {
     signInToInventory();
-    cy.get('input[placeholder^="Filter by title"]').should("be.visible");
+    cy.get('input[placeholder^="Filter by title"]')
+      .scrollIntoView()
+      .should("be.visible");
     cy.visit("/wishlist");
     cy.get('input[placeholder="Filter by title or part number..."]').should("be.visible");
     cy.get("table").should("be.visible");
