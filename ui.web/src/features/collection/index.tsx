@@ -2584,10 +2584,7 @@ export function Collection({
   )
 
   useEffect(() => {
-    if (
-      routePath === '/_authenticated/inventory/' &&
-      !activeProfileResolved
-    ) {
+    if (routePath === '/_authenticated/inventory/' && !activeProfileResolved) {
       return
     }
     void loadInventoryItems()
@@ -5020,7 +5017,7 @@ export function Collection({
           className='grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]'
           data-testid='inventory-workspace'
         >
-          <Card className='flex min-h-[24rem] max-h-[calc(100vh-7rem)] flex-col overflow-hidden xl:min-h-0 xl:max-h-none'>
+          <Card className='flex max-h-[calc(100vh-7rem)] min-h-[24rem] min-w-0 flex-col overflow-hidden xl:max-h-none xl:min-h-0'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
@@ -5325,7 +5322,7 @@ export function Collection({
           </Card>
 
           <Card
-            className='flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0'
+            className='flex min-h-[24rem] min-w-0 flex-col overflow-hidden xl:min-h-0'
             data-testid='inventory-table-card'
           >
             <CardContent className='flex min-h-0 flex-1 flex-col gap-4 pt-6'>
