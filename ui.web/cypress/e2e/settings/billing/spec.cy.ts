@@ -57,6 +57,7 @@ describe('settings billing screen', () => {
     })
 
     cy.contains('button', 'Open Billing Portal (Coming soon)')
+      .scrollIntoView()
       .should('be.visible')
       .and('be.disabled')
 
