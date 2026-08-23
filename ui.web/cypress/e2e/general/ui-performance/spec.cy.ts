@@ -1,7 +1,11 @@
 describe('general/ui-performance', () => {
-  function signInToInventory() {
+  beforeEach(() => {
+    cy.e2eReset()
+  })
+
+  function signInToDashboard() {
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
-      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/inventory/' })
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/dashboard' })
     })
   }
 
@@ -54,19 +58,47 @@ describe('general/ui-performance', () => {
       category: 'feature',
     }))
 
-    cy.intercept('GET', '/api/items*', (req) => {
-      req.reply((res) => {
-        res.delay = 1200
-        res.send({
-          statusCode: 200,
-          body: { items: bulkItems },
-        })
-      })
-    }).as('itemsDelayed')
+    let releaseItemsResponse: (() => void) | null = null
 
-    signInToInventory()
-    cy.get('[data-testid="inventory-loading"]').should('be.visible')
-    cy.wait('@itemsDelayed')
+    signInToDashboard()
+    cy.visit('/inventory/', {
+      onBeforeLoad(win) {
+        const originalFetch = win.fetch.bind(win)
+        win.fetch = (input, init) => {
+          const url =
+            typeof input === 'string'
+              ? input
+              : input instanceof win.Request
+                ? input.url
+                : String(input)
+          const pathname = new URL(url, win.location.origin).pathname
+          if (pathname === '/api/items' || pathname === '/api/items/') {
+            return new Promise<Response>((resolve) => {
+              releaseItemsResponse = () => {
+                resolve(
+                  new win.Response(JSON.stringify({ items: bulkItems }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                  })
+                )
+              }
+            })
+          }
+          return originalFetch(input, init)
+        }
+      },
+    })
+    cy.get('[data-testid="inventory-loading"]')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.wrap(null, { timeout: 10000 }).should(() => {
+      expect(releaseItemsResponse, 'delayed inventory response').to.be.a(
+        'function'
+      )
+    })
+    cy.then(() => {
+      releaseItemsResponse?.()
+    })
     cy.get('[data-testid="inventory-loading"]').should('not.exist')
     cy.get('[data-testid="inventory-table-surface"]').should('exist')
     cy.get('table[data-slot="table"]').should('exist')

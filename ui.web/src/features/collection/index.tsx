@@ -3962,9 +3962,11 @@ export function Collection({
       setActiveProfileID('')
       setActiveProfileResolved(false)
       setWorkspaceSnapshotReady(false)
+      setLoading(false)
       return
     }
     let cancelled = false
+    setLoading(true)
     setActiveProfileResolved(false)
     const loadActiveProfile = async () => {
       try {
