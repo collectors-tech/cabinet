@@ -117,25 +117,27 @@ describe('settings/operations', () => {
       'not.exist'
     )
     cy.get('[data-testid="settings-operations-runtime-card"]').within(() => {
-      cy.get('[data-testid="settings-operations-retry"]').should('be.visible')
+      cy.get('[data-testid="settings-operations-retry"]')
+        .scrollIntoView()
+        .should('be.visible')
     })
     cy.get('[data-testid="settings-operations-logs-card"]').within(() => {
-      cy.get('[data-testid="settings-operations-export-logs"]').should(
-        'be.visible'
-      )
+      cy.get('[data-testid="settings-operations-export-logs"]')
+        .scrollIntoView()
+        .should('be.visible')
     })
     cy.get('[data-testid="settings-operations-data-card"]').within(() => {
-      cy.get('[data-testid="settings-operations-export-json"]').should(
-        'be.visible'
-      )
+      cy.get('[data-testid="settings-operations-export-json"]')
+        .scrollIntoView()
+        .should('be.visible')
     })
     cy.get('[data-testid="settings-operations-queue-card"]').within(() => {
-      cy.get('[data-testid="settings-operations-queue-pause"]').should(
-        'be.visible'
-      )
-      cy.get('[data-testid="settings-operations-queue-resume"]').should(
-        'be.visible'
-      )
+      cy.get('[data-testid="settings-operations-queue-pause"]')
+        .scrollIntoView()
+        .should('be.visible')
+      cy.get('[data-testid="settings-operations-queue-resume"]')
+        .scrollIntoView()
+        .should('be.visible')
     })
   })
 
