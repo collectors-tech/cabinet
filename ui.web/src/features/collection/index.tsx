@@ -5020,7 +5020,7 @@ export function Collection({
           className='grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]'
           data-testid='inventory-workspace'
         >
-          <Card className='flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0'>
+          <Card className='flex min-h-[24rem] max-h-[calc(100vh-7rem)] flex-col overflow-hidden xl:min-h-0 xl:max-h-none'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
@@ -5090,7 +5090,7 @@ export function Collection({
                       onDrop={(event) =>
                         handleFolderHTMLDrop({ kind: 'root' }, event)
                       }
-                      className='rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
+                      className='sticky top-0 z-10 rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
                     >
                       Drop here to move folder to the root level
                     </div>
