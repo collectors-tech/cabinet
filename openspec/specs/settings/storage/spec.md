@@ -106,6 +106,26 @@ Data export actions MUST provide profile-scoped JSON snapshot and item CSV downl
 - **THEN** JSON Snapshot and Item CSV actions MUST be disabled buttons
 - **AND** live export download links MUST NOT render until storage context recovers
 
+### Requirement UI-SCREEN-SETTINGS-STORAGE-012: Storage screen SHALL use the route header as the visible page title
+Storage route title hierarchy MUST remain owned by the shared Settings route header rather than duplicating a second page-level heading inside the content body.
+
+#### Scenario: Route header title
+- **GIVEN** user opens `/settings/storage`
+- **WHEN** storage information and backup list state are loaded
+- **THEN** the shared Settings header MUST show `Storage Settings`
+- **AND** the Storage content body MUST NOT render a duplicate `h1`
+
+### Requirement UI-SCREEN-SETTINGS-STORAGE-013: Storage actions SHALL remain scoped to local cards, rows, and dialogs
+Storage actions MUST stay near the data or workflow they affect instead of creating a global header action region.
+
+#### Scenario: Local storage actions
+- **GIVEN** storage information and backup list state are loaded
+- **WHEN** user reviews `/settings/storage`
+- **THEN** no global storage header actions region MUST render
+- **AND** the backup creation action MUST remain inside the Backups card
+- **AND** backup download and restore actions MUST remain scoped to each backup row
+- **AND** restore confirmation actions MUST render inside the restore confirmation dialog
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -115,3 +135,5 @@ Data export actions MUST provide profile-scoped JSON snapshot and item CSV downl
 | UC-SET-STR-04 | Restore failure recovery | Failed restore closes confirmation, stays on Storage, and shows deterministic failure feedback | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-008 reports restore failure without route reload` |
 | UC-SET-STR-05 | Integrity check | Database integrity check reports healthy and failure outcomes without route loss | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-009 runs storage integrity check and shows healthy result`, `UI-SCREEN-SETTINGS-STORAGE-010 reports integrity-check failure without route reload` |
 | UC-SET-STR-06 | Export downloads | JSON snapshot and item CSV actions expose deterministic download targets only after ready storage context | `ui.web/cypress/e2e/settings/storage-export/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-011 exposes JSON snapshot and item CSV download actions`, `UI-SCREEN-SETTINGS-STORAGE-011 disables export downloads while storage context is degraded` |
+| UC-SET-STR-07 | Storage title hierarchy | The shared Settings header owns the visible Storage page title without a duplicate body `h1` | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-012 uses the route header as the only visible page title` |
+| UC-SET-STR-08 | Local storage actions | Backup and restore controls stay scoped to the Backups card, row, and restore dialog without global header actions | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-013 keeps storage actions scoped to cards, rows, and dialogs` |

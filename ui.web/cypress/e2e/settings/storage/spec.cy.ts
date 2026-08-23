@@ -80,7 +80,9 @@ describe('settings/storage', () => {
       'not.exist'
     )
     cy.get('[data-testid="settings-storage-backup-section"]').within(() => {
-      cy.get('[data-testid="settings-storage-backup-run"]').should('be.visible')
+      cy.get('[data-testid="settings-storage-backup-run"]')
+        .scrollIntoView()
+        .should('be.visible')
       cy.get('[data-testid="settings-storage-backup-table"]').should(
         'be.visible'
       )
@@ -137,6 +139,7 @@ describe('settings/storage', () => {
     cy.contains('button', 'Reindex Search').should('be.disabled')
     cy.contains('button', 'Rebuild Thumbnails').should('be.disabled')
     cy.contains('Diagnostics actions are unavailable while storage info is degraded.')
+      .scrollIntoView()
       .should('be.visible')
   })
 
@@ -356,13 +359,17 @@ describe('settings/storage', () => {
     cy.wait('@storageInfo')
     cy.wait('@backupList')
 
-    cy.get('[data-testid="settings-storage-backup-table"]').should('be.visible')
+    cy.get('[data-testid="settings-storage-backup-table"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.get('[data-testid="settings-storage-backup-row"]').should('have.length', 1)
     cy.get('[data-testid="settings-storage-backup-row"]')
       .first()
       .should('contain', 'Legacy database snapshot')
       .and('contain', 'Valid')
-    cy.get('[data-testid="settings-storage-backup-run"]').click()
+    cy.get('[data-testid="settings-storage-backup-run"]')
+      .scrollIntoView()
+      .click()
     cy.wait('@backupRun')
     cy.wait('@backupList')
     cy.get('[data-testid="settings-storage-backup-row"]').should('have.length', 2)
