@@ -3,12 +3,18 @@ Define continuous, scheduled, executable UI validation for Cabinet including rel
 
 ## Requirements
 ### Requirement CONT-UI-CAB-001: Cabinet hourly validation SHALL be release-aware
-Hourly validation run SHALL compare active build/version against latest available build and skip full run when unchanged.
+Hourly validation run SHALL compare the active build/version against the latest successfully validated build and skip a full run only when they match.
 
 #### Scenario: No new build available
 - **GIVEN** hourly validation starts
-- **WHEN** latest build/version matches current validated build
+- **WHEN** latest build/version matches the current successfully validated build
 - **THEN** runner SHALL record `no-change` status and wait for next schedule
+
+#### Scenario: Failed revision remains eligible for retry
+- **GIVEN** a revision's hourly validation report contains one or more failures
+- **WHEN** the workflow persists state for a later scheduled run
+- **THEN** it MUST retain the last successfully validated revision rather than mark the failed revision as validated
+- **AND** the same failed revision MUST execute again on the next schedule instead of returning `no-change`
 
 ### Requirement CONT-UI-CAB-002: Cabinet hourly validation SHALL execute real browser interactions
 Validation run MUST open live app and execute real user actions (no synthetic-only claims).
@@ -189,6 +195,7 @@ Cabinet hourly UI validation SHALL start one workflow-built exact runtime for th
 
 #### Scenario: Skip duplicate same-revision validation
 - **GIVEN** scheduled Windows runners are ephemeral
-- **WHEN** a validated revision is scheduled again
+- **WHEN** a successfully validated revision is scheduled again
 - **THEN** the workflow SHALL restore the persisted revision state and record `no-change` without starting Cabinet or Cypress.
+- **AND** a failed revision MUST remain eligible for rerun until a successful report advances the persisted revision state.
 - **AND** if state restoration is unavailable, failure handling SHALL avoid creating another open hourly issue whose body already records the same commit.

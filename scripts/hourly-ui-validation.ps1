@@ -421,15 +421,6 @@ $reportPayload = [ordered]@{
 
 Write-JsonFile $reportPath $reportPayload
 
-$updatedState = [ordered]@{
-  last_validated_version = $currentVersion
-  last_validated_commit = $currentCommit
-  last_report_path = $reportPath
-  last_status = $reportPayload.status
-  updated_at = (Get-Date).ToString("o")
-}
-Write-JsonFile $statePath $updatedState
-
 if ($hadFailures) {
   if ((-not $SkipIssueCreate) -and (Get-Command gh -ErrorAction SilentlyContinue)) {
     $title = "[Hourly UI Validation] failures detected $timestamp"
@@ -453,6 +444,15 @@ $(($failures | ForEach-Object { "- $($_.screen): $($_.actual)" }) -join "`n")
   Write-Step "Validation finished with failures."
   exit 1
 }
+
+$updatedState = [ordered]@{
+  last_validated_version = $currentVersion
+  last_validated_commit = $currentCommit
+  last_report_path = $reportPath
+  last_status = $reportPayload.status
+  updated_at = (Get-Date).ToString("o")
+}
+Write-JsonFile $statePath $updatedState
 
 Write-Step "Validation finished successfully."
 exit 0
