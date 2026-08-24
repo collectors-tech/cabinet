@@ -45,11 +45,10 @@ func TestContinuousUIValidationPersistsRevisionStateAndPreventsOverlap(t *testin
 		"actions/cache/restore@v4",
 		"id: hourly-state",
 		".logs/hourly-ui-validation-state.json",
-		"hourly-ui-validation-state-${{ runner.os }}-${{ github.sha }}",
+		"hourly-ui-validation-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}",
 		"restore-keys:",
 		"actions/cache/save@v4",
 		"if: always()",
-		"steps.hourly-state.outputs.cache-hit != 'true'",
 	}
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {
@@ -115,6 +114,54 @@ func TestHourlyUIValidationScriptContract(t *testing.T) {
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {
 			t.Fatalf("expected hourly validation script to contain fragment %q", fragment)
+		}
+	}
+}
+
+func TestHourlyUIValidationOnlyMarksSuccessfulRunsValidated(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "scripts", "hourly-ui-validation.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(raw)
+
+	reportIndex := strings.Index(content, "Write-JsonFile $reportPath $reportPayload")
+	if reportIndex < 0 {
+		t.Fatalf("expected hourly validation to write a report before handling validation failure")
+	}
+	failureOffset := strings.Index(content[reportIndex:], "if ($hadFailures) {")
+	failureIndex := reportIndex + failureOffset
+	stateIndex := strings.Index(content, "$updatedState = [ordered]@")
+	if failureOffset < 0 || stateIndex < 0 {
+		t.Fatalf("expected hourly validation failure and state-persistence branches")
+	}
+	if stateIndex <= failureIndex {
+		t.Fatalf("failed validation must not advance the successful validated revision before returning failure")
+	}
+}
+
+func TestContinuousUIValidationUsesWritableRunScopedStateCache(t *testing.T) {
+	t.Parallel()
+
+	workflowPath := filepath.Join("..", ".github", "workflows", "continuous-ui-validation.yml")
+	raw, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("read workflow: %v", err)
+	}
+	content := string(raw)
+
+	if strings.Contains(content, "hourly-ui-validation-state-${{ runner.os }}-${{ github.sha }}") {
+		t.Fatalf("hourly validation state cache must not use an immutable revision key")
+	}
+	for _, fragment := range []string{
+		"hourly-ui-validation-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}",
+		"hourly-ui-validation-state-${{ runner.os }}-",
+	} {
+		if !strings.Contains(content, fragment) {
+			t.Fatalf("expected writable run-scoped hourly validation state cache fragment %q", fragment)
 		}
 	}
 }
@@ -238,8 +285,10 @@ func TestHourlyUIValidationRunnerLifecycleIsTraceable(t *testing.T) {
 	for _, fragment := range []string{
 		"CONT-UI-CAB-013",
 		"#2307",
+		"#2475",
 		"TestHourlyUIValidationReusesOneBoundedExactRuntime",
 		"TestHourlyUIValidationDeduplicatesSameRevisionIssues",
+		"TestHourlyUIValidationOnlyMarksSuccessfulRunsValidated",
 	} {
 		if !strings.Contains(string(traceRaw), fragment) {
 			t.Fatalf("expected continuous UI validation traceability fragment %q", fragment)

@@ -28,7 +28,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .logs/hourly-ui-validation-state.json
-          key: hourly-ui-validation-state-${{ runner.os }}-${{ github.sha }}
+          key: hourly-ui-validation-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             hourly-ui-validation-state-${{ runner.os }}-
 
@@ -65,11 +65,11 @@ jobs:
         run: pwsh -NoLogo -NoProfile -File ./scripts/hourly-ui-validation.ps1 -Browser chrome
 
       - name: Save hourly validation revision state
-        if: always() && steps.hourly-state.outputs.cache-hit != 'true' && hashFiles('.logs/hourly-ui-validation-state.json') != ''
+        if: always() && hashFiles('.logs/hourly-ui-validation-state.json') != ''
         uses: actions/cache/save@v4
         with:
           path: .logs/hourly-ui-validation-state.json
-          key: hourly-ui-validation-state-${{ runner.os }}-${{ github.sha }}
+          key: hourly-ui-validation-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload validation logs
         if: always()
