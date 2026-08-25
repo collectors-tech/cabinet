@@ -941,7 +941,8 @@ export function Scanner() {
     if (querySets.length === 0) {
       setActionStatus('scheduled_run_blocked_empty')
       setActionFeedback({
-        summary: 'Run Scheduled Watches needs at least one runnable saved watch.',
+        summary:
+          'Run Scheduled Watches needs at least one runnable saved watch.',
         actions: [
           'Create a saved watch first.',
           'Add keywords so the first scheduled run has valid criteria.',
@@ -1693,7 +1694,8 @@ export function Scanner() {
       value: String(
         Object.values(candidatesByQuerySet)
           .flat()
-          .filter((candidate) => normalizeResultStatus(candidate) === 'new').length
+          .filter((candidate) => normalizeResultStatus(candidate) === 'new')
+          .length
       ),
       detail: 'Unreviewed provider results',
     },
@@ -1726,17 +1728,17 @@ export function Scanner() {
     },
     {
       label: 'Next run',
-      value:
-        querySets.some(
-          (querySet) =>
-            querySet.enabled !== false && Boolean(querySet.schedule_cron?.trim())
-        )
-          ? 'Scheduled'
-          : 'Manual',
+      value: querySets.some(
+        (querySet) =>
+          querySet.enabled !== false && Boolean(querySet.schedule_cron?.trim())
+      )
+        ? 'Scheduled'
+        : 'Manual',
       detail:
         querySets.find(
           (querySet) =>
-            querySet.enabled !== false && Boolean(querySet.schedule_cron?.trim())
+            querySet.enabled !== false &&
+            Boolean(querySet.schedule_cron?.trim())
         )?.name ?? 'Create a cadence to automate searches',
     },
   ]
@@ -1992,8 +1994,9 @@ export function Scanner() {
       ...current,
       [pendingApplyScanID]: result,
     }))
+    const targetLabel = target === 'inventory' ? 'Inventory' : 'Wishlist'
     setQuickScanStatus(
-      `Scanner ${target} write applied after explicit confirmation.`
+      `${targetLabel} mutation applied after explicit confirmation.`
     )
     setPendingApplyScanID(null)
   }
@@ -2073,7 +2076,9 @@ export function Scanner() {
               <p className='text-xs font-medium text-muted-foreground'>
                 {card.label}
               </p>
-              <p className='mt-1 truncate text-lg font-semibold'>{card.value}</p>
+              <p className='mt-1 truncate text-lg font-semibold'>
+                {card.value}
+              </p>
               <p className='mt-1 truncate text-xs text-muted-foreground'>
                 {card.detail}
               </p>
@@ -3388,7 +3393,7 @@ export function Scanner() {
               ) : (
                 <div className='mt-2 overflow-x-auto'>
                   <table
-                    className='w-full text-xs'
+                    className='w-full table-fixed text-xs [&_td]:break-all [&_th]:break-words'
                     data-testid='market-watch-output-results-table'
                   >
                     <thead className='bg-muted/30 text-left'>

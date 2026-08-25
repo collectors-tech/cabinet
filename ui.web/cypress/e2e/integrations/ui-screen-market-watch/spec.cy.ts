@@ -1,20 +1,33 @@
 describe('integrations/ui-screen-market-watch', () => {
   function signInToMarketWatch(redirectPath = '/scanner/') {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`)
-    cy.get('body').then(($body) => {
-      if ($body.find('input[name="email"]').length > 0) {
-        cy.get('input[name="email"]').clear().type('e2e-market-watch@example.com')
-        cy.get('input[name="password"]').clear().type('password123')
-        cy.contains('button', 'Sign in').click()
-        return
-      }
-
+    const [targetPath, targetQuery] = redirectPath.split('?', 2)
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.request('PUT', '/api/profiles/active', { profile_id })
+        .its('status')
+        .should('eq', 200)
+      cy.visit(`/sign-in?redirect=${encodeURIComponent(targetPath)}`, {
+        onBeforeLoad(win) {
+          win.localStorage.setItem(`cabinet.workspace.${profile_id}`, '1')
+        },
+      })
       cy.contains('button', 'Open local workspace').click()
+      cy.wait('@localServerSession', { timeout: 60000 })
+      cy.location('pathname', { timeout: 60000 }).should('match', /^\/scanner\/?$/)
+      cy.get('body').then(($body) => {
+        const preferredLabel = `Use ${profile_name}`
+        if ($body.text().includes(preferredLabel)) {
+          cy.contains('button', preferredLabel).click()
+        }
+      })
+      cy.visit(targetQuery ? `${targetPath}?${targetQuery}` : targetPath)
     })
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
   }
 
   beforeEach(() => {
+    cy.e2eReset()
     cy.clearCookies()
     cy.clearLocalStorage()
     cy.intercept('GET', '/api/providers/registry', {
@@ -55,7 +68,7 @@ describe('integrations/ui-screen-market-watch', () => {
 
   it('UI-SCREEN-MARKET-WATCH-004 shows deterministic workspace states', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
-      delay: 500,
+      delay: 2000,
       statusCode: 200,
       body: { query_sets: [] },
     }).as('querySets')
@@ -471,10 +484,12 @@ describe('integrations/ui-screen-market-watch', () => {
       enabled?: boolean
     }> = []
 
-    cy.intercept('GET', '/api/scanner/query-sets', () => ({
-      statusCode: 200,
-      body: { query_sets: querySets },
-    })).as('querySets')
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { query_sets: querySets },
+      })
+    }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
       'failures'
     )
@@ -573,10 +588,12 @@ describe('integrations/ui-screen-market-watch', () => {
       enabled?: boolean
     }> = []
 
-    cy.intercept('GET', '/api/scanner/query-sets', () => ({
-      statusCode: 200,
-      body: { query_sets: querySets },
-    })).as('querySets')
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { query_sets: querySets },
+      })
+    }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
       'failures'
     )

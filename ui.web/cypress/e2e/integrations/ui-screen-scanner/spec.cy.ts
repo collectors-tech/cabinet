@@ -1,13 +1,15 @@
 describe('integrations/ui-screen-scanner', () => {
   function signInToScanner() {
-    cy.visit('/sign-in?redirect=%2Fscanner%2F')
-    cy.get('input[name="email"]').clear().type('e2e-scanner@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/scanner/' })
+    })
   }
 
   beforeEach(() => {
+    cy.e2eReset()
     cy.clearCookies()
     cy.clearLocalStorage()
   })
@@ -29,12 +31,14 @@ describe('integrations/ui-screen-scanner', () => {
     cy.wait(['@querySets', '@failures', '@providerHealth'])
 
     cy.location('pathname').should('match', /^\/scanner\/?$/)
-    cy.get('main').contains('h1', 'Market Watch').should('be.visible')
+    cy.get('main').find('h1').should('not.exist')
     cy.get('[data-testid="market-watch-header-title"]')
       .should('contain', 'Market Watch')
-    cy.get('main')
-      .contains('Track saved searches across integrations')
-      .should('be.visible')
+      .and(
+        'have.attr',
+        'title',
+        'Run saved market searches and review provider results.'
+      )
     cy.get('[data-testid="scanner-empty-state"]').should(
       'contain',
       'Create your first saved integration search'
