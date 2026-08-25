@@ -21,6 +21,7 @@ type BaseNavItem = {
 
 type NavLink = BaseNavItem & {
   url: LinkProps['to'] | (string & {})
+  reloadDocument?: boolean
   items?: never
 }
 

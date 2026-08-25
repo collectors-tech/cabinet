@@ -22,6 +22,7 @@ export type SidebarNavigationItem = {
   url: string
   icon: RouteMetadata['icon']
   testIdKey: string
+  reloadDocument: boolean
 }
 
 export type SidebarNavigationGroup = {
@@ -87,6 +88,7 @@ function toSidebarNavigationItem(
     url: navigationPathFor(metadata),
     icon: metadata.icon,
     testIdKey: sidebarTestKeyFor(metadata),
+    reloadDocument: metadata.path === '/',
   }
 }
 

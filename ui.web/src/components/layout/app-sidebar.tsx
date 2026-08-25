@@ -398,10 +398,6 @@ export function AppSidebar() {
     }
     setActiveWorkspace('navigation')
   }
-  const prepareSettingsDisplay = () => {
-    setNavEditMode(false)
-    setActiveWorkspace('navigation')
-  }
   const inboxRouteActive = location.pathname.startsWith('/inbox')
   const inboxActive = inboxRouteActive || activeWorkspace === 'inbox'
   const navigationActive = !inboxActive && activeWorkspace === 'navigation'
@@ -511,7 +507,6 @@ export function AppSidebar() {
                 <DropdownMenuItem asChild>
                   <Link
                     to='/settings/display'
-                    onClick={prepareSettingsDisplay}
                     data-testid='shell-workspace-menu-settings'
                   >
                     <Settings className='h-4 w-4' aria-hidden />
