@@ -1,13 +1,16 @@
 describe('scanner/ui-screen-card-scanner', () => {
   function signInToScanner() {
-    cy.visit('/sign-in?redirect=%2Fscanner%2F')
-    cy.get('input[name="email"]').clear().type('e2e-card-scanner@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/scanner/' })
+    })
+    cy.get('[data-testid="market-watch-capture-reveal"]').click()
   }
 
   beforeEach(() => {
+    cy.e2eReset()
     cy.clearCookies()
     cy.clearLocalStorage()
     cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
