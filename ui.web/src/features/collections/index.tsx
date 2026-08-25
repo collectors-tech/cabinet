@@ -307,6 +307,11 @@ export function Collections() {
     { id: 'name', desc: false },
   ])
   const [globalFilter, setGlobalFilter] = useState('')
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: 10,
+  })
+  const unfilteredPageIndexRef = useRef(0)
   const [selectedCollectionID, setSelectedCollectionID] = useState<
     string | null
   >(null)
@@ -468,9 +473,44 @@ export function Collections() {
     state: {
       sorting,
       globalFilter,
+      pagination,
     },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: (updater) => {
+      setSorting(updater)
+      unfilteredPageIndexRef.current = 0
+      setPagination((current) => ({ ...current, pageIndex: 0 }))
+    },
+    onGlobalFilterChange: (updater) => {
+      const nextValue =
+        typeof updater === 'function' ? updater(globalFilter) : updater
+      const nextFilter = String(nextValue ?? '')
+      const wasFiltered = globalFilter.trim().length > 0
+      const willBeFiltered = nextFilter.trim().length > 0
+
+      if (!wasFiltered && willBeFiltered) {
+        unfilteredPageIndexRef.current = pagination.pageIndex
+        setPagination((current) => ({ ...current, pageIndex: 0 }))
+      } else if (wasFiltered && !willBeFiltered) {
+        setPagination((current) => ({
+          ...current,
+          pageIndex: unfilteredPageIndexRef.current,
+        }))
+      } else if (willBeFiltered) {
+        setPagination((current) => ({ ...current, pageIndex: 0 }))
+      }
+
+      setGlobalFilter(nextFilter)
+    },
+    onPaginationChange: (updater) => {
+      setPagination((current) => {
+        const next = typeof updater === 'function' ? updater(current) : updater
+        if (globalFilter.trim().length === 0) {
+          unfilteredPageIndexRef.current = next.pageIndex
+        }
+        return next
+      })
+    },
+    autoResetPageIndex: false,
     globalFilterFn: (row, _columnId, filterValue) => {
       const searchValue = String(filterValue).trim().toLowerCase()
       if (!searchValue) {

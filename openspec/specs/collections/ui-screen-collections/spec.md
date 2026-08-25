@@ -338,6 +338,8 @@ Collections table pagination SHALL let users reach collections beyond the first 
 - **WHEN** the user filters the collections table to that row
 - **THEN** the selected row MUST remain reachable and selected
 - **AND** filtering MUST NOT send an additional profile-settings save
+- **WHEN** the user clears the filter to return to the full collections list
+- **THEN** the table MUST return to the pagination page containing the selected row
 
 ### Requirement UI-SCREEN-COLLECTIONS-029: Collection members pagination is retired
 The Collection members table pagination SHALL remain absent because the separate members table is retired from Collections.
