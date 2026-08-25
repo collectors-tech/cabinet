@@ -58,6 +58,8 @@ describe('collections-pagination', () => {
       })
         .its('status')
         .should('eq', 200)
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
       cy.useBootstrappedProfile(profile_id, profile_name, {
         path: '/collections/',
       })
@@ -76,9 +78,7 @@ describe('collections-pagination', () => {
     }
   }
 
-  it('UI-SCREEN-COLLECTIONS-028 preserves paginated collection selection without passive settings writes', () => {
-    seedPaginatedCollectionsProfile()
-
+  function expectInitialCollectionsPage() {
     cy.get('[data-testid="collections-management-summary"]').should(
       'contain.text',
       'Showing 18 of 18 collections.'
@@ -89,15 +89,23 @@ describe('collections-pagination', () => {
     )
     cy.get('[data-testid="collections-row-zed-shelf-12"]').should('not.exist')
     cy.get('@saveCollectionSettings.all').should('have.length', 0)
+  }
 
+  function navigateToPageTwo() {
     cy.get('[data-testid="collections-table-pagination"]')
       .contains('button', '2')
       .click()
+    cy.get('[data-testid="collections-table-pagination"]').should(
+      'contain.text',
+      'Page 2 of 2'
+    )
     cy.get('[data-testid="collections-row-zed-shelf-12"]')
       .scrollIntoView()
       .should('be.visible')
-    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+  }
 
+  function selectTargetCollection() {
+    navigateToPageTwo()
     cy.get('[data-testid="collections-row-zed-shelf-12"]').click()
     cy.wait('@saveCollectionSettings').then(({ request }) => {
       expect(persistedCollectionsSettings(request.body).activeCollection).to.eq(
@@ -108,15 +116,31 @@ describe('collections-pagination', () => {
       'contain.text',
       targetCollection
     )
-    cy.get('[data-testid="collections-table-pagination"]')
-      .contains('button', '2')
-      .click()
+  }
+
+  it('UI-SCREEN-COLLECTIONS-028 reaches page two without passive settings writes', () => {
+    seedPaginatedCollectionsProfile()
+    expectInitialCollectionsPage()
+
+    navigateToPageTwo()
+    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+  })
+
+  it('UI-SCREEN-COLLECTIONS-028 keeps a later-page selection on its page and persists active context', () => {
+    seedPaginatedCollectionsProfile()
+
+    selectTargetCollection()
+    cy.get('[data-testid="collections-table-pagination"]').should(
+      'contain.text',
+      'Page 2 of 2'
+    )
     cy.get('[data-testid="collections-row-zed-shelf-12"]').should(
       'have.attr',
       'data-state',
       'selected'
     )
     cy.get('[data-testid="collections-members-table"]').should('not.exist')
+    cy.get('@saveCollectionSettings.all').should('have.length', 1)
 
     cy.reload()
     cy.wait('@loadCollectionSettings')
@@ -125,14 +149,18 @@ describe('collections-pagination', () => {
       'contain.text',
       targetCollection
     )
-    cy.get('[data-testid="collections-table-pagination"]')
-      .contains('button', '2')
-      .click()
+    navigateToPageTwo()
     cy.get('[data-testid="collections-row-zed-shelf-12"]').should(
       'have.attr',
       'data-state',
       'selected'
     )
+    cy.get('@saveCollectionSettings.all').should('have.length', 1)
+  })
+
+  it('UI-SCREEN-COLLECTIONS-028 keeps selected context reachable while filtering without passive writes', () => {
+    seedPaginatedCollectionsProfile()
+    selectTargetCollection()
 
     cy.get('[data-testid="collections-search-input"]').type(targetCollection)
     cy.get('[data-testid="collections-row-zed-shelf-12"]').should(
@@ -143,6 +171,37 @@ describe('collections-pagination', () => {
     cy.get('[data-testid="collections-management-summary"]').should(
       'contain.text',
       'Showing 1 of 18 collections.'
+    )
+    cy.get('[data-testid="collections-table-pagination"]').should(
+      'contain.text',
+      'Page 1 of 1'
+    )
+    cy.get('@saveCollectionSettings.all').should('have.length', 1)
+  })
+
+  it('UI-SCREEN-COLLECTIONS-028 returns a filtered selection to its full-list pagination page', () => {
+    seedPaginatedCollectionsProfile()
+    selectTargetCollection()
+
+    cy.get('[data-testid="collections-search-input"]').type(targetCollection)
+    cy.get('[data-testid="collections-row-zed-shelf-12"]').should(
+      'have.attr',
+      'data-state',
+      'selected'
+    )
+    cy.get('[data-testid="collections-search-input"]').clear()
+    cy.get('[data-testid="collections-management-summary"]').should(
+      'contain.text',
+      'Showing 18 of 18 collections.'
+    )
+    cy.get('[data-testid="collections-table-pagination"]').should(
+      'contain.text',
+      'Page 2 of 2'
+    )
+    cy.get('[data-testid="collections-row-zed-shelf-12"]').should(
+      'have.attr',
+      'data-state',
+      'selected'
     )
     cy.get('@saveCollectionSettings.all').should('have.length', 1)
   })
