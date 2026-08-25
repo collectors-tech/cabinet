@@ -104,6 +104,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
       >
         <Link
           to={item.url}
+          reloadDocument={item.reloadDocument}
           aria-label={item.title}
           title={item.title}
           onClick={() => setOpenMobile(false)}
