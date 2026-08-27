@@ -2,8 +2,8 @@ describe('chats/assistant-codex-chat-ui', () => {
   it('ASSISTANT-CODEX-UI-001 keeps a compact conversation-first Agent with context and result links', () => {
     cy.viewport(1280, 720)
     cy.e2eReset()
-    cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    cy.e2eBootstrap()
     cy.e2eEnsureSignedOut()
     cy.stubLocalServerSession('e2e-profile-001')
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
