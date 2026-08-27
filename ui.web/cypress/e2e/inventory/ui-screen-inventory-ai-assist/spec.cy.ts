@@ -1,10 +1,13 @@
 describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
   function signIn() {
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-paste-create@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/inventory/' })
+      cy.wait('@localServerSession')
+    })
   }
 
   function openCreateDialog() {
@@ -16,10 +19,7 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
   }
 
   beforeEach(() => {
-    cy.intercept('GET', '/api/profiles/active', {
-      statusCode: 200,
-      body: { id: 'profile-paste-create-1', name: 'Paste Create Profile' },
-    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/active').as('activeProfile')
   })
 
   it('UI-SCREEN-INVENTORY-PASTE-CREATE-001 keeps Inventory title visible and header actions compact', () => {
