@@ -128,6 +128,22 @@ function Stop-CypressOwnedProcessTree(
     $stoppedProcesses += $targetProcess
     $stopped += $processId
   }
+  # Revalidate against a fresh inventory before declaring success. A process
+  # created while the first inventory is materializing can otherwise escape
+  # the owned tree even though its parent is the timed-out root.
+  $verificationInventory = @(Get-CypressProcessInventory)
+  $lateOwnedIds = @(Get-CypressOwnedProcessIds -RootProcessId $RootProcessId -ProcessInventory $verificationInventory |
+    Where-Object { $_ -gt 0 -and $_ -ne $PID -and $targets -notcontains $_ } |
+    Select-Object -Unique)
+  [array]::Reverse($lateOwnedIds)
+  foreach ($processId in $lateOwnedIds) {
+    $targetProcess = Get-Process -Id $processId -ErrorAction SilentlyContinue
+    if (-not $targetProcess) { continue }
+    Stop-Process -InputObject $targetProcess -Force -ErrorAction SilentlyContinue
+    $stoppedProcesses += $targetProcess
+    $stopped += $processId
+  }
+  $targets = @($targets + $lateOwnedIds | Select-Object -Unique)
   $cleanupDeadline = (Get-Date).AddSeconds(2)
   foreach ($targetProcess in $stoppedProcesses) {
     try {
