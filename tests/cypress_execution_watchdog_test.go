@@ -37,25 +37,24 @@ func TestCypressExecutionWatchdogFailsClosedAndPreservesUnrelatedProcess(t *test
 	repoRoot := resolveRepoRoot(t)
 	watchdogPath := filepath.Join(repoRoot, "scripts", "lib", "cypress-process-watchdog.ps1")
 	tempDir := t.TempDir()
-	fixturePath := filepath.Join(tempDir, "hanging-cypress-fixture.cmd")
 	harnessPath := filepath.Join(tempDir, "watchdog-harness.ps1")
+	readinessPath := filepath.Join(tempDir, "watchdog-harness.ready")
 	stdoutPath := filepath.Join(tempDir, "fixture.stdout.log")
 	stderrPath := filepath.Join(tempDir, "fixture.stderr.log")
-	fixture := "@echo off\r\nstart \"\" /b pwsh -NoLogo -NoProfile -Command \"Start-Sleep -Seconds 120\"\r\necho fixture-ready owned_child_started\r\necho token=super-secret-fixture-value\r\nping 127.0.0.1 -n 120 >nul\r\n"
-	if err := os.WriteFile(fixturePath, []byte(fixture), 0600); err != nil {
-		t.Fatal(err)
-	}
-	harness := fmt.Sprintf(". %q\n$result = Invoke-CypressOwnedProcess -FilePath \"cmd.exe\" -ArgumentList @(\"/d\", \"/s\", \"/c\", %q, \"--token=super-secret-command-line\") -WorkingDirectory %q -TimeoutSec 1 -StandardOutputPath %q -StandardErrorPath %q -OutputTailLineCount 20\n$result | ConvertTo-Json -Depth 6 -Compress\n", watchdogPath, fixturePath, tempDir, stdoutPath, stderrPath)
+	fixtureCommand := `echo --token=super-secret-command-line >nul & echo fixture-ready owned_child_started & echo token=super-secret-fixture-value & ping 127.0.0.1 -n 120 >nul`
+	harness := fmt.Sprintf(". %q\nNew-Item -ItemType File -Path %q -ErrorAction Stop | Out-Null\n$result = Invoke-CypressOwnedProcess -FilePath \"cmd.exe\" -ArgumentList @(\"/d\", \"/s\", \"/c\", '%s') -WorkingDirectory %q -TimeoutSec 1 -StandardOutputPath %q -StandardErrorPath %q -OutputTailLineCount 20\n$result | ConvertTo-Json -Depth 6 -Compress\n", watchdogPath, readinessPath, fixtureCommand, tempDir, stdoutPath, stderrPath)
 	if err := os.WriteFile(harnessPath, []byte(harness), 0600); err != nil {
 		t.Fatal(err)
 	}
-	unrelated := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 120")
+	unrelated := exec.Command("ping", "127.0.0.1", "-n", "120")
 	if err := unrelated.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = unrelated.Process.Kill(); _, _ = unrelated.Process.Wait() })
 	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", harnessPath)
-	output, err := runWatchdogCommand(cmd, 15*time.Second)
+	// Production cypress.ps1 invokes the helper from an already-running PowerShell host,
+	// so cold host startup is bounded separately from the unchanged watchdog operation bound.
+	output, err := runWatchdogCommandAfterReadiness(cmd, readinessPath, 15*time.Second, 15*time.Second)
 	if err != nil {
 		t.Fatalf("watchdog harness: %v\n%s", err, output)
 	}
@@ -173,7 +172,7 @@ func TestCypressE2EHookProbeDoesNotMisclassifyBoundedResetWorkAsUnavailable(t *t
 	}
 }
 
-func runWatchdogCommand(cmd *exec.Cmd, timeout time.Duration) (string, error) {
+func runWatchdogCommandAfterReadiness(cmd *exec.Cmd, readinessPath string, startupTimeout, completionTimeout time.Duration) (string, error) {
 	var output strings.Builder
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -182,13 +181,49 @@ func runWatchdogCommand(cmd *exec.Cmd, timeout time.Duration) (string, error) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	startupTimer := time.NewTimer(startupTimeout)
+	readinessPoll := time.NewTicker(25 * time.Millisecond)
+	ready := false
+	for !ready {
+		if _, err := os.Stat(readinessPath); err == nil {
+			ready = true
+			break
+		}
+		select {
+		case err := <-done:
+			startupTimer.Stop()
+			readinessPoll.Stop()
+			if _, markerErr := os.Stat(readinessPath); markerErr == nil {
+				return output.String(), err
+			}
+			if err != nil {
+				return output.String(), fmt.Errorf("PowerShell host exited before readiness marker: %w", err)
+			}
+			return output.String(), fmt.Errorf("PowerShell host exited before readiness marker")
+		case <-startupTimer.C:
+			readinessPoll.Stop()
+			_ = cmd.Process.Kill()
+			<-done
+			return output.String(), fmt.Errorf("PowerShell host readiness timed out after %s", startupTimeout)
+		case <-readinessPoll.C:
+		}
+	}
+	if !startupTimer.Stop() {
+		select {
+		case <-startupTimer.C:
+		default:
+		}
+	}
+	readinessPoll.Stop()
+	completionTimer := time.NewTimer(completionTimeout)
+	defer completionTimer.Stop()
 	select {
 	case err := <-done:
 		return output.String(), err
-	case <-time.After(timeout):
+	case <-completionTimer.C:
 		_ = cmd.Process.Kill()
 		<-done
-		return output.String(), fmt.Errorf("command timed out after %s", timeout)
+		return output.String(), fmt.Errorf("command timed out after %s", completionTimeout)
 	}
 }
 func assertWatchdogProcessStopped(t *testing.T, pid int) {
