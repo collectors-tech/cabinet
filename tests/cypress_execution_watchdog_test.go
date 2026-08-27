@@ -32,6 +32,36 @@ type cypressWatchdogResult struct {
 	CleanupResult string   `json:"cleanup_result"`
 }
 
+var sharedWatchdogPowerShellHost *watchdogPowerShellHost
+
+func TestMain(m *testing.M) {
+	if runtime.GOOS != "windows" {
+		os.Exit(m.Run())
+	}
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "resolve Cypress watchdog test path")
+		os.Exit(1)
+	}
+	hostTempDir, err := os.MkdirTemp("", "cabinet-watchdog-host-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	watchdogPath := filepath.Join(filepath.Dir(thisFile), "..", "scripts", "lib", "cypress-process-watchdog.ps1")
+	hostScriptPath := filepath.Join(hostTempDir, "watchdog-host.ps1")
+	sharedWatchdogPowerShellHost, err = startWatchdogPowerShellHost(watchdogPath, hostScriptPath, 15*time.Second)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		_ = os.RemoveAll(hostTempDir)
+		os.Exit(1)
+	}
+	exitCode := m.Run()
+	sharedWatchdogPowerShellHost.stop()
+	_ = os.RemoveAll(hostTempDir)
+	os.Exit(exitCode)
+}
+
 func TestCypressExecutionWatchdogFailsClosedAndPreservesUnrelatedProcess(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows PowerShell workflow")
@@ -55,9 +85,10 @@ func TestCypressExecutionWatchdogFailsClosedAndPreservesUnrelatedProcess(t *test
 	// cypress.ps1 invokes the watchdog from an already-running PowerShell host.
 	// Warm only that host before measuring the watchdog operation so unrelated
 	// PowerShell startup contention cannot consume the unchanged 15-second guard.
-	host := startWatchdogPowerShellHost(t, watchdogPath, 15*time.Second)
-	t.Cleanup(host.stop)
-	output, err := host.invokeScriptWithinDeadline(harnessPath, 15*time.Second)
+	if sharedWatchdogPowerShellHost == nil {
+		t.Fatal("PowerShell watchdog host unavailable")
+	}
+	output, err := sharedWatchdogPowerShellHost.invokeScriptWithinDeadline(harnessPath, 15*time.Second)
 	if err != nil {
 		t.Fatalf("watchdog harness: %v\n%s", err, output)
 	}
@@ -114,7 +145,7 @@ func TestCypressExecutionWatchdogFailsClosedAndPreservesUnrelatedProcess(t *test
 		}
 	}
 	for _, pid := range append([]int{result.RootPID}, result.ChildPIDs...) {
-		assertWatchdogProcessStopped(t, pid)
+		assertWatchdogProcessStopped(t, pid, result)
 	}
 	if unrelated.ProcessState != nil || !watchdogProcessExists(unrelated.Process.Pid) {
 		t.Fatalf("unrelated process %d stopped", unrelated.Process.Pid)
@@ -186,26 +217,26 @@ type watchdogPowerShellHost struct {
 	dead   bool
 }
 
-func startWatchdogPowerShellHost(t *testing.T, watchdogPath string, timeout time.Duration) *watchdogPowerShellHost {
-	t.Helper()
-	hostScriptPath := filepath.Join(t.TempDir(), "watchdog-host.ps1")
+func startWatchdogPowerShellHost(watchdogPath string, hostScriptPath string, timeout time.Duration) (*watchdogPowerShellHost, error) {
 	hostScript := fmt.Sprintf("$ErrorActionPreference = 'Stop'\n. '%s'\n[Console]::Out.WriteLine('%s')\nwhile (($invocationPath = [Console]::In.ReadLine()) -ne $null) {\n  if ($invocationPath -eq '__CABINET_WATCHDOG_POWERSHELL_EXIT__') { break }\n  . $invocationPath\n}\n", escapePowerShellSingleQuoted(watchdogPath), watchdogPowerShellReady)
 	if err := os.WriteFile(hostScriptPath, []byte(hostScript), 0600); err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	cmd := exec.Command("powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", hostScriptPath)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		t.Fatal(err)
+		_ = stdin.Close()
+		return nil, err
 	}
 	host := &watchdogPowerShellHost{cmd: cmd, stdin: stdin, lines: make(chan string, 8), done: make(chan error, 1)}
 	cmd.Stderr = &host.stderr
 	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
+		_ = stdin.Close()
+		return nil, err
 	}
 	go func() {
 		scanner := bufio.NewScanner(stdout)
@@ -218,9 +249,9 @@ func startWatchdogPowerShellHost(t *testing.T, watchdogPath string, timeout time
 	line, err := host.readLineWithin(timeout)
 	if err != nil || line != watchdogPowerShellReady {
 		host.stop()
-		t.Fatalf("initialize PowerShell watchdog host: ready=%q err=%v\n%s", line, err, host.stderr.String())
+		return nil, fmt.Errorf("initialize PowerShell watchdog host: ready=%q err=%v\n%s", line, err, host.stderr.String())
 	}
-	return host
+	return host, nil
 }
 
 func (host *watchdogPowerShellHost) invokeScriptWithinDeadline(scriptPath string, timeout time.Duration) (string, error) {
@@ -275,7 +306,7 @@ func escapePowerShellSingleQuoted(value string) string {
 	return strings.ReplaceAll(value, "'", "''")
 }
 
-func assertWatchdogProcessStopped(t *testing.T, pid int) {
+func assertWatchdogProcessStopped(t *testing.T, pid int, result cypressWatchdogResult) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -284,5 +315,5 @@ func assertWatchdogProcessStopped(t *testing.T, pid int) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("owned process %d still exists", pid)
+	t.Fatalf("owned process %d still exists: %+v", pid, result)
 }
