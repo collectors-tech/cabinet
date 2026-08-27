@@ -2,8 +2,8 @@ describe('chats/agent-attachment-continuity', () => {
   function bootstrapInventory() {
     cy.viewport(1400, 900)
     cy.e2eReset()
-    cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    cy.e2eBootstrap()
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inventory/',
     })
