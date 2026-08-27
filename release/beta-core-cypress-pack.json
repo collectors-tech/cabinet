@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "issue": 2055,
   "name": "Cabinet 0.1 beta core Cypress acceptance pack",
   "required_categories": [
@@ -43,7 +43,19 @@
     },
     {
       "category": "provider_handoff",
-      "path": "cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts"
+      "path": "cypress/e2e/integrations/ui-screen-market-watch/01-core.cy.ts"
+    },
+    {
+      "category": "provider_handoff",
+      "path": "cypress/e2e/integrations/ui-screen-market-watch/02-create-run.cy.ts"
+    },
+    {
+      "category": "provider_handoff",
+      "path": "cypress/e2e/integrations/ui-screen-market-watch/03-results.cy.ts"
+    },
+    {
+      "category": "provider_handoff",
+      "path": "cypress/e2e/integrations/ui-screen-market-watch/04-handoffs.cy.ts"
     },
     {
       "category": "provider_handoff",
