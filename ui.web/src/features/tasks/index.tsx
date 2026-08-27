@@ -650,6 +650,7 @@ export function Tasks({
     isWishlistRoute ? [] : tasks
   )
   const tableDataRef = useRef(tableData)
+  const wishlistInlineUpdateGenerationRef = useRef(0)
   const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [dialogNavigationRows, setDialogNavigationRows] = useState<Task[]>([])
@@ -898,10 +899,17 @@ export function Tasks({
     }
   }, [isWishlistRoute, loadInventoryData, loadWishlistData])
 
-  const refreshWishlistTable = useCallback(async () => {
-    const mapped = await loadWishlistData()
-    setTableData(mapped)
-  }, [loadWishlistData])
+  const refreshWishlistTable = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      const mapped = await loadWishlistData()
+      if (!shouldApply()) {
+        return
+      }
+      tableDataRef.current = mapped
+      setTableData(mapped)
+    },
+    [loadWishlistData]
+  )
 
   const saveWishlistDraft = useCallback(
     async (draft: WishlistEntryDraft, currentRow?: Task) => {
@@ -1099,6 +1107,8 @@ export function Tasks({
         return
       }
 
+      const updateGeneration = ++wishlistInlineUpdateGenerationRef.current
+
       const currentTask =
         tableDataRef.current.find((candidate) => candidate.id === task.id) ??
         task
@@ -1229,7 +1239,9 @@ export function Tasks({
         if (!response.ok) {
           throw new Error('wishlist_inline_update_failed')
         }
-        await refreshWishlistTable()
+        await refreshWishlistTable(
+          () => updateGeneration === wishlistInlineUpdateGenerationRef.current
+        )
         toast.success(
           'Wishlist row updated.',
           wishlistToastHistory(
