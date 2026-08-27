@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"os"
 	"os/exec"
@@ -14,6 +15,16 @@ import (
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+const cabinetMCPTestHelperReady = "CABINET_MCP_TEST_HELPER_READY"
+
+type connectedMCPTransport struct {
+	connection mcp.Connection
+}
+
+func (t *connectedMCPTransport) Connect(context.Context) (mcp.Connection, error) {
+	return t.connection, nil
+}
 
 func TestParseLauncherArgsRequiresExplicitProfile(t *testing.T) {
 	if _, err := parseLauncherArgs([]string{}); err == nil {
@@ -85,20 +96,78 @@ func TestVerifyProfileAuthorityRejectsUnknownProfileInDataDir(t *testing.T) {
 }
 
 func TestLauncherStdioInitializeSmoke(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	testLauncherStdioInitialize(t, 0)
+}
 
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestLauncherStdioHelperProcess", "--",
+func TestLauncherStdioInitializeSeparatesProcessStartupFromProtocolDeadline(t *testing.T) {
+	startupElapsed, protocolElapsed := testLauncherStdioInitialize(t, 6*time.Second)
+	if startupElapsed < 6*time.Second {
+		t.Fatalf("helper startup elapsed = %v, want at least 6s", startupElapsed)
+	}
+	if protocolElapsed >= 5*time.Second {
+		t.Fatalf("MCP protocol initialization elapsed = %v, want less than 5s", protocolElapsed)
+	}
+}
+
+func testLauncherStdioInitialize(t *testing.T, startupDelay time.Duration) (time.Duration, time.Duration) {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=TestLauncherStdioHelperProcess", "--",
 		"--profile-id", "profile-main",
 		"--profile-label", "Main collection",
 		"--version", "0.1.0-smoke",
 		"--version-digest", "git:stdio-smoke",
 	)
-	cmd.Env = append(os.Environ(), "CABINET_MCP_TEST_HELPER_PROCESS=1")
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-stdio-smoke", Version: "0.1.0"}, nil)
-	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd, TerminateDuration: time.Second}, nil)
+	cmd.Env = append(os.Environ(),
+		"CABINET_MCP_TEST_HELPER_PROCESS=1",
+		"CABINET_MCP_TEST_HELPER_STARTUP_DELAY="+startupDelay.String(),
+	)
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		t.Fatalf("helper stderr pipe: %v", err)
+	}
+
+	commandTransport := &mcp.CommandTransport{Command: cmd, TerminateDuration: time.Second}
+	startupStarted := time.Now()
+	connection, err := commandTransport.Connect(context.Background())
+	if err != nil {
+		t.Fatalf("start helper command transport: %v", err)
+	}
+
+	type readinessResult struct {
+		line string
+		err  error
+	}
+	readiness := make(chan readinessResult, 1)
+	go func() {
+		line, err := bufio.NewReader(stderr).ReadString('\n')
+		readiness <- readinessResult{line: strings.TrimSpace(line), err: err}
+	}()
+	startupTimer := time.NewTimer(15 * time.Second)
+	defer startupTimer.Stop()
+	select {
+	case result := <-readiness:
+		if result.err != nil {
+			_ = connection.Close()
+			t.Fatalf("wait for helper readiness: %v", result.err)
+		}
+		if result.line != cabinetMCPTestHelperReady {
+			_ = connection.Close()
+			t.Fatalf("helper readiness = %q, want %q", result.line, cabinetMCPTestHelperReady)
+		}
+	case <-startupTimer.C:
+		_ = connection.Close()
+		t.Fatal("helper process did not become ready within 15s")
+	}
+	startupElapsed := time.Since(startupStarted)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client := mcp.NewClient(&mcp.Implementation{Name: "cabinet-stdio-smoke", Version: "0.1.0"}, nil)
+	protocolStarted := time.Now()
+	session, err := client.Connect(ctx, &connectedMCPTransport{connection: connection}, nil)
+	protocolElapsed := time.Since(protocolStarted)
+	if err != nil {
+		_ = connection.Close()
 		t.Fatalf("client.Connect() error = %v", err)
 	}
 	defer session.Close()
@@ -113,6 +182,7 @@ func TestLauncherStdioInitializeSmoke(t *testing.T) {
 	if !strings.Contains(result.Instructions, "profile-main") {
 		t.Fatalf("stdio launcher initialize instructions should include profile binding, got %q", result.Instructions)
 	}
+	return startupElapsed, protocolElapsed
 }
 
 func TestLauncherStdioHelperProcess(t *testing.T) {
@@ -129,6 +199,16 @@ func TestLauncherStdioHelperProcess(t *testing.T) {
 	cfg, err := parseLauncherArgs(args)
 	if err != nil {
 		t.Fatalf("parseLauncherArgs() error = %v", err)
+	}
+	startupDelay, err := time.ParseDuration(os.Getenv("CABINET_MCP_TEST_HELPER_STARTUP_DELAY"))
+	if err != nil {
+		t.Fatalf("parse helper startup delay: %v", err)
+	}
+	if startupDelay > 0 {
+		time.Sleep(startupDelay)
+	}
+	if _, err := os.Stderr.WriteString(cabinetMCPTestHelperReady + "\n"); err != nil {
+		t.Fatalf("signal helper readiness: %v", err)
 	}
 	if err := runLauncher(context.Background(), cfg); err != nil {
 		t.Fatalf("runLauncher() error = %v", err)
