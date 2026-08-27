@@ -1,6 +1,8 @@
 describe('inventory-folder-tree-persistence', () => {
   const folderTreeSettingsKey = 'inventory.folder-tree.v2'
   const itemAssignmentsSettingsKey = 'inventory.folder-item-assignments.v1'
+  let holdProfileSettingsReads = false
+  let releaseProfileSettingsReads: Array<() => void> = []
 
   function findNode(
     nodes: Array<{
@@ -83,11 +85,38 @@ describe('inventory-folder-tree-persistence', () => {
   }
 
   beforeEach(() => {
+    holdProfileSettingsReads = Cypress.currentTest.title.includes(
+      'UI-SCREEN-INVENTORY-FOLDER-TREE-016'
+    )
+    releaseProfileSettingsReads = []
+
     cy.visit('about:blank')
     cy.clearCookies()
     cy.clearLocalStorage()
     cy.e2eReset()
     cy.e2eBootstrap()
+    if (holdProfileSettingsReads) {
+      cy.request('PUT', '/api/profiles/e2e-profile-001/settings', {
+        settings: {
+          [itemAssignmentsSettingsKey]: JSON.stringify({
+            'stale-item': 'Store 2',
+          }),
+        },
+      })
+    }
+    cy.intercept('GET', '/api/profiles/e2e-profile-001/settings', (request) => {
+      if (!holdProfileSettingsReads) {
+        request.continue()
+        return
+      }
+
+      return new Cypress.Promise<void>((resolve) => {
+        releaseProfileSettingsReads.push(() => {
+          request.continue()
+          resolve()
+        })
+      })
+    })
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
       body: {
@@ -109,9 +138,14 @@ describe('inventory-folder-tree-persistence', () => {
         ],
       },
     }).as('items')
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings', (request) => {
+      const settings = request.body?.settings as Record<string, unknown> | undefined
+      if (typeof settings?.[itemAssignmentsSettingsKey] === 'string') {
+        request.alias = 'saveItemAssignments'
+      }
+    }).as('saveSettings')
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/inventory/' })
     cy.wait('@items')
-    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveSettings')
   })
 
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-015 persists folder edits, new folders, and moved folders to profile settings and across refresh', () => {
@@ -174,7 +208,25 @@ describe('inventory-folder-tree-persistence', () => {
       .trigger('dragover', { dataTransfer: transfer })
       .trigger('drop', { dataTransfer: transfer })
 
-    cy.wait('@saveSettings')
+    cy.then(() => {
+      expect(
+        releaseProfileSettingsReads.length,
+        'profile settings hydration reads are held'
+      ).to.be.greaterThan(0)
+      holdProfileSettingsReads = false
+      releaseProfileSettingsReads.splice(0).forEach((release) => release())
+    })
+
+    cy.wait('@saveItemAssignments').then((interception) => {
+      const settings = interception.request.body?.settings as
+        | Record<string, string>
+        | undefined
+      const savedAssignments = JSON.parse(
+        settings?.[itemAssignmentsSettingsKey] ?? '{}'
+      ) as Record<string, string>
+
+      expect(savedAssignments['e2e-item-001'], 'assignment save payload').to.equal('Store 1')
+    })
 
     cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
       const settings = (response.body.settings ?? {}) as Record<string, string>
