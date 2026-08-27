@@ -1,7 +1,7 @@
 # fresh-runtime-startup Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-startup-nfr-gates. Update Purpose after archive.
+Define the validation-safe startup contract for initializing a fresh Cabinet runtime without avoidable migration overhead.
 ## Requirements
 ### Requirement: Fresh runtime startup SHALL remain validation-safe on empty databases
 Cabinet SHALL initialize a fresh tempdir runtime database quickly enough that startup-bound validation suites do not fail due to avoidable migration overhead in the normal app startup path.

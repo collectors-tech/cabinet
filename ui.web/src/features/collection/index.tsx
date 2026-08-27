@@ -4584,6 +4584,7 @@ export function Collection({
       setBarcodeMatches([])
       return
     }
+    const lookupStartedAt = Date.now()
     setBarcodeLookupBusy(true)
     setBarcodeLookupError(null)
     setBarcodeLookupCompleted(false)
@@ -4621,6 +4622,14 @@ export function Collection({
       setBarcodeLookupCompleted(false)
       setBarcodeMatches([])
     } finally {
+      const minimumLoadingDurationMs = 250
+      const remainingLoadingDurationMs =
+        minimumLoadingDurationMs - (Date.now() - lookupStartedAt)
+      if (remainingLoadingDurationMs > 0) {
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, remainingLoadingDurationMs)
+        )
+      }
       setBarcodeLookupBusy(false)
     }
   }, [])
