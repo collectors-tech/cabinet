@@ -11,6 +11,19 @@ function Get-CypressProcessInventory {
     Select-Object ProcessId, ParentProcessId, Name, CommandLine)
 }
 
+function Get-CypressImmediateChildProcessInventory([int[]]$ParentProcessIds) {
+  $parents = @($ParentProcessIds | Where-Object { $_ -gt 0 } | Select-Object -Unique)
+  if ($parents.Count -eq 0) { return @() }
+  $filter = @($parents | ForEach-Object { "ParentProcessId = $([int]$_)" }) -join " OR "
+  $processes = if (Get-Command Get-WmiObject -ErrorAction SilentlyContinue) {
+    @(Get-WmiObject Win32_Process -Filter $filter -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue)
+  } else {
+    @(Get-CimInstance Win32_Process -Filter $filter -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue)
+  }
+  return @($processes |
+    Select-Object ProcessId, ParentProcessId, Name, CommandLine)
+}
+
 function Get-CypressOwnedProcessIds([int]$RootProcessId, $ProcessInventory = $null) {
   $processes = if ($null -eq $ProcessInventory) { @(Get-CypressProcessInventory) } else { @($ProcessInventory) }
   $childrenByParent = @{}
@@ -124,22 +137,31 @@ function Stop-CypressOwnedProcessTree(
     if ($processId -le 0 -or $processId -eq $PID) { continue }
     $targetProcess = Get-Process -Id $processId -ErrorAction SilentlyContinue
     if (-not $targetProcess) { continue }
-    Stop-Process -InputObject $targetProcess -Force -ErrorAction SilentlyContinue
+    try { Stop-Process -InputObject $targetProcess -Force -ErrorAction Stop } catch { continue }
     $stoppedProcesses += $targetProcess
     $stopped += $processId
   }
   # Revalidate against a fresh inventory before declaring success. A process
   # created while the first inventory is materializing can otherwise escape
   # the owned tree even though its parent is the timed-out root.
-  $verificationInventory = @(Get-CypressProcessInventory)
-  $lateOwnedIds = @(Get-CypressOwnedProcessIds -RootProcessId $RootProcessId -ProcessInventory $verificationInventory |
-    Where-Object { $_ -gt 0 -and $_ -ne $PID -and $targets -notcontains $_ } |
-    Select-Object -Unique)
+  $lateOwnedIds = [System.Collections.Generic.List[int]]::new()
+  $pendingParentIds = @($targets)
+  while ($pendingParentIds.Count -gt 0) {
+    $nextParentIds = @()
+    foreach ($process in @(Get-CypressImmediateChildProcessInventory -ParentProcessIds $pendingParentIds)) {
+      $processId = [int]$process.ProcessId
+      if ($processId -le 0 -or $processId -eq $PID -or $targets -contains $processId -or $lateOwnedIds.Contains($processId)) { continue }
+      $lateOwnedIds.Add($processId)
+      $nextParentIds += $processId
+    }
+    $pendingParentIds = @($nextParentIds)
+  }
+  $lateOwnedIds = @($lateOwnedIds)
   [array]::Reverse($lateOwnedIds)
   foreach ($processId in $lateOwnedIds) {
     $targetProcess = Get-Process -Id $processId -ErrorAction SilentlyContinue
     if (-not $targetProcess) { continue }
-    Stop-Process -InputObject $targetProcess -Force -ErrorAction SilentlyContinue
+    try { Stop-Process -InputObject $targetProcess -Force -ErrorAction Stop } catch { continue }
     $stoppedProcesses += $targetProcess
     $stopped += $processId
   }
