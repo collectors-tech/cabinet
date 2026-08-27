@@ -1,5 +1,10 @@
-function Get-CypressOwnedProcessIds([int]$RootProcessId) {
-  $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Select-Object ProcessId, ParentProcessId)
+function Get-CypressProcessInventory {
+  return @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue |
+    Select-Object ProcessId, ParentProcessId, Name, CommandLine)
+}
+
+function Get-CypressOwnedProcessIds([int]$RootProcessId, $ProcessInventory = $null) {
+  $processes = if ($null -eq $ProcessInventory) { @(Get-CypressProcessInventory) } else { @($ProcessInventory) }
   $childrenByParent = @{}
   foreach ($process in $processes) {
     $parentId = [int]$process.ParentProcessId
@@ -41,20 +46,22 @@ function ConvertTo-CypressRedactedCommandLine([string]$CommandLine) {
   return $redacted
 }
 
-function Get-CypressProcessTreeSnapshot([int]$RootProcessId) {
-  $processIds = @($RootProcessId) + @(Get-CypressOwnedProcessIds $RootProcessId)
+function Get-CypressProcessTreeSnapshot([int]$RootProcessId, $ProcessInventory = $null) {
+  $processes = if ($null -eq $ProcessInventory) { @(Get-CypressProcessInventory) } else { @($ProcessInventory) }
+  $processIds = @($RootProcessId) + @(Get-CypressOwnedProcessIds -RootProcessId $RootProcessId -ProcessInventory $processes)
+  $processesById = @{}
+  foreach ($process in $processes) { $processesById[[int]$process.ProcessId] = $process }
   $snapshot = @()
   foreach ($processId in @($processIds | Where-Object { $_ -gt 0 } | Select-Object -Unique)) {
-    try {
-      $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction Stop
+    if ($processesById.ContainsKey([int]$processId)) {
+      $process = $processesById[[int]$processId]
       $snapshot += [pscustomobject][ordered]@{
         pid = [int]$process.ProcessId
         parent_pid = [int]$process.ParentProcessId
         name = [string]$process.Name
         command_line = ConvertTo-CypressRedactedCommandLine ([string]$process.CommandLine)
       }
-    }
-    catch {
+    } else {
       $snapshot += [pscustomobject][ordered]@{
         pid = [int]$processId
         parent_pid = $null
@@ -78,41 +85,53 @@ function Get-CypressOutputTail([string]$StandardOutputPath, [string]$StandardErr
   return @(Protect-CypressSummaryOutput $lines)
 }
 
-function Test-CypressObservedCleanupCandidate([int]$ProcessId, [int[]]$CurrentOwnedProcessIds) {
+function Test-CypressObservedCleanupCandidate([int]$ProcessId, [int[]]$CurrentOwnedProcessIds, $ProcessInventory = $null) {
   if ($ProcessId -le 0 -or $ProcessId -eq $PID) { return $false }
   if ($CurrentOwnedProcessIds -contains $ProcessId) { return $true }
-  try {
-    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
-    $commandLine = [string]$process.CommandLine
-    if ([string]::IsNullOrWhiteSpace($commandLine)) { return $false }
-    return $commandLine -match '(?i)(\\cypress\\|/cypress/|cypress-runtime-|Cypress\\cy\\production\\browsers|cypress\.config\.runtime\.cjs|run-cypress\.mjs)'
-  }
-  catch {
-    return $false
-  }
+  $processes = if ($null -eq $ProcessInventory) { @(Get-CypressProcessInventory) } else { @($ProcessInventory) }
+  $process = $processes | Where-Object { [int]$_.ProcessId -eq $ProcessId } | Select-Object -First 1
+  if (-not $process) { return $false }
+  $commandLine = [string]$process.CommandLine
+  if ([string]::IsNullOrWhiteSpace($commandLine)) { return $false }
+  return $commandLine -match '(?i)(\\cypress\\|/cypress/|cypress-runtime-|Cypress\\cy\\production\\browsers|cypress\.config\.runtime\.cjs|run-cypress\.mjs)'
 }
 
-function Stop-CypressOwnedProcessTree([int]$RootProcessId, [int[]]$ObservedChildProcessIds = @()) {
+function Stop-CypressOwnedProcessTree(
+  [int]$RootProcessId,
+  [int[]]$ObservedChildProcessIds = @(),
+  $ProcessInventory = $null
+) {
   # Observed PIDs are guarded by current command-line evidence before cleanup to avoid killing reused PIDs.
-  $ownedIds = @(Get-CypressOwnedProcessIds $RootProcessId | Where-Object { $_ -gt 0 -and $_ -ne $PID } | Select-Object -Unique)
+  $processes = if ($null -eq $ProcessInventory) { @(Get-CypressProcessInventory) } else { @($ProcessInventory) }
+  $ownedIds = @(Get-CypressOwnedProcessIds -RootProcessId $RootProcessId -ProcessInventory $processes | Where-Object { $_ -gt 0 -and $_ -ne $PID } | Select-Object -Unique)
   $observedLiveIds = @($ObservedChildProcessIds | Where-Object {
-    Test-CypressObservedCleanupCandidate -ProcessId $_ -CurrentOwnedProcessIds $ownedIds
+    Test-CypressObservedCleanupCandidate -ProcessId $_ -CurrentOwnedProcessIds $ownedIds -ProcessInventory $processes
   } | Select-Object -Unique)
   $ownedIds = @($ownedIds + $observedLiveIds | Select-Object -Unique)
   [array]::Reverse($ownedIds)
   $targets = @($ownedIds) + @($RootProcessId)
   $stopped = @()
+  $stoppedProcesses = @()
   foreach ($processId in $targets) {
     if ($processId -le 0 -or $processId -eq $PID) { continue }
-    $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-    if (-not $process) { continue }
-    Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-    try { $process.WaitForExit(2000) | Out-Null; $process.Dispose() } catch {}
+    $targetProcess = Get-Process -Id $processId -ErrorAction SilentlyContinue
+    if (-not $targetProcess) { continue }
+    Stop-Process -InputObject $targetProcess -Force -ErrorAction SilentlyContinue
+    $stoppedProcesses += $targetProcess
     $stopped += $processId
   }
+  $cleanupDeadline = (Get-Date).AddSeconds(2)
+  foreach ($targetProcess in $stoppedProcesses) {
+    try {
+      $remainingMs = [int][Math]::Max(0, [Math]::Floor(($cleanupDeadline - (Get-Date)).TotalMilliseconds))
+      if ($remainingMs -gt 0) { $targetProcess.WaitForExit($remainingMs) | Out-Null }
+    } catch {}
+  }
   $remaining = @($targets | Select-Object -Unique | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+  foreach ($targetProcess in $stoppedProcesses) { try { $targetProcess.Dispose() } catch {} }
   if ($remaining.Count -gt 0) { return "owned_process_tree_cleanup_incomplete stopped=$($stopped -join ',') remaining=$($remaining -join ',')" }
-  return "owned_process_tree_stopped pids=$($stopped -join ',')"
+  $verifiedStopped = @($targets | Select-Object -Unique)
+  return "owned_process_tree_stopped pids=$($verifiedStopped -join ',')"
 }
 
 function Invoke-CypressOwnedProcess(
@@ -126,37 +145,40 @@ function Invoke-CypressOwnedProcess(
     $parent = Split-Path -Parent $capturePath
     if (-not [string]::IsNullOrWhiteSpace($parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
   }
-  $startedAt = Get-Date
   $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory $WorkingDirectory -RedirectStandardOutput $StandardOutputPath -RedirectStandardError $StandardErrorPath -PassThru
+  $startedAt = Get-Date
   $observedChildIds = @()
   $deadline = $startedAt.AddSeconds($TimeoutSec)
   while ((Get-Date) -lt $deadline) {
     $process.Refresh()
-    $observedChildIds = @($observedChildIds + @(Get-CypressOwnedProcessIds $process.Id) | Select-Object -Unique)
     if ($process.HasExited) { break }
     Start-Sleep -Milliseconds 200
   }
   $process.Refresh()
   $timedOut = -not $process.HasExited
-  $processTree = @(Get-CypressProcessTreeSnapshot $process.Id)
+  $processInventory = @(Get-CypressProcessInventory)
+  $observedChildIds = @(Get-CypressOwnedProcessIds -RootProcessId $process.Id -ProcessInventory $processInventory | Select-Object -Unique)
+  $processTree = @(Get-CypressProcessTreeSnapshot -RootProcessId $process.Id -ProcessInventory $processInventory)
   $cleanupResult = "not_required"
   if ($timedOut) {
-    $observedChildIds = @($observedChildIds + @(Get-CypressOwnedProcessIds $process.Id) | Select-Object -Unique)
-    $cleanupResult = Stop-CypressOwnedProcessTree -RootProcessId $process.Id -ObservedChildProcessIds $observedChildIds
-    try { $process.WaitForExit(5000) | Out-Null } catch { $cleanupResult = "$cleanupResult; process_handle_wait_failed" }
+    $cleanupResult = Stop-CypressOwnedProcessTree -RootProcessId $process.Id -ObservedChildProcessIds $observedChildIds -ProcessInventory $processInventory
   } else { $process.WaitForExit() }
   $rootProcessId = $process.Id
   $exitCode = if ($timedOut) { 124 } else { [int]$process.ExitCode }
   $process.Dispose()
   $finishedAt = Get-Date
   $runnerPhase = if ($timedOut) { "execution_timeout" } elseif ($exitCode -eq 0) { "completed" } else { "cypress_failed" }
-  $outputDeadline = (Get-Date).AddSeconds(2)
   $lastOutput = @()
-  do {
+  if ($timedOut) {
     $lastOutput = @(Get-CypressOutputTail $StandardOutputPath $StandardErrorPath $OutputTailLineCount)
-    if ($lastOutput.Count -gt 0) { break }
-    Start-Sleep -Milliseconds 100
-  } while ((Get-Date) -lt $outputDeadline)
+  } else {
+    $outputDeadline = (Get-Date).AddSeconds(2)
+    do {
+      $lastOutput = @(Get-CypressOutputTail $StandardOutputPath $StandardErrorPath $OutputTailLineCount)
+      if ($lastOutput.Count -gt 0) { break }
+      Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $outputDeadline)
+  }
   return [pscustomobject][ordered]@{
     timed_out = $timedOut; exit_code = $exitCode; runner_phase = $runnerPhase
     root_pid = $rootProcessId; child_pids = @($observedChildIds)
