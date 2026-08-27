@@ -11,6 +11,8 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/collection"
@@ -233,7 +235,10 @@ func showcasePhotoTargetCount(item collection.Item) int {
 
 func generateShowcaseIdenticonPNG(item collection.Item, variant int) ([]byte, error) {
 	seed := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d", item.PartNumber, item.Title, variant)))
-	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	// These generated assets are shown as compact inventory thumbnails. Keeping
+	// the source at that display scale avoids encoding two oversized renditions
+	// for every row while onboarding is waiting for the synchronous response.
+	img := image.NewRGBA(image.Rect(0, 0, 128, 128))
 
 	bg := color.RGBA{
 		R: 16 + seed[1]%28,
@@ -255,11 +260,11 @@ func generateShowcaseIdenticonPNG(item collection.Item, variant int) ([]byte, er
 	}
 
 	draw.Draw(img, img.Bounds(), &image.Uniform{C: bg}, image.Point{}, draw.Src)
-	draw.Draw(img, image.Rect(28, 28, 484, 484), &image.Uniform{C: color.RGBA{R: bg.R + 6, G: bg.G + 8, B: bg.B + 10, A: 255}}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(7, 7, 121, 121), &image.Uniform{C: color.RGBA{R: bg.R + 6, G: bg.G + 8, B: bg.B + 10, A: 255}}, image.Point{}, draw.Src)
 
-	const cell = 72
-	const gap = 8
-	const origin = 76
+	const cell = 18
+	const gap = 2
+	const origin = 19
 	for y := 0; y < 5; y++ {
 		for x := 0; x < 3; x++ {
 			if seed[10+y*3+x]%2 == 0 {
@@ -284,26 +289,28 @@ func generateShowcaseIdenticonPNG(item collection.Item, variant int) ([]byte, er
 	return out.Bytes(), nil
 }
 
-func seedShowcaseItemPhotos(ctx context.Context, mediaSvc *media.Service, item collection.Item) (int, error) {
+func seedShowcaseItemPhotos(ctx context.Context, tx *sql.Tx, mediaSvc *media.Service, item collection.Item, createdAssetDirs *[]string) (int, error) {
 	if mediaSvc == nil {
 		return 0, nil
 	}
-	existing, err := mediaSvc.ListByItem(ctx, item.ID)
+	existingCount, err := mediaSvc.CountByItemTx(ctx, tx, item.ID)
 	if err != nil {
 		return 0, fmt.Errorf("list photos for %s: %w", item.ID, err)
 	}
 
 	target := showcasePhotoTargetCount(item)
 	created := 0
-	for variant := len(existing) + 1; variant <= target; variant++ {
+	for variant := existingCount + 1; variant <= target; variant++ {
 		data, err := generateShowcaseIdenticonPNG(item, variant)
 		if err != nil {
 			return created, fmt.Errorf("generate showcase photo for %s: %w", item.PartNumber, err)
 		}
 		filename := fmt.Sprintf("%s-identicon-%02d.png", item.PartNumber, variant)
-		if _, err := mediaSvc.Upload(ctx, item.ID, filename, bytes.NewReader(data)); err != nil {
+		photo, err := mediaSvc.UploadTx(ctx, tx, item.ID, filename, bytes.NewReader(data))
+		if err != nil {
 			return created, fmt.Errorf("upload showcase photo for %s: %w", item.PartNumber, err)
 		}
+		*createdAssetDirs = append(*createdAssetDirs, filepath.Dir(filepath.Dir(photo.OriginalPath)))
 		created++
 	}
 	return created, nil
@@ -372,7 +379,7 @@ func onboardingPurchaseSamples() []onboardingPurchaseSampleLine {
 	}
 }
 
-func seedOnboardingPurchaseSamples(ctx context.Context, dbConn *sql.DB, profileID string, itemByPart map[string]collection.Item) (int, int, error) {
+func seedOnboardingPurchaseSamples(ctx context.Context, dbConn *sql.Tx, profileID string, itemByPart map[string]collection.Item) (int, int, error) {
 	samples := onboardingPurchaseSamples()
 	createdOrderKeys := map[string]struct{}{}
 	for _, sample := range samples {
@@ -428,6 +435,50 @@ func seedOnboardingSampleData(
 	wishlistSvc *wishlist.Service,
 	mediaSvc *media.Service,
 	dbConn *sql.DB,
+) (onboardingSampleSeedResult, error) {
+	tx, err := dbConn.BeginTx(ctx, nil)
+	if err != nil {
+		return onboardingSampleSeedResult{}, fmt.Errorf("begin onboarding sample transaction: %w", err)
+	}
+	createdAssetDirs := make([]string, 0)
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		_ = tx.Rollback()
+		for _, assetDir := range createdAssetDirs {
+			_ = os.RemoveAll(assetDir)
+		}
+	}()
+
+	result, err := seedOnboardingSampleDataTx(
+		ctx,
+		profiles.WithTx(tx),
+		collectionRepo.WithTx(tx),
+		wishlistSvc.WithTx(tx),
+		mediaSvc,
+		tx,
+		&createdAssetDirs,
+	)
+	if err != nil {
+		return onboardingSampleSeedResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return onboardingSampleSeedResult{}, fmt.Errorf("commit onboarding sample transaction: %w", err)
+	}
+	committed = true
+	return result, nil
+}
+
+func seedOnboardingSampleDataTx(
+	ctx context.Context,
+	profiles *profile.Repository,
+	collectionRepo *collection.Repository,
+	wishlistSvc *wishlist.Service,
+	mediaSvc *media.Service,
+	dbConn *sql.Tx,
+	createdAssetDirs *[]string,
 ) (onboardingSampleSeedResult, error) {
 	active, err := profiles.GetActiveProfile(ctx)
 	if err != nil {
@@ -687,7 +738,7 @@ func seedOnboardingSampleData(
 			folderAssignments[item.ID] = spec.FolderName
 		}
 
-		createdPhotos, photoErr := seedShowcaseItemPhotos(ctx, mediaSvc, item)
+		createdPhotos, photoErr := seedShowcaseItemPhotos(ctx, dbConn, mediaSvc, item, createdAssetDirs)
 		if photoErr != nil {
 			return onboardingSampleSeedResult{}, photoErr
 		}

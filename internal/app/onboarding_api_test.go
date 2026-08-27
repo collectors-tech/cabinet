@@ -3,6 +3,8 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -218,5 +220,61 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 	}
 	if !hasHighlightHit {
 		t.Fatalf("expected wishlist sample rows to include highlighted hit coverage, got %+v", wishlistPayload.Items)
+	}
+}
+
+func TestOnboardingSampleDataEndpointRollsBackDatabaseAndMediaOnFailure(t *testing.T) {
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P1"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	setActive := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if setActive.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", setActive.Code, setActive.Body.String())
+	}
+
+	if _, err := a.db.Exec(`
+		CREATE TRIGGER fail_onboarding_sample_price
+		BEFORE INSERT ON price_snapshots
+		WHEN NEW.id LIKE 'sample-price-%'
+		BEGIN
+			SELECT RAISE(ABORT, 'forced onboarding seed failure');
+		END;
+	`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	failedSeed := doRequest(t, a, http.MethodPost, "/api/onboarding/sample-data", nil, nil)
+	if failedSeed.Code != http.StatusBadRequest {
+		t.Fatalf("failed seed status=%d body=%s", failedSeed.Code, failedSeed.Body.String())
+	}
+
+	for table, query := range map[string]string{
+		"items":  `SELECT COUNT(*) FROM canonical_items WHERE profile_id = ?`,
+		"photos": `SELECT COUNT(*) FROM item_photos ip JOIN canonical_items ci ON ci.id = ip.item_id WHERE ci.profile_id = ?`,
+	} {
+		var count int
+		if err := a.db.QueryRow(query, p.ID).Scan(&count); err != nil {
+			t.Fatalf("count %s after rollback: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("expected no %s after rollback, got %d", table, count)
+		}
+	}
+
+	assetRoot := filepath.Join(a.cfg.DataDir, "media", "assets")
+	entries, err := os.ReadDir(assetRoot)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("read media assets after rollback: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no canonical media assets after rollback, got %d", len(entries))
 	}
 }

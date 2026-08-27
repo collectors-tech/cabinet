@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -34,18 +35,35 @@ func (r *Repository) PutSettings(ctx context.Context, profileID string, values m
 	if _, err := r.GetByID(ctx, profileID); err != nil {
 		return err
 	}
+	if tx, ok := r.db.(*sql.Tx); ok {
+		return putSettingsValues(ctx, tx, profileID, values)
+	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
+	db, ok := r.db.(*sql.DB)
+	if !ok {
+		return fmt.Errorf("profile settings database does not support transactions")
+	}
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin settings tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if err := putSettingsValues(ctx, tx, profileID, values); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit settings tx: %w", err)
+	}
+	return nil
+}
+
+func putSettingsValues(ctx context.Context, exec queryExecutor, profileID string, values map[string]string) error {
 	for k, v := range values {
 		if k == "" {
 			return fmt.Errorf("setting key is required")
 		}
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := exec.ExecContext(ctx, `
 			INSERT INTO profile_settings(profile_id, key, value, updated_at)
 			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 			ON CONFLICT(profile_id, key) DO UPDATE SET
@@ -54,10 +72,6 @@ func (r *Repository) PutSettings(ctx context.Context, profileID string, values m
 		`, profileID, k, v); err != nil {
 			return fmt.Errorf("upsert setting %q: %w", k, err)
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit settings tx: %w", err)
 	}
 	return nil
 }
