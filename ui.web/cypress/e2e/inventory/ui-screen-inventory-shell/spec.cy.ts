@@ -8,6 +8,7 @@ describe("inventory-shell", () => {
       cy.useBootstrappedProfile(profile_id, profile_name, {
         path: "/inventory/",
       });
+      cy.wait("@localServerSession");
     });
   }
 
