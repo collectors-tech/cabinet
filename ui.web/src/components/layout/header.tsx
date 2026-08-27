@@ -172,7 +172,6 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
       >
         <SidebarTrigger variant='outline' className='max-md:scale-125' />
         <Separator orientation='vertical' className='h-6' />
-        {children}
         <Button
           data-testid='shell-chat-toggle'
           type='button'
@@ -188,6 +187,7 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
         >
           <MessageSquare className='h-4 w-4' />
         </Button>
+        {children}
       </div>
     </header>
   )
