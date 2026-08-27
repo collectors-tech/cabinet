@@ -1,10 +1,17 @@
 describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
+  function useServerLocalSession(profileID: string) {
+    cy.intercept('POST', '/api/auth/local/session', (request) => {
+      expect(request.body).to.deep.equal({ profile_id: profileID })
+      request.continue()
+    }).as('localServerSession')
+  }
+
   function signIn() {
     cy.e2eReset()
     cy.e2eSetSetupState('present')
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
       cy.e2eEnsureSignedOut()
-      cy.stubLocalServerSession(profile_id)
+      useServerLocalSession(profile_id)
       cy.useBootstrappedProfile(profile_id, profile_name, { path: '/inventory/' })
       cy.wait('@localServerSession')
     })
