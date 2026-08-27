@@ -1,7 +1,7 @@
 # parity-components-route-contracts Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-parity-components-route-contracts. Update Purpose after archive.
+Keep parity and foundation-component validation aligned with canonical authenticated routes and stable visible settings controls.
 ## Requirements
 ### Requirement: General parity contracts SHALL use canonical authenticated routes
 Cabinet SHALL keep general parity tests aligned with the canonical authenticated routes currently exposed by the shell.
