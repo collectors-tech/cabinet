@@ -183,6 +183,7 @@ export function Reports() {
           icon={ChartColumn}
           testId='reports-header-title'
           iconTestId='reports-page-icon'
+          className='max-sm:hidden'
         />
         <div
           className='ms-auto flex items-center gap-2'

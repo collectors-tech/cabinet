@@ -48,9 +48,10 @@ describe("UI-SCREEN-REPORTS", () => {
 
       cy.get('[data-testid="reports-global-header-actions"]').then(($actions) => {
         const actionsRect = $actions[0].getBoundingClientRect()
-        const viewportWidth = Cypress.config("viewportWidth")
+        const viewportWidth = $actions[0].ownerDocument.defaultView?.innerWidth ?? 0
         const titleIsCrowded = $title.attr("data-crowded") === "true"
 
+        expect(viewportWidth).to.be.greaterThan(0)
         expect(actionsRect.left).to.be.greaterThan(0)
         expect(actionsRect.right).to.be.lessThan(viewportWidth)
         if (titleIsCrowded) {
