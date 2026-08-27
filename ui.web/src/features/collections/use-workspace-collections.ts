@@ -326,7 +326,6 @@ export function useWorkspaceCollections() {
     }
 
     await saveSettings({
-      ...settings,
       [collectionsSettingsKey]: serializeWorkspaceCollectionsState(
         nextState.collections,
         nextState.activeCollection,

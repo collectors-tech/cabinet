@@ -1878,7 +1878,6 @@ async function saveProfileWorkspaceSnapshot(
     },
     body: JSON.stringify({
       settings: {
-        ...(payload.settings ?? {}),
         [inventoryFolderTreeSettingsKey]: nextTreeValue,
       },
     }),
@@ -1909,7 +1908,6 @@ async function saveProfileInventoryItemFolderAssignments(
   ) {
     return
   }
-
   await fetch(`/api/profiles/${encodeURIComponent(profileID)}/settings`, {
     method: 'PUT',
     headers: {
@@ -1917,7 +1915,6 @@ async function saveProfileInventoryItemFolderAssignments(
     },
     body: JSON.stringify({
       settings: {
-        ...(payload.settings ?? {}),
         [inventoryItemFolderAssignmentsSettingsKey]: nextAssignmentsValue,
       },
     }),
@@ -1956,7 +1953,6 @@ async function saveProfileInventoryCategoryOptions(
     },
     body: JSON.stringify({
       settings: {
-        ...(payload.settings ?? {}),
         [inventoryCategoryOptionsSettingsKey]: nextCategoriesValue,
       },
     }),
@@ -2231,6 +2227,9 @@ export function Collection({
   const inventoryItemDetailRequestIDRef = useRef(0)
   const inventoryLoadInFlightRef = useRef(false)
   const selectedItemIDRef = useRef('')
+  const pendingItemFolderAssignmentsRef = useRef(
+    new Map<string, Record<string, string>>()
+  )
   const {
     workspaceCollections,
     activeWorkspaceCollection,
@@ -2253,6 +2252,30 @@ export function Collection({
       persistAgentSelectedInventoryItem(activeProfileID, item)
     },
     [activeProfileID]
+  )
+
+  const assignInventoryItemToFolder = useCallback(
+    (itemID: string, folderName: string) => {
+      const normalizedItemID = itemID.trim()
+      const normalizedFolderName = folderName.trim()
+      if (normalizedItemID === '' || normalizedFolderName === '') {
+        return
+      }
+
+      if (!workspaceSnapshotReady) {
+        const pendingAssignments =
+          pendingItemFolderAssignmentsRef.current.get(activeProfileID) ?? {}
+        pendingItemFolderAssignmentsRef.current.set(activeProfileID, {
+          ...pendingAssignments,
+          [normalizedItemID]: normalizedFolderName,
+        })
+      }
+      setItemFolderAssignments((current) => ({
+        ...current,
+        [normalizedItemID]: normalizedFolderName,
+      }))
+    },
+    [activeProfileID, workspaceSnapshotReady]
   )
 
   useEffect(() => {
@@ -2432,16 +2455,14 @@ export function Collection({
       return
     }
 
-    setItemFolderAssignments((current) => ({
-      ...current,
-      [assignCollectionItem.id]: assignCollectionName,
-    }))
+    assignInventoryItemToFolder(assignCollectionItem.id, assignCollectionName)
     selectInventoryItem(assignCollectionItem)
     setAssignCollectionOpen(false)
     setAssignCollectionError(null)
   }, [
     assignCollectionItem,
     assignCollectionName,
+    assignInventoryItemToFolder,
     assignWorkspaceItemToCollection,
     selectInventoryItem,
   ])
@@ -2637,10 +2658,7 @@ export function Collection({
             activeFolder
           )
           if (assigned) {
-            setItemFolderAssignments((current) => ({
-              ...current,
-              [savedID]: activeFolder,
-            }))
+            assignInventoryItemToFolder(savedID, activeFolder)
           }
         }
 
@@ -2665,7 +2683,12 @@ export function Collection({
         setImageDropBusy(false)
       }
     },
-    [activeFolder, ensureWorkspaceCollectionAndAssignItem, loadInventoryItems]
+    [
+      activeFolder,
+      assignInventoryItemToFolder,
+      ensureWorkspaceCollectionAndAssignItem,
+      loadInventoryItems,
+    ]
   )
 
   const handleInventoryImageDrag = useCallback(
@@ -3112,13 +3135,10 @@ export function Collection({
 
       event.preventDefault()
       event.stopPropagation()
-      setItemFolderAssignments((previous) => ({
-        ...previous,
-        [itemID]: node.name,
-      }))
+      assignInventoryItemToFolder(itemID, node.name)
       setActiveFolder(node.name)
     },
-    []
+    [assignInventoryItemToFolder]
   )
 
   const clearFolderHTMLDrag = useCallback(() => {
@@ -3959,6 +3979,7 @@ export function Collection({
 
   useEffect(() => {
     if (!isInventoryRoute) {
+      pendingItemFolderAssignmentsRef.current.clear()
       setActiveProfileID('')
       setActiveProfileResolved(false)
       setWorkspaceSnapshotReady(false)
@@ -4003,6 +4024,19 @@ export function Collection({
     let cancelled = false
     setWorkspaceSnapshotReady(false)
 
+    const takePendingAssignments = () => {
+      const unresolvedAssignments =
+        pendingItemFolderAssignmentsRef.current.get('') ?? {}
+      const profileAssignments =
+        pendingItemFolderAssignmentsRef.current.get(activeProfileID) ?? {}
+      pendingItemFolderAssignmentsRef.current.delete('')
+      pendingItemFolderAssignmentsRef.current.delete(activeProfileID)
+      return {
+        ...unresolvedAssignments,
+        ...profileAssignments,
+      }
+    }
+
     const hydrateWorkspaceSnapshot = async () => {
       try {
         const remoteTree = await loadProfileWorkspaceSnapshot(activeProfileID)
@@ -4030,8 +4064,13 @@ export function Collection({
           return
         }
 
+        const pendingAssignments = takePendingAssignments()
+        const hydratedAssignments = {
+          ...nextAssignments,
+          ...pendingAssignments,
+        }
         setFolderTree(nextTree)
-        setItemFolderAssignments(nextAssignments)
+        setItemFolderAssignments(hydratedAssignments)
         setCategoryOptions(nextCategories)
         setItemTypeConditionScales(remoteItemTypeConditionScales)
         setInventoryPackagingGrades(remoteInventoryPackagingGrades)
@@ -4047,8 +4086,13 @@ export function Collection({
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
         const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = localTree ?? initialFolderTree
+        const pendingAssignments = takePendingAssignments()
+        const hydratedAssignments = {
+          ...localAssignments,
+          ...pendingAssignments,
+        }
         setFolderTree(nextTree)
-        setItemFolderAssignments(localAssignments)
+        setItemFolderAssignments(hydratedAssignments)
         setCategoryOptions(defaultInventoryCategoryOptions)
         setItemTypeConditionScales(defaultInventoryItemTypeConditionScales)
         setInventoryPackagingGrades(defaultInventoryPackagingGrades)
@@ -4242,10 +4286,7 @@ export function Collection({
         if (!assigned) {
           throw new Error('create_item_collection_assignment')
         }
-        setItemFolderAssignments((current) => ({
-          ...current,
-          [savedID]: targetCreateCollection,
-        }))
+        assignInventoryItemToFolder(savedID, targetCreateCollection)
         setActiveFolder(targetCreateCollection)
       }
       if (wasCreateMode && itemCreatePhotoFile) {
@@ -4332,6 +4373,7 @@ export function Collection({
     itemDraft,
     itemInstanceDraft,
     itemEditorMode,
+    assignInventoryItemToFolder,
     ensureWorkspaceCollectionAndAssignItem,
     loadInventoryItemDetails,
     loadInventoryItems,
