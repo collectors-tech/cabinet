@@ -437,9 +437,15 @@ export function registerMarketWatchCases(firstCase: number, lastCase: number) {
   })
 
   marketWatchIt('UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state', () => {
-    cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
-      'querySets'
-    )
+    let barcodeQuerySets: Array<{
+      id: string
+      name: string
+      keywords: string[]
+      provider_scope: string[]
+    }> = []
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({ statusCode: 200, body: { query_sets: barcodeQuerySets } })
+    }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
       'failures'
     )
@@ -451,14 +457,17 @@ export function registerMarketWatchCases(firstCase: number, lastCase: number) {
       expect(req.body.name).to.equal('Barcode 9312345678901')
       expect(req.body.keywords).to.deep.equal(['9312345678901'])
       expect(req.body.provider_scope).to.deep.equal(['ebay'])
-      req.reply({
-        statusCode: 201,
-        body: {
+      barcodeQuerySets = [
+        {
           id: 'qs-mw-barcode',
           name: 'Barcode 9312345678901',
           keywords: ['9312345678901'],
           provider_scope: ['ebay'],
         },
+      ]
+      req.reply({
+        statusCode: 201,
+        body: barcodeQuerySets[0],
       })
     }).as('createBarcodeQuery')
 
