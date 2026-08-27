@@ -359,11 +359,13 @@ func newE2EResetFailure(operation string, err error) error {
 func safeE2EResetOperation(operation string) string {
 	switch operation {
 	case "acquire_connection",
+		"enable_write_ahead_log",
 		"disable_foreign_keys",
 		"begin_transaction",
 		"check_table",
 		"clear_table",
 		"commit_transaction",
+		"rollback_transaction",
 		"restore_foreign_keys",
 		"retry_wait":
 		return operation
@@ -425,6 +427,14 @@ func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) 
 	}
 	defer conn.Close()
 
+	var journalMode string
+	if err := conn.QueryRowContext(ctx, `PRAGMA journal_mode = WAL`).Scan(&journalMode); err != nil {
+		return newE2EResetFailure("enable_write_ahead_log", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(journalMode), "wal") {
+		return newE2EResetFailure("enable_write_ahead_log", fmt.Errorf("sqlite did not enable write-ahead logging"))
+	}
+
 	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return newE2EResetFailure("disable_foreign_keys", err)
 	}
@@ -436,11 +446,20 @@ func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) 
 		}
 	}()
 
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
 		return newE2EResetFailure("begin_transaction", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	transactionOpen := true
+	defer func() {
+		if !transactionOpen {
+			return
+		}
+		rollbackCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if _, err := conn.ExecContext(rollbackCtx, `ROLLBACK`); err != nil && resultErr == nil {
+			resultErr = newE2EResetFailure("rollback_transaction", err)
+		}
+	}()
 
 	tables := []string{
 		"activity_logs",
@@ -490,7 +509,7 @@ func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) 
 	}
 
 	for _, table := range tables {
-		exists, err := resetTableExists(ctx, tx, table)
+		exists, err := resetTableExists(ctx, conn, table)
 		if err != nil {
 			return newE2EResetFailure("check_table", err)
 		}
@@ -498,20 +517,21 @@ func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) 
 			continue
 		}
 		query := "DELETE FROM " + table
-		if _, err := tx.ExecContext(ctx, query); err != nil {
+		if _, err := conn.ExecContext(ctx, query); err != nil {
 			return newE2EResetFailure("clear_table", err)
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
 		return newE2EResetFailure("commit_transaction", err)
 	}
+	transactionOpen = false
 	return nil
 }
 
-func resetTableExists(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
+func resetTableExists(ctx context.Context, conn *sql.Conn, table string) (bool, error) {
 	var count int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?`, table).Scan(&count); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?`, table).Scan(&count); err != nil {
 		return false, err
 	}
 	return count > 0, nil

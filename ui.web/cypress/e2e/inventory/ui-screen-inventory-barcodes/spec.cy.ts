@@ -1,14 +1,20 @@
 describe('UI-SCREEN-INVENTORY-BARCODES', () => {
   function signIn() {
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-barcodes@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/inventory/' })
+      cy.wait('@localServerSession')
+    })
   }
 
-  function openBarcodesModal() {
-    cy.get('[data-testid="inventory-row-barcodes-action"]').first().click()
+  function openBarcodesModal(itemTitle: string) {
+    cy.get('[data-testid="inventory-row-barcodes-action"]')
+      .first()
+      .should('have.attr', 'aria-label', `Open barcodes for ${itemTitle}`)
+      .click()
     cy.get('[data-testid="inventory-barcodes-dialog"]').should('be.visible')
     cy.get('[data-testid="inventory-barcodes-panel"]').should('be.visible')
   }
@@ -51,7 +57,7 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
 
     signIn()
     cy.wait('@items')
-    openBarcodesModal()
+    openBarcodesModal('Barcode Item')
     cy.get('[data-testid="inventory-barcodes-add-input"]').type('9780201379624')
     cy.get('[data-testid="inventory-barcodes-add-button"]').click()
     cy.wait('@addBarcode')
@@ -86,7 +92,7 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
 
     signIn()
     cy.wait('@items')
-    openBarcodesModal()
+    openBarcodesModal('No Match Item')
     cy.get('[data-testid="inventory-barcodes-lookup-input"]').clear().type('0000000000000')
     cy.get('[data-testid="inventory-barcodes-lookup-button"]').click()
     cy.wait('@lookupNoMatch')
@@ -139,7 +145,7 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
 
     signIn()
     cy.wait('@items')
-    openBarcodesModal()
+    openBarcodesModal('Error Item')
     cy.get('[data-testid="inventory-barcodes-lookup-input"]').clear().type('9999999999999')
     cy.get('[data-testid="inventory-barcodes-lookup-button"]').click()
     cy.get('[data-testid="inventory-barcodes-lookup-loading"]').should('be.visible')

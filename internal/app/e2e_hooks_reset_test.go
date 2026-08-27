@@ -65,6 +65,101 @@ func TestResetE2EDatabaseSerializesConcurrentCalls(t *testing.T) {
 	}
 }
 
+func TestResetE2EDatabaseRecoversConnectionAfterBusyCommit(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+	a.db.SetMaxOpenConns(2)
+	a.db.SetMaxIdleConns(2)
+
+	bootstrap := doRequest(t, a, http.MethodPost, "/api/test/bootstrap", nil, nil)
+	if bootstrap.Code != http.StatusOK {
+		t.Fatalf("bootstrap status=%d body=%s", bootstrap.Code, bootstrap.Body.String())
+	}
+
+	reader, err := a.db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("acquire reader connection: %v", err)
+	}
+	defer reader.Close()
+	if _, err := reader.ExecContext(context.Background(), `BEGIN`); err != nil {
+		t.Fatalf("begin reader transaction: %v", err)
+	}
+	defer func() { _, _ = reader.ExecContext(context.Background(), `ROLLBACK`) }()
+	var itemCount int
+	if err := reader.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM canonical_items`).Scan(&itemCount); err != nil {
+		t.Fatalf("hold reader transaction: %v", err)
+	}
+	if itemCount == 0 {
+		t.Fatal("expected bootstrap data before reset contention")
+	}
+
+	writer, err := a.db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("acquire writer connection: %v", err)
+	}
+	if _, err := writer.ExecContext(context.Background(), `PRAGMA busy_timeout = 10`); err != nil {
+		writer.Close()
+		t.Fatalf("shorten writer busy timeout: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("release writer connection: %v", err)
+	}
+
+	firstResetErr := resetE2EDatabase(context.Background(), a.db)
+	if firstResetErr == nil {
+		t.Fatal("expected held reader transaction to block the first reset commit")
+	}
+	class, operation := classifyE2EResetFailure(firstResetErr)
+	t.Logf("first reset failed as class=%s operation=%s", class, operation)
+
+	if _, err := reader.ExecContext(context.Background(), `ROLLBACK`); err != nil {
+		t.Fatalf("release reader transaction: %v", err)
+	}
+	if err := resetE2EDatabase(context.Background(), a.db); err != nil {
+		class, operation := classifyE2EResetFailure(err)
+		t.Fatalf("reset did not recover after contention cleared: class=%s operation=%s err=%v", class, operation, err)
+	}
+}
+
+func TestResetE2EDatabaseToleratesActiveReaderAfterPreflight(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+	a.db.SetMaxOpenConns(2)
+	a.db.SetMaxIdleConns(2)
+
+	if err := resetE2EDatabase(context.Background(), a.db); err != nil {
+		t.Fatalf("preflight reset failed: %v", err)
+	}
+	bootstrap := doRequest(t, a, http.MethodPost, "/api/test/bootstrap", nil, nil)
+	if bootstrap.Code != http.StatusOK {
+		t.Fatalf("bootstrap status=%d body=%s", bootstrap.Code, bootstrap.Body.String())
+	}
+
+	reader, err := a.db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("acquire reader connection: %v", err)
+	}
+	defer reader.Close()
+	if _, err := reader.ExecContext(context.Background(), `BEGIN`); err != nil {
+		t.Fatalf("begin reader transaction: %v", err)
+	}
+	defer func() { _, _ = reader.ExecContext(context.Background(), `ROLLBACK`) }()
+	var itemCount int
+	if err := reader.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM canonical_items`).Scan(&itemCount); err != nil {
+		t.Fatalf("hold reader transaction: %v", err)
+	}
+	if itemCount == 0 {
+		t.Fatal("expected bootstrap data before reset")
+	}
+
+	if err := resetE2EDatabase(context.Background(), a.db); err != nil {
+		class, operation := classifyE2EResetFailure(err)
+		t.Fatalf("reset failed with active reader: class=%s operation=%s err=%v", class, operation, err)
+	}
+}
+
 func TestE2EResetDiagnosticRedactsUnderlyingStorageError(t *testing.T) {
 	t.Parallel()
 
