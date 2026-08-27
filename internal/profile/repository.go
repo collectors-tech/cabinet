@@ -33,12 +33,22 @@ type Profile struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type queryExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 type Repository struct {
-	db *sql.DB
+	db queryExecutor
 }
 
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) WithTx(tx *sql.Tx) *Repository {
+	return &Repository{db: tx}
 }
 
 func (r *Repository) List(ctx context.Context) ([]Profile, error) {

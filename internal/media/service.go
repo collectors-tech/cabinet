@@ -316,6 +316,91 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	return s.GetByID(ctx, photoID)
 }
 
+// UploadTx persists an inventory photo through the caller's transaction. It is
+// used by atomic bulk workflows that must not pay one durable database commit
+// per asset. The canonical files remain identical to a normal Upload.
+func (s *Service) UploadTx(ctx context.Context, tx *sql.Tx, itemID, filename string, r io.Reader) (Photo, error) {
+	if tx == nil {
+		return Photo{}, fmt.Errorf("transaction is required")
+	}
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return Photo{}, fmt.Errorf("item_id is required")
+	}
+	if strings.TrimSpace(filename) == "" {
+		filename = "upload.jpg"
+	}
+
+	photoID := uuid.NewString()
+	rootMediaDir, err := s.resolveMediaDirForItemTx(ctx, tx, itemID)
+	if err != nil {
+		return Photo{}, err
+	}
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == "" {
+		ext = ".jpg"
+	}
+	safeName := safeMediaFilename(filename)
+	if filepath.Ext(safeName) == "" {
+		safeName += ext
+	}
+	origPath, previewPath, thumbPath, err := s.createCanonicalAsset(ctx, rootMediaDir, photoID, safeName, filename, contentTypeForFilename(safeName), r, []AssetManifestOwner{{Type: "inventory_item", ID: itemID}}, map[string]string{"source": "inventory.photo.upload"})
+	if err != nil {
+		return Photo{}, err
+	}
+
+	var existingCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM item_photos WHERE item_id = ?`, itemID).Scan(&existingCount); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
+		return Photo{}, fmt.Errorf("count existing photos: %w", err)
+	}
+	isPrimary := 0
+	if existingCount == 0 {
+		isPrimary = 1
+	}
+	var nextOrder int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(display_order), 0) + 1 FROM item_photos WHERE item_id = ?`, itemID).Scan(&nextOrder); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
+		return Photo{}, fmt.Errorf("next photo order: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, photoID, itemID, filename, mediaRootRelativePath(rootMediaDir, origPath), mediaRootRelativePath(rootMediaDir, previewPath), mediaRootRelativePath(rootMediaDir, thumbPath), isPrimary, nextOrder); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
+		return Photo{}, fmt.Errorf("insert photo record: %w", err)
+	}
+
+	photo := Photo{
+		ID:            photoID,
+		ItemID:        itemID,
+		Filename:      filename,
+		OriginalPath:  origPath,
+		PreviewPath:   previewPath,
+		ThumbnailPath: thumbPath,
+		IsPrimary:     isPrimary == 1,
+		DisplayOrder:  nextOrder,
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT created_at FROM item_photos WHERE id = ?`, photoID).Scan(&photo.CreatedAt); err != nil {
+		_ = os.RemoveAll(filepath.Dir(filepath.Dir(origPath)))
+		return Photo{}, fmt.Errorf("load photo record: %w", err)
+	}
+	return photo, nil
+}
+
+func (s *Service) CountByItemTx(ctx context.Context, tx *sql.Tx, itemID string) (int, error) {
+	if tx == nil {
+		return 0, fmt.Errorf("transaction is required")
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM item_photos WHERE item_id = ?`, strings.TrimSpace(itemID)).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count item photos: %w", err)
+	}
+	return count, nil
+}
+
 func (s *Service) SaveWorkspaceAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (WorkspaceAttachment, error) {
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
@@ -1539,13 +1624,25 @@ func (s *Service) assetType(ctx context.Context, profileID, assetID string) (str
 }
 
 func (s *Service) resolveMediaDirForItem(ctx context.Context, itemID string) (string, error) {
+	return s.resolveMediaDirForItemQuery(ctx, s.db, itemID)
+}
+
+func (s *Service) resolveMediaDirForItemTx(ctx context.Context, tx *sql.Tx, itemID string) (string, error) {
+	return s.resolveMediaDirForItemQuery(ctx, tx, itemID)
+}
+
+type mediaQueryRower interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (s *Service) resolveMediaDirForItemQuery(ctx context.Context, query mediaQueryRower, itemID string) (string, error) {
 	itemID = strings.TrimSpace(itemID)
 	if itemID == "" {
 		return "", fmt.Errorf("item_id is required")
 	}
 
 	var configuredMediaDir sql.NullString
-	err := s.db.QueryRowContext(
+	err := query.QueryRowContext(
 		ctx,
 		`
 		SELECT ps.value

@@ -71,8 +71,14 @@ type Instance struct {
 	UpdatedAt        string  `json:"updated_at"`
 }
 
+type queryExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 type Repository struct {
-	db *sql.DB
+	db queryExecutor
 }
 
 const (
@@ -101,6 +107,10 @@ var allowedItemLifecycleStatuses = map[string]struct{}{
 
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) WithTx(tx *sql.Tx) *Repository {
+	return &Repository{db: tx}
 }
 
 func (r *Repository) CreateItem(ctx context.Context, in Item) (Item, error) {
