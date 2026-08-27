@@ -1,3 +1,3 @@
 import { registerMarketWatchCases } from './cases'
 
-registerMarketWatchCases(23, 33)
+registerMarketWatchCases(9, 16)
