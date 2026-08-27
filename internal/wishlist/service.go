@@ -40,12 +40,22 @@ type Hit struct {
 	LastSeen    string  `json:"last_seen"`
 }
 
+type queryExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 type Service struct {
-	db *sql.DB
+	db queryExecutor
 }
 
 func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
+}
+
+func (s *Service) WithTx(tx *sql.Tx) *Service {
+	return &Service{db: tx}
 }
 
 func (s *Service) Create(ctx context.Context, in Entry) (Entry, error) {
