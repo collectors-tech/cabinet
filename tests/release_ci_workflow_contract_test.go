@@ -130,8 +130,8 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		"CYPRESS_telegramRuntimeFixture: \"true\"",
 		"if ($env:CYPRESS_telegramRuntimeFixture -ne \"true\"",
 		"Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden.",
-		"$pack.version -lt 5 -or $pack.spec_count -ne 23 -or $pack.specs.Count -ne 23",
-		"Fixed beta Cypress pack must resolve version 5 with exactly 23 specs.",
+		"$pack.version -lt 6 -or $pack.spec_count -ne 26 -or $pack.specs.Count -ne 26",
+		"Fixed beta Cypress pack must resolve version 6 with exactly 26 specs.",
 		"timeout-minutes: 30",
 		"go test ./... -count=1 -p 1 -parallel 4 -timeout 900s",
 		"$name = Split-Path (Split-Path $spec -Parent) -Leaf",
@@ -211,11 +211,11 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 	if manifest.Issue != 2055 {
 		t.Fatalf("manifest should stay bound to #2055, got #%d", manifest.Issue)
 	}
-	if manifest.Version < 5 {
-		t.Fatalf("Chat-managed integration acceptance pack must be version 5 or newer, got %d", manifest.Version)
+	if manifest.Version < 6 {
+		t.Fatalf("renderer-bounded Market Watch acceptance pack must be version 6 or newer, got %d", manifest.Version)
 	}
-	if len(manifest.Specs) != 23 {
-		t.Fatalf("Chat-managed integration acceptance pack must contain exactly 23 specs, got %d", len(manifest.Specs))
+	if len(manifest.Specs) != 26 {
+		t.Fatalf("renderer-bounded Market Watch acceptance pack must contain exactly 26 specs, got %d", len(manifest.Specs))
 	}
 
 	required := map[string]bool{
@@ -259,13 +259,17 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 		}
 	}
 	for requiredPath, requiredCategory := range map[string]string{
-		"cypress/e2e/integrations/provider-openai-chatgpt-ux/spec.cy.ts":     "provider_auth",
-		"cypress/e2e/chats/agent-attachment-continuity/spec.cy.ts":           "agent_primary",
-		"cypress/e2e/chats/agent-response-state-matrix/spec.cy.ts":           "agent_primary",
-		"cypress/e2e/chats/agent-compact-accessibility/spec.cy.ts":           "agent_primary",
-		"cypress/e2e/chats/cabinet-agent-collection-workflows/spec.cy.ts":    "agent_primary",
-		"cypress/e2e/chats/assistant-acquisition-workflows/spec.cy.ts":       "agent_primary",
-		"cypress/e2e/chats/assistant-workspace-dashboard-summary/spec.cy.ts": "agent_primary",
+		"cypress/e2e/integrations/ui-screen-market-watch/01-core.cy.ts":       "provider_handoff",
+		"cypress/e2e/integrations/ui-screen-market-watch/02-create-run.cy.ts": "provider_handoff",
+		"cypress/e2e/integrations/ui-screen-market-watch/03-results.cy.ts":    "provider_handoff",
+		"cypress/e2e/integrations/ui-screen-market-watch/04-handoffs.cy.ts":   "provider_handoff",
+		"cypress/e2e/integrations/provider-openai-chatgpt-ux/spec.cy.ts":      "provider_auth",
+		"cypress/e2e/chats/agent-attachment-continuity/spec.cy.ts":            "agent_primary",
+		"cypress/e2e/chats/agent-response-state-matrix/spec.cy.ts":            "agent_primary",
+		"cypress/e2e/chats/agent-compact-accessibility/spec.cy.ts":            "agent_primary",
+		"cypress/e2e/chats/cabinet-agent-collection-workflows/spec.cy.ts":     "agent_primary",
+		"cypress/e2e/chats/assistant-acquisition-workflows/spec.cy.ts":        "agent_primary",
+		"cypress/e2e/chats/assistant-workspace-dashboard-summary/spec.cy.ts":  "agent_primary",
 		"cypress/e2e/chats/chat-integration-management/spec.cy.ts":            "agent_primary",
 	} {
 		foundCategory := ""

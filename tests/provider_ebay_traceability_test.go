@@ -686,7 +686,7 @@ func TestEbayProductionHardeningAcceptanceRollupImplemented(t *testing.T) {
 			"TestScannerRunMapsEbayAuthFailureToProviderErrorCode",
 			"TestOpenAPIDocumentsEbayProviderRunContract",
 			"Cypress `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts`",
-			"Cypress `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts`",
+			"Cypress `ui.web/cypress/e2e/integrations/ui-screen-market-watch/cases.ts`",
 			"| implemented |",
 		},
 		"INTEGRATION-006": {
