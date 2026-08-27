@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent } from 'react'
-import { Link, useLocation } from '@tanstack/react-router'
+import { useLocation } from '@tanstack/react-router'
 import {
   ArrowDown,
   ArrowUp,
@@ -505,13 +505,13 @@ export function AppSidebar() {
                   <span>Customise Nav</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link
-                    to='/settings/display'
+                  <a
+                    href='/settings/display'
                     data-testid='shell-workspace-menu-settings'
                   >
                     <Settings className='h-4 w-4' aria-hidden />
                     <span>Settings</span>
-                  </Link>
+                  </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
