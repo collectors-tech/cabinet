@@ -767,7 +767,10 @@ describe('chats/assistant-workspace', () => {
         cy.request('PUT', '/api/profiles/active', { profile_id: showcaseID }).its('status').should('eq', 200)
         cy.reload()
         cy.get('[data-testid="active-profile-name"]', { timeout: 20000 }).should('contain', 'Showcase DB')
-        cy.get('[data-testid="shell-chat-toggle"]').click()
+        cy.get('[data-testid="shell-chat-toggle"]')
+          .should('be.visible')
+          .and('be.enabled')
+          .click()
         cy.get('[data-testid="shell-assistant-profile-scope"]').should('have.text', showcaseID)
         cy.contains('[data-testid="shell-assistant-message-list"]', 'primary profile message').should('not.exist')
         cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
