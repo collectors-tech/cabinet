@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { type Row } from '@tanstack/react-table'
 import { Trash2 } from 'lucide-react'
@@ -28,14 +27,13 @@ export function DataTableRowActions<TData>({
 }: DataTableRowActionsProps<TData>) {
   const task = taskSchema.parse(row.original)
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
-  const [open, setOpen] = useState(false)
   const rowActionId = task.itemID?.trim() || task.id
   const handleDeleteRow = () => {
     onDeleteRow?.(task)
   }
 
   return (
-    <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           type='button'
@@ -46,11 +44,9 @@ export function DataTableRowActions<TData>({
           aria-label={`Open actions for ${task.title}`}
           onPointerDown={(event) => {
             event.stopPropagation()
-            setOpen(true)
           }}
           onClick={(event) => {
             event.stopPropagation()
-            setOpen(true)
           }}
         >
           <DotsHorizontalIcon className='h-4 w-4' />
