@@ -1,5 +1,13 @@
 function Get-CypressProcessInventory {
-  return @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue |
+  # Windows PowerShell's first CIM query can spend most of the watchdog guard
+  # loading the CIM stack. Prefer its in-box WMI cmdlet there; PowerShell 7
+  # does not expose Get-WmiObject, so retain CIM as the compatible fallback.
+  $processes = if (Get-Command Get-WmiObject -ErrorAction SilentlyContinue) {
+    @(Get-WmiObject Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue)
+  } else {
+    @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue)
+  }
+  return @($processes |
     Select-Object ProcessId, ParentProcessId, Name, CommandLine)
 }
 
