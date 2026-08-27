@@ -29,6 +29,12 @@ describe('chats/chats-workspace', () => {
   }
 
   it('CHATS-WORKSPACE-001 renders Cabinet-specific chats semantics instead of placeholder inbox copy', () => {
+    cy.intercept('GET', '/api/chat/threads?profile_id=*', {
+      statusCode: 200,
+      delay: 15000,
+      body: { threads: [] },
+    }).as('delayedEmptyThreads')
+
     openChats()
 
     cy.contains('h1', 'Chats').should('be.visible')
@@ -43,6 +49,7 @@ describe('chats/chats-workspace', () => {
         'Cabinet Agent keeps the same governed conversation, context, and action reviews in this full workspace and the contextual panel.'
       )
     cy.get('[data-testid="chat-thread-list"]').should('be.visible')
+    cy.wait('@delayedEmptyThreads')
     cy.contains('No chat threads yet.').should('be.visible')
     cy.contains(/inbox template|stock inbox|placeholder/i).should('not.exist')
   })

@@ -864,7 +864,7 @@ export function Chats() {
               />
             </div>
             <ScrollArea className='min-h-0 flex-1'>
-              <div data-testid='chat-thread-list' className='space-y-1'>
+              <div data-testid='chat-thread-list' className='min-h-px space-y-1'>
                 {threads.length === 0 && !loading ? (
                   <p className='rounded-md border border-dashed border-slate-800 p-3 text-sm text-slate-500'>
                     No chat threads yet.
