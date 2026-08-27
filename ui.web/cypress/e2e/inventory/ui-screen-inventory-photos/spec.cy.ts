@@ -2,24 +2,37 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
   const validPhotoJPEGBase64 =
     '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD7B8CfDHwdceB/D0svhPQ5JX063ZnfTYSzExKSSdvJooorip/AvQ+SqfG/U//Z'
 
+  function useServerLocalSession(profileID: string) {
+    cy.intercept('POST', '/api/auth/local/session', (request) => {
+      expect(request.body).to.deep.equal({ profile_id: profileID })
+      request.continue()
+    }).as('localServerSession')
+  }
+
   function bootstrapInventoryPhotos(path = '/inventory/') {
-    cy.e2eReset()
-    cy.e2eSetSetupState('present')
     cy.intercept('GET', '/api/items').as('inventoryItems')
     cy.intercept('GET', /\/api\/items\/.*\/photos/).as('inventoryPhotos')
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      useServerLocalSession(profile_id)
       cy.useBootstrappedProfile(profile_id, profile_name, { path })
+      cy.wait('@localServerSession')
     })
     cy.wait('@inventoryItems')
     cy.wait('@inventoryPhotos')
   }
 
   function signIn() {
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-photos@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      useServerLocalSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/inventory/' })
+      cy.wait('@localServerSession')
+    })
   }
 
   function photoRowNames() {
@@ -392,6 +405,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
       .should('exist')
 
     cy.reload()
+    cy.wait('@localServerSession')
     cy.wait('@items')
     cy.wait('@reloadPhotos')
     cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-RELOAD')
@@ -472,6 +486,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     ])
 
     cy.reload()
+    cy.wait('@localServerSession')
     cy.wait('@items')
     cy.wait('@orderedPhotos')
     openPhotosModal()
@@ -553,6 +568,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
       .should('exist')
 
     cy.reload()
+    cy.wait('@localServerSession')
     cy.wait('@inventoryItems')
     openFirstRowPhotosModal()
     cy.wait('@inventoryPhotos')
@@ -580,6 +596,9 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
       }
     )
 
+    cy.then(() => {
+      useServerLocalSession(secondProfileId)
+    })
     cy.visit('/inventory/', {
       onBeforeLoad(win) {
         if (secondProfileId) {
@@ -587,6 +606,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
         }
       },
     })
+    cy.wait('@localServerSession')
     cy.wait('@inventoryItems')
     openFirstRowPhotosModal()
     cy.wait('@inventoryPhotos')
@@ -598,11 +618,13 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.request('PUT', '/api/profiles/active', { profile_id: 'e2e-profile-001' })
       .its('status')
       .should('eq', 200)
+    useServerLocalSession('e2e-profile-001')
     cy.visit('/inventory/', {
       onBeforeLoad(win) {
         win.localStorage.setItem('cabinet.workspace.e2e-profile-001', '1')
       },
     })
+    cy.wait('@localServerSession')
     cy.wait('@inventoryItems')
     openFirstRowPhotosModal()
     cy.wait('@inventoryPhotos')
