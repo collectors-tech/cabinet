@@ -123,8 +123,9 @@ const denseInboxItems: StubItem[] = [
 describe('chats/notification-inbox', () => {
   function bootInbox(
     items: StubItem[] = baseItems,
-    options: { failUpdates?: boolean } = {}
+    options: { failUpdates?: boolean; delayTrailingBulkRead?: boolean } = {}
   ) {
+    let updateRequestCount = 0
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.clearLocalStorage('cabinet.toastHistory.v1')
@@ -135,6 +136,14 @@ describe('chats/notification-inbox', () => {
       body: { items },
     }).as('loadNotifications')
     cy.intercept('PATCH', '/api/chat/inbox/*', (req) => {
+      updateRequestCount += 1
+      if (
+        options.delayTrailingBulkRead &&
+        req.body.status === 'read' &&
+        updateRequestCount === 2
+      ) {
+        req.alias = 'firstBulkReadUpdate'
+      }
       if (options.failUpdates) {
         req.reply({
           statusCode: 500,
@@ -145,6 +154,12 @@ describe('chats/notification-inbox', () => {
       const id = String(req.url).split('/api/chat/inbox/')[1]
       const item = items.find((candidate) => candidate.id === id)
       req.reply({
+        delay:
+          options.delayTrailingBulkRead &&
+          req.body.status === 'read' &&
+          updateRequestCount > 2
+            ? 5000
+            : 0,
         statusCode: 200,
         body: {
           ...(item ?? items[0]),
@@ -1129,7 +1144,7 @@ describe('chats/notification-inbox', () => {
   })
 
   it('UI-SCREEN-NOTIFICATION-INBOX-004 supports row and bulk triage actions', () => {
-    bootInbox()
+    bootInbox(baseItems, { delayTrailingBulkRead: true })
 
     cy.contains(
       '[data-testid="notification-inbox-row"]',
@@ -1150,9 +1165,11 @@ describe('chats/notification-inbox', () => {
 
     cy.get('[data-testid="notification-inbox-select-all"]').click()
     cy.get('[data-testid="notification-inbox-bulk-read"]').click()
-    cy.wait('@updateNotification')
+    cy.wait('@firstBulkReadUpdate')
     cy.get('[data-testid="notification-inbox-select-all"]').click()
-    cy.get('[data-testid="notification-inbox-bulk-archive"]').click()
+    cy.get('[data-testid="notification-inbox-bulk-archive"]')
+      .should('be.enabled')
+      .click()
     cy.wait('@updateNotification')
     cy.get('[data-testid="notification-inbox-row"]').should('have.length.lessThan', 3)
   })

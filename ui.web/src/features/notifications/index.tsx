@@ -302,6 +302,12 @@ export function NotificationInbox() {
     if (!activeProfileId || ids.length === 0) {
       return
     }
+    const selectedIdsForUpdate = selectedIds.filter((id) => ids.includes(id))
+    if (selectedIdsForUpdate.length > 0) {
+      setSelectedIds((current) =>
+        current.filter((id) => !selectedIdsForUpdate.includes(id))
+      )
+    }
     setUpdating(true)
     setError('')
     try {
@@ -367,8 +373,13 @@ export function NotificationInbox() {
           )
         )
       })
-      setSelectedIds((current) => current.filter((id) => !ids.includes(id)))
     } catch (err) {
+      if (selectedIdsForUpdate.length > 0) {
+        setSelectedIds((current) => [
+          ...current,
+          ...selectedIdsForUpdate.filter((id) => !current.includes(id)),
+        ])
+      }
       setError(
         err instanceof Error ? err.message : 'notification_inbox_update_failed'
       )
