@@ -2,8 +2,8 @@ describe('chats/assistant-execution-surfaces', () => {
   it('ASSISTANT-EXECUTION-001/002/003/004 uses natural preview, explicit confirmation, and no mutation on cancel', () => {
     cy.viewport(1280, 720)
     cy.e2eReset()
-    cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    cy.e2eBootstrap()
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inventory/',
       shellWorkspace: 'navigation',
