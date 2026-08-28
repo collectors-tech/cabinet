@@ -101,12 +101,10 @@ describe('ui-global-search-command', () => {
   it('UI-GLOBAL-SEARCH-COMMAND-007 exposes local catalog loading and error states', () => {
     cy.intercept({ method: 'GET', url: '/api/search/items*', times: 1 }, (req) => {
       expect(req.query.text).to.eq('SLOW')
-      req.reply((res) => {
-        res.delay = 1000
-        res.send({
-          statusCode: 200,
-          body: { items: [] },
-        })
+      req.reply({
+        statusCode: 200,
+        body: { items: [] },
+        delay: 1000,
       })
     }).as('slowLocalSearch')
 
@@ -132,22 +130,18 @@ describe('ui-global-search-command', () => {
       statusCode: 200,
       body: { items: [] },
     }).as('localSearchForBarcode')
-    cy.intercept('GET', '/api/barcodes/123456789012', (req) => {
-      req.reply((res) => {
-        res.delay = 1000
-        res.send({
-          statusCode: 503,
-          body: { error: 'barcode unavailable' },
-        })
-      })
+    cy.intercept('GET', '/api/barcodes/123456789012', {
+      statusCode: 503,
+      body: { error: 'barcode unavailable' },
+      delay: 1000,
     }).as('failedBarcodeLookup')
 
     openCommandPaletteFromSearchButton()
     cy.get(commandInputSelector).type('123456789012')
-    cy.wait('@localSearchForBarcode')
     cy.contains('[cmdk-item]', 'Looking up barcode 123456789012...').should(
       'be.visible'
     )
+    cy.wait('@localSearchForBarcode')
     cy.wait('@failedBarcodeLookup')
     cy.contains('[cmdk-item]', 'Barcode lookup is unavailable.').should(
       'be.visible'
