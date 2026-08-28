@@ -56,8 +56,8 @@ describe('chats/agent-admin-session-authority', () => {
 
   it('AGENT-SKILLS-REGISTRY-014/#2089 uses an action-specific one-time confirmation for Chat user removal', () => {
     cy.e2eReset()
+    cy.e2eSetSetupState('present')
     cy.e2eBootstrap().then((state) => {
-      cy.e2eSetSetupState('present')
       cy.useBootstrappedProfile(state.profile_id, state.profile_name, {
         path: '/chats/',
         shellWorkspace: 'navigation',
