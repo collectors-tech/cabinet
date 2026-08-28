@@ -324,8 +324,9 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config, a
 }
 
 const (
-	e2eResetMaxAttempts = 3
-	e2eResetRetryDelay  = 25 * time.Millisecond
+	e2eResetMaxAttempts        = 3
+	e2eResetRetryDelay         = 25 * time.Millisecond
+	e2eResetMaxIdleConnections = 2
 )
 
 var e2eResetMu sync.Mutex
@@ -393,6 +394,13 @@ func e2eResetDiagnostic(err error) string {
 func resetE2EDatabase(ctx context.Context, db *sql.DB) error {
 	e2eResetMu.Lock()
 	defer e2eResetMu.Unlock()
+
+	// A failed transaction outside the reset handler can return its SQLite
+	// connection to the idle pool while still owning the single-writer lock.
+	// The pinned reset connection and WAL cannot release a foreign writer, so
+	// discard idle connections before starting the clean reset transaction.
+	db.SetMaxIdleConns(0)
+	db.SetMaxIdleConns(e2eResetMaxIdleConnections)
 
 	return runE2EResetWithRetry(ctx, func() error {
 		return resetE2EDatabaseAttempt(ctx, db)
