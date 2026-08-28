@@ -88,12 +88,11 @@ describe("inventory responsive table-first redesign", () => {
   }
 
   function switchToRowsView() {
-    cy.get('button[aria-label="Switch to rows view"]').click({ force: true });
-    cy.get('button[aria-label="Switch to rows view"]').should(
-      "have.attr",
-      "aria-pressed",
-      "true"
-    );
+    cy.get('button[aria-label="Switch to rows view"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .click()
+      .should("have.attr", "aria-pressed", "true");
   }
 
   it("keeps desktop Inventory table-first with compact filters and page modals", () => {
@@ -193,12 +192,25 @@ describe("inventory responsive table-first redesign", () => {
   it("keeps tablet editor panel navigation available from table rows", () => {
     cy.viewport(768, 1024);
     signIn();
+    cy.wait("@alphaPhotos");
     switchToRowsView();
 
+    const alphaRowActions =
+      '[data-testid="inventory-item-row-item-responsive-alpha"] [data-testid="task-row-actions-trigger"]';
+    cy.get(alphaRowActions).scrollIntoView().should("be.visible");
+    cy.get(alphaRowActions)
+      .click()
+      .should("have.attr", "data-state", "open");
     cy.get(
-      '[data-testid="inventory-item-row-item-responsive-alpha"] [data-testid="task-row-actions-trigger"]'
-    ).click({ force: true });
-    cy.contains('[role="menuitem"]', "Edit").click({ force: true });
+      '[data-testid="task-row-actions-menu"][data-row-id="item-responsive-alpha"]'
+    )
+      .should("be.visible")
+      .find(
+        '[role="menuitem"][data-testid="task-row-action-edit"][data-row-id="item-responsive-alpha"]'
+      )
+      .should("be.visible")
+      .and("have.text", "Edit")
+      .click();
     cy.get('[role="dialog"]')
       .should("be.visible")
       .and("contain", "Edit Item");
