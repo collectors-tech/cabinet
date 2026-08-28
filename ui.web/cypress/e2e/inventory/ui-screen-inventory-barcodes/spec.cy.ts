@@ -11,10 +11,12 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
   }
 
   function openBarcodesModal(itemTitle: string) {
-    cy.get('[data-testid="inventory-row-barcodes-action"]')
-      .first()
-      .should('have.attr', 'aria-label', `Open barcodes for ${itemTitle}`)
-      .click()
+    const actionSelector =
+      `[data-testid="inventory-row-barcodes-action"]` +
+      `[aria-label="Open barcodes for ${itemTitle}"]`
+
+    cy.get(actionSelector).should('have.length', 1)
+    cy.get(actionSelector).click()
     cy.get('[data-testid="inventory-barcodes-dialog"]').should('be.visible')
     cy.get('[data-testid="inventory-barcodes-panel"]').should('be.visible')
   }
