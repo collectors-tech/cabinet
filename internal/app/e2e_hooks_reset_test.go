@@ -160,6 +160,58 @@ func TestResetE2EDatabaseToleratesActiveReaderAfterPreflight(t *testing.T) {
 	}
 }
 
+func TestE2EResetEndpointEvictsForeignIdleWriterBeforeBegin(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+	a.db.SetMaxOpenConns(2)
+	a.db.SetMaxIdleConns(2)
+
+	if err := resetE2EDatabase(context.Background(), a.db); err != nil {
+		t.Fatalf("preflight reset failed: %v", err)
+	}
+	bootstrap := doRequest(t, a, http.MethodPost, "/api/test/bootstrap", nil, nil)
+	if bootstrap.Code != http.StatusOK {
+		t.Fatalf("bootstrap status=%d body=%s", bootstrap.Code, bootstrap.Body.String())
+	}
+
+	writer, err := a.db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("acquire foreign writer connection: %v", err)
+	}
+	clean, err := a.db.Conn(context.Background())
+	if err != nil {
+		writer.Close()
+		t.Fatalf("acquire clean reset connection: %v", err)
+	}
+	if _, err := writer.ExecContext(context.Background(), `BEGIN IMMEDIATE`); err != nil {
+		clean.Close()
+		writer.Close()
+		t.Fatalf("begin foreign writer transaction: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		clean.Close()
+		t.Fatalf("return foreign writer to idle pool: %v", err)
+	}
+	if err := clean.Close(); err != nil {
+		t.Fatalf("return clean connection to idle pool: %v", err)
+	}
+
+	reset := doRequest(t, a, http.MethodPost, "/api/test/reset", nil, nil)
+	if reset.Code != http.StatusOK {
+		resetErr := resetE2EDatabase(context.Background(), a.db)
+		class, operation := classifyE2EResetFailure(resetErr)
+		t.Fatalf(
+			"reset status=%d body=%s diagnostic=%s/%s err=%v",
+			reset.Code,
+			reset.Body.String(),
+			class,
+			operation,
+			resetErr,
+		)
+	}
+}
+
 func TestE2EResetDiagnosticRedactsUnderlyingStorageError(t *testing.T) {
 	t.Parallel()
 
