@@ -1,6 +1,6 @@
 # Cabinet 1.0 General Availability Roadmap
 
-Status: active program plan  
+Status: active OpenSpec program plan  
 Canonical tracking issue: [#2546](https://github.com/collectors-tech/cabinet/issues/2546)  
 Project: [collectors-tech Project #2](https://github.com/orgs/collectors-tech/projects/2)  
 Baseline date: 2026-09-01  
