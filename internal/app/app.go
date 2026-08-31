@@ -304,6 +304,7 @@ func New(cfg config.Config) (*App, error) {
 	runtimeStopCh := make(chan string, 1)
 
 	mux := http.NewServeMux()
+	var initialSetupBootstrapMu sync.Mutex
 	registerOpenAIBrowserAuthRoutes(mux, profiles, openAIBrowserAuth)
 	telegramBotAPIBaseURL := ""
 	if isE2EHooksEnabled(cfg) {
@@ -8149,6 +8150,15 @@ func New(cfg config.Config) (*App, error) {
 	})
 
 	protectedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isInitialSetupBootstrapRequest(cfg, r) {
+			initialSetupBootstrapMu.Lock()
+			if isInitialSetupBootstrapRequest(cfg, r) {
+				defer initialSetupBootstrapMu.Unlock()
+				mux.ServeHTTP(w, r)
+				return
+			}
+			initialSetupBootstrapMu.Unlock()
+		}
 		if requiresZitadelSession(zitadelAuth, r) {
 			remoteSession, err := zitadelAuth.validateZitadelRequestSession(r)
 			if err != nil {
@@ -8843,6 +8853,18 @@ func requiresUnlockedSession(cfg config.Config, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func isInitialSetupBootstrapRequest(cfg config.Config, r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost || !runtimeSetupRequired(cfg) {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/runtime/setup-complete", "/api/runtime/setup-import", "/api/runtime/setup-storage-validate":
+		return true
+	default:
+		return false
+	}
 }
 
 func isPublicAPIRequest(r *http.Request) bool {
