@@ -53,3 +53,12 @@ test('portable guidance explains local and hosted verification without overstati
   assert.match(guidance, /does not prove.+free of vulnerabilities/is)
   assert.match(guidance, /does not replace.+release approval/is)
 })
+
+test('private package workflow prepares embedded UI before running the Go suite', async () => {
+  const workflow = await read('.github/workflows/release-installers.yml')
+  const uiBuild = workflow.indexOf('scripts/build-ui-static.ps1')
+  const goTests = workflow.indexOf('go test ./...')
+  assert.notEqual(uiBuild, -1)
+  assert.notEqual(goTests, -1)
+  assert.ok(uiBuild < goTests, 'the static UI must exist before Go resolves internal/ui embed patterns')
+})

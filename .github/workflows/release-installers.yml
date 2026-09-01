@@ -60,12 +60,14 @@ jobs:
         run: |
           npm run test:release-package
           if ($LASTEXITCODE -ne 0) { throw "Release package contracts failed." }
+          ./scripts/build-ui-static.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Static UI build failed before Go tests." }
           go test ./...
           if ($LASTEXITCODE -ne 0) { throw "Go tests failed." }
 
       - name: Build Windows portable package
         shell: pwsh
-        run: ./scripts/package-installers.ps1 -ExpectedCommit "${{ inputs.commit_sha }}" -OutputDirectory "dist/cabinet" -InstallUIDeps
+        run: ./scripts/package-installers.ps1 -ExpectedCommit "${{ inputs.commit_sha }}" -OutputDirectory "dist/cabinet"
 
       - name: Verify exact Windows portable package
         run: node scripts/verify-cabinet-release-package.mjs --manifest dist/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
