@@ -106,16 +106,34 @@ jobs:
       - name: Verify exact Windows portable package
         run: node scripts/verify-cabinet-release-package.mjs --manifest dist/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
 
+      - name: Resolve exact package evidence paths
+        id: package-evidence
+        shell: pwsh
+        run: |
+          $packageFiles = @(Get-ChildItem -LiteralPath "dist/cabinet" -Filter "cabinet-*-windows-amd64-portable.zip" -File)
+          $sbomFiles = @(Get-ChildItem -LiteralPath "dist/cabinet" -Filter "cabinet-*-sbom.cdx.json" -File)
+          if ($packageFiles.Count -ne 1) {
+            throw "Expected exactly one Windows portable package, found $($packageFiles.Count)."
+          }
+          if ($sbomFiles.Count -ne 1) {
+            throw "Expected exactly one CycloneDX SBOM, found $($sbomFiles.Count)."
+          }
+          $workspace = (Get-Location).Path
+          $packagePath = [IO.Path]::GetRelativePath($workspace, $packageFiles[0].FullName).Replace('\', '/')
+          $sbomPath = [IO.Path]::GetRelativePath($workspace, $sbomFiles[0].FullName).Replace('\', '/')
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "package_path=$packagePath" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "sbom_path=$sbomPath" -Encoding utf8
+
       - name: Attest Windows portable package build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: dist/cabinet/cabinet-*-windows-amd64-portable.zip
+          subject-path: ${{ steps.package-evidence.outputs.package_path }}
 
       - name: Attest Windows portable package CycloneDX SBOM
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: dist/cabinet/cabinet-*-windows-amd64-portable.zip
-          sbom-path: dist/cabinet/cabinet-*-sbom.cdx.json
+          subject-path: ${{ steps.package-evidence.outputs.package_path }}
+          sbom-path: ${{ steps.package-evidence.outputs.sbom_path }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
