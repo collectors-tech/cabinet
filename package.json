@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test:infra": "node --test scripts/deployment-infrastructure-contract.test.mjs",
+    "test:infra": "node --test scripts/deployment-infrastructure-contract.test.mjs scripts/github-actions-runtime.test.mjs",
+    "test:workflow-actions": "node --test scripts/github-actions-runtime.test.mjs",
     "test:auth-infra": "node --test scripts/zitadel-auth-contract.test.mjs",
     "test:dependency-security": "node --test scripts/dependency-security.test.mjs",
     "security:dependencies": "node scripts/check-production-dependencies.mjs",

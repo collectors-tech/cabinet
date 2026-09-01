@@ -100,7 +100,10 @@ describe("Cabinet beta packaging contract", () => {
     assert.match(workflow, /author_association/);
     assert.match(workflow, /Beta Release Candidate Gate/);
     assert.match(workflow, /conclusion.+success/s);
-    assert.match(workflow, /actions\/download-artifact@v4/);
+    assert.match(
+      workflow,
+      /actions\/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8\.0\.1/,
+    );
     assert.match(workflow, /verify-cabinet-release-package\.mjs/);
     assert.match(workflow, /verify-browser-companion-package\.mjs/);
     assert.match(

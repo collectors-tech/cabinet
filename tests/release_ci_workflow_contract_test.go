@@ -40,7 +40,7 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 		"@redocly/cli@latest lint docs/api/openapi.yaml",
 		"@redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html",
 		"npm run e2e:ci-smoke",
-		"actions/upload-artifact@v4",
+		"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
 	}
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {
