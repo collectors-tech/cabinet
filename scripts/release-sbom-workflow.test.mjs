@@ -62,3 +62,24 @@ test('private package workflow prepares embedded UI before running the Go suite'
   assert.notEqual(goTests, -1)
   assert.ok(uiBuild < goTests, 'the static UI must exist before Go resolves internal/ui embed patterns')
 })
+
+test('private package workflow validates before packaging from a fresh least-privilege checkout', async () => {
+  const workflow = await read('.github/workflows/release-installers.yml')
+  const validateJob = workflow.indexOf('  validate-source:')
+  const packageJob = workflow.indexOf('  build-windows-portable-package:')
+
+  assert.notEqual(validateJob, -1, 'source validation must be an independent job')
+  assert.notEqual(packageJob, -1)
+  assert.ok(validateJob < packageJob, 'source validation must gate the package job')
+
+  const workflowPermissions = workflow.slice(workflow.indexOf('permissions:'), workflow.indexOf('jobs:'))
+  const validation = workflow.slice(validateJob, packageJob)
+  const packaging = workflow.slice(packageJob)
+
+  assert.doesNotMatch(workflowPermissions, /id-token:\s*write|attestations:\s*write/)
+  assert.doesNotMatch(validation, /id-token:\s*write|attestations:\s*write/)
+  assert.match(packaging, /needs:\s*validate-source/)
+  assert.match(packaging, /permissions:\s*\n\s+contents:\s*read\s*\n\s+id-token:\s*write\s*\n\s+attestations:\s*write/)
+  assert.match(packaging, /uses:\s*actions\/checkout@v4/)
+  assert.match(packaging, /Confirm exact clean checkout/)
+})
