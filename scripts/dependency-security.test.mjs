@@ -30,13 +30,26 @@ test("known release advisory graph rejects vulnerable nanoid, js-yaml, postcss a
         "node_modules/tool/node_modules/nanoid": { version: "5.1.16" },
         "node_modules/js-yaml": { version: "4.3.1", dev: true },
         "node_modules/postcss": { version: "8.5.23" },
+        "node_modules/esbuild": { version: "0.28.1" },
       },
     }),
-    { nanoid: 2, "js-yaml": 1, postcss: 1, "extract-zip": 0 },
+    { nanoid: 2, "js-yaml": 1, postcss: 1, "extract-zip": 0, esbuild: 1 },
   );
 });
 
-test("current lock graph is above the #56-#60 patched floors or omits the package", async () => {
+test("known release advisory graph rejects the vulnerable esbuild Windows development server", () => {
+  assert.throws(
+    () =>
+      evaluateKnownHighAdvisoryGraph({
+        packages: {
+          "node_modules/esbuild": { version: "0.27.3" },
+        },
+      }),
+    /esbuild.*0\.27\.3.*GHSA-g7r4-m6w7-qqqr.*0\.28\.1/,
+  );
+});
+
+test("current lock graph is above every governed advisory floor or omits the package", async () => {
   const packageLock = JSON.parse(
     await readFile("ui.web/package-lock.json", "utf8"),
   );
@@ -45,6 +58,7 @@ test("current lock graph is above the #56-#60 patched floors or omits the packag
   assert.ok(counts["js-yaml"] > 0, "the js-yaml advisory contract must exercise a lock path");
   assert.ok(counts.postcss > 0, "the postcss advisory contract must exercise a lock path");
   assert.equal(counts["extract-zip"], 0, "the unpatched extract-zip package must be absent");
+  assert.ok(counts.esbuild > 0, "the esbuild advisory contract must exercise a lock path");
 });
 
 test("production dependency audit rejects unresolved critical and high findings", () => {
@@ -156,8 +170,9 @@ test("dependency security gate remains bound to OpenSpec and release evidence", 
   assert.match(runtimeSpec, /Requirement RUNTIME-CORE-025:/);
   assert.match(traceability, /RUNTIME-CORE-025[\s\S]*#2051/);
   assert.match(evidence, /1 critical and 6 high/);
-  assert.match(evidence, /zero critical or high production vulnerabilities/);
-  assert.match(evidence, /one low-severity `esbuild` advisory/);
+  assert.match(evidence, /zero production vulnerabilities at every severity/);
+  assert.match(evidence, /`esbuild` 0\.28\.2/);
+  assert.match(evidence, /#2559/);
   assert.match(evidence, /lock-owned optional WebAssembly bundle/);
   assert.match(evidence, /#56-#60/);
   assert.match(evidence, /no `extract-zip` entry/);

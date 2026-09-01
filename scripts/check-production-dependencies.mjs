@@ -123,14 +123,23 @@ function extractZipAdvisory(version) {
   return null;
 }
 
+function esbuildAdvisory(version) {
+  const affectedFloor = { major: 0, minor: 27, patch: 3 };
+  const patchedFloor = { major: 0, minor: 28, patch: 1 };
+  if (!isBefore(version, affectedFloor) && isBefore(version, patchedFloor)) {
+    return "GHSA-g7r4-m6w7-qqqr (patched in 0.28.1)";
+  }
+  return null;
+}
+
 export function evaluateKnownHighAdvisoryGraph(packageLock) {
   if (!packageLock?.packages || typeof packageLock.packages !== "object") {
     throw new Error("package lock does not contain a packages graph");
   }
 
   const findings = [];
-  const counts = { nanoid: 0, "js-yaml": 0, postcss: 0, "extract-zip": 0 };
-  for (const packageName of ["nanoid", "js-yaml", "postcss", "extract-zip"]) {
+  const counts = { nanoid: 0, "js-yaml": 0, postcss: 0, "extract-zip": 0, esbuild: 0 };
+  for (const packageName of ["nanoid", "js-yaml", "postcss", "extract-zip", "esbuild"]) {
     const suffix = `/node_modules/${packageName}`;
     for (const [rawPackagePath, entry] of Object.entries(packageLock.packages)) {
       const packagePath = rawPackagePath.replaceAll("\\", "/");
@@ -146,7 +155,9 @@ export function evaluateKnownHighAdvisoryGraph(packageLock) {
             ? jsYamlAdvisory(version)
             : packageName === "postcss"
               ? postcssAdvisory(version)
-              : extractZipAdvisory(version);
+              : packageName === "extract-zip"
+                ? extractZipAdvisory(version)
+                : esbuildAdvisory(version);
       if (advisory) {
         findings.push(`${packageName} ${entry.version} at ${packagePath}: ${advisory}`);
       }
@@ -154,7 +165,7 @@ export function evaluateKnownHighAdvisoryGraph(packageLock) {
   }
 
   if (findings.length > 0) {
-    throw new Error(`lock graph contains known high dependency advisories:\n${findings.join("\n")}`);
+    throw new Error(`lock graph contains known release dependency advisories:\n${findings.join("\n")}`);
   }
   return counts;
 }
@@ -188,7 +199,7 @@ export function main() {
   evaluateDependencyTree(runNpmJson(["ls", "--depth=0", "--json"]), packageLock);
   const counts = evaluateAuditReport(runNpmJson(["audit", "--omit=dev", "--json"]));
   console.log(
-    `Known release advisory graph passed: nanoid=${graphCounts.nanoid} js-yaml=${graphCounts["js-yaml"]} postcss=${graphCounts.postcss} extract-zip=${graphCounts["extract-zip"]}`,
+    `Known release advisory graph passed: nanoid=${graphCounts.nanoid} js-yaml=${graphCounts["js-yaml"]} postcss=${graphCounts.postcss} extract-zip=${graphCounts["extract-zip"]} esbuild=${graphCounts.esbuild}`,
   );
   console.log(
     `Production dependency audit passed: critical=${counts.critical} high=${counts.high} moderate=${counts.moderate} low=${counts.low}`,
