@@ -23,4 +23,4 @@
 
 - [x] 5.1 Add RUNTIME-CORE-026 traceability and user-facing verification/limitation guidance.
 - [x] 5.2 Run focused red/green tests, release package contracts, full affected tests, strict OpenSpec validation, and diff checks.
-- [ ] 5.3 Commit, push, open the issue-linked PR, wait for terminal hosted checks, merge, and reconcile #2550/Project #2.
+- [x] 5.3 Commit, push, open the issue-linked PR, wait for terminal hosted checks, merge, and reconcile #2550/Project #2.
