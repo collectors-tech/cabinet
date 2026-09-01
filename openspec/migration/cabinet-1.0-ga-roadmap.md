@@ -4,7 +4,7 @@ Status: active OpenSpec program plan
 Canonical tracking issue: [#2546](https://github.com/collectors-tech/cabinet/issues/2546)  
 Project: [collectors-tech Project #2](https://github.com/orgs/collectors-tech/projects/2)  
 Baseline date: 2026-09-01  
-Baseline `develop`: `46f4640882bc3d3ba0b2f6225d26ff12bc2c3b10`
+Current evidenced `develop`: `00a434e096131be7e76d55e66c30be6fe69b8b76`
 
 ## Purpose
 
@@ -52,13 +52,13 @@ to make a gate appear green.
 
 | Gate | 2026-09-01 position | Required next evidence |
 | --- | --- | --- |
-| Source qualification | Exact-head hosted validation passed 146/146 UI specifications, 742 tests, and zero failures in [run 33178615689](https://github.com/collectors-tech/cabinet/actions/runs/33178615689). | Re-run at the frozen candidate SHA. A scheduled `no-change` result is not a substitute. |
+| Source qualification | All seven hosted gates passed at exact PR head `4394cf44ac3a96b2fd4c6d2c3e03fbb030aeeb07` in [run 33515181050](https://github.com/collectors-tech/cabinet/actions/runs/33515181050). Post-merge source validation then passed at exact `develop` commit `00a434e096131be7e76d55e66c30be6fe69b8b76` in [run 33515591777](https://github.com/collectors-tech/cabinet/actions/runs/33515591777). | Re-run at the frozen candidate SHA. A scheduled `no-change` result is not a substitute. |
 | First run | A clean production-mode source run returned `setup_complete_failed_401` when choosing **Use Defaults**. | Reproduce against the exact packaged candidate under [#1946](https://github.com/collectors-tech/cabinet/issues/1946), then remediate test-first if confirmed. |
 | Live providers | Frontline [#1944](https://github.com/collectors-tech/cabinet/issues/1944) and Bonza [#1945](https://github.com/collectors-tech/cabinet/issues/1945) lack user-present browser proof. | Complete the lawful live journeys or explicitly classify the providers as Preview/post-1.0 and update the release contract. |
 | Candidate artifacts | The latest published package is [v0.1.0-beta.9](https://github.com/collectors-tech/cabinet/releases/tag/v0.1.0-beta.9), behind the baseline `develop` SHA. | Freeze and package an exact-current candidate under [#1868](https://github.com/collectors-tech/cabinet/issues/1868). |
-| SBOM and provenance | [#2550](https://github.com/collectors-tech/cabinet/issues/2550) is complete. Private package [run 33508229009](https://github.com/collectors-tech/cabinet/actions/runs/33508229009) retained and independently verified a manifest-bound CycloneDX 1.7 SBOM plus build and SBOM attestations for exact `develop` commit `4a41a415b0ee0f30d4052947cc395029062f6d11`. | Reuse this gate for each frozen candidate. This evidence does not replace packaged product, provider, recovery, legal, approval or publication gates. |
+| SBOM and provenance | [#2550](https://github.com/collectors-tech/cabinet/issues/2550) is complete. Private package [run 33515591777](https://github.com/collectors-tech/cabinet/actions/runs/33515591777) retained and independently verified a manifest-bound CycloneDX 1.7 SBOM plus [build](https://github.com/collectors-tech/cabinet/attestations/44428274) and [SBOM](https://github.com/collectors-tech/cabinet/attestations/44428287) attestations for exact `develop` commit `00a434e096131be7e76d55e66c30be6fe69b8b76`. | Reuse this gate for each frozen candidate. This evidence does not replace packaged product, provider, recovery, legal, approval or publication gates. |
 | Packaged acceptance | Exact-current Companion, collector workflow and recovery acceptance are incomplete. | Complete [#2034](https://github.com/collectors-tech/cabinet/issues/2034), [#1869](https://github.com/collectors-tech/cabinet/issues/1869) and [#1867](https://github.com/collectors-tech/cabinet/issues/1867) against one candidate. |
-| Dependency security | The local production gate reports critical/high/moderate `0/0/0` and low `1`; GitHub still reports open medium/low advisories. | Reconcile every advisory against the exact lock, installed production tree and packaged contents. Record evidence for fixes or dismissals. |
+| Dependency security | [#2559](https://github.com/collectors-tech/cabinet/issues/2559) moved the final affected `develop` lock path to `esbuild` 0.28.2 and added a fail-closed advisory contract. Clean install and package validation report critical/high/moderate/low `0/0/0/0`. GitHub still reports 23 alerts against older default `main`; they cannot truthfully close until an explicitly approved promotion puts the patched graph on the default branch. | Repeat the gate at the frozen candidate SHA and reconcile the hosted default-branch records after any separately approved promotion. |
 | Legal and support | Entity, privacy, retention, licensing, consumer and support decisions remain open in [#2057](https://github.com/collectors-tech/cabinet/issues/2057). | Record owner decisions and verify the exact candidate documentation. |
 | Publication | No exact-current approved release exists. | Obtain exact-commit approval, publish, independently redownload and replay, then re-read release, issue and Project state. |
 
@@ -178,7 +178,9 @@ Exit gate:
 
 | Area | Evidence |
 | --- | --- |
-| SBOM and provenance | [#2550](https://github.com/collectors-tech/cabinet/issues/2550); retained private package [run 33508229009](https://github.com/collectors-tech/cabinet/actions/runs/33508229009); build attestation [#44409596](https://github.com/collectors-tech/cabinet/attestations/44409596); CycloneDX attestation [#44409608](https://github.com/collectors-tech/cabinet/attestations/44409608) |
+| SBOM and provenance | [#2550](https://github.com/collectors-tech/cabinet/issues/2550); retained private package [run 33515591777](https://github.com/collectors-tech/cabinet/actions/runs/33515591777); build attestation [#44428274](https://github.com/collectors-tech/cabinet/attestations/44428274); CycloneDX attestation [#44428287](https://github.com/collectors-tech/cabinet/attestations/44428287) |
+| Supported GitHub Actions runtime | [#2557](https://github.com/collectors-tech/cabinet/issues/2557); all seven hosted checks in [run 33512211318](https://github.com/collectors-tech/cabinet/actions/runs/33512211318); post-merge private package [run 33512797108](https://github.com/collectors-tech/cabinet/actions/runs/33512797108) with zero deprecated Node 20 runtime warnings |
+| Production dependency advisories | [#2559](https://github.com/collectors-tech/cabinet/issues/2559); all seven hosted checks in [run 33515181050](https://github.com/collectors-tech/cabinet/actions/runs/33515181050); exact post-merge package/SBOM [run 33515591777](https://github.com/collectors-tech/cabinet/actions/runs/33515591777); clean installed graph `0/0/0/0` and patched `esbuild` 0.28.2 build tooling |
 
 ### Beta-evidence candidates
 
