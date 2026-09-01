@@ -80,7 +80,10 @@ test('private package workflow validates before packaging from a fresh least-pri
   assert.doesNotMatch(validation, /id-token:\s*write|attestations:\s*write/)
   assert.match(packaging, /needs:\s*validate-source/)
   assert.match(packaging, /permissions:\s*\n\s+contents:\s*read\s*\n\s+id-token:\s*write\s*\n\s+attestations:\s*write/)
-  assert.match(packaging, /uses:\s*actions\/checkout@v4/)
+  assert.match(
+    packaging,
+    /uses:\s*actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\.0\.1/,
+  )
   assert.match(packaging, /Confirm exact clean checkout/)
 })
 
