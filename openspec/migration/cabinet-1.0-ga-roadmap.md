@@ -56,6 +56,7 @@ to make a gate appear green.
 | First run | A clean production-mode source run returned `setup_complete_failed_401` when choosing **Use Defaults**. | Reproduce against the exact packaged candidate under [#1946](https://github.com/collectors-tech/cabinet/issues/1946), then remediate test-first if confirmed. |
 | Live providers | Frontline [#1944](https://github.com/collectors-tech/cabinet/issues/1944) and Bonza [#1945](https://github.com/collectors-tech/cabinet/issues/1945) lack user-present browser proof. | Complete the lawful live journeys or explicitly classify the providers as Preview/post-1.0 and update the release contract. |
 | Candidate artifacts | The latest published package is [v0.1.0-beta.9](https://github.com/collectors-tech/cabinet/releases/tag/v0.1.0-beta.9), behind the baseline `develop` SHA. | Freeze and package an exact-current candidate under [#1868](https://github.com/collectors-tech/cabinet/issues/1868). |
+| SBOM and provenance | [#2550](https://github.com/collectors-tech/cabinet/issues/2550) is complete. Private package [run 33508229009](https://github.com/collectors-tech/cabinet/actions/runs/33508229009) retained and independently verified a manifest-bound CycloneDX 1.7 SBOM plus build and SBOM attestations for exact `develop` commit `4a41a415b0ee0f30d4052947cc395029062f6d11`. | Reuse this gate for each frozen candidate. This evidence does not replace packaged product, provider, recovery, legal, approval or publication gates. |
 | Packaged acceptance | Exact-current Companion, collector workflow and recovery acceptance are incomplete. | Complete [#2034](https://github.com/collectors-tech/cabinet/issues/2034), [#1869](https://github.com/collectors-tech/cabinet/issues/1869) and [#1867](https://github.com/collectors-tech/cabinet/issues/1867) against one candidate. |
 | Dependency security | The local production gate reports critical/high/moderate `0/0/0` and low `1`; GitHub still reports open medium/low advisories. | Reconcile every advisory against the exact lock, installed production tree and packaged contents. Record evidence for fixes or dismissals. |
 | Legal and support | Entity, privacy, retention, licensing, consumer and support decisions remain open in [#2057](https://github.com/collectors-tech/cabinet/issues/2057). | Record owner decisions and verify the exact candidate documentation. |
@@ -132,7 +133,8 @@ Required work:
   portable-only release requires explicit approval and truthful documentation.
 - Provision and validate code-signing and update-signing keys.
 - Test install, uninstall, upgrade, rollback and supported data migrations.
-- Produce SBOM and provenance evidence and reconcile all security advisories.
+- Reproduce the completed SBOM and provenance gate from #2550 for the immutable RC.
+- Reconcile all security advisories against the exact packaged contents.
 - Complete threat-model review, corrupted-input handling and recovery exercises.
 - Finalize privacy, legal, licensing, support and incident-response material.
 - Qualify performance and accessibility on supported Windows hardware.
@@ -171,6 +173,12 @@ Exit gate:
 | Candidate and browser artifacts | [#1868](https://github.com/collectors-tech/cabinet/issues/1868), [#2034](https://github.com/collectors-tech/cabinet/issues/2034) |
 | Packaged product and recovery | [#1869](https://github.com/collectors-tech/cabinet/issues/1869), [#1867](https://github.com/collectors-tech/cabinet/issues/1867) |
 | Legal, privacy and support | [#2057](https://github.com/collectors-tech/cabinet/issues/2057) |
+
+### Completed GA evidence enablers
+
+| Area | Evidence |
+| --- | --- |
+| SBOM and provenance | [#2550](https://github.com/collectors-tech/cabinet/issues/2550); retained private package [run 33508229009](https://github.com/collectors-tech/cabinet/actions/runs/33508229009); build attestation [#44409596](https://github.com/collectors-tech/cabinet/attestations/44409596); CycloneDX attestation [#44409608](https://github.com/collectors-tech/cabinet/attestations/44409608) |
 
 ### Beta-evidence candidates
 
