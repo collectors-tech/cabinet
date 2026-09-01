@@ -59,6 +59,10 @@ $packagePath = Join-Path $out $packageName
 $checksumPath = "$packagePath.sha256"
 $notesPath = Join-Path $out "cabinet-$resolvedVersion-release-notes.md"
 $manifestPath = Join-Path $out "cabinet-release-manifest.json"
+$sbomName = "cabinet-$resolvedVersion-sbom.cdx.json"
+$sbomPath = Join-Path $out $sbomName
+$embeddedSBOMName = "CABINET-SBOM.cdx.json"
+$embeddedSBOMPath = Join-Path $stage $embeddedSBOMName
 $disclosurePath = Join-Path $root "release\cabinet-beta-disclosure.json"
 
 Write-CabinetBanner -Command "package-installers" -Summary "Build the Windows portable beta package."
@@ -69,7 +73,7 @@ Write-CabinetHint "This script creates a truthful Windows portable package, not 
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stage
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
-foreach ($artifactPath in @($packagePath, $checksumPath, $notesPath, $manifestPath)) {
+foreach ($artifactPath in @($packagePath, $checksumPath, $notesPath, $manifestPath, $sbomPath)) {
   if (Test-Path -LiteralPath $artifactPath) {
     throw "Refusing to overwrite existing release output: $artifactPath"
   }
@@ -122,6 +126,19 @@ if ($portableGuide -match '\{\{CABINET_[A-Z_]+\}\}') {
   [System.Text.UTF8Encoding]::new($false)
 )
 
+Write-CabinetSection "Software bill of materials"
+& node (Join-Path $root "scripts\create-cabinet-sbom.mjs") `
+  --version $resolvedVersion `
+  --source-commit $buildRevision `
+  --build-date $buildDate `
+  --go-binary (Join-Path $stage "cabinet.exe") `
+  --go-binary (Join-Path $stage "cabinet-mcp.exe") `
+  --output $sbomPath
+if ($LASTEXITCODE -ne 0) {
+  throw "CycloneDX SBOM generation failed with exit code $LASTEXITCODE"
+}
+Copy-Item -LiteralPath $sbomPath -Destination $embeddedSBOMPath
+
 $disclosureNotes = & node (Join-Path $root "scripts\render-beta-disclosure.mjs") --format release-notes --source $disclosurePath
 if ($LASTEXITCODE -ne 0) {
   throw "Failed to render governed Cabinet beta disclosure."
@@ -146,6 +163,7 @@ $disclosureNotes
 
 - Extract ``$packageName`` and open ``README.md`` in the package root for startup, data-path, privacy, support, and development boundaries.
 - Open ``WINDOWS-PORTABLE-BETA.md`` in the package root for install, backup, upgrade, rollback, and removal steps.
+- Inspect ``$embeddedSBOMName`` in the package root or the separately supplied ``$sbomName`` for the source-bound CycloneDX dependency inventory.
 - After Cabinet starts, open **Help Center > Integrations** for Browser Companion install, pairing, provider capture, revocation, and recovery guidance. Use any separately supplied companion target release notes and manifest with it.
 
 ## Exact-source online references
@@ -159,6 +177,7 @@ These links require access to the source repository. The supplied package guidan
 
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $packagePath
 $hash = Get-FileHash -LiteralPath $packagePath -Algorithm SHA256
+$sbomHash = Get-FileHash -LiteralPath $sbomPath -Algorithm SHA256
 $checksumLine = "$($hash.Hash.ToLowerInvariant())  $packageName`n"
 [System.IO.File]::WriteAllText($checksumPath, $checksumLine, [System.Text.UTF8Encoding]::new($false))
 
@@ -191,6 +210,17 @@ $releaseManifest = [ordered]@{
     sha256 = $hash.Hash.ToLowerInvariant()
     size_bytes = [int64](Get-Item -LiteralPath $packagePath).Length
   }
+  sbom = [ordered]@{
+    filename = $sbomName
+    embedded_path = $embeddedSBOMName
+    format = "cyclonedx-json"
+    spec_version = "1.7"
+    predicate_type = "https://cyclonedx.org/bom"
+    sha256 = $sbomHash.Hash.ToLowerInvariant()
+    size_bytes = [int64](Get-Item -LiteralPath $sbomPath).Length
+    source_commit = $buildRevision
+    subject_artifact_sha256 = $hash.Hash.ToLowerInvariant()
+  }
   release_notes_filename = [System.IO.Path]::GetFileName($notesPath)
   package_files = $packageFiles
 }
@@ -201,3 +231,4 @@ Write-CabinetKeyValue -Key "Package path" -Value $packagePath
 Write-CabinetKeyValue -Key "SHA256 path" -Value $checksumPath
 Write-CabinetKeyValue -Key "Release notes" -Value $notesPath
 Write-CabinetKeyValue -Key "Release manifest" -Value $manifestPath
+Write-CabinetKeyValue -Key "CycloneDX SBOM" -Value $sbomPath

@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 
+import { verifyCabinetSBOM } from './cabinet-sbom.mjs'
+
 const sha256File = async (path) => createHash('sha256').update(await readFile(path)).digest('hex')
 const safeFilename = (value) => typeof value === 'string' && value === basename(value) && value.length > 0
 const safeArchivePath = (value) => typeof value === 'string' && value.length > 0 && !value.startsWith('/') &&
@@ -88,6 +90,26 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
   }
   await verifyCabinetReleaseDisclosure(notes, repositoryRoot)
 
+  const expectedSBOMFilename = `cabinet-${release.version}-sbom.cdx.json`
+  const sbom = release.sbom
+  if (sbom?.filename !== expectedSBOMFilename || !safeFilename(sbom?.filename) || sbom?.embedded_path !== 'CABINET-SBOM.cdx.json' ||
+      sbom?.format !== 'cyclonedx-json' || sbom?.spec_version !== '1.7' || sbom?.predicate_type !== 'https://cyclonedx.org/bom' ||
+      !/^[a-f0-9]{64}$/.test(sbom?.sha256 ?? '') || !Number.isInteger(sbom?.size_bytes) || sbom.size_bytes < 1 ||
+      sbom?.source_commit !== release.source_commit || sbom?.subject_artifact_sha256 !== artifact.sha256) {
+    throw new Error('cabinet_sbom_manifest_identity_invalid')
+  }
+  const sbomBytes = await readFile(join(outputDirectory, expectedSBOMFilename))
+  if (sbomBytes.length !== sbom.size_bytes || createHash('sha256').update(sbomBytes).digest('hex') !== sbom.sha256) {
+    throw new Error('cabinet_sbom_checksum_mismatch')
+  }
+  let parsedSBOM
+  try {
+    parsedSBOM = JSON.parse(sbomBytes.toString('utf8'))
+  } catch {
+    throw new Error('cabinet_sbom_json_invalid')
+  }
+  verifyCabinetSBOM(parsedSBOM, { version: release.version, sourceCommit: release.source_commit, buildDate: release.build_date })
+
   if (!Array.isArray(release.package_files) || release.package_files.length < 4) throw new Error('cabinet_package_file_inventory_invalid')
   const paths = new Set()
   const recordedFiles = new Map()
@@ -98,11 +120,12 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
     paths.add(file.path)
     recordedFiles.set(file.path, file)
   }
-  for (const required of ['cabinet.exe', 'cabinet-mcp.exe', 'README.md', 'WINDOWS-PORTABLE-BETA.md']) {
+  for (const required of ['cabinet.exe', 'cabinet-mcp.exe', 'README.md', 'WINDOWS-PORTABLE-BETA.md', 'CABINET-SBOM.cdx.json']) {
     if (!paths.has(required)) throw new Error(`cabinet_required_package_file_missing:${required}`)
   }
   const archivedFiles = readZipEntries(archive)
   if ([...archivedFiles.keys()].sort().join('\n') !== [...paths].sort().join('\n')) throw new Error('cabinet_zip_file_inventory_mismatch')
+  if (!archivedFiles.get(sbom.embedded_path)?.equals(sbomBytes)) throw new Error('cabinet_sbom_embedded_bytes_mismatch')
   const portableGuide = archivedFiles.get('WINDOWS-PORTABLE-BETA.md').toString('utf8')
   if (!portableGuide.includes(`Cabinet \`${release.version}\``) ||
       !portableGuide.includes(`\`${expectedFilename}\``) ||

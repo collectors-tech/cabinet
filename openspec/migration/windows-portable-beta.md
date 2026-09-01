@@ -18,6 +18,26 @@ For a normal portable launch, Cabinet creates a `data` directory beside `cabinet
 
 Before replacing an existing beta build, run a backup from Settings Storage and keep the generated ZIP outside the extracted Cabinet folder. Start the new portable build against the same confirmed data directory only after recording the package checksum and commit. Confirm the active profile and representative Inventory, Wishlist, Collection, and saved-view data after restart.
 
+## Verify the Package and SBOM
+
+The candidate includes `cabinet-{{CABINET_BETA_VERSION}}-sbom.cdx.json` beside the portable ZIP and the identical bytes as `CABINET-SBOM.cdx.json` inside it. The release manifest records the SBOM and package SHA-256 values, exact source commit, and the SBOM's package subject digest.
+
+Before extraction, compare the locally calculated hashes with the supplied manifest and `.sha256` file:
+
+```powershell
+Get-FileHash -Algorithm SHA256 -LiteralPath .\{{CABINET_PORTABLE_FILENAME}}
+Get-FileHash -Algorithm SHA256 -LiteralPath .\cabinet-{{CABINET_BETA_VERSION}}-sbom.cdx.json
+```
+
+For a candidate created by the hosted package workflow, verify the build-provenance and CycloneDX statements against this repository:
+
+```powershell
+gh attestation verify .\{{CABINET_PORTABLE_FILENAME}} --repo collectors-tech/cabinet
+gh attestation verify .\{{CABINET_PORTABLE_FILENAME}} --repo collectors-tech/cabinet --predicate-type https://cyclonedx.org/bom
+```
+
+The CycloneDX inventory describes the Go modules recorded in the shipped binaries and the production UI dependency graph. It does not prove that dependencies are free of vulnerabilities, appropriately licensed, reachable at runtime, or approved for release. A valid hosted attestation links an artifact to a repository workflow; it does not replace packaged acceptance, code signing, or release approval.
+
 ## Uninstall or Rollback
 
 Close Cabinet before moving or deleting files. With the executable-local layout, deleting the whole extracted folder also deletes the default `data` directory inside it; deleting only `cabinet.exe` does not reliably remove data from an overridden or custom location. Keep or move the confirmed data directory as needed.

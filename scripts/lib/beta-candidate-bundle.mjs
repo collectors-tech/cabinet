@@ -29,6 +29,7 @@ export const createBetaCandidateBundle = async ({
         manifest_filename: 'cabinet-release-manifest.json',
         release_notes_filename: cabinet.release_notes_filename,
         artifacts: [cabinet.artifact],
+        sbom: cabinet.sbom,
       },
       {
         product: companion.product,

@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 jobs:
   build-windows-portable-package:
@@ -68,6 +70,17 @@ jobs:
       - name: Verify exact Windows portable package
         run: node scripts/verify-cabinet-release-package.mjs --manifest dist/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
 
+      - name: Attest Windows portable package build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/cabinet/cabinet-*-windows-amd64-portable.zip
+
+      - name: Attest Windows portable package CycloneDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/cabinet/cabinet-*-windows-amd64-portable.zip
+          sbom-path: dist/cabinet/cabinet-*-sbom.cdx.json
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -78,3 +91,4 @@ jobs:
             dist/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
             dist/cabinet/cabinet-*-release-notes.md
             dist/cabinet/cabinet-release-manifest.json
+            dist/cabinet/cabinet-*-sbom.cdx.json
