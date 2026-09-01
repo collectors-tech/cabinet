@@ -222,33 +222,22 @@ export function verifyCabinetSBOM(sbom, { version, sourceCommit, buildDate }) {
   return sbom
 }
 
-export function parseJSONValues(text) {
-  const values = []
-  let start = -1
-  let depth = 0
-  let quoted = false
-  let escaped = false
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index]
-    if (quoted) {
-      if (escaped) escaped = false
-      else if (character === '\\') escaped = true
-      else if (character === '"') quoted = false
-      continue
-    }
-    if (character === '"') quoted = true
-    else if (character === '{') {
-      if (depth === 0) start = index
-      depth += 1
-    } else if (character === '}') {
-      depth -= 1
-      if (depth < 0) fail('cabinet_sbom_go_list_json_invalid')
-      if (depth === 0 && start >= 0) {
-        values.push(JSON.parse(text.slice(start, index + 1)))
-        start = -1
-      }
+export function parseGoBuildModules(text) {
+  if (typeof text !== 'string' || text.trim() === '') fail('cabinet_sbom_go_build_info_invalid')
+  const modules = []
+  let previousDependency
+  for (const line of text.split(/\r?\n/)) {
+    const fields = line.replace(/^\s+/, '').split('\t')
+    if (fields[0] === 'dep') {
+      if (fields.length !== 4 || !fields[1] || !fields[2] || !fields[3]?.startsWith('h1:')) fail('cabinet_sbom_go_build_info_invalid')
+      previousDependency = { Path: fields[1], Version: fields[2], Sum: fields[3] }
+      modules.push(previousDependency)
+    } else if (fields[0] === '=>') {
+      if (!previousDependency || fields.length < 3 || fields.length > 4 || !fields[1] || !fields[2]) fail('cabinet_sbom_go_build_info_invalid')
+      previousDependency.Replace = { Path: fields[1], Version: fields[2] }
+      if (fields[3]) previousDependency.Replace.Sum = fields[3]
     }
   }
-  if (quoted || depth !== 0 || start !== -1 || values.length === 0) fail('cabinet_sbom_go_list_json_invalid')
-  return values
+  if (modules.length === 0) fail('cabinet_sbom_go_build_info_invalid')
+  return modules
 }

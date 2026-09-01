@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import test from 'node:test'
 
-import { createCabinetSBOM, verifyCabinetSBOM } from './lib/cabinet-sbom.mjs'
+import { createCabinetSBOM, parseGoBuildModules, verifyCabinetSBOM } from './lib/cabinet-sbom.mjs'
 
 const sourceCommit = 'a'.repeat(40)
 const buildDate = '2026-09-01T00:00:00Z'
@@ -100,4 +100,30 @@ test('rejects invalid generator inputs instead of emitting partial inventory', (
     () => createCabinetSBOM({ version, sourceCommit, buildDate, goModules, npmLock: missingProductionGraph }),
     /cabinet_sbom_npm_dependency_missing:react/,
   )
+})
+
+test('parses the stable go version -m format used by the repository toolchain', () => {
+  const buildInfo = [
+    'cabinet.exe: go1.24.0',
+    '\tpath\tgithub.com/collectors-tech/cabinet/cmd/cabinet',
+    '\tmod\tgithub.com/collectors-tech/cabinet\t(devel)\t',
+    `\tdep\tgithub.com/example/runtime\tv1.2.3\t${goSum(1)}`,
+    '\tbuild\tGOOS=windows',
+    'cabinet-mcp.exe: go1.24.0',
+    '\tpath\tgithub.com/collectors-tech/cabinet/cmd/cabinet-mcp',
+    `\tdep\tgithub.com/example/runtime\tv1.2.3\t${goSum(1)}`,
+    `\tdep\tgithub.com/example/old\tv1.0.0\t${goSum(2)}`,
+    `\t=>\tgithub.com/example/new\tv1.0.1\t${goSum(3)}`,
+  ].join('\n')
+  assert.deepEqual(parseGoBuildModules(buildInfo), [
+    { Path: 'github.com/example/runtime', Version: 'v1.2.3', Sum: goSum(1) },
+    { Path: 'github.com/example/runtime', Version: 'v1.2.3', Sum: goSum(1) },
+    {
+      Path: 'github.com/example/old',
+      Version: 'v1.0.0',
+      Sum: goSum(2),
+      Replace: { Path: 'github.com/example/new', Version: 'v1.0.1', Sum: goSum(3) },
+    },
+  ])
+  assert.throws(() => parseGoBuildModules('cabinet.exe: go1.24.0\n\tdep\tmissing-version'), /cabinet_sbom_go_build_info_invalid/)
 })

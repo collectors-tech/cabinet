@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { promisify } from 'node:util'
 
-import { createCabinetSBOM, parseJSONValues, verifyCabinetSBOM } from './lib/cabinet-sbom.mjs'
+import { createCabinetSBOM, parseGoBuildModules, verifyCabinetSBOM } from './lib/cabinet-sbom.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -30,7 +30,7 @@ const goBinaries = options('--go-binary').map((path) => resolve(path))
 if (goBinaries.length === 0) throw new Error('cabinet_sbom_go_binary_missing')
 
 const [{ stdout: goBuildInfo }, packageLockText] = await Promise.all([
-  execFileAsync('go', ['version', '-m', '-json', ...goBinaries], {
+  execFileAsync('go', ['version', '-m', ...goBinaries], {
     cwd: repositoryRoot,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
@@ -42,7 +42,7 @@ const sbom = createCabinetSBOM({
   version,
   sourceCommit,
   buildDate,
-  goModules: parseJSONValues(goBuildInfo).flatMap((build) => build.Deps ?? []),
+  goModules: parseGoBuildModules(goBuildInfo),
   npmLock: JSON.parse(packageLockText),
 })
 verifyCabinetSBOM(sbom, { version, sourceCommit, buildDate })
