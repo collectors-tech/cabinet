@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 const sourceCommitPattern = /^[0-9a-f]{40}$/
+const urlNamespaceUuid = Buffer.from('6ba7b8119dad11d180b400c04fd430c8', 'hex')
 const shaHexLengths = new Map([
   ['SHA-256', 64],
   ['SHA-384', 96],
@@ -22,6 +23,15 @@ function validateIdentity({ version, sourceCommit, buildDate }) {
   if (typeof buildDate !== 'string' || Number.isNaN(Date.parse(buildDate)) || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(buildDate)) {
     fail('cabinet_sbom_build_date_invalid')
   }
+}
+
+function sbomSerialNumber({ version, sourceCommit, buildDate }) {
+  const name = `https://github.com/collectors-tech/cabinet/sbom/${version}/${sourceCommit}/${buildDate}`
+  const bytes = Buffer.from(createHash('sha1').update(urlNamespaceUuid).update(name, 'utf8').digest().subarray(0, 16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x50
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = bytes.toString('hex')
+  return `urn:uuid:${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function hashFromIntegrity(integrity, context) {
@@ -170,6 +180,7 @@ export function createCabinetSBOM({ version, sourceCommit, buildDate, goModules,
     $schema: 'https://cyclonedx.org/schema/bom-1.7.schema.json',
     bomFormat: 'CycloneDX',
     specVersion: '1.7',
+    serialNumber: sbomSerialNumber({ version, sourceCommit, buildDate }),
     version: 1,
     metadata: { timestamp: buildDate, component: rootComponent },
     components,
@@ -184,6 +195,7 @@ export function verifyCabinetSBOM(sbom, { version, sourceCommit, buildDate }) {
   if (sbom.$schema !== 'https://cyclonedx.org/schema/bom-1.7.schema.json' || sbom.bomFormat !== 'CycloneDX' || sbom.specVersion !== '1.7' || sbom.version !== 1) {
     fail('cabinet_sbom_format_mismatch')
   }
+  if (sbom.serialNumber !== sbomSerialNumber({ version, sourceCommit, buildDate })) fail('cabinet_sbom_serial_number_mismatch')
   if (sbom.metadata?.timestamp !== buildDate) fail('cabinet_sbom_build_date_mismatch')
   const root = sbom.metadata?.component
   if (root?.type !== 'application' || root?.name !== 'Cabinet' || root?.version !== version) fail('cabinet_sbom_root_identity_mismatch')

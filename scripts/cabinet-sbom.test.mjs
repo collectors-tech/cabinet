@@ -51,6 +51,9 @@ test('creates deterministic CycloneDX 1.7 from Go and production npm dependencie
   assert.equal(`${JSON.stringify(first, null, 2)}\n`, `${JSON.stringify(second, null, 2)}\n`)
   assert.equal(first.bomFormat, 'CycloneDX')
   assert.equal(first.specVersion, '1.7')
+  assert.match(first.serialNumber, /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  const differentSource = createCabinetSBOM({ version, sourceCommit: 'b'.repeat(40), buildDate, goModules, npmLock })
+  assert.notEqual(differentSource.serialNumber, first.serialNumber)
   assert.equal(first.metadata.timestamp, buildDate)
   assert.equal(first.metadata.component.version, version)
   assert.equal(first.metadata.component.properties.find((item) => item.name === 'cabinet:source_commit')?.value, sourceCommit)
@@ -87,6 +90,10 @@ test('deduplicates repeated package identities and rejects malformed or drifted 
   const malformedHash = structuredClone(create())
   malformedHash.components[0].hashes[0].content = createHash('sha256').update('short').digest('hex').slice(1)
   assert.throws(() => verifyCabinetSBOM(malformedHash, { version, sourceCommit, buildDate }), /cabinet_sbom_component_hash_invalid/)
+
+  const missingSerial = structuredClone(create())
+  delete missingSerial.serialNumber
+  assert.throws(() => verifyCabinetSBOM(missingSerial, { version, sourceCommit, buildDate }), /cabinet_sbom_serial_number_mismatch/)
 })
 
 test('rejects invalid generator inputs instead of emitting partial inventory', () => {
