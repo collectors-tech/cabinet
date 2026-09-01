@@ -15,6 +15,7 @@ import {
   renderAcceptanceMarkdown,
   validateAcceptanceState,
 } from './lib/acceptance-evidence-recorder.mjs'
+import { createCabinetSBOM } from './lib/cabinet-sbom.mjs'
 
 const commit = 'a'.repeat(40)
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
@@ -33,6 +34,23 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
   const candidateVersion = `0.1.0-beta.10.g${sourceCommit.slice(0, 12)}`
   const cabinetArtifact = await writeArtifact(directory, 'cabinet-0.1.0-beta.10-windows-amd64-portable.zip', `cabinet-${suffix}`)
   cabinetArtifact.kind = 'portable_zip'
+  const buildDate = '2026-08-11T00:00:00Z'
+  const sbomDocument = createCabinetSBOM({
+    version: '0.1.0-beta.10',
+    sourceCommit,
+    buildDate,
+    goModules: [
+      { Path: 'github.com/collectors-tech/cabinet', Main: true },
+      { Path: 'github.com/example/runtime', Version: 'v1.2.3', Sum: `h1:${Buffer.alloc(32, 1).toString('base64')}` },
+    ],
+    npmLock: { packages: {
+      '': { dependencies: { react: '19.2.3' } },
+      'node_modules/react': { version: '19.2.3', integrity: `sha512-${Buffer.alloc(64, 2).toString('base64')}` },
+    } },
+  })
+  const sbomBytes = Buffer.from(`${JSON.stringify(sbomDocument, null, 2)}\n`)
+  const sbomFilename = 'cabinet-0.1.0-beta.10-sbom.cdx.json'
+  await writeFile(join(directory, sbomFilename), sbomBytes)
   const chromeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-chrome.zip`, `chrome-${suffix}`)
   const edgeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-edge.zip`, `edge-${suffix}`)
   const cabinet = {
@@ -41,9 +59,20 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
     channel: 'private-beta',
     version: '0.1.0-beta.10',
     source_commit: sourceCommit,
-    build_date: '2026-08-11T00:00:00Z',
+    build_date: buildDate,
     publication_state: 'private_candidate_not_published',
     artifact: cabinetArtifact,
+    sbom: {
+      filename: sbomFilename,
+      embedded_path: 'CABINET-SBOM.cdx.json',
+      format: 'cyclonedx-json',
+      spec_version: '1.7',
+      predicate_type: 'https://cyclonedx.org/bom',
+      sha256: sha256(sbomBytes),
+      size_bytes: sbomBytes.length,
+      source_commit: sourceCommit,
+      subject_artifact_sha256: cabinetArtifact.sha256,
+    },
     release_notes_filename: 'cabinet-0.1.0-beta.10-release-notes.md',
   }
   const companion = {
@@ -66,7 +95,7 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
     source_commit: sourceCommit,
     publication_state: 'private_candidate_not_published',
     components: [
-      { product: cabinet.product, version: cabinet.version, manifest_filename: 'cabinet-release-manifest.json', release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact] },
+      { product: cabinet.product, version: cabinet.version, manifest_filename: 'cabinet-release-manifest.json', release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact], sbom: cabinet.sbom },
       { product: companion.product, version: companion.version_name, manifest_filename: 'browser-companion-release-manifest.json', release_notes_filename: companion.release_notes_filename, protocol_compatibility: companion.protocol_compatibility, artifacts: companion.artifacts.map(({ target, filename, sha256_filename, sha256 }) => ({ target, filename, sha256_filename, sha256 })) },
     ],
   }
@@ -121,12 +150,20 @@ test('candidate identity, three manifests, and independently verified package ch
   assert.equal(state.candidate.source_commit, commit)
   assert.equal(state.environment.runtime.build_revision, commit)
   assert.equal(state.candidate.cabinet.package.filename, 'cabinet-0.1.0-beta.10-windows-amd64-portable.zip')
+  assert.equal(state.candidate.cabinet.sbom.sha256.length, 64)
   assert.deepEqual(state.candidate.companion.packages.map((item) => item.target), ['chrome', 'edge'])
   assert.equal(state.rows.length, acceptanceRows.length)
 
   const cabinet = JSON.parse(await readFile(fixture.cabinetManifestPath, 'utf8'))
   await writeFile(join(fixture.directory, cabinet.artifact.filename), 'tampered')
   await assert.rejects(() => start(fixture, join(fixture.directory, 'tampered.json')), /acceptance_package_checksum_mismatch/)
+})
+
+test('candidate identity rejects a standalone SBOM that drifts from its manifest fingerprint', async () => {
+  const fixture = await candidateFixture()
+  const cabinet = JSON.parse(await readFile(fixture.cabinetManifestPath, 'utf8'))
+  await writeFile(join(fixture.directory, cabinet.sbom.filename), 'tampered')
+  await assert.rejects(() => start(fixture), /acceptance_sbom_checksum_mismatch/)
 })
 
 test('running package revision must be a full lowercase SHA matching the candidate manifest', async () => {

@@ -105,6 +105,13 @@ jobs:
           node scripts/create-beta-candidate-bundle.mjs --cabinet-manifest candidate/dist/cabinet/cabinet-release-manifest.json --companion-manifest candidate/dist/browser-companion/browser-companion-release-manifest.json --output candidate/recreated-beta-candidate-bundle-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
           cmp candidate/recreated-beta-candidate-bundle-manifest.json candidate/dist/beta-candidate-bundle-manifest.json
 
+      - name: Verify source-bound package attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY"
+          gh attestation verify candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
+
       - name: Resolve immutable release identity
         id: release
         env:
@@ -150,6 +157,7 @@ jobs:
             candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip
             candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
             candidate/dist/cabinet/cabinet-*-release-notes.md
+            candidate/dist/cabinet/cabinet-*-sbom.cdx.json
             candidate/dist/browser-companion/browser-companion-release-manifest.json
             candidate/dist/browser-companion/browser-companion-candidate-summary.md
             candidate/dist/browser-companion/cabinet-browser-companion-*.zip

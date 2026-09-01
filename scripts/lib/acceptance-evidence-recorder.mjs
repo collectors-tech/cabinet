@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import { access, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
+import { verifyCabinetSBOM } from './cabinet-sbom.mjs'
+
 const rows = (section, prefix, titles, requiresHumanConfirmation = false) => titles.map((title, index) => ({
   id: `${prefix}-${String(index + 1).padStart(2, '0')}`,
   section,
@@ -132,6 +134,42 @@ const requireReleaseNotes = async (manifestPath, filename, target) => {
   return filename
 }
 
+const verifySBOM = async (manifestPath, cabinet, cabinetPackage) => {
+  const sbom = cabinet.sbom
+  const expectedFilename = `cabinet-${cabinet.version}-sbom.cdx.json`
+  if (!isObject(sbom) || sbom.filename !== expectedFilename || !safeFilename(sbom.filename) ||
+      sbom.embedded_path !== 'CABINET-SBOM.cdx.json' || sbom.format !== 'cyclonedx-json' || sbom.spec_version !== '1.7' ||
+      sbom.predicate_type !== 'https://cyclonedx.org/bom' || !checksum(sbom.sha256) || !Number.isInteger(sbom.size_bytes) || sbom.size_bytes < 1 ||
+      sbom.source_commit !== cabinet.source_commit || sbom.subject_artifact_sha256 !== cabinetPackage.sha256) {
+    throw new Error('acceptance_sbom_identity_invalid')
+  }
+  const data = await readFile(join(dirname(manifestPath), sbom.filename))
+    .catch(() => { throw new Error('acceptance_sbom_missing') })
+  if (data.length !== sbom.size_bytes || sha256(data) !== sbom.sha256) throw new Error('acceptance_sbom_checksum_mismatch')
+  let document
+  try {
+    document = JSON.parse(data)
+  } catch {
+    throw new Error('acceptance_sbom_json_invalid')
+  }
+  verifyCabinetSBOM(document, {
+    version: cabinet.version,
+    sourceCommit: cabinet.source_commit,
+    buildDate: cabinet.build_date,
+  })
+  return {
+    filename: sbom.filename,
+    embedded_path: sbom.embedded_path,
+    format: sbom.format,
+    spec_version: sbom.spec_version,
+    predicate_type: sbom.predicate_type,
+    sha256: sbom.sha256,
+    size_bytes: sbom.size_bytes,
+    source_commit: sbom.source_commit,
+    subject_artifact_sha256: sbom.subject_artifact_sha256,
+  }
+}
+
 const verifyCandidate = async ({
   cabinetManifestPath,
   companionManifestPath,
@@ -175,6 +213,7 @@ const verifyCandidate = async ({
     throw new Error('acceptance_candidate_manifest_filename_invalid')
   }
   const cabinetPackage = await verifyArtifact(dirname(cabinetManifestPath), cabinet.artifact, 'windows-amd64')
+  const cabinetSBOM = await verifySBOM(cabinetManifestPath, cabinet, cabinetPackage)
   const companionArtifacts = new Map((companion.artifacts ?? []).map((artifact) => [artifact.target, artifact]))
   if (companionArtifacts.size !== 2 || !companionArtifacts.has('chrome') || !companionArtifacts.has('edge')) {
     throw new Error('acceptance_companion_targets_invalid')
@@ -183,7 +222,7 @@ const verifyCandidate = async ({
   for (const target of ['chrome', 'edge']) companionPackages.push(await verifyArtifact(dirname(companionManifestPath), companionArtifacts.get(target), target))
 
   const expectedComponents = [
-    { product: cabinet.product, version: cabinet.version, manifest_filename: basename(cabinetManifestPath), release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact] },
+    { product: cabinet.product, version: cabinet.version, manifest_filename: basename(cabinetManifestPath), release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact], sbom: cabinet.sbom },
     { product: companion.product, version: companion.version_name, manifest_filename: basename(companionManifestPath), release_notes_filename: companion.release_notes_filename, protocol_compatibility: companion.protocol_compatibility, artifacts: companion.artifacts.map(({ target, filename, sha256_filename, sha256 }) => ({ target, filename, sha256_filename, sha256 })) },
   ]
   if (bundle.schema_version !== 1 || bundle.product !== 'Cabinet 0.1 private beta candidate' || stableStringify(bundle.components) !== stableStringify(expectedComponents)) {
@@ -198,6 +237,7 @@ const verifyCandidate = async ({
       manifest_filename: basename(cabinetManifestPath),
       manifest_sha256: sha256(cabinetFile.raw),
       package: cabinetPackage,
+      sbom: cabinetSBOM,
       release_notes_filename: await requireReleaseNotes(cabinetManifestPath, cabinet.release_notes_filename, 'cabinet'),
     },
     companion: {

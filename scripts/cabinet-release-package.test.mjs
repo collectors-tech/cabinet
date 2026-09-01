@@ -8,13 +8,32 @@ import test from 'node:test'
 import { writeStoreZip } from './lib/browser-companion-package.mjs'
 import { createBetaCandidateBundle } from './lib/beta-candidate-bundle.mjs'
 import { verifyCabinetReleasePackage } from './lib/cabinet-release-verify.mjs'
+import { createCabinetSBOM } from './lib/cabinet-sbom.mjs'
 import { loadBetaDisclosure, renderBetaDisclosureMarkdown } from './render-beta-disclosure.mjs'
 
 const sourceCommit = 'c'.repeat(40)
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
+const buildDate = '2026-08-06T00:00:00Z'
+const sbomDocument = createCabinetSBOM({
+  version: '0.1.0-beta.10',
+  sourceCommit,
+  buildDate,
+  goModules: [
+    { Path: 'github.com/collectors-tech/cabinet', Main: true },
+    { Path: 'github.com/example/runtime', Version: 'v1.2.3', Sum: `h1:${Buffer.alloc(32, 1).toString('base64')}` },
+  ],
+  npmLock: {
+    packages: {
+      '': { dependencies: { react: '19.2.3' } },
+      'node_modules/react': { version: '19.2.3', integrity: `sha512-${Buffer.alloc(64, 2).toString('base64')}` },
+    },
+  },
+})
+const sbomBytes = Buffer.from(`${JSON.stringify(sbomDocument, null, 2)}\n`)
 
 const cabinetFixture = async ({
   portableGuide = '# Cabinet Windows Portable Beta\n\nCabinet `0.1.0-beta.10` is packaged as a Windows portable ZIP.\n\nExtract `cabinet-0.1.0-beta.10-windows-amd64-portable.zip`.\n',
+  embeddedSBOM = sbomBytes,
 } = {}) => {
   const directory = await mkdtemp(join(tmpdir(), 'cabinet-release-package-'))
   const filename = 'cabinet-0.1.0-beta.10-windows-amd64-portable.zip'
@@ -23,6 +42,7 @@ const cabinetFixture = async ({
   const packageEntries = new Map([
     ['README.md', Buffer.from('r')],
     ['WINDOWS-PORTABLE-BETA.md', Buffer.from(portableGuide)],
+    ['CABINET-SBOM.cdx.json', embeddedSBOM],
     ['cabinet-mcp.exe', Buffer.from('m')],
     ['cabinet.exe', Buffer.from('c')],
   ])
@@ -33,15 +53,28 @@ const cabinetFixture = async ({
   await writeFile(join(directory, filename), archive)
   await writeFile(join(directory, checksumFilename), `${checksum}  ${filename}\n`)
   await writeFile(join(directory, notesFilename), `# Cabinet 0.1.0-beta.10\n\nCommit: ${sourceCommit}\n\nWindows portable package; not an installer.\n\n${disclosureNotes}`)
+  const sbomFilename = 'cabinet-0.1.0-beta.10-sbom.cdx.json'
+  await writeFile(join(directory, sbomFilename), sbomBytes)
   const manifest = {
     schema_version: 1,
     product: 'Cabinet',
     channel: 'private-beta',
     version: '0.1.0-beta.10',
     source_commit: sourceCommit,
-    build_date: '2026-08-06T00:00:00Z',
+    build_date: buildDate,
     publication_state: 'private_candidate_not_published',
     artifact: { target: 'windows-amd64', kind: 'portable_zip', filename, sha256_filename: checksumFilename, sha256: checksum, size_bytes: archive.length },
+    sbom: {
+      filename: sbomFilename,
+      embedded_path: 'CABINET-SBOM.cdx.json',
+      format: 'cyclonedx-json',
+      spec_version: '1.7',
+      predicate_type: 'https://cyclonedx.org/bom',
+      sha256: sha256(sbomBytes),
+      size_bytes: sbomBytes.length,
+      source_commit: sourceCommit,
+      subject_artifact_sha256: checksum,
+    },
     release_notes_filename: notesFilename,
     package_files: [...packageEntries].map(([path, data]) => ({ path, size_bytes: data.length, sha256: sha256(data) })),
   }
@@ -76,6 +109,14 @@ test('rejects an embedded portable guide whose version and filename drift from t
       expectedSourceCommit: sourceCommit,
     }),
     /cabinet_portable_guide_version_mismatch/,
+  )
+})
+
+test('rejects an embedded SBOM whose bytes drift from the standalone manifest-bound SBOM', async () => {
+  const fixture = await cabinetFixture({ embeddedSBOM: Buffer.from('tampered') })
+  await assert.rejects(
+    () => verifyCabinetReleasePackage(fixture.manifestPath, { repositoryRoot: resolve('.'), expectedSourceCommit: sourceCommit }),
+    /cabinet_sbom_embedded_bytes_mismatch/,
   )
 })
 
