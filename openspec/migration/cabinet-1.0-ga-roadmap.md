@@ -48,6 +48,48 @@ Moving an item into or out of the GA contract requires an owner decision and an
 update to #2546 and the affected release issue. Scope must not change silently
 to make a gate appear green.
 
+## Recommended minimum 1.0 contract
+
+Status: proposed for owner approval in
+[#2546](https://github.com/collectors-tech/cabinet/issues/2546). Committing this
+recommendation does not authorize an RC, GA publication, or `develop` to
+`main` promotion.
+
+The shortest truthful GA contract is:
+
+- Windows x64 desktop, with the exact supported Windows versions and hardware
+  baseline recorded before the candidate freeze.
+- Dashboard, Inventory, Wishlist, Collections, Media, search, import/export,
+  backup and restore as the supported core collector workflows.
+- Voglers [#1871](https://github.com/collectors-tech/cabinet/issues/1871) and
+  Hobbytech [#1943](https://github.com/collectors-tech/cabinet/issues/1943) as
+  the recommended supported providers, subject to exact packaged acceptance.
+- Frontline [#1944](https://github.com/collectors-tech/cabinet/issues/1944) and
+  Bonza [#1945](https://github.com/collectors-tech/cabinet/issues/1945) as
+  Preview unless their lawful user-present live and packaged journeys pass
+  before the scope freeze.
+- Chat and Agent as Preview unless their exact packaged Browser Auth journeys
+  pass. Telegram remains post-1.0 by default.
+- Distribution remains an explicit choice between an approved portable-only
+  release with checksums, SBOM, attestations and truthful limitations, or a
+  signed installer with signing-key and installer qualification.
+
+This recommendation keeps unresolved Preview breadth visible without allowing
+it to block the supported core product. Approving a broader 1.0 contract adds
+the corresponding live, package, recovery and support obligations back to the
+critical path.
+
+## Execution order after scope approval
+
+| Order | Gate | Required evidence |
+| --- | --- | --- |
+| 1 | Scope and governance | Record the approved platform, providers, Chat/Agent status and distribution contract in [#2546](https://github.com/collectors-tech/cabinet/issues/2546); complete the owner/legal decisions in [#2057](https://github.com/collectors-tech/cabinet/issues/2057). |
+| 2 | Exact candidate | Re-fetch `origin/develop`, nominate one full commit, freeze it, and build Cabinet plus immutable Chrome/Edge Companion artifacts under [#1868](https://github.com/collectors-tech/cabinet/issues/1868) and [#2034](https://github.com/collectors-tech/cabinet/issues/2034). |
+| 3 | Clean packaged acceptance | Run clean Windows onboarding under [#1946](https://github.com/collectors-tech/cabinet/issues/1946) and the complete supported core/provider/browser journey under [#1869](https://github.com/collectors-tech/cabinet/issues/1869), without development servers or test-only hooks. |
+| 4 | Same-candidate recovery | Prove upgrade, restart, backup, export, restore, relocation and failed-restore recovery using those exact files under [#1867](https://github.com/collectors-tech/cabinet/issues/1867). |
+| 5 | RC qualification | Route every observed failure through a focused test-first issue and [#2488](https://github.com/collectors-tech/cabinet/issues/2488). Every code change invalidates the candidate. Two consecutive exact candidates must pass the required source and package gates with no open P0/P1 defect in the approved GA contract. |
+| 6 | Approval and publication | Soak the immutable RC for 7–14 days, obtain trusted exact-commit approval under [#1864](https://github.com/collectors-tech/cabinet/issues/1864), publish, independently redownload and replay every asset, and reconcile issue/Project state. A separate explicit approval is required before any `develop` to `main` promotion. |
+
 ## Starting position
 
 | Gate | 2026-09-01 position | Required next evidence |
@@ -168,8 +210,9 @@ Exit gate:
 | Area | Issues |
 | --- | --- |
 | Coordination and final approval | [#2546](https://github.com/collectors-tech/cabinet/issues/2546), [#2488](https://github.com/collectors-tech/cabinet/issues/2488), [#1864](https://github.com/collectors-tech/cabinet/issues/1864) |
-| First run and packaged Chat setup | [#1946](https://github.com/collectors-tech/cabinet/issues/1946), [#2185](https://github.com/collectors-tech/cabinet/issues/2185), [#2190](https://github.com/collectors-tech/cabinet/issues/2190), [#2332](https://github.com/collectors-tech/cabinet/issues/2332) |
-| Provider contract and proof | [#1944](https://github.com/collectors-tech/cabinet/issues/1944), [#1945](https://github.com/collectors-tech/cabinet/issues/1945) |
+| First run | [#1946](https://github.com/collectors-tech/cabinet/issues/1946) |
+| Conditional provider proof | [#1944](https://github.com/collectors-tech/cabinet/issues/1944) and [#1945](https://github.com/collectors-tech/cabinet/issues/1945) only if promoted from Preview into the approved 1.0 contract |
+| Conditional Chat/Agent package proof | [#2185](https://github.com/collectors-tech/cabinet/issues/2185), [#2190](https://github.com/collectors-tech/cabinet/issues/2190) and [#2332](https://github.com/collectors-tech/cabinet/issues/2332) only if Chat/Agent is promoted from Preview into the approved 1.0 contract |
 | Candidate and browser artifacts | [#1868](https://github.com/collectors-tech/cabinet/issues/1868), [#2034](https://github.com/collectors-tech/cabinet/issues/2034) |
 | Packaged product and recovery | [#1869](https://github.com/collectors-tech/cabinet/issues/1869), [#1867](https://github.com/collectors-tech/cabinet/issues/1867) |
 | Legal, privacy and support | [#2057](https://github.com/collectors-tech/cabinet/issues/2057) |

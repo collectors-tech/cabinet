@@ -187,3 +187,35 @@ test('OpenSpec and traceability bind the beta documentation alignment contract',
     /DOCUMENTATION-GOVERNANCE-006.+#2057.+beta-product-docs-contract\.test\.mjs/is
   )
 })
+
+test('GA roadmap keeps the minimum supported contract and release sequence explicit', () => {
+  const roadmap = readRepoFile(
+    'openspec/migration/cabinet-1.0-ga-roadmap.md'
+  )
+
+  assert.match(roadmap, /## Recommended minimum 1\.0 contract/)
+  assert.match(roadmap, /proposed for owner approval.+#2546/is)
+  assert.match(roadmap, /Voglers.+Hobbytech.+supported providers/is)
+  assert.match(roadmap, /Frontline.+Bonza.+Preview/is)
+  assert.match(roadmap, /Chat.+Agent.+Preview/is)
+  assert.match(roadmap, /Telegram.+post-1\.0/is)
+  assert.match(roadmap, /portable-only.+signed installer/is)
+
+  assert.match(roadmap, /## Execution order after scope approval/)
+  for (const issue of [
+    '#2546',
+    '#2057',
+    '#1868',
+    '#2034',
+    '#1946',
+    '#1869',
+    '#1867',
+    '#2488',
+    '#1864',
+  ]) {
+    assert.match(roadmap, new RegExp(issue))
+  }
+  assert.match(roadmap, /two consecutive exact candidates/is)
+  assert.match(roadmap, /Every code change invalidates the candidate/is)
+  assert.match(roadmap, /separate explicit approval.+`main`/is)
+})
