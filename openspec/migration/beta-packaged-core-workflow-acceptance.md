@@ -9,6 +9,11 @@ source-ready gate. Internal candidate creation does not require final #1864 appr
 Final #1864 approval is required before external prerelease publication or `develop` to `main` promotion.
 The final approval follows packaged acceptance and #1867 data-safety evidence.
 
+For a practical Windows operator sequence, evidence-folder layout, Chrome/Edge
+split, stop conditions, and handback steps, use
+`openspec/migration/cabinet-1.0-ga-second-pc-test-plan.md`. The checklist on this
+page remains the stable recorder contract.
+
 ## Resumable evidence recorder
 
 Use `scripts/record-beta-acceptance.mjs` (or `npm run acceptance:record --`) to
