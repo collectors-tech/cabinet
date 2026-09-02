@@ -128,3 +128,63 @@ func TestPackagedAcceptanceRecorderIsResumableFailClosedAndNonPublishing(t *test
 		}
 	}
 }
+
+func TestSecondPCGAAcceptancePlanIsExecutableAndFailClosed(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := resolveRepoRoot(t)
+	planPath := filepath.Join(repoRoot, "openspec", "migration", "cabinet-1.0-ga-second-pc-test-plan.md")
+	raw, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatalf("read second-PC GA acceptance plan: %v", err)
+	}
+	content := string(raw)
+
+	requiredFragments := []string{
+		"Cabinet 1.0 GA Second-PC Acceptance Test Plan",
+		"Issue: #1869",
+		"Do not start the acceptance run",
+		"exact candidate bundle from #1868",
+		"Cabinet portable ZIP",
+		"Chrome Companion ZIP",
+		"Edge Companion ZIP",
+		"Get-FileHash",
+		"/api/runtime",
+		"scripts/record-beta-acceptance.mjs init",
+		"scripts/record-beta-acceptance.mjs record",
+		"IDENTITY-01..11",
+		"COLLECTOR-01..10",
+		"PROVIDER-01..15",
+		"CROSS-01..06",
+		"FAILURE-01..05",
+		"SHORTCUT-01..04",
+		"separate Chrome and Edge evidence packs",
+		"owner-approved GA scope",
+		"all 51 rows",
+		"Candidate invalidation",
+		"Do not record credentials, tokens, cookies",
+		"fail_with_blockers",
+		"#1867",
+		"#1864",
+		"does not publish",
+		"does not promote `develop` to `main`",
+	}
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(content, fragment) {
+			t.Errorf("second-PC GA acceptance plan missing %q", fragment)
+		}
+	}
+
+	for _, relativePath := range []string{
+		filepath.Join("openspec", "migration", "beta-packaged-core-workflow-acceptance.md"),
+		filepath.Join("openspec", "traceability.md"),
+	} {
+		linked, err := os.ReadFile(filepath.Join(repoRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		if !strings.Contains(string(linked), "openspec/migration/cabinet-1.0-ga-second-pc-test-plan.md") {
+			t.Errorf("%s does not link the second-PC GA acceptance plan", relativePath)
+		}
+	}
+}
