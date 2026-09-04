@@ -33,6 +33,31 @@ export function evaluateAuditReport(report) {
   return counts;
 }
 
+export function evaluateAuditReportWithRetry(
+  runAudit,
+  { maxAttempts = 2, onRetry = () => {} } = {},
+) {
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new Error("npm audit retry attempts must be a positive integer");
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return evaluateAuditReport(runAudit());
+    } catch (error) {
+      const isMissingMetadata =
+        error instanceof Error &&
+        error.message === "npm audit did not return vulnerability metadata";
+      if (!isMissingMetadata || attempt === maxAttempts) {
+        throw error;
+      }
+      onRetry(attempt, maxAttempts);
+    }
+  }
+
+  throw new Error("npm audit retry loop ended unexpectedly");
+}
+
 function isLockOwnedOptionalProblem(problem, packageLock) {
   if (!problem.startsWith("extraneous:")) {
     return false;
@@ -197,7 +222,15 @@ export function main() {
   const packageLock = JSON.parse(readFileSync(path.join(uiRoot, "package-lock.json"), "utf8"));
   const graphCounts = evaluateKnownHighAdvisoryGraph(packageLock);
   evaluateDependencyTree(runNpmJson(["ls", "--depth=0", "--json"]), packageLock);
-  const counts = evaluateAuditReport(runNpmJson(["audit", "--omit=dev", "--json"]));
+  const counts = evaluateAuditReportWithRetry(
+    () => runNpmJson(["audit", "--omit=dev", "--json"]),
+    {
+      onRetry: (attempt, maxAttempts) =>
+        console.warn(
+          `npm audit attempt ${attempt} of ${maxAttempts} returned no vulnerability metadata; retrying once`,
+        ),
+    },
+  );
   console.log(
     `Known release advisory graph passed: nanoid=${graphCounts.nanoid} js-yaml=${graphCounts["js-yaml"]} postcss=${graphCounts.postcss} extract-zip=${graphCounts["extract-zip"]} esbuild=${graphCounts.esbuild}`,
   );
