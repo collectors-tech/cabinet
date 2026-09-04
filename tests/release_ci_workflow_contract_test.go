@@ -69,34 +69,45 @@ func TestMainGateOpenAPIBuildsRuntimeUIBeforeParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read main gate workflow: %v", err)
 	}
-	content := string(raw)
-
-	openAPIStart := strings.Index(content, "  openapi:\n")
-	uiBuildStart := strings.Index(content, "  ui-build:\n")
-	if openAPIStart < 0 || uiBuildStart <= openAPIStart {
-		t.Fatal("main gate does not define the OpenAPI job before the UI build job")
+	normalized := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	lineEndings := []struct {
+		name    string
+		content string
+	}{
+		{name: "LF", content: normalized},
+		{name: "CRLF", content: strings.ReplaceAll(normalized, "\n", "\r\n")},
 	}
-	openAPIJob := content[openAPIStart:uiBuildStart]
+	for _, lineEnding := range lineEndings {
+		t.Run(lineEnding.name, func(t *testing.T) {
+			content := lineEnding.content
+			openAPIStart := strings.Index(content, "  openapi:")
+			uiBuildStart := strings.Index(content, "  ui-build:")
+			if openAPIStart < 0 || uiBuildStart <= openAPIStart {
+				t.Fatal("main gate does not define the OpenAPI job before the UI build job")
+			}
+			openAPIJob := content[openAPIStart:uiBuildStart]
 
-	requiredInOrder := []string{
-		"cache-dependency-path: ui.web/package-lock.json",
-		"name: Install ui.web dependencies",
-		"run: npm ci",
-		"name: Build runtime UI static bundle for OpenAPI tests",
-		"run: npm run build",
-		"name: Verify complete API/OpenAPI parity suite",
-		"run: go run ./cmd/openapi-parity-gate",
-	}
-	previous := -1
-	for _, fragment := range requiredInOrder {
-		position := strings.Index(openAPIJob, fragment)
-		if position < 0 {
-			t.Fatalf("main gate OpenAPI job missing %q", fragment)
-		}
-		if position <= previous {
-			t.Fatalf("main gate OpenAPI job has %q out of prerequisite order", fragment)
-		}
-		previous = position
+			requiredInOrder := []string{
+				"cache-dependency-path: ui.web/package-lock.json",
+				"name: Install ui.web dependencies",
+				"run: npm ci",
+				"name: Build runtime UI static bundle for OpenAPI tests",
+				"run: npm run build",
+				"name: Verify complete API/OpenAPI parity suite",
+				"run: go run ./cmd/openapi-parity-gate",
+			}
+			previous := -1
+			for _, fragment := range requiredInOrder {
+				position := strings.Index(openAPIJob, fragment)
+				if position < 0 {
+					t.Fatalf("main gate OpenAPI job missing %q", fragment)
+				}
+				if position <= previous {
+					t.Fatalf("main gate OpenAPI job has %q out of prerequisite order", fragment)
+				}
+				previous = position
+			}
+		})
 	}
 }
 
