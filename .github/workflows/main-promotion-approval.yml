@@ -36,7 +36,6 @@ jobs:
             })
             const approval = comments.find((comment) =>
               comment.user?.login === 'wildone' &&
-              ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(comment.author_association) &&
               comment.body.split(/\r?\n/).some((line) => line.trim() === marker)
             )
             if (!approval) throw new Error(`Missing exact #1864 approval marker: ${marker}`)

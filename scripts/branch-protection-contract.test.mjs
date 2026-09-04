@@ -230,7 +230,8 @@ test("keeps verification read-only and documents approval and emergency evidence
   }
   assert.doesNotMatch(
     approvalWorkflow,
-    /actions\/checkout|contents:\s*write|git push|pull-requests:\s*write/,
+    /actions\/checkout|contents:\s*write|git push|pull-requests:\s*write|author_association/,
+    "promotion approval must use the immutable release-owner login rather than token-relative association metadata",
   );
   assert.ok(
     publisherWorkflow.includes("approvalAuthor === 'wildone'"),
