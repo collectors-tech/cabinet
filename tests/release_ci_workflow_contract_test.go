@@ -60,6 +60,46 @@ func TestDevelopQualityGateWorkflowContract(t *testing.T) {
 	}
 }
 
+func TestMainGateOpenAPIBuildsRuntimeUIBeforeParity(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := resolveRepoRoot(t)
+	workflowPath := filepath.Join(repoRoot, ".github", "workflows", "main-gate.yml")
+	raw, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("read main gate workflow: %v", err)
+	}
+	content := string(raw)
+
+	openAPIStart := strings.Index(content, "  openapi:\n")
+	uiBuildStart := strings.Index(content, "  ui-build:\n")
+	if openAPIStart < 0 || uiBuildStart <= openAPIStart {
+		t.Fatal("main gate does not define the OpenAPI job before the UI build job")
+	}
+	openAPIJob := content[openAPIStart:uiBuildStart]
+
+	requiredInOrder := []string{
+		"cache-dependency-path: ui.web/package-lock.json",
+		"name: Install ui.web dependencies",
+		"run: npm ci",
+		"name: Build runtime UI static bundle for OpenAPI tests",
+		"run: npm run build",
+		"name: Verify complete API/OpenAPI parity suite",
+		"run: go run ./cmd/openapi-parity-gate",
+	}
+	previous := -1
+	for _, fragment := range requiredInOrder {
+		position := strings.Index(openAPIJob, fragment)
+		if position < 0 {
+			t.Fatalf("main gate OpenAPI job missing %q", fragment)
+		}
+		if position <= previous {
+			t.Fatalf("main gate OpenAPI job has %q out of prerequisite order", fragment)
+		}
+		previous = position
+	}
+}
+
 func TestReleaseWorkflowsRunCompleteGoRepositorySuite(t *testing.T) {
 	t.Parallel()
 
