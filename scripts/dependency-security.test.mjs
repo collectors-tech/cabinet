@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   evaluateAuditReport,
+  evaluateAuditReportWithRetry,
   evaluateDependencyTree,
   evaluateKnownHighAdvisoryGraph,
 } from "./check-production-dependencies.mjs";
@@ -94,6 +95,79 @@ test("production dependency audit permits lower-severity findings", () => {
     }),
     { critical: 0, high: 0, moderate: 2, low: 1 },
   );
+});
+
+test("production dependency audit retries one missing-metadata response", () => {
+  let attempts = 0;
+  const counts = evaluateAuditReportWithRetry(() => {
+    attempts += 1;
+    return attempts === 1
+      ? { error: { code: "E503", summary: "advisory service unavailable" } }
+      : {
+          metadata: {
+            vulnerabilities: { critical: 0, high: 0, moderate: 2, low: 1 },
+          },
+        };
+  });
+
+  assert.equal(attempts, 2);
+  assert.deepEqual(counts, { critical: 0, high: 0, moderate: 2, low: 1 });
+});
+
+test("production dependency audit fails after two missing-metadata responses", () => {
+  let attempts = 0;
+
+  assert.throws(
+    () =>
+      evaluateAuditReportWithRetry(() => {
+        attempts += 1;
+        return { error: { code: "E503", summary: "advisory service unavailable" } };
+      }),
+    /did not return vulnerability metadata/,
+  );
+  assert.equal(attempts, 2);
+});
+
+test("production dependency audit does not retry security or execution failures", () => {
+  for (const [name, runAudit, expected] of [
+    [
+      "high vulnerability",
+      () => ({
+        metadata: {
+          vulnerabilities: { critical: 0, high: 1, moderate: 0, low: 0 },
+        },
+      }),
+      /0 critical and 1 high/,
+    ],
+    [
+      "invalid count",
+      () => ({
+        metadata: {
+          vulnerabilities: { critical: 0, high: "0", moderate: 0, low: 0 },
+        },
+      }),
+      /invalid high vulnerability count/,
+    ],
+    [
+      "npm execution error",
+      () => {
+        throw new Error("npm audit process failed");
+      },
+      /npm audit process failed/,
+    ],
+  ]) {
+    let attempts = 0;
+    assert.throws(
+      () =>
+        evaluateAuditReportWithRetry(() => {
+          attempts += 1;
+          return runAudit();
+        }),
+      expected,
+      name,
+    );
+    assert.equal(attempts, 1, name);
+  }
 });
 
 test("production dependency tree rejects clean-install drift", () => {
