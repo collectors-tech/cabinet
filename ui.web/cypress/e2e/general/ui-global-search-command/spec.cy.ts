@@ -2,10 +2,14 @@ describe('ui-global-search-command', () => {
   const commandInputSelector = 'input[placeholder="Type a command or search..."]'
 
   function signInToHome() {
-    cy.visit('/sign-in?redirect=%2F')
-    cy.get('input[name="email"]').clear().type('e2e-command@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eBootstrap({ minimalProfile: true }).then((state) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(state.profile_id)
+      cy.useBootstrappedProfile(state.profile_id, state.profile_name, {
+        path: '/dashboard',
+      })
+      cy.wait('@localServerSession')
+    })
     cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard')
     cy.contains('button', /search/i).should('be.visible')
   }
@@ -19,8 +23,8 @@ describe('ui-global-search-command', () => {
   }
 
   beforeEach(() => {
-    cy.clearCookies()
-    cy.clearLocalStorage()
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
     signInToHome()
   })
 
@@ -63,7 +67,7 @@ describe('ui-global-search-command', () => {
   })
 
   it('UI-GLOBAL-SEARCH-COMMAND-004 surfaces local catalog results and opens filtered Inventory', () => {
-    cy.intercept('GET', '/api/search/items*', (req) => {
+    cy.intercept({ method: 'GET', url: '/api/search/items*', times: 1 }, (req) => {
       expect(req.query.text).to.eq('AFX')
       req.reply({
         statusCode: 200,
@@ -92,6 +96,56 @@ describe('ui-global-search-command', () => {
 
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.location('search').should('contain', 'filter=AFX-123')
+  })
+
+  it('UI-GLOBAL-SEARCH-COMMAND-007 exposes local catalog loading and error states', () => {
+    cy.intercept({ method: 'GET', url: '/api/search/items*', times: 1 }, (req) => {
+      expect(req.query.text).to.eq('SLOW')
+      req.reply({
+        statusCode: 200,
+        body: { items: [] },
+        delay: 1000,
+      })
+    }).as('slowLocalSearch')
+
+    openCommandPaletteFromSearchButton()
+    cy.get(commandInputSelector).type('SLOW')
+    cy.contains('[cmdk-item]', 'Searching local catalog...').should('be.visible')
+    cy.wait('@slowLocalSearch')
+    cy.contains('[cmdk-item]', 'No local catalog matches.').should('be.visible')
+
+    cy.intercept('GET', '/api/search/items*', {
+      statusCode: 503,
+      body: { error: 'search unavailable' },
+    }).as('failedLocalSearch')
+    cy.get(commandInputSelector).clear().type('ERR')
+    cy.wait('@failedLocalSearch')
+    cy.contains('[cmdk-item]', 'Local catalog search is unavailable.').should(
+      'be.visible'
+    )
+  })
+
+  it('UI-GLOBAL-SEARCH-COMMAND-008 exposes barcode lookup loading and error states', () => {
+    cy.intercept('GET', '/api/search/items*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('localSearchForBarcode')
+    cy.intercept('GET', '/api/barcodes/123456789012', {
+      statusCode: 503,
+      body: { error: 'barcode unavailable' },
+      delay: 1000,
+    }).as('failedBarcodeLookup')
+
+    openCommandPaletteFromSearchButton()
+    cy.get(commandInputSelector).type('123456789012')
+    cy.contains('[cmdk-item]', 'Looking up barcode 123456789012...').should(
+      'be.visible'
+    )
+    cy.wait('@localSearchForBarcode')
+    cy.wait('@failedBarcodeLookup')
+    cy.contains('[cmdk-item]', 'Barcode lookup is unavailable.').should(
+      'be.visible'
+    )
   })
 
   it('UI-GLOBAL-SEARCH-COMMAND-005 makes unresolved barcode lookup actionable from Market Watch', () => {

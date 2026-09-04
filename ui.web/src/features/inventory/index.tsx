@@ -5,10 +5,12 @@ export function Inventory() {
   const { t } = useTranslation('pages')
 
   return (
-    <Collection
-      title={t('inventory.title')}
-      description={t('inventory.description')}
-      routePath='/_authenticated/inventory/'
-    />
+    <div data-testid='inventory-page'>
+      <Collection
+        title={t('inventory.title')}
+        description={t('inventory.description')}
+        routePath='/_authenticated/inventory/'
+      />
+    </div>
   )
 }

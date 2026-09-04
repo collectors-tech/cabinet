@@ -179,11 +179,15 @@ describe("wishlist-row-side-panel", () => {
   it("opens a right-side edit panel on double click and navigates visible records", () => {
     signInToWishlistWithRows();
 
-    cy.contains("tr", "Panel Wishlist Alpha").click();
+    cy.contains("tr", "Panel Wishlist Alpha")
+      .scrollIntoView()
+      .click({ force: true });
     cy.get('[data-testid="wishlist-edit-panel"]').should("not.exist");
     cy.get('[data-testid="row-edit-modal"]').should("not.exist");
 
-    cy.contains("tr", "Panel Wishlist Alpha").dblclick();
+    cy.contains("tr", "Panel Wishlist Alpha")
+      .scrollIntoView()
+      .dblclick({ force: true });
     cy.get('[data-testid="wishlist-edit-panel"]')
       .should("be.visible")
       .should("have.attr", "data-side", "right");
@@ -195,6 +199,14 @@ describe("wishlist-row-side-panel", () => {
     cy.get('[data-testid="wishlist-edit-entry-id"]').should(
       "contain.text",
       "wish-panel-1"
+    );
+    cy.get('[data-testid="inventory-item-row-item-panel-1"]').should(
+      "have.class",
+      "bg-primary/5"
+    );
+    cy.get('[data-testid="inventory-item-row-item-panel-2"]').should(
+      "not.have.class",
+      "bg-primary/5"
     );
     cy.get('input[name="partNumber"]').should("have.value", "PANEL-001");
     cy.get('input[name="category"]').should("have.value", "Cards");
@@ -226,10 +238,36 @@ describe("wishlist-row-side-panel", () => {
     cy.get('input[name="purchaseDate"]').should("have.value", "2026-04-20");
     cy.get('input[name="purchaseCondition"]').should("have.value", "Boxed");
 
-    cy.get('[data-testid="wishlist-edit-next"]').click();
+    cy.get('[data-testid="wishlist-edit-panel"]').then(($panel) => {
+      cy.get('[data-testid="wishlist-edit-next"]').click();
+      cy.get('[data-testid="wishlist-edit-panel"]').should(($nextPanel) => {
+        expect($nextPanel[0]).to.equal($panel[0]);
+      });
+    });
     cy.get('input[name="title"]').should("have.value", "Panel Wishlist Beta");
-    cy.get('[data-testid="wishlist-edit-previous"]').click();
+    cy.get('[data-testid="inventory-item-row-item-panel-1"]').should(
+      "not.have.class",
+      "bg-primary/5"
+    );
+    cy.get('[data-testid="inventory-item-row-item-panel-2"]').should(
+      "have.class",
+      "bg-primary/5"
+    );
+    cy.get('[data-testid="wishlist-edit-panel"]').then(($panel) => {
+      cy.get('[data-testid="wishlist-edit-previous"]').click();
+      cy.get('[data-testid="wishlist-edit-panel"]').should(($nextPanel) => {
+        expect($nextPanel[0]).to.equal($panel[0]);
+      });
+    });
     cy.get('input[name="title"]').should("have.value", "Panel Wishlist Alpha");
+    cy.get('[data-testid="inventory-item-row-item-panel-1"]').should(
+      "have.class",
+      "bg-primary/5"
+    );
+    cy.get('[data-testid="inventory-item-row-item-panel-2"]').should(
+      "not.have.class",
+      "bg-primary/5"
+    );
     cy.get('[data-testid="wishlist-edit-next"]').click();
 
     cy.get('input[name="title"]').clear().type("Panel Wishlist Beta Updated");

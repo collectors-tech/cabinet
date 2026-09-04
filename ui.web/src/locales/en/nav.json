@@ -4,8 +4,10 @@
     "other": "Other"
   },
   "items": {
+    "home": "Home",
     "dashboard": "Dashboard",
     "inventory": "Inventory",
+    "media": "Media",
     "wishlist": "Wishlist",
     "integrations": "Integrations",
     "chats": "Chats",

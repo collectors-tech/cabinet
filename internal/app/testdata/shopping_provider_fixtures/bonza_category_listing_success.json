@@ -1,0 +1,28 @@
+[
+  {
+    "id": 2001,
+    "name": "AFX Mega-G+ Ford GT",
+    "slug": "afx-mega-g-ford-gt",
+    "permalink": "/product/afx-mega-g-ford-gt/",
+    "description": "<p>HO scale slot car listing fixture.</p>",
+    "prices": {
+      "currency_code": "AUD",
+      "price": "6495"
+    },
+    "is_in_stock": true,
+    "low_stock_remaining": 3,
+    "categories": [
+      {
+        "name": "HO Slot Cars"
+      },
+      {
+        "name": "AFX"
+      }
+    ],
+    "images": [
+      {
+        "src": "https://bonzaslotcars.com.au/wp-content/uploads/afx-mega-g-ford-gt.jpg"
+      }
+    ]
+  }
+]

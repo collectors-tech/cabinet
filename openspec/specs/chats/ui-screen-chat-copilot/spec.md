@@ -80,16 +80,111 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **WHEN** copilot proposes field changes
 - **THEN** UI MUST present confirmation summary and only apply changes after explicit confirm action
 
+#### Scenario: Inventory update apply records changed fields
+- **GIVEN** user has previewed an inventory update with exact part number and title changes
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST update the active-profile inventory item with those fields
+- **AND** the apply result and chat thread history MUST record the changed part number and title evidence
+
 #### Scenario: Create new item/wishlist entry via chat
 - **GIVEN** user requests creation of new record in chat
 - **WHEN** copilot returns structured draft payload
 - **THEN** user MUST be able to confirm creation and resulting record MUST be linked in chat outcome
+
+#### Scenario: Apply without explicit confirmation leaves state unchanged
+- **GIVEN** user has previewed an inventory create action
+- **WHEN** the apply request does not include explicit confirmation
+- **THEN** Cabinet MUST reject the apply with confirmation-required feedback
+- **AND** the preview MUST remain unapplied and available to apply for the same profile/thread
+- **AND** inventory state MUST remain unchanged
+- **AND** chat thread history MUST NOT record an applied assistant outcome
+
+#### Scenario: Wishlist entry apply persists state and records target item
+- **GIVEN** user has previewed a wishlist entry creation with part number and title fields
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST create a wishlist entry and backing inventory item in the active profile
+- **AND** the resulting inventory item MUST appear through the wishlist item API/surface with wishlist status
+- **AND** the chat thread history MUST record an assistant outcome message that links the wishlist entry to the created item
+
+#### Scenario: Cancel apply keeps preview pending
+- **GIVEN** user has a previewed chat action and the confirm-before-apply dialog is open
+- **WHEN** user cancels the apply confirmation
+- **THEN** Cabinet MUST close the confirmation dialog without applying the action
+- **AND** the pending preview MUST remain visible with actionable cancellation feedback
 
 #### Scenario: Empty thread cannot preview actions without source context
 - **GIVEN** a chat thread has no messages and no uploaded attachment context
 - **WHEN** the user opens Action Preview controls
 - **THEN** `Preview Action` MUST remain disabled until source conversation context exists
 - **AND** the UI MUST NOT generate preview artifacts from seeded defaults alone
+
+#### Scenario: Provider defaults are visible on previewed chat actions
+- **GIVEN** the active profile has assistant provider/model defaults configured
+- **WHEN** the user previews a structured chat action
+- **THEN** the chat action surface MUST show the active assistant provider/model defaults before apply
+- **AND** the preview and confirm-before-apply summary MUST preserve the same provider/model context
+
+#### Scenario: Collection assignment previews show exact target boundaries
+- **GIVEN** user asks copilot to assign an inventory item to a workspace collection
+- **WHEN** the user previews the collection assignment action
+- **THEN** the preview MUST show the target inventory item and collection name before apply
+- **AND** the confirm-before-apply summary MUST preserve the same target item, collection, and assistant provider/model context
+
+#### Scenario: Collection assignment apply persists state and records outcome
+- **GIVEN** user has previewed a collection assignment with an exact item and collection target
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST persist the item membership in the active profile workspace collections state
+- **AND** the Collections surface MUST show the item assigned to the requested collection after navigation
+- **AND** the chat thread history MUST record an assistant outcome message with the applied action, target item, and collection
+
+#### Scenario: Failed collection assignment leaves state unchanged
+- **GIVEN** user has previewed a collection assignment for an item target that is not present in the active profile
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST reject the apply without creating workspace collection membership
+- **AND** the preview MUST remain pending for correction or cancellation
+- **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
+
+#### Scenario: Failed inventory update apply leaves state unchanged
+- **GIVEN** user has previewed an inventory update for an item target that is not present in the active profile
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST reject the apply without creating or updating inventory records
+- **AND** the preview MUST remain pending for correction or cancellation
+- **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
+
+#### Scenario: Canceled inventory update apply leaves state unchanged and records outcome
+- **GIVEN** user has previewed an inventory update with exact target item and changed field values
+- **WHEN** the user cancels from the confirmation dialog
+- **THEN** Cabinet MUST mark the preview canceled without applying the changed fields to inventory
+- **AND** the apply action MUST no longer be enabled for that canceled preview
+- **AND** the chat thread history MUST record a canceled outcome message with no-mutation evidence
+- **AND** the chat thread history MUST NOT record an applied outcome message for the canceled mutation
+
+#### Scenario: Canceled collection assignment records target without mutation
+- **GIVEN** user has previewed a collection assignment with an exact item and collection target
+- **WHEN** the user cancels from the confirmation dialog
+- **THEN** Cabinet MUST mark the preview canceled without assigning the item to the collection
+- **AND** the chat thread history MUST record the canceled action, target item, target collection, and no-mutation evidence
+- **AND** the canceled preview MUST reject any later apply attempt
+
+#### Scenario: Thread context change clears pending action state
+- **GIVEN** user has a pending chat action preview, cancellation notice, or apply result in one thread
+- **WHEN** user switches to another chat thread in the same active profile
+- **THEN** Cabinet MUST clear the pending preview, apply notice, apply result, and confirmation dialog
+- **AND** the next thread MUST NOT expose an enabled apply action for the previous thread preview
+
+#### Scenario: Pending action preview resumes after route return and reload
+- **GIVEN** user has a pending chat action preview in the selected chat thread
+- **WHEN** user navigates to another route, returns to Chats, or reloads the Chats route in the same browser session
+- **THEN** Cabinet MUST restore the same pending preview for the active profile and thread
+- **AND** the restored preview MUST remain explicitly pending and applyable only for that same profile/thread context
+
+#### Scenario: Stale thread apply attempts leave state unchanged
+- **GIVEN** user has a pending chat action preview in one thread for the active profile
+- **WHEN** an apply request is attempted from another thread in the same active profile using that preview id
+- **THEN** Cabinet MUST reject the apply as unavailable to that thread
+- **AND** the owning preview MUST remain pending in its original thread
+- **AND** inventory state MUST remain unchanged
+- **AND** neither thread history MUST record an applied assistant outcome for the stale apply attempt
 
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
@@ -118,7 +213,140 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 - **THEN** Cabinet MUST render a communications surface
 - **AND** route MUST NOT render the app 404 page
 
+### Requirement UI-SCREEN-CHAT-COPILOT-010: Assistant sidebar SHALL operate as a compact chat with explicit screen-opening actions
+The authenticated shell Assistant sidebar SHALL let users select an existing assistant chat, create a new assistant chat, send messages from the compact panel, and expose assistant-proposed navigation actions without changing the current page until the user invokes the action.
+
+#### Scenario: Select an existing assistant chat from the sidebar
+- **GIVEN** an authenticated actor has an active local profile and two or more assistant chat threads exist
+- **WHEN** user opens the Assistant sidebar and selects an existing chat
+- **THEN** the sidebar MUST render that chat's message history and clear pending action state from the previously selected chat
+- **AND** the current Cabinet page route MUST remain unchanged
+
+#### Scenario: Create a new assistant chat from the sidebar
+- **GIVEN** an authenticated actor has an active local profile and the Assistant sidebar is open
+- **WHEN** user invokes the new-chat control
+- **THEN** Cabinet MUST create a fresh assistant chat for the active profile
+- **AND** the sidebar MUST select the new chat with an empty compact conversation state
+
+#### Scenario: Assistant exposes a screen-opening action from chat output
+- **GIVEN** an authenticated actor is using the Assistant sidebar from another Cabinet page
+- **WHEN** user sends a request for layout configuration help
+- **THEN** the sidebar MUST expose an explicit action to open the relevant settings screen
+- **AND** Cabinet MUST keep the current page route unchanged until user invokes that action
+- **AND** invoking the action MUST navigate to the relevant settings screen
+
+### Requirement UI-SCREEN-CHAT-COPILOT-011: Assistant sidebar SHALL use a Cabinet-owned assistant-ui adapter
+The authenticated shell Assistant sidebar SHALL render assistant-ui compact anchored modal, runtime, composer, and message primitives through a Cabinet-specific external-store adapter that keeps Cabinet's Go APIs as the source of truth for threads, messages, provider readiness, route context, attachments, and guarded action state.
+
+#### Scenario: Prefer Cabinet adapter over direct AI SDK runtime adoption
+- **GIVEN** Cabinet evaluates assistant-ui adoption for the shell Assistant sidebar
+- **WHEN** comparing direct AI SDK runtime adoption against a Cabinet-specific assistant-ui runtime adapter
+- **THEN** Cabinet MUST choose the Cabinet-specific adapter for the first implementation slice
+- **AND** the adapter MUST read/write thread and message state through existing Cabinet chat APIs rather than a Next.js or Vercel AI SDK route handler
+- **AND** the compact modal pattern MUST be adapted to Cabinet's existing Assistant sidepanel anchor rather than introduced as an unrelated bottom-right support bubble
+- **AND** the direct AI SDK runtime approach MUST remain a future option only for provider streaming after Cabinet exposes a governed Go transport boundary
+
+#### Scenario: Send message through assistant-ui composer without losing Cabinet context
+- **GIVEN** the shell Assistant sidebar has an active profile, active thread, selected provider/model, route context, and workspace selection context
+- **WHEN** user sends a message through the assistant-ui composer primitive
+- **THEN** Cabinet MUST persist the user message through `/api/chat/messages`
+- **AND** the request MUST include the active profile id, thread id, route context, workspace selection context, and selected assistant provider/model
+- **AND** the rendered message list MUST reload from Cabinet's persisted thread state
+
+#### Scenario: Reload existing shell assistant history
+- **GIVEN** existing assistant sidebar messages are persisted for the active profile/thread
+- **WHEN** the shell Assistant sidebar opens or the user switches back to that thread
+- **THEN** assistant-ui message primitives MUST render the existing persisted history without replacing thread ownership or provider/model metadata
+
+#### Scenario: Provider setup-needed and action confirmation remain Cabinet-governed
+- **GIVEN** provider setup/readiness or assistant action preview/apply state is unavailable, pending, or confirm-required
+- **WHEN** the assistant-ui adapter renders the shell Assistant sidebar in the compact anchored modal frame
+- **THEN** setup-needed/provider state MUST remain represented by Cabinet state and guidance
+- **AND** action previews MUST remain non-mutating until the user explicitly confirms apply through Cabinet's preview/apply APIs
+- **AND** assistant-ui tool-call behavior MUST NOT auto-apply inventory, wishlist, collection, import, or provider mutations
+
+### Requirement UI-SCREEN-CHAT-COPILOT-017: Chats route SHALL render the thread surface through Cabinet assistant-ui primitives
+The full `/chats` workspace SHALL render its selected thread message list and composer through Cabinet's assistant-ui external-store adapter while preserving the existing profile-scoped Go chat APIs, attachment controls, action preview/apply confirmation, provider defaults, and persisted reload behavior.
+
+#### Scenario: Send through assistant-ui composer on `/chats`
+- **GIVEN** user is on `/chats` with an active profile-scoped thread
+- **WHEN** user sends a message through the assistant-ui composer primitive
+- **THEN** `/api/chat/messages` MUST receive the active profile id, selected thread id, user role, message content, route context, profile context, and assistant provider/model defaults
+- **AND** the message MUST persist and reload through Cabinet chat APIs
+
+#### Scenario: Existing `/chats` controls stay governed
+- **GIVEN** the selected `/chats` thread is rendered through assistant-ui message primitives
+- **WHEN** attachments and action preview/apply controls render below the composer
+- **THEN** attachment upload controls MUST remain visible for the selected thread
+- **AND** action preview/apply controls MUST remain explicit Cabinet controls outside automatic assistant-ui tool-call mutation
+
+### Requirement UI-SCREEN-CHAT-COPILOT-018: Chat and Assistant surfaces SHALL use assistant-ui.com as the primary UI reference
+The 2026-06-13 Cabinet product direction requires Cabinet to use `https://www.assistant-ui.com/examples/ai-sdk` / assistant-ui.com as the primary chat UI reference for both the main chat UI and the side-panel Assistant UI. Cabinet SHALL evaluate future chat, Assistant side-panel, composer, message, thread/status, and tool/result work against that assistant-ui direction while preserving Cabinet-owned Go API persistence, provider/profile context, attachments, audit history, and explicit preview/confirm/apply safety.
+
+This cross-surface direction complements the existing main chat implementation in #1140 / PR #1148 (`UI-SCREEN-CHAT-COPILOT-017`) and the side-panel Assistant adapter context from #1133 / `ASSISTANT-WORKSPACE-005`.
+
+#### Scenario: Main chat UI follows assistant-ui direction
+- **GIVEN** a future issue, spec, or PR changes `/chats` or another full Cabinet chat workspace
+- **WHEN** the change defines thread, message, composer, streaming/status, or tool/result behavior
+- **THEN** the issue/spec/PR MUST state how the surface follows the assistant-ui AI SDK example
+- **AND** any intentional divergence from assistant-ui.com behavior MUST record the reason, affected surface, and validation expectation
+
+#### Scenario: Side-panel Assistant UI follows assistant-ui direction
+- **GIVEN** a future issue, spec, or PR changes the shell Assistant workspace or compact Assistant panel
+- **WHEN** the change defines side-panel chat, composer, message, thread/status, or tool/result behavior
+- **THEN** the issue/spec/PR MUST state how the side-panel Assistant UI follows the assistant-ui AI SDK example
+- **AND** overlapping main-chat and side-panel behavior MUST use consistent assistant-ui-aligned interaction semantics unless a linked issue/spec records a justified divergence
+
+#### Scenario: Cabinet safety boundaries remain authoritative
+- **GIVEN** assistant-ui components or AI SDK patterns are used for Cabinet chat or Assistant surfaces
+- **WHEN** the UI sends messages, reloads history, renders provider/setup-needed state, handles attachments, or exposes tool/action results
+- **THEN** Cabinet Go APIs MUST remain authoritative for persisted threads/messages, provider/profile state, route context, attachments, audit history, and action confirmation boundaries
+- **AND** assistant-ui tool-call rendering MUST NOT auto-apply inventory, wishlist, collection, import, provider, or other Cabinet data mutations
+- **AND** validation MUST cover message send, persisted reload/history, setup-needed/provider-missing state, context/attachment preservation, explicit preview/apply/cancel safety, and visual/interaction comparison against the assistant-ui AI SDK example for each affected surface
+
+### Requirement UI-SCREEN-CHAT-COPILOT-019: `/chats` SHALL provide an assistant-ui-inspired dark chat shell
+The full `/chats` workspace SHALL render a Cabinet-branded dark chat shell inspired by the assistant-ui AI SDK reference while keeping Cabinet Go APIs authoritative for profile-scoped persisted threads, messages, attachments, provider/model defaults, and explicit preview/confirm/apply action controls.
+
+#### Scenario: Render dark assistant-ui chat shell structure
+- **GIVEN** user opens `/chats` with an active profile
+- **WHEN** the chat workspace renders
+- **THEN** it MUST show a dark full-screen-style workspace, assistant-ui-style left thread/history sidebar, `New Thread` action, rounded main chat canvas, top `New Chat` action, share/export action, centered empty state, large rounded composer, attachment affordance, model selector/readiness row, voice/send controls, and prompt/action chips
+- **AND** the composer placeholder MUST preserve the mention/command affordance, for example `Send a message... (@ to mention, / for commands)`
+- **AND** the thread sidebar and thread creation MUST continue to use Cabinet `/api/chat/*` persisted state rather than client-only example state
+
+#### Scenario: Preserve Cabinet safety and side-panel visual alignment
+- **GIVEN** user uses `/chats` or the shell Assistant side-panel
+- **WHEN** assistant-ui visual patterns, tool cards, prompt chips, or composer controls render
+- **THEN** Cabinet identity, accessible names, route semantics, provider/model readiness, attachment context, and preview/confirm/apply boundaries MUST remain visible and Cabinet-governed
+- **AND** tool/action containers MUST be ready for Cabinet Agent control cards from #1207 without auto-applying mutations
+- **AND** desktop and mobile layouts MUST avoid overlapping text, clipped controls, or unusable sidebar/composer states
+
 ## Acceptance Criteria
+
+### Requirement UI-SCREEN-CHAT-COPILOT-020: Chat SHALL normalize Agent outcomes without false success
+The full Chat workspace SHALL render one server-owned response contract for read results, clarification, setup and authority blockers, unsupported requests, provider failures, preview lifecycle, cancellation, and applied results.
+
+#### Scenario: Render deterministic response-state actions
+- **GIVEN** the latest assistant message contains a normalized Agent response
+- **WHEN** `/chats` renders or refreshes that exact profile/thread
+- **THEN** it MUST show the governed skill name and bounded source surface/channel
+- **AND** retryable states MUST resubmit only the bounded original intent to that same profile/thread
+- **AND** non-retryable states MUST NOT expose Retry
+- **AND** failure or blocked states MUST NOT expose Apply or success language
+
+#### Scenario: Open the owning provider setup from a blocked Chat response
+- **GIVEN** the latest assistant response is `setup_required` because the OpenAI assistant provider is not configured
+- **WHEN** the user invokes `Open setup` from the normalized response card
+- **THEN** Chat MUST navigate to `/integrations?provider=openai`
+- **AND** Integrations MUST open the OpenAI provider configuration dialog directly
+- **AND** Chat MUST NOT route provider setup to the unrelated MCP settings screen
+
+#### Scenario: Ordinary response evicts stale structured cards
+- **GIVEN** an older assistant message contains planner, capability, navigation, or preview state
+- **WHEN** a newer ordinary assistant response is persisted
+- **THEN** `/chats` MUST render no older structured Agent card
+- **AND** the compact Assistant workspace MUST make the same latest-message decision
+
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
 
@@ -143,3 +371,20 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-08 | Preview action | `Preview Action` renders dry-run output before apply | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations` |
 | UC-CHAT-09 | Mobile image attachment flow | image attachment supports confirm-before-apply workflow | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow` |
 | UC-CHAT-10 | Unavailable bootstrap state | Thread creation controls stay disabled until chat context recovers | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-unavailable-disables-thread-create` |
+| UC-CHAT-11 | Cancel preview apply | Preview remains pending and no applied result is shown | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action` |
+| UC-CHAT-12 | Provider defaults in preview | Preview and confirm summary preserve active assistant provider/model defaults | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews` |
+| UC-CHAT-13 | Collection assignment preview/apply | Preview and confirm summary preserve target item, collection name, and assistant defaults before apply; confirmed apply persists collection membership and records thread outcome | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-013 previews structured collection assignment targets before apply`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-14 | Wrong-profile preview apply | Preview apply is scoped to the owning profile/thread and rejected stale profile attempts leave inventory unchanged | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossProfileApply` |
+| UC-CHAT-15 | Failed update apply | Missing inventory target rejects apply, keeps the preview pending, leaves inventory unchanged, and avoids false assistant applied history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-014 keeps failed update apply pending without false history`; `internal/chat/service_test.go` `TestServiceUpdatePreviewApplyRejectsMissingTarget` |
+| UC-CHAT-16 | Thread context reset | Pending preview/apply UI state is cleared when switching chat threads | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-015 clears pending action state when thread context changes` |
+| UC-CHAT-17 | Pending preview route return/reload | Pending action preview restores for the same active profile/thread after route return and reload while remaining scoped to that context | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-016 restores pending action preview after route return and reload` |
+| UC-CHAT-18 | Wishlist apply outcome | Confirmed wishlist creation persists the wishlist item and records entry/item linkage in chat history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-19 | Inventory update apply outcome | Confirmed inventory updates persist changed fields and record part/title evidence in UI and thread history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-20 | Failed collection assignment apply | Missing collection assignment target rejects apply, keeps the preview pending, leaves workspace collections unchanged, and avoids false assistant applied history | implemented: `internal/chat/service_test.go` `TestServiceCollectionAssignmentRejectsMissingTarget` |
+| UC-CHAT-21 | Missing confirmation apply rejection | Apply attempts without explicit confirmation reject before mutation, keep the preview unapplied, and avoid applied assistant history | implemented: `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-22 | Stale thread apply rejection | Same-profile apply attempts from the wrong thread reject as unavailable, leave inventory unchanged, keep the owner preview pending, and avoid false assistant history in either thread | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossThreadApply` |
+| UC-CHAT-23 | Assistant sidebar compact chat selection/new-chat/navigation action | Sidebar selects existing assistant chats, creates a new chat, sends a layout configuration prompt, exposes an explicit screen-opening action, and navigates only after invocation | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 selects chats, creates a new chat, and exposes a layout navigation action` |
+| UC-CHAT-24 | Assistant-ui shell adapter send/history/provider/action safety | assistant-ui external-store runtime renders shell assistant messages, sends through Cabinet chat APIs with route/profile/provider context, reloads existing history, preserves setup-needed/provider guidance, and keeps preview/apply confirmation explicit | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation` |
+| UC-CHAT-25 | Assistant-ui full Chats route surface | assistant-ui external-store runtime renders `/chats` selected thread messages and composer while preserving Cabinet profile/thread APIs, route/profile/provider context, attachments, and explicit action preview/apply controls | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-017 renders full Chats route through assistant-ui primitives while preserving Cabinet APIs` |
+| UC-CHAT-26 | Assistant-ui main chat and side-panel direction | #1205 links the 2026-06-13 Cabinet product direction across #1140 / PR #1148 for main chat and #1133 for side-panel Assistant, with assistant-ui.com / the AI SDK example as the primary UI reference and Cabinet Go APIs plus preview/confirm/apply safety remaining authoritative | planned: future affected main chat or side-panel Assistant PRs must bind validation to `UI-SCREEN-CHAT-COPILOT-018` |
+| UC-CHAT-27 | Assistant-ui dark visual shell | `/chats` renders the assistant-ui-inspired dark shell with persisted thread sidebar, rounded main canvas, top actions, centered empty state, large composer, attachment/model/voice/send affordances, prompt chips, and non-mutating tool-card readiness | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure` |

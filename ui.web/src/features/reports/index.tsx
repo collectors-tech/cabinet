@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChartColumn } from 'lucide-react'
+import { ChartColumn, Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -183,9 +183,39 @@ export function Reports() {
           icon={ChartColumn}
           testId='reports-header-title'
           iconTestId='reports-page-icon'
+          className='max-sm:hidden'
         />
         <div
-          className='ms-auto flex items-center space-x-4'
+          className='ms-auto flex items-center gap-2'
+          data-header-title-avoid='true'
+          data-testid='reports-global-header-actions'
+        >
+          <Button
+            variant='outline'
+            onClick={() => void loadReports()}
+            disabled={loading}
+            data-testid='reports-refresh-button'
+            aria-label='Refresh reports'
+            title='Refresh reports'
+          >
+            <RefreshCw className='h-4 w-4' />
+            <span className='sr-only 2xl:not-sr-only'>
+              {loading ? 'Refreshing...' : 'Refresh Reports'}
+            </span>
+          </Button>
+          <Button
+            data-testid='reports-export-button'
+            onClick={() => void exportReport()}
+            disabled={exportDisabled}
+            aria-label='Export CSV'
+            title='Export CSV'
+          >
+            <Download className='h-4 w-4' />
+            <span className='sr-only 2xl:not-sr-only'>Export CSV</span>
+          </Button>
+        </div>
+        <div
+          className='flex items-center space-x-4'
           data-header-title-avoid='true'
         >
           <LanguageSwitch />
@@ -196,31 +226,6 @@ export function Reports() {
       </Header>
 
       <Main className='space-y-6'>
-        <div className='flex flex-wrap items-center justify-between gap-3'>
-          <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Reports</h1>
-            <p className='text-muted-foreground'>
-              Wishlist and pricing analytics with export-ready snapshots.
-            </p>
-          </div>
-          <div className='flex gap-2'>
-            <Button
-              variant='outline'
-              onClick={() => void loadReports()}
-              disabled={loading}
-            >
-              {loading ? 'Refreshing...' : 'Refresh Reports'}
-            </Button>
-            <Button
-              data-testid='reports-export-button'
-              onClick={() => void exportReport()}
-              disabled={exportDisabled}
-            >
-              Export CSV
-            </Button>
-          </div>
-        </div>
-
         {error ? (
           <Card data-testid='reports-error'>
             <CardHeader>

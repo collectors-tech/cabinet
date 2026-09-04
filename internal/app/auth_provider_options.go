@@ -13,9 +13,10 @@ type authProviderOption struct {
 }
 
 type authProviderOptionsPayload struct {
-	IdentityMode    string               `json:"identity_mode"`
-	ClerkConfigured bool                 `json:"clerk_configured"`
-	Providers       []authProviderOption `json:"providers"`
+	IdentityMode      string               `json:"identity_mode"`
+	ZitadelConfigured bool                 `json:"zitadel_configured"`
+	ZitadelLoginPath  string               `json:"zitadel_login_path,omitempty"`
+	Providers         []authProviderOption `json:"providers"`
 }
 
 var (
@@ -47,23 +48,23 @@ func resolveAuthProviderOptions() authProviderOptionsPayload {
 }
 
 func defaultAuthProviderOptionsFromEnv() authProviderOptionsPayload {
-	clerkKeyConfigured := strings.TrimSpace(os.Getenv("VITE_CLERK_PUBLISHABLE_KEY")) != ""
+	zitadelConfigured := strings.TrimSpace(os.Getenv("CABINET_ZITADEL_ISSUER")) != "" &&
+		strings.TrimSpace(os.Getenv("CABINET_ZITADEL_CLIENT_ID")) != "" &&
+		strings.TrimSpace(os.Getenv("CABINET_ZITADEL_AUDIENCE")) != "" &&
+		strings.TrimSpace(os.Getenv("CABINET_PUBLIC_ORIGIN")) != ""
 
 	identityMode := strings.TrimSpace(strings.ToLower(os.Getenv("CABINET_AUTH_IDENTITY_MODE")))
 	if identityMode == "" {
-		if clerkKeyConfigured {
-			identityMode = "clerk"
-		} else {
-			identityMode = "local"
-		}
+		identityMode = "local"
 	}
-	if identityMode != "clerk" {
+	if identityMode != "zitadel" {
 		identityMode = "local"
 	}
 
 	return authProviderOptionsPayload{
-		IdentityMode:    identityMode,
-		ClerkConfigured: clerkKeyConfigured,
+		IdentityMode:      identityMode,
+		ZitadelConfigured: zitadelConfigured,
+		ZitadelLoginPath:  "/api/auth/zitadel/login",
 		Providers: []authProviderOption{
 			{
 				ID:      "google",

@@ -1,15 +1,80 @@
 describe('integrations/default-site-search', () => {
   function signInToMarketWatch() {
-    cy.visit('/sign-in?redirect=%2Fscanner%2F')
-    cy.get('input[name="email"]').clear().type('e2e-default-search@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/scanner/',
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
   }
 
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
+  })
+
+  it('INTEGRATION-016 runs default-scoped saved searches through the shared scanner route', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-dss-default',
+            name: 'Default Provider Search',
+            keywords: ['slot car'],
+            enabled: true,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', { statusCode: 200, body: { status: 'ok' } }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', {
+      statusCode: 500,
+      body: { error: 'unexpected_provider_specific_run_for_default_scope' },
+    }).as('ebayProviderRun')
+    cy.intercept('POST', '/api/scanner/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-dss-default')
+      expect(req.body.provider_scope).to.deep.equal([])
+      req.reply({ statusCode: 200, body: { run_id: 'run-dss-default', status: 'ok' } })
+    }).as('defaultScannerRun')
+    cy.intercept('GET', '/api/scanner/candidates?query_set_id=qs-dss-default', {
+      statusCode: 200,
+      body: {
+        candidates: [
+          {
+            id: 'cand-dss-default-ebay',
+            query_set_id: 'qs-dss-default',
+            listing_id: 'ebay-default-1',
+            title: 'Default eBay Slot Car',
+            source: 'ebay',
+          },
+          {
+            id: 'cand-dss-default-amazon',
+            query_set_id: 'qs-dss-default',
+            listing_id: 'amazon-default-1',
+            title: 'Default Amazon Slot Car',
+            source: 'amazon',
+          },
+        ],
+      },
+    }).as('defaultCandidates')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-query-providers-qs-dss-default"]').should('contain', 'ebay')
+    cy.get('[data-testid="scanner-run-qs-dss-default"]').click()
+    cy.wait('@defaultScannerRun')
+    cy.wait('@defaultCandidates')
+    cy.get('@ebayProviderRun.all').should('have.length', 0)
+    cy.get('[data-testid="scanner-action-status"]').should('contain', 'run_started_qs-dss-default')
+    cy.get('[data-testid="scanner-candidates-qs-dss-default"]')
+      .should('contain', 'Default eBay Slot Car')
+      .and('contain', 'ebay')
+      .and('contain', 'Default Amazon Slot Car')
+      .and('contain', 'amazon')
   })
 
   it('DEFAULT-SITE-SEARCH-004 manages provider-bound saved searches with persisted filters', () => {
@@ -54,6 +119,7 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="market-watch-provider-single"]').select('bonzaslotcars')
     cy.get('[data-testid="scanner-new-query-name"]').type('Bonza AFX')
     cy.get('[data-testid="scanner-new-query-keywords"]').type('afx, mega g+')
+    cy.get('[data-testid="scanner-new-watch-cadence"]').select('custom')
     cy.get('[data-testid="scanner-new-query-schedule"]').clear().type('0 */4 * * *')
     cy.get('[data-testid="scanner-create-query"]').click()
     cy.wait('@createQuerySet')
@@ -61,6 +127,7 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="scanner-edit-qs-dss-1"]').click()
     cy.get('[data-testid="scanner-edit-name-qs-dss-1"]').clear().type('Bonza AFX Updated')
     cy.get('[data-testid="scanner-edit-keywords-qs-dss-1"]').clear().type('afx, mega g+, camaro')
+    cy.get('[data-testid="scanner-edit-cadence-qs-dss-1"]').select('custom')
     cy.get('[data-testid="scanner-edit-schedule-qs-dss-1"]').clear().type('0 */8 * * *')
     cy.get('[data-testid="scanner-save-qs-dss-1"]').click()
     cy.wait('@updateQuerySet')
@@ -72,20 +139,30 @@ describe('integrations/default-site-search', () => {
   })
 
   it('DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh', () => {
-    cy.intercept('GET', '/api/scanner/query-sets', {
-      statusCode: 200,
-      body: {
-        query_sets: [
-          {
-            id: 'qs-dss-2',
-            name: 'Amazon Watch',
-            keywords: ['slot cars'],
-            provider_scope: ['amazon'],
-            schedule_cron: '0 */6 * * *',
-            enabled: true,
-          },
-        ],
-      },
+    let scheduledCompleted = false
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_sets: [
+            {
+              id: 'qs-dss-2',
+              name: 'Amazon Watch',
+              keywords: ['slot cars'],
+              provider_scope: ['amazon'],
+              schedule_cron: '0 */6 * * *',
+              enabled: true,
+              ...(scheduledCompleted
+                ? {
+                    last_run_status: 'succeeded',
+                    last_run_at: '2026-05-27T11:52:00Z',
+                    last_candidate_count: 1,
+                  }
+                : {}),
+            },
+          ],
+        },
+      })
     }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
     cy.intercept('GET', '/api/provider/health?provider=ebay', { statusCode: 200, body: { status: 'ok' } }).as('providerHealth')
@@ -107,14 +184,17 @@ describe('integrations/default-site-search', () => {
         ],
       },
     }).as('candidates')
-    cy.intercept('POST', '/api/scanner/run/scheduled', {
-      statusCode: 200,
-      body: {
-        run_id: 'scheduled-1',
-        query_sets_executed: 1,
-        candidates_collected: 1,
-        failures: 0,
-      },
+    cy.intercept('POST', '/api/scanner/run/scheduled', (req) => {
+      scheduledCompleted = true
+      req.reply({
+        statusCode: 200,
+        body: {
+          run_id: 'scheduled-1',
+          query_sets_executed: 1,
+          candidates_collected: 1,
+          failures: 0,
+        },
+      })
     }).as('scheduledRefresh')
 
     signInToMarketWatch()
@@ -128,11 +208,26 @@ describe('integrations/default-site-search', () => {
 
     cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
     cy.wait('@scheduledRefresh')
+    cy.wait('@querySets')
     cy.get('[data-testid="scanner-action-status"]').should('contain', 'scheduled_run_completed_scheduled-1')
     cy.get('[data-testid="scanner-action-feedback"]').should('contain', 'Query sets executed: 1')
+    cy.get('[data-testid="market-watch-run-history-qs-dss-2"]')
+      .should('contain', 'Amazon Watch')
+      .and('contain', 'succeeded')
+      .and('contain', 'Candidates: 1')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Amazon Watch').should('be.visible')
+      cy.contains('td', 'succeeded').should('be.visible')
+      cy.contains('td', '1').should('be.visible')
+    })
   })
 
-  it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and wishlist flows', () => {
+  it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries wishlist and inventory flows', () => {
+    let wishlistEntries: Array<Record<string, unknown>> = []
+    let wishlistItems: Array<Record<string, unknown>> = []
+    const discoveryActionTypes: string[] = []
+
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
       body: {
@@ -149,9 +244,23 @@ describe('integrations/default-site-search', () => {
     }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
     cy.intercept('GET', '/api/provider/health?provider=ebay', { statusCode: 200, body: { status: 'ok' } }).as('providerHealth')
-    cy.intercept('POST', '/api/scanner/run', {
-      statusCode: 200,
-      body: { run_id: 'run-dss-3', status: 'ok' },
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-dss-3')
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          candidates: [
+            {
+              id: 'cand-dss-3',
+              query_set_id: 'qs-dss-3',
+              listing_id: 'ebay-1',
+              title: 'eBay Handoff Car',
+              source: 'ebay',
+            },
+          ],
+        },
+      })
     }).as('runNow')
     cy.intercept('GET', '/api/scanner/candidates?query_set_id=qs-dss-3', {
       statusCode: 200,
@@ -175,16 +284,67 @@ describe('integrations/default-site-search', () => {
     }).as('discoveriesHandoff')
     cy.intercept('POST', '/api/discovery/action', (req) => {
       expect(req.body.candidate_id).to.equal('cand-dss-3')
-      expect(req.body.type).to.equal('add_to_wishlist')
+      discoveryActionTypes.push(req.body.type)
+      expect(['add_to_wishlist', 'create_item']).to.include(req.body.type)
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-dss-3',
+      })
+      if (req.body.type === 'add_to_wishlist') {
+        wishlistEntries = [
+          {
+            id: 'wish-dss-3',
+            item_id: 'item-dss-3',
+            priority: 'medium',
+            target_price: 0,
+            notes:
+              'source_provider=ebay; query_set_id=qs-dss-3; query_name=eBay Handoff; provider_scope=ebay',
+            created_at: '2026-05-27T10:44:00Z',
+            updated_at: '2026-05-27T10:44:00Z',
+          },
+        ]
+        wishlistItems = [
+          {
+            id: 'item-dss-3',
+            title: 'eBay Handoff Car',
+            part_number: 'ebay-1',
+            status: 'wishlist',
+            category: 'Slot Cars',
+            priority: 'medium',
+          },
+        ]
+      }
       req.reply({ statusCode: 200, body: { ok: true } })
-    }).as('wishlistHandoff')
+    }).as('savedSearchAction')
+    cy.intercept('GET', '/api/wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } })
+    }).as('wishlistEntries')
+    cy.intercept('GET', '/api/items?status=wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } })
+    }).as('wishlistItems')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+    cy.intercept('GET', '/api/pricing/stats?item_id=item-dss-3', {
+      statusCode: 200,
+      body: { min: 0, median: 0, latest: 0 },
+    }).as('wishlistPriceStats')
+    cy.intercept('GET', '/api/pricing/trend?item_id=item-dss-3', {
+      statusCode: 200,
+      body: { points: [] },
+    }).as('wishlistPriceTrend')
+    cy.intercept('GET', '/api/pricing/history?item_id=item-dss-3', {
+      statusCode: 200,
+      body: { history: [] },
+    }).as('wishlistPriceHistory')
 
     signInToMarketWatch()
     cy.wait(['@querySets', '@failures', '@providerHealth'])
 
     cy.get('[data-testid="scanner-run-qs-dss-3"]').click()
     cy.wait('@runNow')
-    cy.wait('@candidates')
+    cy.get('@candidates.all').should('have.length', 0)
 
     cy.get('[data-testid="scanner-handoff-discoveries-qs-dss-3"]').click()
     cy.wait('@discoveriesHandoff')
@@ -193,7 +353,23 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="market-watch-view-mode-table"]').click()
     cy.get('[data-testid="market-watch-open-output-qs-dss-3"]').click()
     cy.get('[data-testid="scanner-handoff-wishlist-qs-dss-3"]').click()
-    cy.wait('@wishlistHandoff')
+    cy.wait('@savedSearchAction')
     cy.get('[data-testid="scanner-handoff-status"]').should('contain', 'wishlist_handoff_ok')
+
+    cy.get('[data-testid="scanner-handoff-inventory-qs-dss-3"]').click()
+    cy.wait('@savedSearchAction')
+    cy.wrap(discoveryActionTypes).should('deep.equal', [
+      'add_to_wishlist',
+      'create_item',
+    ])
+    cy.get('[data-testid="scanner-handoff-status"]').should('contain', 'inventory_handoff_ok')
+
+    cy.visit('/wishlist/')
+    cy.wait(['@wishlistEntries', '@wishlistItems'])
+    cy.contains('eBay Handoff Car').should('be.visible')
+    cy.contains('source_provider=ebay').should('be.visible')
+    cy.contains('query_set_id=qs-dss-3').should('be.visible')
+    cy.contains('query_name=eBay Handoff').should('be.visible')
+    cy.contains('provider_scope=ebay').should('be.visible')
   })
 })

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { type Table } from '@tanstack/react-table'
 import { Trash2, UserX, UserCheck, Mail } from 'lucide-react'
 import { toast } from 'sonner'
-import { sleep } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -15,38 +14,99 @@ import { UsersMultiDeleteDialog } from './users-multi-delete-dialog'
 
 type DataTableBulkActionsProps<TData> = {
   table: Table<TData>
+  onMutated: () => Promise<void> | void
+}
+
+function usersBulkHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Users bulk actions',
+      category: 'users',
+    },
+  }
 }
 
 export function DataTableBulkActions<TData>({
   table,
+  onMutated,
 }: DataTableBulkActionsProps<TData>) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const selectedRows = table.getFilteredSelectedRowModel().rows
 
   const handleBulkStatusChange = (status: 'active' | 'inactive') => {
     const selectedUsers = selectedRows.map((row) => row.original as User)
-    toast.promise(sleep(2000), {
-      loading: `${status === 'active' ? 'Activating' : 'Deactivating'} users...`,
-      success: () => {
+    const actionLabel = status === 'active' ? 'Activate' : 'Deactivate'
+    const historyId =
+      status === 'active' ? 'users-bulk-active' : 'users-bulk-inactive'
+    toast.promise(
+      async () => {
+        await Promise.all(
+          selectedUsers.map((user) =>
+            fetch(`/api/users/${user.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...user, status }),
+            }).then((response) => {
+              if (!response.ok) {
+                throw new Error(`users_bulk_status_failed_${response.status}`)
+              }
+            })
+          )
+        )
+        await onMutated()
         table.resetRowSelection()
-        return `${status === 'active' ? 'Activated' : 'Deactivated'} ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`
       },
-      error: `Error ${status === 'active' ? 'activating' : 'deactivating'} users`,
-    })
-    table.resetRowSelection()
+      {
+        loading: `${status === 'active' ? 'Activating' : 'Deactivating'} users...`,
+        success: `${status === 'active' ? 'Activated' : 'Deactivated'} ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`,
+        error: `Error ${status === 'active' ? 'activating' : 'deactivating'} users`,
+        ...usersBulkHistory(
+          historyId,
+          `${actionLabel} selected users`,
+          'Users bulk status change feedback was preserved in Inbox history.'
+        ),
+      }
+    )
   }
 
   const handleBulkInvite = () => {
     const selectedUsers = selectedRows.map((row) => row.original as User)
-    toast.promise(sleep(2000), {
-      loading: 'Inviting users...',
-      success: () => {
+    toast.promise(
+      async () => {
+        await Promise.all(
+          selectedUsers.map((user) =>
+            fetch('/api/users/invite', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: user.email,
+                role: user.role,
+                desc: 'Bulk invitation',
+              }),
+            }).then((response) => {
+              if (!response.ok) {
+                throw new Error(`users_bulk_invite_failed_${response.status}`)
+              }
+            })
+          )
+        )
+        await onMutated()
         table.resetRowSelection()
-        return `Invited ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`
       },
-      error: 'Error inviting users',
-    })
-    table.resetRowSelection()
+      {
+        loading: 'Inviting users...',
+        success: `Invited ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`,
+        error: 'Error inviting users',
+        ...usersBulkHistory(
+          'users-bulk-invite',
+          'Invite selected users',
+          'Users bulk invitation feedback was preserved in Inbox history.'
+        ),
+      }
+    )
   }
 
   return (
@@ -133,6 +193,7 @@ export function DataTableBulkActions<TData>({
         table={table}
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
+        onDeleted={onMutated}
       />
     </>
   )

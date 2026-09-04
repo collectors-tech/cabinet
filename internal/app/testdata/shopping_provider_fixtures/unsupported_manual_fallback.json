@@ -1,0 +1,6 @@
+{
+  "error": "unsupported_page_manual_fallback_required",
+  "provider": "manual-fallback.test",
+  "message": "This provider page does not expose a supported storefront search shape.",
+  "next_action": "capture_manual_url_or_configure_headless_provider"
+}

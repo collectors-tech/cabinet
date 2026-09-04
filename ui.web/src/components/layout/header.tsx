@@ -7,10 +7,10 @@ import {
 } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-context'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { SidebarTrigger } from '@/components/ui/sidebar'
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
 
 type HeaderProps = React.HTMLAttributes<HTMLElement> & {
   fixed?: boolean
@@ -90,8 +90,8 @@ export function HeaderTitle({
   return (
     <div
       className={cn(
-        'pointer-events-none absolute top-1/2 left-1/2 z-10 hidden max-w-[min(34rem,42vw)] -translate-x-1/2 -translate-y-1/2 justify-center md:flex',
-        isCrowded && 'opacity-0',
+        'pointer-events-none z-10 flex max-w-28 min-w-20 shrink-0 justify-center md:absolute md:top-1/2 md:left-1/2 md:max-w-[min(34rem,42vw)] md:min-w-0 md:-translate-x-1/2 md:-translate-y-1/2',
+        isCrowded && 'md:opacity-0',
         className
       )}
       data-crowded={isCrowded ? 'true' : 'false'}
@@ -122,7 +122,23 @@ export function HeaderTitle({
 export function Header({ className, fixed, children, ...props }: HeaderProps) {
   const [offset, setOffset] = useState(0)
   const { activeWorkspace, toggleAssistantWorkspace } = useShellWorkspace()
+  const { isMobile, setOpenMobile } = useSidebar()
   const assistantActive = activeWorkspace === 'assistant'
+
+  const handleAssistantToggle = () => {
+    if (!assistantActive && isMobile) {
+      setOpenMobile(true)
+    }
+    toggleAssistantWorkspace()
+  }
+
+  const handleAssistantToggleKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    handleAssistantToggle()
+  }
 
   useEffect(() => {
     const onScroll = () => {
@@ -156,27 +172,22 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
       >
         <SidebarTrigger variant='outline' className='max-md:scale-125' />
         <Separator orientation='vertical' className='h-6' />
-        {children}
         <Button
           data-testid='shell-chat-toggle'
           type='button'
           variant={assistantActive ? 'default' : 'outline'}
           size='icon'
           aria-label={
-            assistantActive
-              ? 'Return to navigation workspace'
-              : 'Open assistant workspace'
+            assistantActive ? 'Close Cabinet Agent' : 'Open Cabinet Agent'
           }
-          title={
-            assistantActive
-              ? 'Return to navigation workspace'
-              : 'Open assistant workspace'
-          }
-          onClick={toggleAssistantWorkspace}
+          title={assistantActive ? 'Close Cabinet Agent' : 'Open Cabinet Agent'}
+          onClick={handleAssistantToggle}
+          onKeyDown={handleAssistantToggleKeyDown}
           className='shrink-0'
         >
           <MessageSquare className='h-4 w-4' />
         </Button>
+        {children}
       </div>
     </header>
   )

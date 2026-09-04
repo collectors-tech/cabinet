@@ -1,10 +1,12 @@
 describe('general/ui-performance', () => {
-  function signInToInventory() {
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-performance@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+  beforeEach(() => {
+    cy.e2eReset()
+  })
+
+  function signInToDashboard() {
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/dashboard' })
+    })
   }
 
   it('UI-PERFORMANCE-001 enforces measurable S2 interaction thresholds', () => {
@@ -56,21 +58,51 @@ describe('general/ui-performance', () => {
       category: 'feature',
     }))
 
-    cy.intercept('GET', '/api/items*', (req) => {
-      req.reply((res) => {
-        res.delay = 1200
-        res.send({
-          statusCode: 200,
-          body: { items: bulkItems },
-        })
-      })
-    }).as('itemsDelayed')
+    let releaseItemsResponse: (() => void) | null = null
 
-    signInToInventory()
-    cy.get('[data-testid="inventory-loading"]').should('be.visible')
-    cy.wait('@itemsDelayed')
+    signInToDashboard()
+    cy.visit('/inventory/', {
+      onBeforeLoad(win) {
+        const originalFetch = win.fetch.bind(win)
+        win.fetch = (input, init) => {
+          const url =
+            typeof input === 'string'
+              ? input
+              : input instanceof win.Request
+                ? input.url
+                : String(input)
+          const pathname = new URL(url, win.location.origin).pathname
+          if (pathname === '/api/items' || pathname === '/api/items/') {
+            return new Promise<Response>((resolve) => {
+              releaseItemsResponse = () => {
+                resolve(
+                  new win.Response(JSON.stringify({ items: bulkItems }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                  })
+                )
+              }
+            })
+          }
+          return originalFetch(input, init)
+        }
+      },
+    })
+    cy.get('[data-testid="inventory-loading"]')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.wrap(null, { timeout: 10000 }).should(() => {
+      expect(releaseItemsResponse, 'delayed inventory response').to.be.a(
+        'function'
+      )
+    })
+    cy.then(() => {
+      releaseItemsResponse?.()
+    })
     cy.get('[data-testid="inventory-loading"]').should('not.exist')
-    cy.get('table').should('be.visible')
+    cy.get('[data-testid="inventory-table-surface"]').should('exist')
+    cy.get('table[data-slot="table"]').should('exist')
+    cy.contains('Performance Item 1').should('exist')
     cy.contains('500').should('not.exist')
   })
 })

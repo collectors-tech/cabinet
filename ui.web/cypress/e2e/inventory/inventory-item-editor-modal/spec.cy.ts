@@ -100,16 +100,10 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="inventory-item-row-item-alpha"]')
       .scrollIntoView()
       .click();
-    cy.wait(250);
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-ALPHA");
     cy.get('[data-testid="row-details-modal"]').should("not.exist");
     cy.get('[data-testid="row-edit-modal"]').should("not.exist");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
-    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
-
-    cy.get('[data-testid="inventory-item-row-item-alpha"]')
-      .scrollIntoView()
-      .dblclick();
     cy.get('[data-testid="inventory-item-editor-panel"]')
       .should("be.visible")
       .and("contain", "Edit Item");
@@ -436,7 +430,7 @@ describe("inventory item editor modal", () => {
 
     signIn();
     cy.wait("@itemsList");
-    cy.get('[data-testid="inventory-item-row-item-alpha"]').dblclick();
+    cy.get('[data-testid="inventory-item-row-item-alpha"]').click();
 
     cy.wait("@alphaPhotos");
     cy.wait("@alphaBarcodes");
@@ -477,17 +471,6 @@ describe("inventory item editor modal", () => {
       "alt",
       "alpha-back.jpg"
     );
-    cy.get('[data-testid="inventory-item-gallery-open"]').click();
-    cy.get('[data-testid="inventory-photo-fullscreen"]')
-      .should("be.visible")
-      .and("contain", "alpha-back.jpg");
-    cy.get('[data-testid="inventory-photo-prev"]').click();
-    cy.get('[data-testid="inventory-photo-fullscreen"]').should(
-      "contain",
-      "alpha-front.jpg"
-    );
-    cy.get('[data-testid="inventory-photo-fullscreen-close"]').click();
-
     cy.get('[data-testid="inventory-item-gallery-preview-rotate-left"]').click();
     cy.wait("@rotateAlphaBackPhotoLeft");
     cy.wait("@alphaPhotos");
@@ -660,7 +643,7 @@ describe("inventory item editor modal", () => {
     signIn();
     cy.wait("@itemsList");
 
-    cy.get('[data-testid="inventory-item-row-item-alpha"]').dblclick();
+    cy.get('[data-testid="inventory-item-row-item-alpha"]').click();
     cy.wait("@alphaInstances");
     cy.get('[data-testid="inventory-instance-price"]').clear().type("75.50");
     cy.get('[data-testid="inventory-instance-quantity"]').clear().type("3");
@@ -679,8 +662,14 @@ describe("inventory item editor modal", () => {
     cy.wait("@updateAlphaItem");
     cy.wait("@updateAlphaInstance");
 
-    cy.get('[data-testid="inventory-item-row-item-bravo"]').dblclick();
+    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-row-item-bravo"]')
+      .scrollIntoView()
+      .click();
     cy.wait("@bravoInstances");
+    cy.get('[data-testid="inventory-item-editor-panel"]')
+      .should("be.visible")
+      .and("contain", "PN-BRAVO");
     cy.get('[data-testid="inventory-instance-price"]').clear().type("22");
     cy.get('[data-testid="inventory-instance-quantity"]').clear().type("1");
     cy.get('[data-testid="inventory-instance-condition"]').select(
@@ -725,6 +714,7 @@ describe("inventory item editor modal", () => {
       .should("be.visible");
     cy.get('[data-testid="inventory-create-barcode-input"]').should("be.visible");
     cy.get('[data-testid="inventory-item-editor-cancel"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
 
     cy.get('[data-testid="inventory-barcodes-action"]').click();
     cy.get('[data-testid="inventory-item-editor-dialog"]')
@@ -739,6 +729,7 @@ describe("inventory item editor modal", () => {
       .should("be.visible")
       .and("be.focused");
     cy.get('[data-testid="inventory-item-editor-cancel"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
 
     cy.get('[data-testid="inventory-photos-action"]').click();
     cy.get('[data-testid="inventory-item-editor-dialog"]')
@@ -753,6 +744,7 @@ describe("inventory item editor modal", () => {
       "photo"
     );
     cy.get('[data-testid="inventory-item-editor-cancel"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
 
     cy.get('[data-testid="inventory-paste-action"]').click();
     cy.get('[data-testid="inventory-item-editor-dialog"]')

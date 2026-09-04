@@ -49,6 +49,70 @@ func TestDiscoveryPanelActionsAndReset(t *testing.T) {
 	}
 }
 
+func TestDiscoveryActionResponseReturnsEbayHandoffProvenance(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"eBay Handoff"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	setActive := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if setActive.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", setActive.Code, setActive.Body.String())
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('ebay-handoff-item-1', ?, 'AFX','Slot','EBAY-HANDOFF-1','eBay Handoff Item')`, profile.ID); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('ebay-handoff-q1', ?, 'eBay Handoff Query', '["afx"]', '[]', '["ebay"]')`, profile.ID); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count) VALUES ('ebay-handoff-c1', ?, 'ebay-handoff-q1', 'EBAY-HANDOFF-L1', 'eBay AFX Handoff Candidate', 112.5, 'AUD', 8.75, 'https://www.ebay.com/itm/EBAY-HANDOFF-L1', '', 'seller-1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay', 'in_stock', 3)`, profile.ID); err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES ('ebay-handoff-c1','ebay-handoff-item-1','not_in_collection',0.92,0,'EBAY-HANDOFF-1',CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed match: %v", err)
+	}
+
+	action := doRequest(t, a, http.MethodPost, "/api/discovery/action", strings.NewReader(`{"candidate_id":"ebay-handoff-c1","type":"add_to_wishlist","payload":{"source":"market_watch","query_set_id":"ebay-handoff-q1"}}`), map[string]string{"Content-Type": "application/json"})
+	if action.Code != http.StatusOK {
+		t.Fatalf("discovery action status=%d body=%s", action.Code, action.Body.String())
+	}
+	var payload struct {
+		OK        bool           `json:"ok"`
+		Action    string         `json:"action"`
+		Candidate string         `json:"candidate_id"`
+		Audit     map[string]any `json:"audit"`
+	}
+	if err := json.NewDecoder(action.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode discovery action response: %v", err)
+	}
+	if !payload.OK || payload.Action != "add_to_wishlist" || payload.Candidate != "ebay-handoff-c1" {
+		t.Fatalf("unexpected action envelope: %+v", payload)
+	}
+	for _, field := range []string{"source", "source_provider", "query_set_id", "query_name", "provider_scope", "listing_id", "source_result_url", "observed_currency", "stock_state", "stock_count"} {
+		if _, ok := payload.Audit[field]; !ok {
+			t.Fatalf("expected audit field %q in response: %+v", field, payload.Audit)
+		}
+	}
+	if payload.Audit["source_provider"] != "ebay" || payload.Audit["query_set_id"] != "ebay-handoff-q1" || payload.Audit["query_name"] != "eBay Handoff Query" {
+		t.Fatalf("expected eBay query provenance in response audit, got %+v", payload.Audit)
+	}
+	providerScope, ok := payload.Audit["provider_scope"].([]any)
+	if !ok || len(providerScope) != 1 || providerScope[0] != "ebay" {
+		t.Fatalf("expected eBay provider scope in response audit, got %+v", payload.Audit["provider_scope"])
+	}
+	if payload.Audit["stock_state"] != "in_stock" || payload.Audit["stock_count"] != float64(3) {
+		t.Fatalf("expected eBay stock attribution in response audit, got %+v", payload.Audit)
+	}
+}
+
 func TestWishlistAndPricingEndpoints(t *testing.T) {
 	t.Parallel()
 

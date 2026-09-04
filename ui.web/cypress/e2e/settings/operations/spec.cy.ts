@@ -1,9 +1,8 @@
 describe('settings/operations', () => {
-  function signInToOperations() {
+  function signInToOperations(sessionProfileId = 'profile-ops-default') {
+    cy.stubLocalServerSession(sessionProfileId)
     cy.visit('/sign-in?redirect=%2Fsettings%2Foperations')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/settings\/operations\/?$/
@@ -13,6 +12,14 @@ describe('settings/operations', () => {
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-ops-default' },
+    })
+    cy.intercept('GET', '/api/profiles/profile-ops-default/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
   })
 
   it('UI-SCREEN-SETTINGS-OPERATIONS-001 renders runtime metadata and recovery visibility', () => {
@@ -20,6 +27,7 @@ describe('settings/operations', () => {
       statusCode: 200,
       body: {
         app_version: 'rev-test123',
+        build_revision: '303754c3cf2e940615817a53e2c496f0b99ef143',
         build_date: '2026-04-22',
         bind_mode: 'lan',
         runtime_host: '192.168.1.53',
@@ -43,6 +51,10 @@ describe('settings/operations', () => {
       'contain',
       'rev-test123'
     )
+    cy.get('[data-testid="settings-operations-build-revision"]').should(
+      'have.text',
+      '303754c3cf2e940615817a53e2c496f0b99ef143'
+    )
     cy.get('[data-testid="settings-operations-runtime-card"]').should(
       'contain',
       '192.168.1.53:17882'
@@ -59,6 +71,74 @@ describe('settings/operations', () => {
       'contain',
       'Recovery required'
     )
+  })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-016 keeps operations controls in local action regions', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-action-placement',
+        build_date: '2026-04-23',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: {
+        id: 'profile-ops-placement',
+      },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/profile-ops-placement/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          scanner_schedule: '0 */6 * * *',
+        },
+      },
+    }).as('profileSettings')
+
+    signInToOperations('profile-ops-placement')
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+    cy.wait('@activeProfile')
+    cy.wait('@profileSettings')
+
+    cy.get('[data-testid="settings-operations-global-header-actions"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="settings-operations-runtime-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-retry"]')
+        .scrollIntoView()
+        .should('be.visible')
+    })
+    cy.get('[data-testid="settings-operations-logs-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-export-logs"]')
+        .scrollIntoView()
+        .should('be.visible')
+    })
+    cy.get('[data-testid="settings-operations-data-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-export-json"]')
+        .scrollIntoView()
+        .should('be.visible')
+    })
+    cy.get('[data-testid="settings-operations-queue-card"]').within(() => {
+      cy.get('[data-testid="settings-operations-queue-pause"]')
+        .scrollIntoView()
+        .should('be.visible')
+      cy.get('[data-testid="settings-operations-queue-resume"]')
+        .scrollIntoView()
+        .should('be.visible')
+    })
   })
 
   it('UI-SCREEN-SETTINGS-OPERATIONS-002 retries runtime visibility without route reload', () => {
@@ -183,7 +263,7 @@ describe('settings/operations', () => {
       })
     }).as('saveProfileSettings')
 
-    signInToOperations()
+    signInToOperations('profile-ops-queue')
     cy.wait('@runtimeInfo')
     cy.wait('@runtimeRecovery')
     cy.wait('@activeProfile')
@@ -272,7 +352,7 @@ describe('settings/operations', () => {
       })
     }).as('beginRecoveryReset')
 
-    signInToOperations()
+    signInToOperations('profile-ops-recovery')
     cy.wait('@runtimeInfo')
     cy.wait('@runtimeRecovery')
     cy.wait('@activeProfile')
@@ -430,7 +510,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-data-status"]').should(
       'contain',
-      'Import dry-run failed.'
+      'Import dry-run failed. No records were changed; fix the JSON snapshot and run dry-run again.'
     )
   })
 
@@ -494,6 +574,11 @@ describe('settings/operations', () => {
         statusCode: 200,
         body: {
           ok: true,
+          total_items: 2,
+          created: 1,
+          merged: 1,
+          skipped: 0,
+          failed: 0,
         },
       })
     }).as('importApply')
@@ -517,7 +602,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-data-status"]').should(
       'contain',
-      'Import applied successfully.'
+      'Import applied: 2 items, 1 created, 1 merged, 0 skipped, 0 failed.'
     )
   })
 
@@ -578,7 +663,11 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-data-status"]').should(
       'contain',
-      'Import apply failed.'
+      'Import apply failed. No records were changed; review the dry-run summary and retry when data services are healthy.'
+    )
+    cy.get('[data-testid="settings-operations-import-summary"]').should(
+      'contain',
+      'OPS-APPLY-ERR'
     )
   })
 
@@ -700,7 +789,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV dry-run failed.'
+      'CSV dry-run failed. No records were changed; fix the CSV rows or mapping and run dry-run again.'
     )
   })
 
@@ -751,6 +840,11 @@ describe('settings/operations', () => {
         statusCode: 200,
         body: {
           ok: true,
+          total_items: 2,
+          created: 1,
+          merged: 1,
+          skipped: 0,
+          failed: 0,
         },
       })
     }).as('importCsvApply')
@@ -774,7 +868,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV import applied successfully.'
+      'CSV import applied: 2 items, 1 created, 1 merged, 0 skipped, 0 failed.'
     )
   })
 
@@ -834,7 +928,11 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV import apply failed.'
+      'CSV import apply failed. No records were changed; review the CSV dry-run summary and retry when data services are healthy.'
+    )
+    cy.get('[data-testid="settings-operations-csv-summary"]').should(
+      'contain',
+      'CSV-APPLY-ERR'
     )
   })
 
@@ -960,6 +1058,11 @@ describe('settings/operations', () => {
         statusCode: 200,
         body: {
           ok: true,
+          total_items: 1,
+          created: 1,
+          merged: 0,
+          skipped: 0,
+          failed: 0,
         },
       })
     }).as('importCsvApply')
@@ -991,7 +1094,7 @@ describe('settings/operations', () => {
     cy.wait('@importCsvApply')
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV import applied successfully.'
+      'CSV import applied: 1 item, 1 created, 0 merged, 0 skipped, 0 failed.'
     )
   })
 
@@ -1098,6 +1201,31 @@ describe('settings/operations', () => {
       'contain',
       'imported-recovery'
     )
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.toastHistory.v1')
+      .then((rawHistory) => {
+        expect(rawHistory).to.be.a('string')
+        const history = JSON.parse(rawHistory ?? '[]') as Array<{
+          level: string
+          title: string
+          source_label?: string
+          category?: string
+          summary?: string
+        }>
+        const record = history.find(
+          (item) => item.title === 'Runtime setup imported successfully.'
+        )
+        expect(record, JSON.stringify(history)).to.not.equal(undefined)
+        expect(record).to.include({
+          level: 'success',
+          title: 'Runtime setup imported successfully.',
+          source_label: 'Settings Operations',
+          category: 'system',
+          summary:
+            'Runtime setup import status from Settings Operations was preserved in Inbox history.',
+        })
+      })
   })
 
   it('UI-SCREEN-SETTINGS-OPERATIONS-015 reports runtime setup import failure without leaving the Operations route', () => {
@@ -1140,5 +1268,30 @@ describe('settings/operations', () => {
       'contain',
       'Runtime setup import failed.'
     )
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.toastHistory.v1')
+      .then((rawHistory) => {
+        expect(rawHistory).to.be.a('string')
+        const history = JSON.parse(rawHistory ?? '[]') as Array<{
+          level: string
+          title: string
+          source_label?: string
+          category?: string
+          summary?: string
+        }>
+        const record = history.find(
+          (item) => item.title === 'Runtime setup import failed.'
+        )
+        expect(record, JSON.stringify(history)).to.not.equal(undefined)
+        expect(record).to.include({
+          level: 'error',
+          title: 'Runtime setup import failed.',
+          source_label: 'Settings Operations',
+          category: 'system',
+          summary:
+            'Runtime setup import failure from Settings Operations was preserved in Inbox history.',
+        })
+      })
   })
 })

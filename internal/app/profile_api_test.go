@@ -8,6 +8,8 @@ import (
 	"image/jpeg"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -66,11 +68,11 @@ func TestProfileStorageSecretAndLicenseEndpoints(t *testing.T) {
 	if storage.Code != http.StatusOK {
 		t.Fatalf("storage status=%d body=%s", storage.Code, storage.Body.String())
 	}
-	var st map[string]string
+	var st map[string]any
 	if err := json.NewDecoder(storage.Body).Decode(&st); err != nil {
 		t.Fatalf("decode storage: %v", err)
 	}
-	if strings.TrimSpace(st["db_path"]) == "" || strings.TrimSpace(st["media_dir"]) == "" {
+	if strings.TrimSpace(st["db_path"].(string)) == "" || strings.TrimSpace(st["media_dir"].(string)) == "" {
 		t.Fatalf("expected non-empty storage paths: %+v", st)
 	}
 
@@ -82,6 +84,14 @@ func TestProfileStorageSecretAndLicenseEndpoints(t *testing.T) {
 	if getSecret.Code != http.StatusOK {
 		t.Fatalf("get secret status=%d body=%s", getSecret.Code, getSecret.Body.String())
 	}
+	deleteSecret := doRequest(t, a, http.MethodDelete, "/api/profiles/"+p.ID+"/secrets?key=openai_api_key", nil, nil)
+	if deleteSecret.Code != http.StatusNoContent {
+		t.Fatalf("delete secret status=%d body=%s", deleteSecret.Code, deleteSecret.Body.String())
+	}
+	missingSecret := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/secrets?key=openai_api_key", nil, nil)
+	if missingSecret.Code != http.StatusBadRequest {
+		t.Fatalf("expected deleted secret lookup to fail, status=%d body=%s", missingSecret.Code, missingSecret.Body.String())
+	}
 
 	putLicense := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/license", strings.NewReader(`{"license_json":"{\"tier\":\"pro\"}"}`), map[string]string{"Content-Type": "application/json"})
 	if putLicense.Code != http.StatusOK {
@@ -90,6 +100,307 @@ func TestProfileStorageSecretAndLicenseEndpoints(t *testing.T) {
 	getLicense := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/license", nil, nil)
 	if getLicense.Code != http.StatusOK {
 		t.Fatalf("get license status=%d body=%s", getLicense.Code, getLicense.Body.String())
+	}
+}
+
+func TestProfileMCPHTTPStatusEndpointDoesNotExposeCredential(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Status"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	disabled := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if disabled.Code != http.StatusOK {
+		t.Fatalf("disabled status=%d body=%s", disabled.Code, disabled.Body.String())
+	}
+	var disabledPayload map[string]any
+	if err := json.NewDecoder(disabled.Body).Decode(&disabledPayload); err != nil {
+		t.Fatalf("decode disabled payload: %v", err)
+	}
+	if disabledPayload["state"] != "disabled" || disabledPayload["enabled"] != false || disabledPayload["credential_configured"] != false {
+		t.Fatalf("unexpected disabled payload: %+v", disabledPayload)
+	}
+
+	putSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{"settings":{"mcp.http.enabled":"true","mcp.http.listen_addr":"127.0.0.1:17890"}}`), map[string]string{"Content-Type": "application/json"})
+	if putSettings.Code != http.StatusOK {
+		t.Fatalf("put mcp settings status=%d body=%s", putSettings.Code, putSettings.Body.String())
+	}
+	missingCredential := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if missingCredential.Code != http.StatusOK {
+		t.Fatalf("missing credential status=%d body=%s", missingCredential.Code, missingCredential.Body.String())
+	}
+	var missingPayload map[string]any
+	if err := json.NewDecoder(missingCredential.Body).Decode(&missingPayload); err != nil {
+		t.Fatalf("decode missing payload: %v", err)
+	}
+	if missingPayload["state"] != "misconfigured" || missingPayload["credential_configured"] != false || missingPayload["recovery_action"] != "generate_mcp_http_credential" {
+		t.Fatalf("unexpected missing credential payload: %+v", missingPayload)
+	}
+
+	const credential = "mcp-status-secret"
+	putSecret := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/secrets", strings.NewReader(`{"key":"mcp_http_transport_token","value":"`+credential+`"}`), map[string]string{"Content-Type": "application/json"})
+	if putSecret.Code != http.StatusOK {
+		t.Fatalf("put mcp credential status=%d body=%s", putSecret.Code, putSecret.Body.String())
+	}
+	ready := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if ready.Code != http.StatusOK {
+		t.Fatalf("ready status=%d body=%s", ready.Code, ready.Body.String())
+	}
+	body := ready.Body.String()
+	if strings.Contains(body, credential) {
+		t.Fatalf("mcp status leaked credential in response: %s", body)
+	}
+	var readyPayload map[string]any
+	if err := json.NewDecoder(strings.NewReader(body)).Decode(&readyPayload); err != nil {
+		t.Fatalf("decode ready payload: %v", err)
+	}
+	if readyPayload["state"] != "ready" || readyPayload["credential_configured"] != true || readyPayload["listen_addr"] != "127.0.0.1:17890" {
+		t.Fatalf("unexpected ready payload: %+v", readyPayload)
+	}
+	if _, ok := readyPayload["credential"]; ok {
+		t.Fatalf("status payload included credential field: %+v", readyPayload)
+	}
+}
+
+func TestProfileMCPHTTPCredentialEndpointStoresSecretOnly(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Credential"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodPost, "/api/profiles/"+p.ID+"/mcp-http-credential", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("generate credential status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Credential           string `json:"credential"`
+		CredentialConfigured bool   `json:"credential_configured"`
+		SecretKey            string `json:"secret_key"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode credential payload: %v", err)
+	}
+	if len(payload.Credential) < 32 || !payload.CredentialConfigured || payload.SecretKey != "mcp_http_transport_token" {
+		t.Fatalf("unexpected credential payload: %+v", payload)
+	}
+
+	settings := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/settings", nil, nil)
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	if strings.Contains(settings.Body.String(), payload.Credential) {
+		t.Fatalf("generated credential leaked into settings response: %s", settings.Body.String())
+	}
+
+	status := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if status.Code != http.StatusOK {
+		t.Fatalf("status status=%d body=%s", status.Code, status.Body.String())
+	}
+	if strings.Contains(status.Body.String(), payload.Credential) {
+		t.Fatalf("generated credential leaked into status response: %s", status.Body.String())
+	}
+}
+
+func TestProfileMCPHTTPConfigEndpointEnablesAndDisablesTransport(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Config"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	enable := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/mcp-http-config", strings.NewReader(`{"enabled":true,"listen_addr":"127.0.0.1:17890"}`), map[string]string{"Content-Type": "application/json"})
+	if enable.Code != http.StatusOK {
+		t.Fatalf("enable config status=%d body=%s", enable.Code, enable.Body.String())
+	}
+	var enabledPayload map[string]any
+	if err := json.NewDecoder(enable.Body).Decode(&enabledPayload); err != nil {
+		t.Fatalf("decode enable payload: %v", err)
+	}
+	if enabledPayload["enabled"] != true || enabledPayload["listen_addr"] != "127.0.0.1:17890" || enabledPayload["state"] != "misconfigured" {
+		t.Fatalf("unexpected enabled payload before credential: %+v", enabledPayload)
+	}
+
+	credential := doRequest(t, a, http.MethodPost, "/api/profiles/"+p.ID+"/mcp-http-credential", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
+	if credential.Code != http.StatusOK {
+		t.Fatalf("credential status=%d body=%s", credential.Code, credential.Body.String())
+	}
+	ready := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if ready.Code != http.StatusOK {
+		t.Fatalf("ready status=%d body=%s", ready.Code, ready.Body.String())
+	}
+	var readyPayload map[string]any
+	if err := json.NewDecoder(ready.Body).Decode(&readyPayload); err != nil {
+		t.Fatalf("decode ready payload: %v", err)
+	}
+	if readyPayload["state"] != "ready" || readyPayload["enabled"] != true {
+		t.Fatalf("unexpected ready payload: %+v", readyPayload)
+	}
+
+	disable := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/mcp-http-config", strings.NewReader(`{"enabled":false}`), map[string]string{"Content-Type": "application/json"})
+	if disable.Code != http.StatusOK {
+		t.Fatalf("disable config status=%d body=%s", disable.Code, disable.Body.String())
+	}
+	var disabledPayload map[string]any
+	if err := json.NewDecoder(disable.Body).Decode(&disabledPayload); err != nil {
+		t.Fatalf("decode disabled payload: %v", err)
+	}
+	if disabledPayload["state"] != "disabled" || disabledPayload["enabled"] != false || disabledPayload["credential_configured"] != false {
+		t.Fatalf("unexpected disabled payload: %+v", disabledPayload)
+	}
+}
+
+func TestProfileMCPHTTPStatusEndpointIncludesRedactedDiagnosticOutcome(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"MCP Diagnostics"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	settingsBody := `{"settings":{
+		"mcp.diagnostics.last_operation_id":"mcp-session:000042",
+		"mcp.diagnostics.last_capability":"tool:cabinet.inventory.search",
+		"mcp.diagnostics.last_method":"tools/call",
+		"mcp.diagnostics.last_input_class":"tool_arguments",
+		"mcp.diagnostics.last_outcome":"error",
+		"mcp.diagnostics.last_error_class":"timeout",
+		"mcp.diagnostics.last_payload":"provider-secret-value"
+	}}`
+	putSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if putSettings.Code != http.StatusOK {
+		t.Fatalf("put mcp diagnostic settings status=%d body=%s", putSettings.Code, putSettings.Body.String())
+	}
+
+	status := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/mcp-http-status", nil, nil)
+	if status.Code != http.StatusOK {
+		t.Fatalf("status status=%d body=%s", status.Code, status.Body.String())
+	}
+	body := status.Body.String()
+	if strings.Contains(body, "provider-secret-value") {
+		t.Fatalf("mcp status leaked raw diagnostic payload: %s", body)
+	}
+	var payload struct {
+		LastDiagnosticOutcome *struct {
+			OperationID string `json:"operation_id"`
+			Capability  string `json:"capability"`
+			Method      string `json:"method"`
+			InputClass  string `json:"input_class"`
+			Outcome     string `json:"outcome"`
+			ErrorClass  string `json:"error_class"`
+		} `json:"last_diagnostic_outcome"`
+	}
+	if err := json.NewDecoder(strings.NewReader(body)).Decode(&payload); err != nil {
+		t.Fatalf("decode status payload: %v", err)
+	}
+	if payload.LastDiagnosticOutcome == nil {
+		t.Fatalf("expected redacted diagnostic outcome in status: %s", body)
+	}
+	if payload.LastDiagnosticOutcome.OperationID != "mcp-session:000042" ||
+		payload.LastDiagnosticOutcome.Capability != "tool:cabinet.inventory.search" ||
+		payload.LastDiagnosticOutcome.Method != "tools/call" ||
+		payload.LastDiagnosticOutcome.InputClass != "tool_arguments" ||
+		payload.LastDiagnosticOutcome.Outcome != "error" ||
+		payload.LastDiagnosticOutcome.ErrorClass != "timeout" {
+		t.Fatalf("unexpected diagnostic outcome: %+v", payload.LastDiagnosticOutcome)
+	}
+}
+
+func TestProfileStorageIncludesMediaMigrationPreflightStatus(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Migration Storage"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	mediaRoot := filepath.Join(a.cfg.DataDir, "profiles", p.ID, "media")
+	legacyItemDir := filepath.Join(mediaRoot, "item-legacy")
+	if err := os.MkdirAll(legacyItemDir, 0o755); err != nil {
+		t.Fatalf("create legacy item dir: %v", err)
+	}
+	legacyOriginal := filepath.Join(legacyItemDir, "front_orig.jpg")
+	if err := os.WriteFile(legacyOriginal, []byte("legacy image bytes"), 0o644); err != nil {
+		t.Fatalf("write legacy original: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title)
+		VALUES ('item-legacy', ?, 'AFX', 'Slot Car', 'MIG-1', 'Legacy Migration Car');
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES ('photo-legacy', 'item-legacy', 'front.jpg', 'item-legacy/front_orig.jpg', '', '', 1, 1);
+	`, p.ID); err != nil {
+		t.Fatalf("seed legacy media row: %v", err)
+	}
+
+	storage := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/storage", nil, nil)
+	if storage.Code != http.StatusOK {
+		t.Fatalf("storage status=%d body=%s", storage.Code, storage.Body.String())
+	}
+	var payload struct {
+		MigrationPreflight struct {
+			State   string `json:"state"`
+			Summary struct {
+				Discovered int `json:"discovered"`
+				Pending    int `json:"pending"`
+			} `json:"summary"`
+			Records []struct {
+				ID             string `json:"id"`
+				Classification string `json:"classification"`
+				RecoveryAction string `json:"recovery_action"`
+			} `json:"records"`
+		} `json:"migration_preflight"`
+	}
+	if err := json.NewDecoder(storage.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode storage payload: %v", err)
+	}
+	if payload.MigrationPreflight.State != "ready" ||
+		payload.MigrationPreflight.Summary.Discovered != 1 ||
+		payload.MigrationPreflight.Summary.Pending != 1 {
+		t.Fatalf("unexpected migration preflight payload: %+v", payload.MigrationPreflight)
+	}
+	if len(payload.MigrationPreflight.Records) != 1 ||
+		payload.MigrationPreflight.Records[0].ID != "photo-legacy" ||
+		payload.MigrationPreflight.Records[0].Classification != "pending" {
+		t.Fatalf("expected pending legacy media record for Settings Storage: %+v", payload.MigrationPreflight.Records)
 	}
 }
 
@@ -113,6 +424,13 @@ func TestStorageMaintenanceEndpoints(t *testing.T) {
 	reindex := doRequest(t, a, http.MethodPost, "/api/data/reindex", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if reindex.Code != http.StatusOK {
 		t.Fatalf("reindex status=%d body=%s", reindex.Code, reindex.Body.String())
+	}
+	var reindexPayload map[string]any
+	if err := json.NewDecoder(reindex.Body).Decode(&reindexPayload); err != nil {
+		t.Fatalf("decode reindex response: %v", err)
+	}
+	if reindexPayload["ok"] != true || reindexPayload["operation"] != "reindex_search" || reindexPayload["rebuilt_search_index"] != true || strings.TrimSpace(reindexPayload["completed_at"].(string)) == "" {
+		t.Fatalf("expected reindex metadata, got %+v", reindexPayload)
 	}
 
 	rebuild := doRequest(t, a, http.MethodPost, "/api/data/rebuild-thumbnails", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
@@ -140,5 +458,8 @@ func TestStorageMaintenanceEndpoints(t *testing.T) {
 	}
 	if strings.TrimSpace(repairPayload["integrity_check"].(string)) == "" {
 		t.Fatalf("expected integrity check result, got %+v", repairPayload)
+	}
+	if repairPayload["ok"] != true || repairPayload["operation"] != "integrity_check" || strings.TrimSpace(repairPayload["completed_at"].(string)) == "" {
+		t.Fatalf("expected repair metadata, got %+v", repairPayload)
 	}
 }

@@ -4,8 +4,98 @@
 - Connecting providers
 - Validating tokens
 - Running sync and status checks
+- Reviewing Market Watch saved searches
 
 ## Common actions
 - Connect/disconnect provider
 - Validate token
 - Run provider sync
+
+## Telegram setup
+
+Telegram connects through outbound long polling, so Cabinet does not expose a public webhook or listener. In Integrations, open Telegram and create a bot with BotFather. Paste the bot token into Cabinet's password field and choose **Test connection**. Cabinet validates the bot with Telegram and stores the token as a write-only profile secret; it will show only the bot username and whether a token is present.
+
+If the bot already has a webhook, Cabinet reports a conflict and waits for you to choose **Remove webhook and use polling**. This explicit action preserves pending updates. Do not use the same bot with another webhook service while Cabinet polling is active.
+
+After validation, choose **Create pairing code**. In a private chat with the displayed bot, send the exact `/start CAB-...` command before it expires. The code works once and pairs that exact Telegram user and private chat to the active Cabinet profile. Cabinet rejects group-chat pairing and does not ask you to copy sender or chat identifiers manually.
+
+The setup panel shows polling state, last successful poll, last processed update, and safe retry/error information. Use pause/resume when you want to temporarily stop intake, replace the token to rotate it, or disconnect to remove the stored token and sender/chat mapping. Never put the bot token in a URL, screenshot, log, support request, or chat message.
+
+Automated setup proof uses a controlled Bot API fixture and is not live Telegram evidence. Before calling Telegram release-validated, complete the operator-approved live-channel checklist without recording tokens, private message content, or full sender/chat identifiers.
+
+## Browser Companion pairing and recovery
+
+The optional Browser Companion connects only to Cabinet on your own computer. Start pairing in the extension, then open Integrations in an unlocked Cabinet window. Compare the extension name and six-digit pairing code before selecting **Approve**. Reject any device, origin or code you do not recognise. Approval is required before the extension receives a usable session.
+
+Cabinet lists paired extensions under **Browser Companion access** without displaying their credentials. Use **Revoke** for a lost, replaced or suspicious extension, or **Revoke all** if the computer or browser profile may be compromised. Reinstalling the extension or clearing browser storage removes its credential; revoke the old session in Cabinet and pair again. Credential rotation revokes the previous value automatically.
+
+Chrome and Edge development builds, unpacked builds and store releases can have different extension origins. Cabinet treats each origin as a separate device boundary, so pair them separately. Never put a Browser Companion credential in a URL, log, screenshot, support request or chat.
+
+### Security and privacy boundary
+
+Cabinet accepts companion traffic only over loopback and binds a random credential to one Cabinet instance, active profile, extension origin, device identity, protocol version, expiry and capability set. Pairing requests expire, exchanges work once, credentials are stored as verifiers in Cabinet, and origin, Host, remote-address, rate, concurrency and body-size checks fail closed. Module discovery includes only enabled integration instances for the paired profile and removes secret, token, password, cookie and API-key configuration.
+
+The companion captures only supported page data that the collector is legitimately viewing. It must not export browser cookies, solve access challenges, crawl invisibly or perform provider writes. Cabinet validates the versioned envelope, commits it to the active profile's durable capture inbox and then sends typed observations to Market Watch, Discoveries or Purchase Inbox review. It does not silently create inventory.
+
+### Install and use the Chrome or Edge companion
+
+Cabinet uses one modular Manifest V3 companion for Chrome and Edge. A paired extension loads the current profile's enabled browser integrations from Cabinet; installing a separate extension per provider is not required. During development, open `chrome://extensions` or `edge://extensions`, enable developer mode, select **Load unpacked**, and choose the repository's `browser-extension` directory. The source manifest is labelled **Development** and is not packaged release evidence.
+
+Private-beta candidates contain separate Chrome and Edge ZIPs, matching SHA-256 files and one release manifest bound to the exact source commit and protocol range. These ZIPs are not installers or store releases and have no automatic updates. Verify the checksum, extract the correct target ZIP into a stable versioned directory, then use **Load unpacked** on that extracted directory. Cabinet supplies enabled modules and the companion requests each exact provider origin only when needed. Follow `openspec/migration/browser-companion-private-beta-package-guide.md` for clean installation, evidence capture, upgrade, rollback, revocation and uninstall.
+
+The popup always shows a Cabinet row and then zero, one or many enabled browser modules. Choose **Open Cabinet** to focus the local app. For a provider, grant its exact optional site permission, open its page and choose **Check session**. An open tab alone is not treated as proof of login. The companion reports **Site access required**, **Browser required**, **Signed out**, **Action required**, **Ready to sync**, or **Page not supported** from bounded module evidence. A challenge always requires normal user action in the provider tab.
+
+Enabled integrations, display names, start pages, exact origins, URL patterns, capture schemas, workflows, redaction rules, fixture version, item/media policy, review destination, cadence, help path and readiness evidence come from Cabinet's versioned module registry. Chrome and Edge therefore use the same host code, and later provider modules can be added without provider branches in the popup or background worker. The extension persists idempotent pending jobs across service-worker, browser and Cabinet restarts, uses bounded retry backoff, and keeps its pending/error state visible. A job leaves the extension queue only after Cabinet confirms durable terminal processing. Partial captures stay visible for review and never imply that previously seen provider items disappeared.
+
+Image submissions accept only verified JPEG or PNG bytes tied to a durable capture field. Cabinet checks the SHA-256 digest and decoded dimensions, rejects login/challenge HTML masquerading as an image, and writes accepted files through canonical media storage. Identical content is stored once per profile but can retain several provenance links. The extension and API never return Cabinet's local media path.
+
+### Frontline Hobbies Browser Companion
+
+Enable the Frontline Hobbies integration in Cabinet, pair the companion, and grant only the exact `frontlinehobbies.com.au`, `www.frontlinehobbies.com.au`, and Frontline CDN origins. Open a public Frontline product, category, brand or search page yourself, choose **Check session**, and sync only after the module reports **Ready to sync**. This is a user-present catalogue workflow: it does not run as an unattended crawler.
+
+The module reads rendered public product cards and sends listing identity, title, AUD price, stock state, canonical product URL and image reference through Cabinet's versioned capture inbox. Cabinet records `au-webshop-frontlinehobbies-com-au` as the integration identity and `frontlinehobbies` as the Market Watch scope. It limits the module to six sync attempts per minute, strips query and fragment values from captured URLs, never exports cookies or tokens, never solves a challenge, and never clicks, writes, adds to cart or checks out.
+
+A sign-in form reports **Signed out**; a challenge reports **Action required**; selector drift or another unknown product-card shape reports **Page not supported** and `frontline_selector_drift`. A paginated or load-more page is recorded as partial, so missing products are never treated as deletion evidence. Direct provider search remains a best-effort fail-closed path and does not make the browser module unattended.
+
+Automated versioned fixtures prove ready, partial, signed-out, challenge and selector-drift handling, persistence and Wishlist hand-off. Those fixtures are not live acceptance. External live evidence from a normal user-present Frontline search is still required before the provider is marked release-validated, followed by the exact packaged journey in #1869.
+
+### Bonza Slot Cars Browser Companion
+
+Enable the Bonza Slot Cars integration in Cabinet, pair the companion, and grant only the exact `bonzaslotcars.com.au` and `www.bonzaslotcars.com.au` origins. Open a Bonza product, category or search page yourself. If Bonza presents its normal Sucuri challenge, complete it in the provider tab, then choose **Check session** and sync only after the module reports **Ready to sync**. This is a user-present catalogue workflow, not an unattended crawler or challenge bypass.
+
+The module reads rendered public WooCommerce product cards and sends listing and variation identity, title, AUD price, stock state, canonical product URL and image reference through Cabinet's versioned capture inbox. Cabinet records `au-webshop-bonzaslotcars-com-au` as the integration identity and `bonzaslotcars` as the Market Watch scope. It limits the module to six sync attempts per minute, strips query and fragment values from captured URLs, never exports cookies or tokens, never decodes or solves the Sucuri challenge, and never clicks, writes, adds to cart or checks out.
+
+A sign-in form reports **Signed out**; a Sucuri challenge reports **Action required**; selector drift or another unknown product-card shape reports **Page not supported** and `bonza_selector_drift`. A paginated or load-more page is recorded as partial, so missing products are never treated as deletion evidence. Direct Store API extraction remains a best-effort fail-closed convenience and cannot satisfy the browser-companion release gate.
+
+Automated versioned fixtures prove ready, partial, signed-out, Sucuri challenge and selector-drift handling plus canonical persistence. Those fixtures are not live acceptance. External live evidence from a normal user-present Bonza search is still required before the provider is marked release-validated, followed by the exact packaged journey in #1869.
+
+This boundary cannot protect a credential from malware or another person who already controls the unlocked operating-system account, Cabinet process or browser profile. If local compromise is suspected, close Cabinet, secure the operating-system account, revoke all companion sessions after recovery, remove unknown extensions, reinstall the trusted extension and pair again. Restore Cabinet from a known-good backup if its local database may have been altered.
+
+## eBay setup
+Use the eBay integration setup when you want Cabinet to run authenticated eBay listing searches from Market Watch.
+
+Before saving the provider, prepare the eBay bearer token that Cabinet will use for Browse API requests. Cabinet only displays token presence after save; it does not show the bearer token back in the setup panel.
+
+Set the marketplace to the eBay region you expect saved searches to query. The default production marketplace is usually enough for normal runs, but the setup panel also accepts a base URL override for controlled environments. Treat the base URL override as an advanced routing setting and keep it blank unless you are deliberately pointing Cabinet at a non-default eBay Browse endpoint.
+
+After saving credentials and marketplace settings, use Validate in the integration dialog. The setup status panel shows token state, marketplace, validation status, provider health, and the next action. If the provider is ready, run eBay query sets from Market Watch; the setup dialog validates configuration but does not execute saved searches.
+
+Market Watch eBay query sets keep keywords, exclusions, max price, schedule, rate-limit settings, provider scope, and page size together. Create or edit an eBay-scoped saved search, then use Run now or scheduled refreshes to collect candidates. Output details preserve source URL, price, shipping, stock, seller, query, and provider provenance before handoff to Discoveries, Wishlist, or Inventory.
+
+If a run fails with `PROVIDER_AUTH_MISSING` or `PROVIDER_AUTH_INVALID`, review the saved bearer token and provider health before retrying. If a run fails with `PROVIDER_SEARCH_FAILED`, check provider health, upstream eBay guidance, and any retry timing before running the query again. Live credential and marketplace capability evidence is still required before treating a real eBay account as production-ready.
+
+## Market Watch saved searches
+Use Market Watch when you want Cabinet to watch provider listings without re-entering the same search each time.
+
+Saved searches keep the provider scope, keywords, filters, schedule, and rate-limit settings together. You can create, edit, delete, run now, or run scheduled refreshes from the Market Watch screen.
+
+## Reviewing run output
+Run results show provider attribution, latest run status, last run time, and candidate counts. Table view is useful when you have several saved searches and need to compare recent output quickly.
+
+Open output details before handing results off. The detail view keeps enough source context for follow-up actions to remain traceable.
+
+## Failures and retries
+Provider failures stay visible instead of silently dropping candidates. Use the retry action after checking the guidance shown on the failed run. When the retry recovers, Market Watch reloads the saved-search state and clears stale failure entries.
+
+## Discoveries and Wishlist handoff
+Send useful saved-search output to Discoveries for review, or add a candidate to Wishlist when it is worth tracking. Cabinet preserves saved-search provenance such as provider, query set, query name, and provider scope so the Wishlist entry can still be understood after reload.

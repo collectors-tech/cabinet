@@ -9,22 +9,36 @@ permissions:
   contents: write
   issues: write
 
+concurrency:
+  group: continuous-ui-validation-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   hourly-ui-validation:
     runs-on: windows-latest
+    timeout-minutes: 240
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
+      - name: Restore hourly validation revision state
+        id: hourly-state
+        uses: actions/cache/restore@v4
+        with:
+          path: .logs/hourly-ui-validation-state.json
+          key: hourly-ui-validation-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            hourly-ui-validation-state-${{ runner.os }}-
+
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -36,7 +50,7 @@ jobs:
 
       - name: Build Cabinet runtime
         shell: pwsh
-        run: go build -o bin/cabinet.exe ./cmd/cabinet
+        run: pwsh -NoLogo -NoProfile -File ./scripts/build-cabinet.ps1
 
       - name: Authenticate gh
         shell: pwsh
@@ -50,9 +64,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pwsh -NoLogo -NoProfile -File ./scripts/hourly-ui-validation.ps1 -Browser chrome
 
+      - name: Save hourly validation revision state
+        if: always() && hashFiles('.logs/hourly-ui-validation-state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .logs/hourly-ui-validation-state.json
+          key: hourly-ui-validation-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Upload validation logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hourly-ui-validation-logs
           path: .logs/hourly-ui-validation/

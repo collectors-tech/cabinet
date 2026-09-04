@@ -6,16 +6,22 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/auth"
+	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/profile"
 )
 
 type e2eBootstrapRequest struct {
@@ -23,11 +29,12 @@ type e2eBootstrapRequest struct {
 }
 
 type e2eBootstrapResponse struct {
-	ProfileID   string   `json:"profile_id"`
-	ProfileName string   `json:"profile_name"`
-	ItemIDs     []string `json:"item_ids"`
-	QuerySetID  string   `json:"query_set_id"`
-	ThreadID    string   `json:"thread_id"`
+	ProfileID    string   `json:"profile_id"`
+	ProfileName  string   `json:"profile_name"`
+	SessionToken string   `json:"session_token"`
+	ItemIDs      []string `json:"item_ids"`
+	QuerySetID   string   `json:"query_set_id"`
+	ThreadID     string   `json:"thread_id"`
 }
 
 type e2eScaleBootstrapRequest struct {
@@ -44,13 +51,14 @@ type e2eScaleBootstrapResponse struct {
 	Counts      map[string]int `json:"counts"`
 }
 
-func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
+func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config, authService *auth.Service) {
 	mux.HandleFunc("/api/test/reset", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
 		if err := resetE2EDatabase(r.Context(), conn); err != nil {
+			log.Print(e2eResetDiagnostic(err))
 			http.Error(w, `{"error":"failed_to_reset_e2e_state"}`, http.StatusInternalServerError)
 			return
 		}
@@ -78,7 +86,71 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 			http.Error(w, `{"error":"failed_to_bootstrap_e2e_state"}`, http.StatusInternalServerError)
 			return
 		}
+		out.SessionToken, err = authService.CreateUnlockedSession(out.ProfileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_unlock_e2e_profile"}`, http.StatusInternalServerError)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(out)
+	})
+
+	mux.HandleFunc("/api/test/chat/agent-response-state", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID      string `json:"profile_id"`
+			ThreadID       string `json:"thread_id"`
+			State          string `json:"state"`
+			OriginalIntent string `json:"original_intent"`
+		}
+		if r.Body != nil {
+			defer r.Body.Close()
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+		}
+		req.ProfileID = strings.TrimSpace(req.ProfileID)
+		req.ThreadID = strings.TrimSpace(req.ThreadID)
+		state := strings.TrimSpace(strings.ToLower(req.State))
+		if req.ProfileID == "" || req.ThreadID == "" || state == "" {
+			http.Error(w, `{"error":"profile_thread_and_state_required"}`, http.StatusBadRequest)
+			return
+		}
+
+		messageID := fmt.Sprintf("e2e-agent-response-%d", time.Now().UnixNano())
+		messageText := "An ordinary server response replaced the previous Agent state."
+		messageContext := map[string]any{}
+		if state != "ordinary_response" {
+			response, err := chat.NewAgentResponse(chat.AgentResponseState(state), state+" response from Cabinet.", req.OriginalIntent, "cabinet.inventory.search_items", "Cabinet Inventory Search", "chats.main", "in-app")
+			if err != nil {
+				http.Error(w, `{"error":"invalid_agent_response_state"}`, http.StatusBadRequest)
+				return
+			}
+			if response.State == chat.AgentResponsePreviewRequired {
+				response.Preview = &chat.AgentResponsePreview{ID: "e2e-preview-2099", Action: "update_inventory_item", Status: "previewed", Payload: map[string]any{"item_id": "e2e-item-001", "title": "Normalized preview"}}
+			}
+			messageText = response.Message
+			messageContext = chat.AgentResponseContext(response)
+		}
+		contextJSON, err := json.Marshal(messageContext)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_encode_agent_response"}`, http.StatusInternalServerError)
+			return
+		}
+		createdAt := time.Now().UTC().Format(time.RFC3339Nano)
+		if _, err := conn.ExecContext(r.Context(), `
+			INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json, created_at)
+			VALUES (?, ?, ?, 'assistant', ?, '[]', ?, ?)
+		`, messageID, req.ProfileID, req.ThreadID, messageText, string(contextJSON), createdAt); err != nil {
+			http.Error(w, `{"error":"failed_to_seed_agent_response"}`, http.StatusBadRequest)
+			return
+		}
+		_, _ = conn.ExecContext(r.Context(), `UPDATE chat_threads SET updated_at = ? WHERE id = ? AND profile_id = ?`, createdAt, req.ThreadID, req.ProfileID)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "message_id": messageID, "state": state})
 	})
 
 	mux.HandleFunc("/api/test/scale/bootstrap", func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +174,7 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 			req.Seed = 1
 		}
 		if err := resetE2EDatabase(r.Context(), conn); err != nil {
+			log.Print(e2eResetDiagnostic(err))
 			http.Error(w, `{"error":"failed_to_reset_e2e_state"}`, http.StatusInternalServerError)
 			return
 		}
@@ -250,29 +323,176 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 	})
 }
 
-func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin reset tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+const (
+	e2eResetMaxAttempts        = 3
+	e2eResetRetryDelay         = 25 * time.Millisecond
+	e2eResetMaxIdleConnections = 2
+)
 
-	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return fmt.Errorf("disable foreign keys: %w", err)
+var e2eResetMu sync.Mutex
+
+type e2eResetFailure struct {
+	class     string
+	operation string
+	err       error
+}
+
+func (e *e2eResetFailure) Error() string {
+	return e.operation + ": " + e.err.Error()
+}
+
+func (e *e2eResetFailure) Unwrap() error {
+	return e.err
+}
+
+func newE2EResetFailure(operation string, err error) error {
+	class := "unexpected_storage"
+	if profile.IsStorageContention(err) {
+		class = "storage_contention"
 	}
+	return &e2eResetFailure{
+		class:     class,
+		operation: safeE2EResetOperation(operation),
+		err:       err,
+	}
+}
+
+func safeE2EResetOperation(operation string) string {
+	switch operation {
+	case "acquire_connection",
+		"enable_write_ahead_log",
+		"disable_foreign_keys",
+		"begin_transaction",
+		"check_table",
+		"clear_table",
+		"commit_transaction",
+		"rollback_transaction",
+		"restore_foreign_keys",
+		"retry_wait":
+		return operation
+	default:
+		return "unknown"
+	}
+}
+
+func classifyE2EResetFailure(err error) (class, operation string) {
+	var failure *e2eResetFailure
+	if errors.As(err, &failure) {
+		return failure.class, failure.operation
+	}
+	if profile.IsStorageContention(err) {
+		return "storage_contention", "unknown"
+	}
+	return "unexpected_storage", "unknown"
+}
+
+func e2eResetDiagnostic(err error) string {
+	class, operation := classifyE2EResetFailure(err)
+	return "e2e reset failed: class=" + class + " operation=" + operation
+}
+
+func resetE2EDatabase(ctx context.Context, db *sql.DB) error {
+	e2eResetMu.Lock()
+	defer e2eResetMu.Unlock()
+
+	// A failed transaction outside the reset handler can return its SQLite
+	// connection to the idle pool while still owning the single-writer lock.
+	// The pinned reset connection and WAL cannot release a foreign writer, so
+	// discard idle connections before starting the clean reset transaction.
+	db.SetMaxIdleConns(0)
+	db.SetMaxIdleConns(e2eResetMaxIdleConnections)
+
+	return runE2EResetWithRetry(ctx, func() error {
+		return resetE2EDatabaseAttempt(ctx, db)
+	})
+}
+
+func runE2EResetWithRetry(ctx context.Context, attemptReset func() error) error {
+	for attempt := 1; attempt <= e2eResetMaxAttempts; attempt++ {
+		err := attemptReset()
+		if err == nil {
+			return nil
+		}
+		class, _ := classifyE2EResetFailure(err)
+		if class != "storage_contention" || attempt == e2eResetMaxAttempts {
+			return err
+		}
+		timer := time.NewTimer(time.Duration(attempt) * e2eResetRetryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return newE2EResetFailure("retry_wait", ctx.Err())
+		case <-timer.C:
+		}
+	}
+	return nil
+}
+
+func resetE2EDatabaseAttempt(ctx context.Context, db *sql.DB) (resultErr error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return newE2EResetFailure("acquire_connection", err)
+	}
+	defer conn.Close()
+
+	var journalMode string
+	if err := conn.QueryRowContext(ctx, `PRAGMA journal_mode = WAL`).Scan(&journalMode); err != nil {
+		return newE2EResetFailure("enable_write_ahead_log", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(journalMode), "wal") {
+		return newE2EResetFailure("enable_write_ahead_log", fmt.Errorf("sqlite did not enable write-ahead logging"))
+	}
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return newE2EResetFailure("disable_foreign_keys", err)
+	}
+	defer func() {
+		restoreCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if _, err := conn.ExecContext(restoreCtx, `PRAGMA foreign_keys = ON`); err != nil && resultErr == nil {
+			resultErr = newE2EResetFailure("restore_foreign_keys", err)
+		}
+	}()
+
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+		return newE2EResetFailure("begin_transaction", err)
+	}
+	transactionOpen := true
+	defer func() {
+		if !transactionOpen {
+			return
+		}
+		rollbackCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if _, err := conn.ExecContext(rollbackCtx, `ROLLBACK`); err != nil && resultErr == nil {
+			resultErr = newE2EResetFailure("rollback_transaction", err)
+		}
+	}()
 
 	tables := []string{
 		"activity_logs",
 		"ai_failures",
 		"app_state",
+		"assistant_workflow_runs",
+		"audit_events",
+		"agent_skill_strong_confirmations",
+		"agent_skill_previews",
 		"chat_action_previews",
 		"chat_attachments",
+		"chat_inbox_items",
 		"chat_messages",
+		"telegram_agent_deliveries",
+		"telegram_agent_threads",
 		"chat_threads",
 		"discovery_actions",
+		"expected_arrivals",
+		"forwarder_package_link_events",
+		"forwarder_package_links",
+		"forwarder_packages",
 		"ignored_candidates",
 		"item_barcodes",
 		"item_photos",
+		"media_asset_links",
 		"price_snapshots",
 		"profile_licenses",
 		"profile_secrets",
@@ -285,8 +505,11 @@ func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
 		"webauthn_credentials",
 		"wishlist_entries",
 		"pokemon_graded_overrides",
+		"commerce_lifecycle_entries",
 		"instances",
 		"profile_settings",
+		"telegram_pairing_requests",
+		"telegram_connector_state",
 		"scanner_query_sets",
 		"canonical_items_fts",
 		"canonical_items",
@@ -294,19 +517,32 @@ func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
 	}
 
 	for _, table := range tables {
+		exists, err := resetTableExists(ctx, conn, table)
+		if err != nil {
+			return newE2EResetFailure("check_table", err)
+		}
+		if !exists {
+			continue
+		}
 		query := "DELETE FROM " + table
-		if _, err := tx.ExecContext(ctx, query); err != nil {
-			return fmt.Errorf("clear table %s: %w", table, err)
+		if _, err := conn.ExecContext(ctx, query); err != nil {
+			return newE2EResetFailure("clear_table", err)
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-		return fmt.Errorf("enable foreign keys: %w", err)
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+		return newE2EResetFailure("commit_transaction", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit reset tx: %w", err)
-	}
+	transactionOpen = false
 	return nil
+}
+
+func resetTableExists(ctx context.Context, conn *sql.Conn, table string) (bool, error) {
+	var count int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?`, table).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func bootstrapE2EFixtures(ctx context.Context, conn *sql.DB, cfg config.Config, req e2eBootstrapRequest) (e2eBootstrapResponse, error) {

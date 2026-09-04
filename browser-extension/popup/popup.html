@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Cabinet Browser Companion</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">Local companion</p>
+          <h1>Cabinet</h1>
+        </div>
+        <span id="connection" class="status">Checking…</span>
+      </header>
+
+      <section class="cabinet-row" aria-labelledby="cabinet-heading">
+        <div>
+          <h2 id="cabinet-heading">Cabinet on this computer</h2>
+          <p id="cabinet-detail">Connect to load enabled integrations.</p>
+        </div>
+        <div class="actions">
+          <button id="open-cabinet" type="button">Open Cabinet</button>
+          <button id="connect" type="button">Connect</button>
+        </div>
+      </section>
+
+      <details class="settings">
+        <summary>Companion settings</summary>
+        <form id="settings-form">
+          <label for="cabinet-url">Local Cabinet address</label>
+          <input id="cabinet-url" name="cabinet_url" type="url" required spellcheck="false">
+          <div class="actions">
+            <button type="submit">Save address</button>
+            <button id="sync-toggle" class="quiet" type="button">Pause sync</button>
+          </div>
+          <p class="detail">Only loopback addresses on this computer are accepted.</p>
+        </form>
+      </details>
+
+      <section aria-labelledby="providers-heading">
+        <div class="section-heading">
+          <h2 id="providers-heading">Enabled integrations</h2>
+          <button id="refresh" class="quiet" type="button">Refresh</button>
+        </div>
+        <p id="empty-state">No browser integrations are enabled in this Cabinet profile.</p>
+        <ul id="module-list" aria-label="Enabled browser integrations"></ul>
+      </section>
+
+      <p id="announcement" class="visually-hidden" aria-live="polite"></p>
+      <p id="error" class="error" role="alert" hidden></p>
+
+      <template id="module-row">
+        <li class="module-row">
+          <span data-module-icon class="module-icon" aria-hidden="true"></span>
+          <div class="module-copy">
+            <h3 data-module-name></h3>
+            <p data-module-status></p>
+            <p data-module-detail class="detail"></p>
+            <p data-module-meta class="detail"></p>
+          </div>
+          <div class="actions">
+            <button data-action="open" type="button">Open</button>
+            <button data-action="permission" class="quiet" type="button"></button>
+            <button data-action="check" class="quiet" type="button">Check session</button>
+            <button data-action="setup" class="quiet" type="button">Set up</button>
+            <button data-action="sync" type="button">Sync now</button>
+            <button data-action="pause" class="quiet" type="button"></button>
+            <button data-action="review" class="quiet" type="button">Review in Cabinet</button>
+            <button data-action="help" class="quiet" type="button">Help</button>
+          </div>
+        </li>
+      </template>
+    </main>
+    <script type="module" src="popup-controller.mjs"></script>
+  </body>
+</html>

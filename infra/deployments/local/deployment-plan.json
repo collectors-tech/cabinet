@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "environment": "local",
+  "purpose": "Developer Docker Compose runtime isolated from desktop, demo and production data.",
+  "deployments": [
+    {
+      "id": "cabinet-local",
+      "target": "developer-machine",
+      "orchestrator": "docker-compose",
+      "source": {"type": "service", "id": "cabinet"},
+      "compose": "infra/deployments/local/developer-machine/docker-compose/compose.yaml",
+      "environmentExample": "infra/deployments/local/developer-machine/docker-compose/.env.example",
+      "dependencies": [],
+      "replicas": 1,
+      "zeroDowntime": false,
+      "imagePolicy": "build-current-checkout",
+      "accessBoundary": "loopback-only",
+      "persistence": "cabinet-local-data"
+    }
+  ],
+  "consumes": [
+    {
+      "id": "shared-identity-local",
+      "capability": "oidc",
+      "service": "zitadel",
+      "owner": "platform-infrastructure",
+      "mode": "shared-reference",
+      "contractRevision": "creator-signal/sales-pulse:infrastructure-deployment-convention@973bda4acdd3b4c81356dc2145ac34a6397222d0",
+      "projectConfiguration": "infra/shared/identity/local.json",
+      "readinessGate": "${CABINET_ZITADEL_ISSUER}/.well-known/openid-configuration"
+    }
+  ],
+  "layers": [
+    {"id": "product", "order": 0, "deployments": ["cabinet-local"]}
+  ]
+}

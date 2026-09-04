@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"log"
@@ -28,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/agentcontext"
+	"github.com/collectors-tech/cabinet/internal/agentskills"
 	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/auth"
 	"github.com/collectors-tech/cabinet/internal/backup"
@@ -35,20 +39,27 @@ import (
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/companion"
 	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/costing"
 	"github.com/collectors-tech/cabinet/internal/dashboard"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
 	"github.com/collectors-tech/cabinet/internal/db"
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
+	"github.com/collectors-tech/cabinet/internal/ebaypurchasecapture"
+	"github.com/collectors-tech/cabinet/internal/forwarding"
 	"github.com/collectors-tech/cabinet/internal/licensing"
 	"github.com/collectors-tech/cabinet/internal/logging"
 	"github.com/collectors-tech/cabinet/internal/matching"
+	"github.com/collectors-tech/cabinet/internal/mcpserver"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/pricing"
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/search"
+	"github.com/collectors-tech/cabinet/internal/telegrambotconnector"
+	"github.com/collectors-tech/cabinet/internal/telegramcapture"
 	"github.com/collectors-tech/cabinet/internal/ui"
 	"github.com/collectors-tech/cabinet/internal/update"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
@@ -67,6 +78,89 @@ func startupMigrationTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+const defaultProviderHTTPTimeout = 12 * time.Second
+
+var sharedProviderHTTPClient = newProviderHTTPClient(defaultProviderHTTPTimeout)
+
+func newProviderHTTPClient(timeout time.Duration) *http.Client {
+	if timeout <= 0 {
+		timeout = defaultProviderHTTPTimeout
+	}
+	dialTimeout := timeout / 3
+	if dialTimeout < time.Second {
+		dialTimeout = timeout
+	}
+	headerTimeout := timeout / 2
+	if headerTimeout < time.Second {
+		headerTimeout = timeout
+	}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   dialTimeout,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          32,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   dialTimeout,
+			ResponseHeaderTimeout: headerTimeout,
+		},
+	}
+}
+
+func providerHTTPClient() *http.Client {
+	return sharedProviderHTTPClient
+}
+
+type profileActivationFailure struct {
+	status            int
+	publicBody        string
+	retryAfterSeconds int
+	diagnosticClass   string
+}
+
+func classifyProfileActivationFailure(err error) profileActivationFailure {
+	switch {
+	case errors.Is(err, profile.ErrProfileNotFound):
+		return profileActivationFailure{
+			status:          http.StatusBadRequest,
+			publicBody:      `{"error":"invalid_profile_id"}`,
+			diagnosticClass: "invalid_profile_id",
+		}
+	case profile.IsStorageContention(err):
+		return profileActivationFailure{
+			status:            http.StatusServiceUnavailable,
+			publicBody:        `{"error":"profile_activation_unavailable","retryable":true,"retry_after_seconds":1}`,
+			retryAfterSeconds: 1,
+			diagnosticClass:   "storage_contention",
+		}
+	default:
+		return profileActivationFailure{
+			status:          http.StatusInternalServerError,
+			publicBody:      `{"error":"profile_activation_failed"}`,
+			diagnosticClass: "unexpected_storage",
+		}
+	}
+}
+
+func profileActivationDiagnostic(failure profileActivationFailure) string {
+	return "profile activation failed: class=" + failure.diagnosticClass
+}
+
+func writeProfileActivationError(w http.ResponseWriter, err error) {
+	failure := classifyProfileActivationFailure(err)
+	if failure.retryAfterSeconds > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(failure.retryAfterSeconds))
+	}
+	if failure.status >= http.StatusInternalServerError {
+		log.Print(profileActivationDiagnostic(failure))
+	}
+	http.Error(w, failure.publicBody, failure.status)
+}
+
 func startupSampleDataSeedEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("CABINET_SEED_SAMPLE_DATA"))) {
 	case "1", "true", "yes", "on":
@@ -76,18 +170,50 @@ func startupSampleDataSeedEnabled() bool {
 	}
 }
 
-type App struct {
-	cfg           config.Config
-	db            *sql.DB
-	srv           *http.Server
-	backupSvc     *backup.Service
-	authService   *auth.Service
-	openapiSpec   []byte
-	runtimeLogs   *runtimeLogManager
-	runtimeStopCh chan string
-	startupNotice func(string)
-	startupIsTTY  func() bool
+func storageMigrationPreflightPayload(report media.LegacyMigrationPreflight) map[string]any {
+	return map[string]any{
+		"profile_id": report.ProfileID,
+		"dry_run":    report.DryRun,
+		"state":      storageMigrationPreflightState(report.Summary),
+		"summary":    report.Summary,
+		"records":    report.Records,
+	}
 }
+
+func storageMigrationPreflightState(summary media.LegacyMigrationSummary) string {
+	switch {
+	case summary.Failed > 0 || summary.Missing > 0 || summary.Duplicate > 0:
+		return "needs_repair"
+	case summary.Pending > 0 || summary.Orphan > 0:
+		return "ready"
+	case summary.AlreadyMigrated > 0:
+		return "completed"
+	default:
+		return "not_needed"
+	}
+}
+
+type App struct {
+	cfg                     config.Config
+	db                      *sql.DB
+	srv                     *http.Server
+	backupSvc               *backup.Service
+	authService             *auth.Service
+	openapiSpec             []byte
+	runtimeLogs             *runtimeLogManager
+	runtimeStopCh           chan string
+	agentPreviewCleanupStop chan struct{}
+	agentPreviewCleanupDone chan struct{}
+	agentPreviewCleanupOnce sync.Once
+	telegramConnector       *telegrambotconnector.Manager
+	startupNotice           func(string)
+	startupIsTTY            func() bool
+}
+
+const (
+	agentSkillImportedStateKey  = "agent.skills.imported"
+	agentSkillInstalledStateKey = "agent.skills.installed_state"
+)
 
 func New(cfg config.Config) (*App, error) {
 	if strings.TrimSpace(cfg.ValidationError) != "" {
@@ -120,17 +246,37 @@ func New(cfg config.Config) (*App, error) {
 	barcodeRepo := barcode.NewRepository(conn)
 	mediaService := media.NewService(conn, filepath.Join(cfg.DataDir, "media"))
 	dataService := datamgmt.NewService(conn)
-	backupSvc := backup.NewService(cfg.DBPath, filepath.Join(cfg.DataDir, "backups"), cfg.BackupInterval)
+	backupSvc := backup.NewServiceWithDataDir(cfg.DBPath, filepath.Join(cfg.DataDir, "backups"), cfg.BackupInterval, cfg.DataDir)
 	searchRepo := search.NewRepository(conn)
 	scannerSvc := scanner.NewService(conn)
 	matchingSvc := matching.NewService(conn)
 	discoverySvc := discovery.NewService(conn)
 	wishlistSvc := wishlist.NewService(conn)
 	commerceSvc := commerce.NewService(conn)
+	forwarderInbox := forwarding.NewService(conn)
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
+	companionSvc, err := companion.NewPersistentService(ctx, conn, profiles, companion.DefaultModules(), companion.Options{})
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("init browser companion: %w", err)
+	}
 	aiSvc := ai.NewService(ai.Config{})
+	openAIBrowserAuth := ai.NewCodexBrowserAuthRuntime()
+	assistantProviders := ai.NewAssistantProviderRegistry(ai.NewOpenAIAssistantProvider(aiSvc, newProfileAssistantProviderSetupResolver(profiles), openAIBrowserAuth))
+	if isE2EHooksEnabled(cfg) {
+		assistantProviders.Register(e2eSyntheticAgentProvider{})
+	}
+	var agentSkillMu sync.RWMutex
+	agentImportedSkills := loadAgentSkillImportedSkills(ctx, conn)
+	agentSkillStore := agentskills.NewInstalledSkillStore(loadAgentSkillInstalledStates(ctx, conn))
+	agentSkillRegistry := func(profileID string) agentskills.Registry {
+		agentSkillMu.RLock()
+		imported := append([]agentskills.Skill{}, agentImportedSkills...)
+		agentSkillMu.RUnlock()
+		return agentskills.NewProfileRegistry(profileID, imported, agentSkillStore.List(profileID))
+	}
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	logSvc := logging.NewService(conn)
 	authService, err := auth.NewService(cfg, conn, profiles)
@@ -154,11 +300,27 @@ func New(cfg config.Config) (*App, error) {
 	}
 	cloudLeases := newCloudLeaseStore()
 	cloudEntitlements := newCloudEntitlementStore()
+	zitadelAuth := newZitadelAuthFromEnv()
 	runtimeStopCh := make(chan string, 1)
 
 	mux := http.NewServeMux()
+	var initialSetupBootstrapMu sync.Mutex
+	registerOpenAIBrowserAuthRoutes(mux, profiles, openAIBrowserAuth)
+	telegramBotAPIBaseURL := ""
 	if isE2EHooksEnabled(cfg) {
-		registerE2ETestHooks(mux, conn, cfg)
+		telegramBotAPIBaseURL = strings.TrimSpace(os.Getenv("CABINET_TELEGRAM_TEST_API_BASE_URL"))
+	}
+	telegramConnector := telegrambotconnector.NewManager(
+		conn,
+		profiles,
+		telegrambotconnector.InProcessGateway{Handler: mux},
+		telegramBotAPIBaseURL,
+		newProviderHTTPClient(35*time.Second),
+	)
+	telegramAgentConversation := newTelegramAgentConversationService(conn, profiles, chatSvc, agentSkillRegistry, assistantProviders)
+	registerZitadelAuthRoutes(mux, zitadelAuth)
+	if isE2EHooksEnabled(cfg) {
+		registerE2ETestHooks(mux, conn, cfg, authService)
 	}
 	var previousClean string
 	_ = conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'clean_shutdown'`).Scan(&previousClean)
@@ -236,7 +398,7 @@ func New(cfg config.Config) (*App, error) {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/api/runtime", func(w http.ResponseWriter, _ *http.Request) {
-		appVersion, buildDate := runtimeBuildMetadata()
+		appVersion, buildRevision, buildDate := runtimeBuildMetadata()
 		host := strings.TrimSpace(cfg.Host)
 		if host == "" {
 			host = "127.0.0.1"
@@ -250,6 +412,7 @@ func New(cfg config.Config) (*App, error) {
 			"update_channel":               cfg.UpdateChannel,
 			"update_public_key_configured": cfg.UpdatePublicKey != "",
 			"app_version":                  appVersion,
+			"build_revision":               buildRevision,
 			"build_date":                   buildDate,
 			"bind_mode":                    strings.TrimSpace(strings.ToLower(cfg.BindMode)),
 			"runtime_host":                 host,
@@ -315,8 +478,12 @@ func New(cfg config.Config) (*App, error) {
 		if port <= 0 {
 			port = 17880
 		}
+		setupRequired := runtimeSetupRequired(cfg)
+		if zitadelAuth.configured() {
+			setupRequired = false
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"setup_required":              runtimeSetupRequired(cfg),
+			"setup_required":              setupRequired,
 			"config_path":                 configPath,
 			"default_storage_data_dir":    defaultStorageDataDir,
 			"default_storage_media_dir":   filepath.Join(defaultStorageDataDir, "media"),
@@ -327,6 +494,7 @@ func New(cfg config.Config) (*App, error) {
 			"default_runtime_port":        port,
 			"default_runtime_port_mode":   "auto",
 			"default_runtime_url":         fmt.Sprintf("http://%s:%d", host, port),
+			"default_auth_mode":           resolveAuthProviderOptions().IdentityMode,
 		})
 	})
 	mux.HandleFunc("/api/runtime/setup-complete", func(w http.ResponseWriter, r *http.Request) {
@@ -686,7 +854,7 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			if err := profiles.SetActiveProfile(r.Context(), req.ProfileID); err != nil {
-				http.Error(w, `{"error":"invalid_profile_id"}`, http.StatusBadRequest)
+				writeProfileActivationError(w, err)
 				return
 			}
 			active, _ := profiles.GetActiveProfile(r.Context())
@@ -734,6 +902,121 @@ func New(cfg config.Config) (*App, error) {
 				}
 				settings, _ := profiles.GetSettings(r.Context(), profileID)
 				_ = json.NewEncoder(w).Encode(map[string]any{"settings": settings})
+			default:
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			}
+		case "mcp-http-status":
+			if r.Method != http.MethodGet {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			settings, err := profiles.GetSettings(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_get_mcp_http_status"}`, http.StatusBadRequest)
+				return
+			}
+			status := mcpserver.HTTPTransportStatus(r.Context(), profiles, profileID, mcpserver.HTTPTransportConfig{
+				Enabled:        boolSetting(settings["mcp.http.enabled"]),
+				ListenAddr:     settings["mcp.http.listen_addr"],
+				LastDiagnostic: mcpDiagnosticOutcomeFromSettings(settings),
+			})
+			_ = json.NewEncoder(w).Encode(status)
+		case "mcp-http-credential":
+			if r.Method != http.MethodPost {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			credential, err := mcpserver.EnsureHTTPTransportCredential(r.Context(), profiles, profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_generate_mcp_http_credential"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"credential":             credential,
+				"credential_configured":  strings.TrimSpace(credential) != "",
+				"secret_key":             mcpserver.HTTPTransportCredentialSecretKey,
+				"configuration_guidance": "Use this bearer token only with loopback MCP clients for the selected Cabinet profile.",
+			})
+		case "mcp-http-config":
+			if r.Method != http.MethodPut {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			var req struct {
+				Enabled    bool   `json:"enabled"`
+				ListenAddr string `json:"listen_addr"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			settings := map[string]string{
+				"mcp.http.enabled": "false",
+			}
+			if req.Enabled {
+				listenAddr := strings.TrimSpace(req.ListenAddr)
+				if listenAddr == "" {
+					listenAddr = "127.0.0.1:17890"
+				}
+				settings["mcp.http.enabled"] = "true"
+				settings["mcp.http.listen_addr"] = listenAddr
+			}
+			if err := profiles.PutSettings(r.Context(), profileID, settings); err != nil {
+				http.Error(w, `{"error":"failed_to_update_mcp_http_config"}`, http.StatusBadRequest)
+				return
+			}
+			updated, err := profiles.GetSettings(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_get_mcp_http_status"}`, http.StatusBadRequest)
+				return
+			}
+			status := mcpserver.HTTPTransportStatus(r.Context(), profiles, profileID, mcpserver.HTTPTransportConfig{
+				Enabled:        boolSetting(updated["mcp.http.enabled"]),
+				ListenAddr:     updated["mcp.http.listen_addr"],
+				LastDiagnostic: mcpDiagnosticOutcomeFromSettings(updated),
+			})
+			_ = json.NewEncoder(w).Encode(status)
+		case "integration-instances":
+			switch r.Method {
+			case http.MethodGet:
+				instances, err := profiles.ListIntegrationInstances(r.Context(), profileID)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_list_integration_instances"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"instances": instances})
+			case http.MethodPost:
+				var req profile.IntegrationInstancePatch
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				instance, err := profiles.UpsertIntegrationInstance(r.Context(), profileID, req)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_create_integration_instance"}`, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]any{"instance": instance})
+			case http.MethodPut:
+				var req profile.IntegrationInstancePatch
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				instance, err := profiles.UpsertIntegrationInstance(r.Context(), profileID, req)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_update_integration_instance"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"instance": instance})
+			case http.MethodDelete:
+				instanceID := strings.TrimSpace(r.URL.Query().Get("id"))
+				if err := profiles.DeleteIntegrationInstance(r.Context(), profileID, instanceID); err != nil {
+					http.Error(w, `{"error":"failed_to_delete_integration_instance"}`, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
 			default:
 				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			}
@@ -802,9 +1085,16 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_get_storage"}`, http.StatusBadRequest)
 				return
 			}
+			migrationPreflight, err := mediaService.PreflightLegacyMediaMigration(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_get_storage_migration_preflight"}`, http.StatusBadRequest)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"db_path":   settings["storage.db_path"],
-				"media_dir": settings["storage.media_dir"],
+				"db_path":              settings["storage.db_path"],
+				"media_dir":            settings["storage.media_dir"],
+				"migration_preflight":  storageMigrationPreflightPayload(migrationPreflight),
+				"migration_status_key": storageMigrationPreflightState(migrationPreflight.Summary),
 			})
 		case "secrets":
 			if r.Method == http.MethodPut {
@@ -825,12 +1115,25 @@ func New(cfg config.Config) (*App, error) {
 			}
 			if r.Method == http.MethodGet {
 				key := strings.TrimSpace(r.URL.Query().Get("key"))
+				if strings.EqualFold(key, telegrambotconnector.BotTokenSecretKey) {
+					http.Error(w, `{"error":"write_only_secret"}`, http.StatusMethodNotAllowed)
+					return
+				}
 				value, err := profiles.GetSecret(r.Context(), profileID, key)
 				if err != nil {
 					http.Error(w, `{"error":"failed_to_get_secret"}`, http.StatusBadRequest)
 					return
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"key": key, "value": value})
+				return
+			}
+			if r.Method == http.MethodDelete {
+				key := strings.TrimSpace(r.URL.Query().Get("key"))
+				if err := profiles.DeleteSecret(r.Context(), profileID, key); err != nil {
+					http.Error(w, `{"error":"failed_to_delete_secret"}`, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -1721,9 +2024,9 @@ func New(cfg config.Config) (*App, error) {
 			if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
 				if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
 					status, _ := licenseSvc.Status(r.Context(), active.ID)
-					if status.State != "valid" || status.Tier != "pro" {
+					if status.State != "valid" || !planHasFeature(status.Tier, "collection_unlimited") {
 						var count int
-						if err := conn.QueryRowContext(r.Context(), `SELECT COUNT(1) FROM canonical_items`).Scan(&count); err == nil && count >= 150 {
+						if err := conn.QueryRowContext(r.Context(), `SELECT COUNT(1) FROM canonical_items`).Scan(&count); err == nil && count >= freeTierItemLimit {
 							http.Error(w, `{"error":"free_tier_item_limit_reached"}`, http.StatusPaymentRequired)
 							return
 						}
@@ -1736,8 +2039,9 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			active, _ := profiles.GetActiveProfile(r.Context())
+			settings := map[string]string{}
 			if strings.TrimSpace(active.ID) != "" {
-				settings, _ := profiles.GetSettings(r.Context(), active.ID)
+				settings, _ = profiles.GetSettings(r.Context(), active.ID)
 				if strings.TrimSpace(req.GradingStatus) == "" {
 					if v := strings.TrimSpace(settings["grading.defaults.grading_status"]); v != "" {
 						req.GradingStatus = strings.ToLower(v)
@@ -1748,6 +2052,10 @@ func New(cfg config.Config) (*App, error) {
 						req.Priority = strings.ToLower(v)
 					}
 				}
+			}
+			if validationErr := validateInventoryItemTaxonomy(req, nil, settings); validationErr != nil {
+				writeInventoryTaxonomyValidationError(w, validationErr)
+				return
 			}
 			created, err := collectionRepo.CreateItemForProfile(r.Context(), active.ID, req)
 			if err != nil {
@@ -1882,6 +2190,34 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/scanner/runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "method_not_allowed",
+				"error_code":     "method_not_allowed",
+				"message":        "Use GET to list persisted Market Watch run history.",
+				"next_action":    "retry_with_get",
+				"allowed_method": http.MethodGet,
+			})
+			return
+		}
+		active, _ := profiles.GetActiveProfile(r.Context())
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		runs, err := scannerSvc.ListRunHistoryByProfile(
+			r.Context(),
+			strings.TrimSpace(active.ID),
+			strings.TrimSpace(r.URL.Query().Get("query_set_id")),
+			limit,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_scanner_runs"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs})
+	})
 	mux.HandleFunc("/api/scanner/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -1935,6 +2271,27 @@ func New(cfg config.Config) (*App, error) {
 		out, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID, provider)
 		if err != nil {
 			logSvc.Log(r.Context(), "error", "scanner_run_failed", map[string]any{"query_set_id": req.QuerySetID, "error": err.Error()})
+			var providerErr *ebay.ProviderError
+			if errors.As(err, &providerErr) && providerErr.ErrorCode != "" {
+				status := providerErr.StatusCode
+				if status <= 0 {
+					status = http.StatusBadRequest
+				}
+				w.WriteHeader(status)
+				payload := map[string]any{
+					"error":        "failed_to_run_scanner",
+					"error_code":   providerErr.ErrorCode,
+					"provider":     "ebay",
+					"message":      providerErr.Error(),
+					"next_action":  ebayProviderErrorNextAction(providerErr),
+					"query_set_id": req.QuerySetID,
+				}
+				if providerErr.RetryAfterSeconds > 0 {
+					payload["retry_after_seconds"] = providerErr.RetryAfterSeconds
+				}
+				_ = json.NewEncoder(w).Encode(payload)
+				return
+			}
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
 			return
 		}
@@ -1981,6 +2338,9 @@ func New(cfg config.Config) (*App, error) {
 			if !qs.Enabled || strings.TrimSpace(qs.ScheduleCron) == "" {
 				continue
 			}
+			if !providerScopeIncludes(qs.ProviderScope, "ebay") {
+				continue
+			}
 			out, runErr := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), qs.ID, provider)
 			if runErr != nil {
 				logSvc.Log(r.Context(), "error", "scanner_run_scheduled_query_failed", map[string]any{
@@ -2008,20 +2368,139 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		active, _ := profiles.GetActiveProfile(r.Context())
-		items, err := scannerSvc.ListCandidatesByProfile(r.Context(), strings.TrimSpace(active.ID), querySetID)
+		list, err := scannerSvc.ListCandidatesByProfileFiltered(r.Context(), strings.TrimSpace(active.ID), querySetID, scanner.CandidateListFilter{
+			Status:   r.URL.Query().Get("status"),
+			Provider: r.URL.Query().Get("provider"),
+			Page:     parsePositiveInt(r.URL.Query().Get("page"), 1),
+			PageSize: parsePositiveInt(r.URL.Query().Get("page_size"), 50),
+		})
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_candidates"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"candidates": items})
+		_ = json.NewEncoder(w).Encode(list)
+	})
+	mux.HandleFunc("/api/scanner/candidates/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPatch {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		candidateID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/scanner/candidates/"), "/")
+		if candidateID == "" {
+			http.Error(w, `{"error":"missing_candidate_id"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		active, _ := profiles.GetActiveProfile(r.Context())
+		item, err := scannerSvc.UpdateCandidateStatusForProfile(r.Context(), strings.TrimSpace(active.ID), candidateID, req.Status)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_update_candidate_status"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(item)
+	})
+	mux.HandleFunc("/api/scanner/recognition-review/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Candidates []scanner.RecognitionCandidateInput `json:"candidates"`
+			Target     string                              `json:"target"`
+			Confirmed  bool                                `json:"confirmed"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		target := normalizeScannerReviewApplyTarget(req.Target)
+		for i := range req.Candidates {
+			if strings.TrimSpace(req.Candidates[i].Target) == "" {
+				req.Candidates[i].Target = target
+			}
+		}
+		review, err := scanner.BuildRecognitionReview(req.Candidates)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_recognition_review"}`, http.StatusBadRequest)
+			return
+		}
+		review.Target = target
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if !req.Confirmed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":              "scanner_review_confirmation_required",
+				"confirmation_state": "required",
+				"review":             review,
+			})
+			return
+		}
+
+		itemInput := scannerReviewApplyItem(review)
+		createdItem, err := collectionRepo.CreateItemForProfile(r.Context(), strings.TrimSpace(active.ID), itemInput)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_create_scanner_item"}`, http.StatusBadRequest)
+			return
+		}
+		result := map[string]any{
+			"mode":               "scanner_review_apply",
+			"profile_id":         strings.TrimSpace(active.ID),
+			"target":             target,
+			"confirmation_state": "confirmed",
+			"review":             review,
+			"item":               createdItem,
+		}
+		if target == "wishlist" {
+			entry, err := wishlistSvc.CreateForProfile(r.Context(), strings.TrimSpace(active.ID), wishlist.Entry{
+				ItemID:       createdItem.ID,
+				Priority:     "medium",
+				Notes:        scannerReviewApplyEvidenceNote(review),
+				HighlightHit: true,
+				Owned:        false,
+			})
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_scanner_wishlist_entry"}`, http.StatusBadRequest)
+				return
+			}
+			result["wishlist_entry"] = entry
+		}
+		logSvc.Log(r.Context(), "info", "scanner_review_apply_confirmed", map[string]any{
+			"profile_id": strings.TrimSpace(active.ID),
+			"target":     target,
+			"item_id":    createdItem.ID,
+		})
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/scanner/failures", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
-			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			w.Header().Set("Allow", http.MethodGet)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "method_not_allowed",
+				"error_code":     "method_not_allowed",
+				"provider":       "ebay",
+				"message":        "Use GET to list scanner failure snapshots before retrying eBay saved-search failures.",
+				"next_action":    "retry_with_get",
+				"allowed_method": http.MethodGet,
+			})
 			return
 		}
-		items, err := scannerSvc.ListFailures(r.Context())
+		active, _ := profiles.GetActiveProfile(r.Context())
+		items, err := scannerSvc.ListFailuresByProfile(r.Context(), strings.TrimSpace(active.ID))
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_failures"}`, http.StatusInternalServerError)
 			return
@@ -2071,12 +2550,90 @@ func New(cfg config.Config) (*App, error) {
 		if provider == "" {
 			provider = "ebay"
 		}
+		if strings.EqualFold(provider, "openai") {
+			health := openAIProviderHealth(r.Context(), profiles)
+			_ = json.NewEncoder(w).Encode(health)
+			return
+		}
+		if strings.EqualFold(provider, "telegram") {
+			health := telegramProviderHealth(r.Context(), profiles)
+			_ = json.NewEncoder(w).Encode(health)
+			return
+		}
 		health, err := scannerSvc.ProviderHealth(r.Context(), provider)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_provider_health"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(health)
+		_ = json.NewEncoder(w).Encode(providerHealthResponse(health))
+	})
+	mux.HandleFunc("/api/provider/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Provider  string `json:"provider"`
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		provider := strings.TrimSpace(req.Provider)
+		if provider == "" {
+			provider = "openai"
+		}
+		if strings.EqualFold(provider, "telegram") {
+			payload, statusCode := telegramProviderTest(r.Context(), profiles, strings.TrimSpace(req.ProfileID))
+			if statusCode >= 400 {
+				requiredAction, _ := payload["next_action"].(string)
+				statusMessage, _ := payload["message"].(string)
+				profileID, _ := payload["profile_id"].(string)
+				if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "telegram", "Telegram", "telegram.provider_test", requiredAction, statusMessage, map[string]any{
+					"provider_test_code": payload["code"],
+					"provider_status":    payload["status"],
+				}); inboxErr != nil {
+					logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.provider_test", "error": inboxErr.Error()})
+				}
+			}
+			w.WriteHeader(statusCode)
+			if statusCode == http.StatusOK {
+				profileID, _ := payload["profile_id"].(string)
+				if resolveErr := chatSvc.ResolveProviderWorkflowInboxEvents(r.Context(), profileID, "telegram", "telegram.provider_test", "provider_test_passed", map[string]any{
+					"provider_test_code": payload["code"],
+					"provider_status":    payload["status"],
+				}); resolveErr != nil {
+					logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_resolve_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.provider_test", "error": resolveErr.Error()})
+				}
+			}
+			_ = json.NewEncoder(w).Encode(payload)
+			return
+		}
+		if !strings.EqualFold(provider, "openai") {
+			http.Error(w, `{"error":"unsupported_provider_test"}`, http.StatusBadRequest)
+			return
+		}
+		payload, statusCode := openAIProviderTest(r.Context(), profiles, aiSvc, strings.TrimSpace(req.ProfileID))
+		if statusCode >= 400 {
+			logSvc.Log(r.Context(), "error", "openai_provider_test_failed", map[string]any{
+				"profile_id": strings.TrimSpace(req.ProfileID),
+				"code":       payload["code"],
+				"status":     payload["status"],
+			})
+			if statusCode == http.StatusBadRequest && payload["code"] == "OPENAI_PROVIDER_TEST_FAILED" {
+				_, _ = conn.ExecContext(r.Context(), `INSERT INTO ai_failures(id, profile_id, message, created_at) VALUES (hex(randomblob(16)), ?, ?, CURRENT_TIMESTAMP)`, strings.TrimSpace(req.ProfileID), payload["message"])
+			}
+		} else {
+			logSvc.Log(r.Context(), "info", "openai_provider_test_passed", map[string]any{
+				"profile_id": strings.TrimSpace(req.ProfileID),
+				"code":       payload["code"],
+				"status":     payload["status"],
+			})
+		}
+		w.WriteHeader(statusCode)
+		_ = json.NewEncoder(w).Encode(payload)
 	})
 	mux.HandleFunc("/api/providers/registry", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2090,11 +2647,167 @@ func New(cfg config.Config) (*App, error) {
 			if profileSettings, settingsErr := profiles.GetSettings(r.Context(), strings.TrimSpace(active.ID)); settingsErr == nil {
 				settings = profileSettings
 			}
+			if key, secretErr := profiles.GetSecret(r.Context(), strings.TrimSpace(active.ID), "openai_api_key"); secretErr == nil && strings.TrimSpace(key) != "" {
+				settings["openai.api_key_secret_present"] = "true"
+			}
+			if key, secretErr := profiles.GetSecret(r.Context(), strings.TrimSpace(active.ID), "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
+				settings["telegram.bot_token_secret_present"] = "true"
+			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
 		})
 	})
+	allowCredentialFreeLocalCompanion := credentialFreeLocalCompanionManagementAllowed(cfg, zitadelAuth)
+	registerCompanionRoutes(mux, companionSvc, profiles, authService, mediaService, allowCredentialFreeLocalCompanion)
+	mux.HandleFunc("/api/providers/ebay/buyer-interest/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SourceAccount       string                    `json:"source_account"`
+			WriteBackCapability string                    `json:"write_back_capability"`
+			Items               []ebay.BuyerInterestInput `json:"items"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if len(req.Items) == 0 {
+			http.Error(w, `{"error":"missing_items"}`, http.StatusBadRequest)
+			return
+		}
+		mappings := make([]ebay.BuyerInterestMapping, 0, len(req.Items))
+		summary := map[string]int{
+			ebay.InterestDestinationWishlist:  0,
+			ebay.InterestDestinationDiscovery: 0,
+			"write_back_allowed":              0,
+			"write_back_blocked":              0,
+		}
+		for _, item := range req.Items {
+			if strings.TrimSpace(item.SourceAccount) == "" {
+				item.SourceAccount = req.SourceAccount
+			}
+			if strings.TrimSpace(item.WriteBackCapability) == "" {
+				item.WriteBackCapability = req.WriteBackCapability
+			}
+			mapped := ebay.MapBuyerInterest(item)
+			mappings = append(mappings, mapped)
+			summary[mapped.Destination]++
+			if mapped.WriteBackAllowed {
+				summary["write_back_allowed"]++
+			} else {
+				summary["write_back_blocked"]++
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "preview",
+			"items":    mappings,
+			"summary":  summary,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/seller-operations/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerOperationActionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		preview := ebay.PreviewSellerOperationAction(req)
+		if preview.Operation == "" || preview.Action == "" {
+			http.Error(w, `{"error":"missing_seller_operation_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "seller_operation_preview",
+			"preview":  preview,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/seller-operations/execute", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerOperationActionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		execution := ebay.ExecuteSellerOperationAction(req)
+		if execution.Operation == "" || execution.Action == "" {
+			http.Error(w, `{"error":"missing_seller_operation_action"}`, http.StatusBadRequest)
+			return
+		}
+		status := http.StatusOK
+		if !execution.Executed {
+			status = http.StatusConflict
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider":  "ebay",
+			"mode":      "seller_operation_execute",
+			"execution": execution,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/listing-lifecycle/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerListingLifecycleCommandRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		preview := ebay.PreviewSellerListingLifecycleCommand(req)
+		if preview.Command == "" {
+			http.Error(w, `{"error":"missing_listing_lifecycle_command"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "listing_lifecycle_preview",
+			"preview":  preview,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/listing-lifecycle/execute", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerListingLifecycleCommandRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		execution := ebay.ExecuteSellerListingLifecycleCommand(req, nil)
+		if execution.Command == "" {
+			http.Error(w, `{"error":"missing_listing_lifecycle_command"}`, http.StatusBadRequest)
+			return
+		}
+		status := http.StatusOK
+		if !execution.Executed {
+			status = http.StatusConflict
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider":  "ebay",
+			"mode":      "listing_lifecycle_execute",
+			"execution": execution,
+		})
+	})
+	registerEbayBuyerInterestImportRoute(mux, conn, profiles)
 	mux.HandleFunc("/api/providers/family-detect", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -2114,7 +2827,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"missing_provider_url"}`, http.StatusBadRequest)
 			return
 		}
-		family, confidence, evidence, domain, err := detectProviderFamily(r.Context(), http.DefaultClient, providerURL, req.HTML)
+		family, confidence, evidence, domain, err := detectProviderFamily(r.Context(), providerHTTPClient(), providerURL, req.HTML)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_detect_provider_family"}`, http.StatusBadRequest)
 			return
@@ -2196,9 +2909,157 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		candidates := buildAmazonCandidateContract(qs)
+		run, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), qs.ID, amazonContractProvider{candidates: candidates})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_run_amazon_provider"}`, http.StatusBadRequest)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id": qs.ID,
+			"candidates":   buildAmazonCandidateResponseContract(candidates),
+			"run":          run,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		writeClientError := func(status int, errorCode, querySetID, nextAction, message string, fields map[string]any) {
+			w.WriteHeader(status)
+			payload := map[string]any{
+				"error":        errorCode,
+				"error_code":   errorCode,
+				"provider":     "ebay",
+				"query_set_id": strings.TrimSpace(querySetID),
+				"next_action":  nextAction,
+				"message":      message,
+			}
+			for key, value := range fields {
+				payload[key] = value
+			}
+			_ = json.NewEncoder(w).Encode(payload)
+		}
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "method_not_allowed",
+				"error_code":     "method_not_allowed",
+				"provider":       "ebay",
+				"allowed_method": http.MethodPost,
+				"next_action":    "retry_with_post",
+				"message":        "Run eBay saved-search providers with POST and a query_set_id request body.",
+			})
+			return
+		}
+		var req struct {
+			QuerySetID string `json:"query_set_id"`
+		}
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&req); err != nil {
+			writeClientError(http.StatusBadRequest, "invalid_json", "", "select_existing_ebay_query_set", "The eBay provider run request body must be valid JSON.", nil)
+			return
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			writeClientError(http.StatusBadRequest, "invalid_json", "", "select_existing_ebay_query_set", "The eBay provider run request body must be valid JSON.", nil)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			writeClientError(http.StatusBadRequest, "missing_query_set_id", req.QuerySetID, "select_existing_ebay_query_set", "Select an existing eBay query set before running the provider.", nil)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			writeClientError(http.StatusBadRequest, "active_profile_not_set", req.QuerySetID, "select_active_profile", "Select an active profile before running eBay saved searches.", nil)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			writeClientError(http.StatusBadRequest, "failed_to_get_settings", req.QuerySetID, "retry_profile_settings", "Profile settings could not be loaded for the eBay provider run.", nil)
+			return
+		}
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			writeClientError(http.StatusBadRequest, "invalid_query_set_id", req.QuerySetID, "select_existing_ebay_query_set", "The selected eBay query set no longer exists for the active profile.", nil)
+			return
+		}
+		if !providerScopeIncludes(qs.ProviderScope, "ebay") {
+			writeClientError(http.StatusBadRequest, "query_set_not_scoped_to_ebay", qs.ID, "choose_ebay_scoped_query_set", "Choose a query set whose provider scope includes eBay.", nil)
+			return
+		}
+		if raw := strings.TrimSpace(settings[providerSettingsKeys("ebay").ItemsPerPageKey]); raw != "" {
+			value, parseErr := strconv.Atoi(raw)
+			if parseErr != nil || value <= 0 {
+				writeClientError(http.StatusBadRequest, "invalid_ebay_items_per_page", qs.ID, "update_ebay_items_per_page", "Update the eBay setup page size to a positive integer before running this query.", map[string]any{
+					"setting": providerSettingsKeys("ebay").ItemsPerPageKey,
+				})
+				return
+			}
+			qs.ItemsPerPage = value
+			if _, updateErr := scannerSvc.UpdateQuerySetForProfile(
+				r.Context(),
+				profileID,
+				qs.ID,
+				qs,
+			); updateErr != nil {
+				writeClientError(http.StatusBadRequest, "failed_to_apply_provider_items_per_page", qs.ID, "update_ebay_items_per_page", "The eBay setup page size could not be applied to this query set.", map[string]any{
+					"setting": providerSettingsKeys("ebay").ItemsPerPageKey,
+				})
+				return
+			}
+		}
+		provider := ebay.NewProvider(ebay.ProviderConfig{
+			BaseURL:     settings["ebay_base_url"],
+			BearerToken: settings["ebay_bearer_token"],
+			Marketplace: settings["ebay_marketplace"],
+		})
+		run, err := scannerSvc.RunNowForProfile(r.Context(), profileID, qs.ID, provider)
+		if err != nil {
+			var providerErr *ebay.ProviderError
+			if errors.As(err, &providerErr) && providerErr.ErrorCode != "" {
+				status := providerErr.StatusCode
+				if status <= 0 {
+					status = http.StatusBadRequest
+				}
+				nextAction := ebayProviderErrorNextAction(providerErr)
+				if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "ebay", "eBay", "market_watch.run", nextAction, providerErr.Error(), map[string]any{
+					"query_set_id":        qs.ID,
+					"provider_error_code": providerErr.ErrorCode,
+					"status_code":         status,
+					"health_impact":       "updates_provider_health",
+					"retry_after_seconds": providerErr.RetryAfterSeconds,
+				}); inboxErr != nil {
+					logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "ebay", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+				}
+				w.WriteHeader(status)
+				payload := map[string]any{
+					"error":        "failed_to_run_ebay_provider",
+					"error_code":   providerErr.ErrorCode,
+					"provider":     "ebay",
+					"message":      providerErr.Error(),
+					"next_action":  nextAction,
+					"query_set_id": qs.ID,
+				}
+				if providerErr.RetryAfterSeconds > 0 {
+					payload["retry_after_seconds"] = providerErr.RetryAfterSeconds
+				}
+				_ = json.NewEncoder(w).Encode(payload)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_run_ebay_provider"}`, http.StatusBadRequest)
+			return
+		}
+		candidates, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			writeClientError(http.StatusBadRequest, "failed_to_list_ebay_candidates", qs.ID, "select_existing_ebay_query_set", "The eBay run completed but persisted candidates could not be reloaded.", nil)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id": qs.ID,
+			"provider":     "ebay",
 			"candidates":   candidates,
+			"run":          run,
 		})
 	})
 	mux.HandleFunc("/api/providers/bonza/run", func(w http.ResponseWriter, r *http.Request) {
@@ -2243,9 +3104,40 @@ func New(cfg config.Config) (*App, error) {
 		if requested > 36 {
 			requested = 36
 		}
-		searchResult, err := runBonzaSearch(r.Context(), http.DefaultClient, baseURL, qs, requested)
+		searchResult, err := runBonzaSearch(r.Context(), providerHTTPClient(), baseURL, qs, requested)
 		if err != nil {
+			scannerSvc.RecordProviderHealth(r.Context(), "bonzaslotcars", "failed", err.Error())
+			scannerSvc.RecordProviderHealth(r.Context(), "au-webshop-bonzaslotcars-com-au", "failed", err.Error())
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-bonzaslotcars-com-au", "bonzaslotcars.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_BONZA",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-bonzaslotcars-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_run_bonza"}`, http.StatusBadRequest)
+			return
+		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			bonzaCandidatesForScanner(searchResult.Candidates),
+			1,
+			requested,
+			searchResult.ItemsPerPageUsed,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_bonza_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		scannerSvc.RecordProviderHealth(r.Context(), "bonzaslotcars", "ok", "Live Bonza Store API Market Watch run succeeded with persisted candidates.")
+		scannerSvc.RecordProviderHealth(r.Context(), "au-webshop-bonzaslotcars-com-au", "ok", "Live Bonza Store API Market Watch run succeeded with persisted candidates.")
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_bonza_candidates"}`, http.StatusBadRequest)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -2253,12 +3145,139 @@ func New(cfg config.Config) (*App, error) {
 			"page_count":          searchResult.PageCount,
 			"observed_page_size":  searchResult.ObservedPageSize,
 			"items_per_page_used": searchResult.ItemsPerPageUsed,
-			"candidates":          searchResult.Candidates,
+			"candidates":          persisted,
+			"run":                 run,
 			"run_summary": map[string]any{
 				"page_count":         searchResult.PageCount,
 				"observed_page_size": searchResult.ObservedPageSize,
-				"candidates_total":   len(searchResult.Candidates),
+				"candidates_total":   run.Saved,
 			},
+		})
+	})
+	mux.HandleFunc("/api/providers/product-url/ingest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			URL              string `json:"url"`
+			CaptureForReview bool   `json:"capture_for_review"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		route, err := detectProviderProductURL(req.URL)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"mode":  "provider_product_url_ingest",
+				"error": "unsupported_provider_url",
+			})
+			return
+		}
+		if route.Provider == "bonzaslotcars" && route.Action != "ingest_product_url" {
+			response := map[string]any{
+				"mode":                        "provider_product_url_ingest",
+				"error":                       "supported_provider_unsupported_page",
+				"provider":                    route.Provider,
+				"family":                      route.Family,
+				"route":                       route,
+				"fallback_state":              "manual_url_capture",
+				"static_extraction_attempted": false,
+				"next_action":                 "paste_a_supported_product_url",
+				"guidance":                    "Paste a Bonza product URL under /product/<slug>/ so Cabinet can attempt static Store API extraction before any manual review or headless fallback.",
+			}
+			if req.CaptureForReview {
+				if review, err := persistProviderURLManualReviewCapture(r.Context(), profiles, collectionRepo, req.URL, route.Provider, route.Family, "manual_url_capture", false, "Known Bonza URL is not a supported product page."); err != nil {
+					response["review_capture_persisted"] = false
+					response["review_capture_error"] = "failed_to_persist_manual_review_capture"
+				} else {
+					response["review_capture_persisted"] = true
+					response["review_capture"] = review
+				}
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+		if route.Provider != "bonzaslotcars" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"mode":  "provider_product_url_ingest",
+				"error": "unsupported_provider_url",
+			})
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), strings.TrimSpace(active.ID))
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		baseURL := strings.TrimSpace(settings["integration.bonzaslotcars.base_url"])
+		if baseURL == "" {
+			baseURL = "https://bonzaslotcars.com.au"
+		}
+		draft, err := ingestBonzaProductURL(r.Context(), providerHTTPClient(), baseURL, route)
+		if err != nil {
+			if errors.Is(err, errBonzaBrowserActionRequired) {
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"mode":                        "provider_product_url_ingest",
+					"error":                       "browser_action_required",
+					"provider":                    route.Provider,
+					"family":                      route.Family,
+					"route":                       route,
+					"fallback_state":              "browser_companion_user_present",
+					"static_extraction_attempted": true,
+					"next_action":                 "open_in_browser_and_sync_with_companion",
+					"guidance":                    "Open Bonza in your paired browser, complete any site challenge yourself, then use the Cabinet Browser Companion to sync the rendered product. Cabinet does not decode challenges, export cookies, or retry with synthesised credentials.",
+				})
+				return
+			}
+			response := map[string]any{
+				"mode":                        "provider_product_url_ingest",
+				"error":                       "failed_to_ingest_bonza_product_url",
+				"provider":                    route.Provider,
+				"family":                      route.Family,
+				"route":                       route,
+				"fallback_state":              "browser_companion_user_present",
+				"static_extraction_attempted": true,
+				"next_action":                 "open_in_browser_and_sync_with_companion",
+				"guidance":                    "Static product extraction was attempted first but the storefront did not return usable public product data. Open Bonza yourself in the paired Browser Companion and sync the rendered product; Cabinet does not run a hidden browser or export session data.",
+			}
+			if req.CaptureForReview {
+				if review, err := persistProviderURLManualReviewCapture(r.Context(), profiles, collectionRepo, req.URL, route.Provider, route.Family, "browser_companion_user_present", true, "Static Store API extraction failed; use the paired browser companion while present."); err != nil {
+					response["review_capture_persisted"] = false
+					response["review_capture_error"] = "failed_to_persist_manual_review_capture"
+				} else {
+					response["review_capture_persisted"] = true
+					response["review_capture"] = review
+				}
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+		existingItems, err := collectionRepo.ListItemsByProfile(r.Context(), strings.TrimSpace(active.ID))
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_check_provider_product_duplicates"}`, http.StatusInternalServerError)
+			return
+		}
+		duplicates := providerProductDuplicateCandidates(existingItems, route, draft)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":       "provider_product_url_ingest",
+			"provider":   route.Provider,
+			"family":     route.Family,
+			"route":      route,
+			"draft":      draft,
+			"evidence":   draft.Evidence,
+			"duplicates": duplicates,
 		})
 	})
 	mux.HandleFunc("/api/providers/frontline/discovery", func(w http.ResponseWriter, r *http.Request) {
@@ -2283,7 +3302,7 @@ func New(cfg config.Config) (*App, error) {
 		config, fallbackUsed, warning, err := discoverFrontlineAlgoliaConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			req.AssetURL,
 			req.FallbackAssetURLs,
 		)
@@ -2295,6 +3314,132 @@ func New(cfg config.Config) (*App, error) {
 			"config":        config,
 			"fallback_used": fallbackUsed,
 			"warning":       warning,
+		})
+	})
+	mux.HandleFunc("/api/providers/frontline/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID                 string   `json:"query_set_id"`
+			DiscoveryAssetURL          string   `json:"discovery_asset_url"`
+			FallbackDiscoveryAssetURLs []string `json:"fallback_discovery_asset_urls"`
+			SearchURL                  string   `json:"search_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		baseURL := strings.TrimSpace(settings["integration.frontlinehobbies.base_url"])
+		if baseURL == "" {
+			baseURL = "https://frontlinehobbies.com.au"
+		}
+		itemsPerPage := parsePositiveInt(settings["integration.frontlinehobbies.items_per_page"], 24)
+		if itemsPerPage > 50 {
+			itemsPerPage = 50
+		}
+		discoveryAssetURL := strings.TrimSpace(req.DiscoveryAssetURL)
+		if discoveryAssetURL == "" {
+			discoveryAssetURL = strings.TrimRight(baseURL, "/") + "/assets/pd-search.js"
+		}
+		cfg, fallbackUsed, warning, err := discoverFrontlineAlgoliaConfig(
+			r.Context(),
+			conn,
+			providerHTTPClient(),
+			discoveryAssetURL,
+			req.FallbackDiscoveryAssetURLs,
+		)
+		if err != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-frontlinehobbies-com-au", "frontlinehobbies.com.au", "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_DISCOVER_FRONTLINE_CONFIG",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+				"discovery_asset_url": discoveryAssetURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-frontlinehobbies-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
+			http.Error(w, `{"error":"failed_to_discover_frontline_config"}`, http.StatusBadRequest)
+			return
+		}
+		searchURL := strings.TrimSpace(req.SearchURL)
+		if searchURL == "" {
+			searchURL = defaultFrontlineAlgoliaSearchURL(cfg)
+		}
+		candidates, total, runErr := runFrontlineAlgoliaSearch(r.Context(), providerHTTPClient(), searchURL, qs, cfg, baseURL, itemsPerPage)
+		if runErr != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-frontlinehobbies-com-au", "frontlinehobbies.com.au", "market_watch.run", "check_provider_health_and_retry", runErr.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_FRONTLINE_PROVIDER",
+				"health_impact":       "updates_provider_health",
+				"base_url":            baseURL,
+				"search_url":          searchURL,
+			}); inboxErr != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "au-webshop-frontlinehobbies-com-au", "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
+			http.Error(w, `{"error":"failed_to_run_frontline_provider"}`, http.StatusBadRequest)
+			return
+		}
+		if fallbackUsed && strings.TrimSpace(warning) == "" {
+			warning = "frontline discovery used cached config"
+		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			frontlineCandidatesForScanner(candidates),
+			1,
+			itemsPerPage,
+			itemsPerPage,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_frontline_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_frontline_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id": qs.ID,
+			"total":        total,
+			"candidates":   persisted,
+			"warning":      warning,
+			"discovery_config": map[string]any{
+				"application_id": cfg.ApplicationID,
+				"index_names":    cfg.IndexNames,
+				"source":         cfg.Source,
+			},
+			"run": run,
+			"run_summary": map[string]any{
+				"candidates_total": run.Saved,
+				"total":            total,
+			},
 		})
 	})
 	mux.HandleFunc("/api/providers/doofinder/discovery", func(w http.ResponseWriter, r *http.Request) {
@@ -2319,7 +3464,7 @@ func New(cfg config.Config) (*App, error) {
 		config, fallbackUsed, warning, err := discoverDoofinderConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			req.AssetURL,
 			req.FallbackAssetURLs,
 		)
@@ -2388,11 +3533,20 @@ func New(cfg config.Config) (*App, error) {
 		config, fallbackUsed, warning, err := discoverDoofinderConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			discoveryAssetURL,
 			req.FallbackAssetURLs,
 		)
 		if err != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-"+strings.ReplaceAll(providerDomain, ".", "-"), providerDomain, "market_watch.run", "check_provider_health_and_retry", err.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_DISCOVER_DOOFINDER_CONFIG",
+				"health_impact":       "updates_provider_health",
+				"provider_domain":     providerDomain,
+				"asset_url":           discoveryAssetURL,
+			}); inboxErr != nil && logSvc != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": providerDomain, "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_discover_doofinder_config"}`, http.StatusBadRequest)
 			return
 		}
@@ -2420,7 +3574,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		candidates, total, runErr := runDoofinderSearch(
 			r.Context(),
-			http.DefaultClient,
+			providerHTTPClient(),
 			searchURL,
 			query,
 			page,
@@ -2430,20 +3584,55 @@ func New(cfg config.Config) (*App, error) {
 			providerDomain,
 		)
 		if runErr != nil {
+			if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "au-webshop-"+strings.ReplaceAll(providerDomain, ".", "-"), providerDomain, "market_watch.run", "check_provider_health_and_retry", runErr.Error(), map[string]any{
+				"query_set_id":        qs.ID,
+				"provider_error_code": "FAILED_TO_RUN_DOOFINDER_PROVIDER",
+				"health_impact":       "updates_provider_health",
+				"provider_domain":     providerDomain,
+				"asset_url":           discoveryAssetURL,
+				"search_url":          searchURL,
+			}); inboxErr != nil && logSvc != nil {
+				logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": providerDomain, "workflow_action_id": "market_watch.run", "query_set_id": qs.ID, "error": inboxErr.Error()})
+			}
 			http.Error(w, `{"error":"failed_to_run_doofinder_provider"}`, http.StatusBadRequest)
 			return
 		}
 		if fallbackUsed && strings.TrimSpace(warning) == "" {
 			warning = "doofinder discovery used cached config"
 		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			doofinderCandidatesForScanner(candidates, providerDomain),
+			1,
+			pageSize,
+			pageSize,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_doofinder_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_doofinder_candidates"}`, http.StatusBadRequest)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id":    qs.ID,
 			"page":            page,
 			"page_size":       pageSize,
 			"total":           total,
-			"candidate_count": len(candidates),
-			"candidates":      candidates,
+			"candidate_count": len(persisted),
+			"candidates":      persisted,
 			"warning":         warning,
+			"run":             run,
+			"run_summary": map[string]any{
+				"page":                page,
+				"effective_page_size": pageSize,
+				"candidates_total":    run.Saved,
+			},
 			"discovery": map[string]any{
 				"store":    config.Store,
 				"zone":     config.Zone,
@@ -2534,9 +3723,15 @@ func New(cfg config.Config) (*App, error) {
 			if graphURL == "" {
 				graphURL = "https://" + providerDomain + "/graphql"
 			}
-			out, runErr := runBigCommerceTokenSearch(r.Context(), http.DefaultClient, graphURL, token, query, providerDomain)
+			out, runErr := runBigCommerceTokenSearch(r.Context(), providerHTTPClient(), graphURL, token, query, providerDomain)
 			if runErr != nil {
-				http.Error(w, `{"error":"failed_to_run_bigcommerce_token_mode"}`, http.StatusBadRequest)
+				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
+				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "failed_to_run_bigcommerce_token_mode",
+					"message": runErr.Error(),
+				})
 				return
 			}
 			candidates = out
@@ -2545,12 +3740,44 @@ func New(cfg config.Config) (*App, error) {
 			if searchURL == "" {
 				searchURL = "https://" + providerDomain + "/products/search"
 			}
-			out, runErr := runBigCommerceStorefrontSearch(r.Context(), http.DefaultClient, searchURL, query, page, pageSize, providerDomain)
+			out, runErr := runBigCommerceStorefrontSearch(r.Context(), providerHTTPClient(), searchURL, query, page, pageSize, providerDomain)
 			if runErr != nil {
-				http.Error(w, `{"error":"failed_to_run_bigcommerce_storefront_mode"}`, http.StatusBadRequest)
+				scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "failed", runErr.Error())
+				scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "failed_to_run_bigcommerce_storefront_mode",
+					"message": runErr.Error(),
+				})
 				return
 			}
 			candidates = out
+		}
+
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			bigCommerceCandidatesForScanner(candidates, providerDomain),
+			1,
+			pageSize,
+			pageSize,
+			"",
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_persist_bigcommerce_candidates",
+				"message": err.Error(),
+			})
+			return
+		}
+		scannerSvc.RecordProviderHealth(r.Context(), providerDomain, "ok", "Live BigCommerce storefront Market Watch run succeeded with persisted candidates.")
+		scannerSvc.RecordProviderHealth(r.Context(), providerID, "ok", "Live BigCommerce storefront Market Watch run succeeded with persisted candidates.")
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_bigcommerce_candidates"}`, http.StatusBadRequest)
+			return
 		}
 
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -2559,8 +3786,127 @@ func New(cfg config.Config) (*App, error) {
 			"auth_mode":         authMode,
 			"data_depth_source": dataDepthSource,
 			"capability_limits": capabilityLimits,
-			"candidate_count":   len(candidates),
-			"candidates":        candidates,
+			"candidate_count":   len(persisted),
+			"candidates":        persisted,
+			"run":               run,
+			"run_summary": map[string]any{
+				"auth_mode":         authMode,
+				"data_depth_source": dataDepthSource,
+				"candidates_total":  run.Saved,
+			},
+		})
+	})
+	mux.HandleFunc("/api/providers/shopify/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID     string `json:"query_set_id"`
+			ProviderDomain string `json:"provider_domain"`
+			SearchURL      string `json:"search_url"`
+			PageSize       int    `json:"page_size"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		providerDomain := strings.TrimSpace(strings.ToLower(req.ProviderDomain))
+		if providerDomain == "" {
+			providerDomain = "andrewshobbies.com.au"
+		}
+		providerID := "au-webshop-" + strings.ReplaceAll(providerDomain, ".", "-")
+		providerScope := marketWatchScopeForAUWebshopDomain(providerDomain)
+		pageSize := req.PageSize
+		if pageSize <= 0 {
+			pageSize = 24
+		}
+		if pageSize > 50 {
+			pageSize = 50
+		}
+		query := strings.TrimSpace(qs.Name)
+		if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+			query = strings.TrimSpace(qs.Keywords[0])
+		}
+		if query == "" {
+			query = "collectible"
+		}
+		searchURL := strings.TrimSpace(req.SearchURL)
+		if searchURL == "" {
+			searchURL = "https://" + providerDomain + "/products.json"
+		}
+
+		candidates, runErr := runShopifyStorefrontSearch(r.Context(), providerHTTPClient(), searchURL, query, providerDomain)
+		if runErr != nil {
+			scannerSvc.RecordProviderHealth(r.Context(), providerScope, "failed", runErr.Error())
+			scannerSvc.RecordProviderHealth(r.Context(), providerID, "failed", runErr.Error())
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_run_shopify_storefront_mode",
+				"message": runErr.Error(),
+			})
+			return
+		}
+
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			shopifyCandidatesForScanner(candidates, providerDomain),
+			1,
+			pageSize,
+			pageSize,
+			"",
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_persist_shopify_candidates",
+				"message": err.Error(),
+			})
+			return
+		}
+		scannerSvc.RecordProviderHealth(r.Context(), providerScope, "ok", "Public Shopify storefront Market Watch run succeeded with persisted candidates.")
+		scannerSvc.RecordProviderHealth(r.Context(), providerID, "ok", "Public Shopify storefront Market Watch run succeeded with persisted candidates.")
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_shopify_candidates"}`, http.StatusBadRequest)
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id":      qs.ID,
+			"provider_domain":   providerDomain,
+			"provider_scope":    providerScope,
+			"auth_mode":         "storefront_public",
+			"data_depth_source": "shopify_products_json",
+			"capability_limits": []string{"public_catalogue_only", "no_login_cart_checkout_or_private_api"},
+			"candidate_count":   len(persisted),
+			"candidates":        persisted,
+			"run":               run,
+			"run_summary": map[string]any{
+				"auth_mode":           "storefront_public",
+				"data_depth_source":   "shopify_products_json",
+				"effective_page_size": pageSize,
+				"candidates_total":    run.Saved,
+			},
 		})
 	})
 	mux.HandleFunc("/api/providers/hobbytech/run", func(w http.ResponseWriter, r *http.Request) {
@@ -2619,19 +3965,29 @@ func New(cfg config.Config) (*App, error) {
 		cfg, discoveryFallbackUsed, discoveryWarning, err := discoverHobbytechBoostConfig(
 			r.Context(),
 			conn,
-			http.DefaultClient,
+			providerHTTPClient(),
 			discoveryAssetURL,
 			req.FallbackDiscoveryAssetURLs,
 			searchURL,
 		)
-		if err != nil {
-			http.Error(w, `{"error":"failed_to_discover_hobbytech_config"}`, http.StatusBadRequest)
-			return
-		}
-		candidates, pageCount, runErr := runHobbytechSearch(r.Context(), http.DefaultClient, qs, cfg, itemsPerPage)
+		var candidates []map[string]any
+		var pageCount int
+		dataDepthSource := "boost_mybcapps_search"
+		var runErr error
 		driftRecovered := false
 		warning := discoveryWarning
-		if runErr != nil {
+		if err != nil {
+			candidates, pageCount, runErr = runHobbytechShopifySuggestSearch(r.Context(), providerHTTPClient(), baseURL, qs, itemsPerPage)
+			if runErr != nil {
+				http.Error(w, `{"error":"failed_to_discover_hobbytech_config"}`, http.StatusBadRequest)
+				return
+			}
+			dataDepthSource = "shopify_search_suggest_json"
+			warning = "hobbytech Boost discovery unavailable; used public Shopify search suggest fallback"
+		} else {
+			candidates, pageCount, runErr = runHobbytechSearch(r.Context(), providerHTTPClient(), qs, cfg, itemsPerPage)
+		}
+		if runErr != nil && dataDepthSource == "boost_mybcapps_search" {
 			recoveryAssetURL := discoveryAssetURL
 			recoveryFallbackAssets := req.FallbackDiscoveryAssetURLs
 			if len(req.FallbackDiscoveryAssetURLs) > 0 {
@@ -2641,13 +3997,13 @@ func New(cfg config.Config) (*App, error) {
 			recoveredCfg, fallbackUsed, fallbackWarning, fallbackErr := discoverHobbytechBoostConfig(
 				r.Context(),
 				conn,
-				http.DefaultClient,
+				providerHTTPClient(),
 				recoveryAssetURL,
 				recoveryFallbackAssets,
 				searchURL,
 			)
 			if fallbackErr == nil {
-				candidates, pageCount, runErr = runHobbytechSearch(r.Context(), http.DefaultClient, qs, recoveredCfg, itemsPerPage)
+				candidates, pageCount, runErr = runHobbytechSearch(r.Context(), providerHTTPClient(), qs, recoveredCfg, itemsPerPage)
 				if runErr == nil {
 					driftRecovered = true
 					if strings.TrimSpace(fallbackWarning) != "" {
@@ -2660,6 +4016,18 @@ func New(cfg config.Config) (*App, error) {
 				}
 			}
 		}
+		if runErr != nil && dataDepthSource == "boost_mybcapps_search" {
+			fallbackCandidates, fallbackPageCount, fallbackErr := runHobbytechShopifySuggestSearch(r.Context(), providerHTTPClient(), baseURL, qs, itemsPerPage)
+			if fallbackErr == nil {
+				candidates = fallbackCandidates
+				pageCount = fallbackPageCount
+				runErr = nil
+				dataDepthSource = "shopify_search_suggest_json"
+				if strings.TrimSpace(warning) == "" {
+					warning = "hobbytech Boost search unavailable; used public Shopify search suggest fallback"
+				}
+			}
+		}
 		if runErr != nil {
 			http.Error(w, `{"error":"failed_to_run_hobbytech_provider"}`, http.StatusBadRequest)
 			return
@@ -2667,13 +4035,38 @@ func New(cfg config.Config) (*App, error) {
 		if discoveryFallbackUsed && strings.TrimSpace(warning) == "" {
 			warning = "hobbytech discovery used cached config"
 		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			hobbytechCandidatesForScanner(candidates),
+			1,
+			itemsPerPage,
+			itemsPerPage,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_hobbytech_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_hobbytech_candidates"}`, http.StatusBadRequest)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id":     qs.ID,
 			"page_count":       pageCount,
-			"candidates":       candidates,
+			"candidates":       persisted,
 			"drift_recovered":  driftRecovered,
 			"warning":          warning,
 			"discovery_config": cfg,
+			"run":              run,
+			"run_summary": map[string]any{
+				"page_count":        pageCount,
+				"candidates_total":  run.Saved,
+				"data_depth_source": dataDepthSource,
+			},
 		})
 	})
 	mux.HandleFunc("/api/providers/au-webshops/parse-stock", func(w http.ResponseWriter, r *http.Request) {
@@ -2739,9 +4132,10 @@ func New(cfg config.Config) (*App, error) {
 		}
 		priceMax, _ := strconv.ParseFloat(r.URL.Query().Get("price_max"), 64)
 		items, err := discoverySvc.ListNotInCollection(r.Context(), discovery.Filter{
-			Query:    r.URL.Query().Get("q"),
-			PriceMax: priceMax,
-			DateFrom: r.URL.Query().Get("date_from"),
+			Query:           r.URL.Query().Get("q"),
+			PriceMax:        priceMax,
+			DateFrom:        r.URL.Query().Get("date_from"),
+			IncludeArchived: r.URL.Query().Get("include_archived") == "true",
 		})
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_not_in_collection"}`, http.StatusInternalServerError)
@@ -2760,11 +4154,16 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := discoverySvc.ApplyAction(r.Context(), req); err != nil {
-			http.Error(w, `{"error":"failed_to_apply_discovery_action"}`, http.StatusBadRequest)
+		result, err := discoverySvc.ApplyActionWithResult(r.Context(), req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "failed_to_apply_discovery_action",
+				"message": err.Error(),
+			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/settings/reset-ignore-rules", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2814,7 +4213,8 @@ func New(cfg config.Config) (*App, error) {
 		profileID := strings.TrimSpace(active.ID)
 		switch r.Method {
 		case http.MethodGet:
-			items, err := wishlistSvc.ListByProfile(r.Context(), profileID)
+			showDeleted := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("deleted")), "true")
+			items, err := wishlistSvc.ListByProfileDeleted(r.Context(), profileID, showDeleted)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_list_wishlist"}`, http.StatusInternalServerError)
 				return
@@ -2873,6 +4273,9 @@ func New(cfg config.Config) (*App, error) {
 					if _, ok := raw["owned"]; !ok {
 						req.Owned = existing.Owned
 					}
+					if _, ok := raw["delivered"]; !ok {
+						req.Delivered = existing.Delivered
+					}
 					if _, ok := raw["price_paid"]; !ok {
 						req.PricePaid = existing.PricePaid
 					}
@@ -2904,7 +4307,13 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"missing_id"}`, http.StatusBadRequest)
 				return
 			}
-			if err := wishlistSvc.DeleteForProfile(r.Context(), profileID, id); err != nil {
+			var err error
+			if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("permanent")), "true") {
+				err = wishlistSvc.PermanentDeleteForProfile(r.Context(), profileID, id)
+			} else {
+				err = wishlistSvc.DeleteForProfile(r.Context(), profileID, id)
+			}
+			if err != nil {
 				http.Error(w, `{"error":"failed_to_delete_wishlist"}`, http.StatusBadRequest)
 				return
 			}
@@ -2912,6 +4321,27 @@ func New(cfg config.Config) (*App, error) {
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
+	})
+	mux.HandleFunc("/api/wishlist/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, _ := profiles.GetActiveProfile(r.Context())
+		profileID := strings.TrimSpace(active.ID)
+		path := strings.TrimPrefix(r.URL.Path, "/api/wishlist/")
+		if !strings.HasSuffix(path, "/restore") || r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		id := strings.TrimSpace(strings.TrimSuffix(path, "/restore"))
+		id = strings.Trim(id, "/")
+		if id == "" {
+			http.Error(w, `{"error":"missing_id"}`, http.StatusBadRequest)
+			return
+		}
+		if err := wishlistSvc.RestoreForProfile(r.Context(), profileID, id); err != nil {
+			http.Error(w, `{"error":"failed_to_restore_wishlist"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 	mux.HandleFunc("/api/wishlist/hits", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2928,6 +4358,46 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"hits": hits})
+	})
+	mux.HandleFunc("/api/commerce/landed-cost/plan", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			costing.AllocationRequest
+			Consolidation struct {
+				ShipmentFeeCents      int64 `json:"shipment_fee_cents"`
+				DestinationLimitCents int64 `json:"destination_limit_cents"`
+				WarningBufferCents    int64 `json:"warning_buffer_cents"`
+			} `json:"consolidation"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		allocation, err := costing.AllocateLandedCosts(req.AllocationRequest)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_landed_cost_allocation"}`, http.StatusBadRequest)
+			return
+		}
+		plan, err := costing.PlanConsolidation(costing.ConsolidationRequest{
+			Items:                 allocation.Items,
+			ShipmentFeeCents:      req.Consolidation.ShipmentFeeCents,
+			DestinationLimitCents: req.Consolidation.DestinationLimitCents,
+			WarningBufferCents:    req.Consolidation.WarningBufferCents,
+		})
+		if err != nil {
+			http.Error(w, `{"error":"invalid_consolidation_plan"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":          "landed_cost_plan",
+			"mutable":       false,
+			"allocation":    allocation,
+			"consolidation": plan,
+		})
 	})
 	mux.HandleFunc("/api/commerce/lifecycle", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2962,6 +4432,33 @@ func New(cfg config.Config) (*App, error) {
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
+	})
+	mux.HandleFunc("/api/commerce/purchase-orders", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		page, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page")))
+		pageSize, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page_size")))
+		orders, err := commerceSvc.ListPurchaseOrdersByProfile(
+			r.Context(),
+			strings.TrimSpace(active.ID),
+			strings.TrimSpace(r.URL.Query().Get("status")),
+			strings.TrimSpace(r.URL.Query().Get("search")),
+			page,
+			pageSize,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_purchase_orders"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(orders)
 	})
 	mux.HandleFunc("/api/commerce/arrivals", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3009,6 +4506,265 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/forwarding/packages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			status := strings.TrimSpace(r.URL.Query().Get("status"))
+			packages, err := forwarderInbox.ListPackages(r.Context(), profileID, status)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_packages\"}", http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"packages": packages,
+				"summary":  map[string]int{"count": len(packages)},
+			})
+		case http.MethodPost:
+			var req forwarding.PackageImport
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+				return
+			}
+			pkg, err := forwarderInbox.UpsertPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"package": pkg,
+				"mode":    "forwarder_package_upsert",
+			})
+		default:
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/forwarding/package-links", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, "{\"error\":\"active_profile_not_set\"}", http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodGet:
+			packageID := strings.TrimSpace(r.URL.Query().Get("package_id"))
+			links, err := forwarderInbox.ListPackageLinks(r.Context(), profileID, packageID)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_package_links\"}", http.StatusInternalServerError)
+				return
+			}
+			events, err := forwarderInbox.ListPackageLinkEvents(r.Context(), profileID, packageID)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_package_link_events\"}", http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"links":   links,
+				"events":  events,
+				"summary": map[string]int{"count": len(links), "events": len(events)},
+			})
+		case http.MethodPost:
+			var req forwarding.PackageLinkRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+				return
+			}
+			req.ProfileID = profileID
+			link, err := forwarderInbox.LinkPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package_link",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"link": link,
+				"mode": "forwarder_package_reconciliation_link",
+			})
+		case http.MethodDelete:
+			var req forwarding.PackageUnlinkRequest
+			if r.Body != nil {
+				_ = json.NewDecoder(r.Body).Decode(&req)
+			}
+			req.ProfileID = profileID
+			if req.PackageID == "" {
+				req.PackageID = strings.TrimSpace(r.URL.Query().Get("package_id"))
+			}
+			event, err := forwarderInbox.UnlinkPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package_unlink",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"event": event,
+				"mode":  "forwarder_package_reconciliation_unlink",
+			})
+		default:
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/forwarding/package-match-suggestions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, "{\"error\":\"active_profile_not_set\"}", http.StatusBadRequest)
+			return
+		}
+		packageID := strings.TrimSpace(r.URL.Query().Get("package_id"))
+		confidenceLabel, err := forwarding.NormalizePackageMatchConfidenceFilter(r.URL.Query().Get("confidence_label"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   "invalid_confidence_label",
+				"message": err.Error(),
+			})
+			return
+		}
+		suggestions, err := forwarderInbox.SuggestPackageMatches(r.Context(), strings.TrimSpace(active.ID), packageID)
+		if err != nil {
+			http.Error(w, "{\"error\":\"failed_to_suggest_forwarder_package_matches\"}", http.StatusInternalServerError)
+			return
+		}
+		suggestions = forwarding.FilterPackageMatchSuggestionsByConfidence(suggestions, confidenceLabel)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":              "forwarder_package_match_suggestions",
+			"mutable":           false,
+			"confidence_filter": confidenceLabel,
+			"suggestions":       suggestions,
+			"summary":           forwarding.SummarizePackageMatchSuggestions(packageID, suggestions),
+		})
+	})
+	mux.HandleFunc("/api/forwarding/packages/import-csv", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Provider  string `json:"provider"`
+			CSV       string `json:"csv"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		imports, rowErrors, err := forwarding.ParsePackageCSV(req.ProfileID, req.Provider, strings.NewReader(req.CSV))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_csv",
+				"message": err.Error(),
+			})
+			return
+		}
+		imported := make([]forwarding.Package, 0, len(imports))
+		for _, item := range imports {
+			pkg, err := forwarderInbox.UpsertPackage(r.Context(), item)
+			if err != nil {
+				rowErrors = append(rowErrors, forwarding.PackageCSVRowError{Error: err.Error()})
+				continue
+			}
+			imported = append(imported, pkg)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":     "forwarder_package_csv_import",
+			"imported": imported,
+			"errors":   rowErrors,
+			"summary": map[string]int{
+				"imported": len(imported),
+				"errors":   len(rowErrors),
+			},
+		})
+	})
+	mux.HandleFunc("/api/forwarding/packages/import-email", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Provider  string `json:"provider"`
+			MessageID string `json:"message_id"`
+			Body      string `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		imported, err := forwarding.ParsePackageEmail(req.ProfileID, req.Provider, req.MessageID, strings.NewReader(req.Body))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_email",
+				"message": err.Error(),
+			})
+			return
+		}
+		pkg, err := forwarderInbox.UpsertPackage(r.Context(), imported)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_email",
+				"message": err.Error(),
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":    "forwarder_package_email_import",
+			"package": pkg,
+		})
+	})
+	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/reviews", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Cards []ebaypurchasecapture.PurchaseCard `json:"cards"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if len(req.Cards) == 0 {
+			req.Cards, err = companionSvc.PurchaseCards(r.Context(), strings.TrimSpace(active.ID))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_load_purchase_inbox"}`, http.StatusInternalServerError)
+				return
+			}
+		}
+		reviews := ebaypurchasecapture.BuildPurchaseInboxReviews(req.Cards)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id": strings.TrimSpace(active.ID),
+			"source":     "ebay_purchase_capture",
+			"reviews":    reviews,
+		})
+	})
 	itemOwnedByProfile := func(ctx context.Context, profileID, itemID string) bool {
 		profileID = strings.TrimSpace(profileID)
 		itemID = strings.TrimSpace(itemID)
@@ -3021,6 +4777,100 @@ func New(cfg config.Config) (*App, error) {
 		}
 		return count > 0
 	}
+	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/actions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		var req struct {
+			ActionID       string                           `json:"action_id"`
+			TargetKey      string                           `json:"target_key"`
+			Confirmed      bool                             `json:"confirmed"`
+			ExistingItemID string                           `json:"existing_item_id"`
+			Card           ebaypurchasecapture.PurchaseCard `json:"card"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		actionID := strings.TrimSpace(req.ActionID)
+		if !req.Confirmed {
+			http.Error(w, `{"error":"purchase_inbox_action_requires_confirmation"}`, http.StatusConflict)
+			return
+		}
+		if actionID != "link_existing_inventory_item" && actionID != "convert_to_inventory_item" {
+			http.Error(w, `{"error":"unsupported_purchase_inbox_action"}`, http.StatusBadRequest)
+			return
+		}
+		targetKey := ebaypurchasecapture.PurchaseItemKey(req.Card)
+		if targetKey == "" || strings.TrimSpace(req.TargetKey) != targetKey {
+			http.Error(w, `{"error":"purchase_inbox_target_mismatch"}`, http.StatusBadRequest)
+			return
+		}
+		itemReview := ebaypurchasecapture.BuildPurchaseInboxReviews([]ebaypurchasecapture.PurchaseCard{req.Card})
+		if len(itemReview) == 0 || len(itemReview[0].Items) == 0 || itemReview[0].Items[0].Status != "ready_to_link_or_convert" {
+			http.Error(w, `{"error":"purchase_inbox_item_not_ready"}`, http.StatusBadRequest)
+			return
+		}
+
+		switch actionID {
+		case "link_existing_inventory_item":
+			existingItemID := strings.TrimSpace(req.ExistingItemID)
+			if !itemOwnedByProfile(r.Context(), profileID, existingItemID) {
+				http.Error(w, `{"error":"purchase_inbox_existing_item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			existing, err := collectionRepo.GetItemByID(r.Context(), existingItemID)
+			if err != nil {
+				http.Error(w, `{"error":"purchase_inbox_existing_item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			existing.Notes = appendPurchaseInboxNote(existing.Notes, req.Card)
+			existing.SourceURLs = appendPurchaseInboxSourceURL(existing.SourceURLs, req.Card.ItemURL)
+			updated, err := collectionRepo.UpdateItem(r.Context(), existingItemID, existing)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_link_purchase_inbox_item"}`, http.StatusBadRequest)
+				return
+			}
+			if err := companionSvc.MarkPurchaseHandOff(r.Context(), profileID, targetKey, "linked", existingItemID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+				http.Error(w, `{"error":"failed_to_commit_purchase_inbox_handoff"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          true,
+				"action_id":   actionID,
+				"target_key":  targetKey,
+				"profile_id":  profileID,
+				"linked_item": updated,
+				"audit":       purchaseInboxActionAudit(req.Card, existingItemID),
+			})
+		case "convert_to_inventory_item":
+			created, err := collectionRepo.CreateItemForProfile(r.Context(), profileID, purchaseInboxCardToItem(req.Card))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_convert_purchase_inbox_item"}`, http.StatusBadRequest)
+				return
+			}
+			if err := companionSvc.MarkPurchaseHandOff(r.Context(), profileID, targetKey, "converted", created.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+				http.Error(w, `{"error":"failed_to_commit_purchase_inbox_handoff"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":           true,
+				"action_id":    actionID,
+				"target_key":   targetKey,
+				"profile_id":   profileID,
+				"created_item": created,
+				"audit":        purchaseInboxActionAudit(req.Card, created.ID),
+			})
+		}
+	})
 	mux.HandleFunc("/api/pricing/track", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -3254,7 +5104,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		sum, err := dashboardSvc.Summary(r.Context())
+		profileID := ""
+		if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil {
+			profileID = strings.TrimSpace(active.ID)
+		}
+		sum, err := dashboardSvc.Summary(r.Context(), profileID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_load_dashboard"}`, http.StatusInternalServerError)
 			return
@@ -3533,6 +5387,469 @@ func New(cfg config.Config) (*App, error) {
 			"draft_id":      strings.TrimSpace(req.DraftID),
 		})
 	})
+	mux.HandleFunc("/api/telegram/connection/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			BotToken  string `json:"bot_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := telegramConnector.TestConnection(r.Context(), strings.TrimSpace(req.ProfileID), req.BotToken)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, telegrambotconnector.ErrWebhookConflict) {
+				status = http.StatusConflict
+			}
+			w.WriteHeader(status)
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/connection/resolve-webhook", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := telegramConnector.ResolveWebhookConflict(r.Context(), strings.TrimSpace(req.ProfileID))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/pairing-codes", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		pairing, err := telegramConnector.CreatePairing(r.Context(), strings.TrimSpace(req.ProfileID))
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, telegrambotconnector.ErrWebhookConflict) {
+				status = http.StatusConflict
+			}
+			http.Error(w, `{"error":"telegram_pairing_unavailable"}`, status)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(pairing)
+	})
+	mux.HandleFunc("/api/telegram/connection/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		status, err := telegramConnector.Status(r.Context(), strings.TrimSpace(r.URL.Query().Get("profile_id")))
+		if err != nil {
+			http.Error(w, `{"error":"telegram_status_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(status)
+	})
+	mux.HandleFunc("/api/telegram/connection/pause", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Paused    bool   `json:"paused"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := telegramConnector.SetPaused(r.Context(), strings.TrimSpace(req.ProfileID), req.Paused); err != nil {
+			http.Error(w, `{"error":"telegram_pause_failed"}`, http.StatusBadRequest)
+			return
+		}
+		status, _ := telegramConnector.Status(r.Context(), strings.TrimSpace(req.ProfileID))
+		_ = json.NewEncoder(w).Encode(status)
+	})
+	mux.HandleFunc("/api/telegram/connection/disconnect", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := telegramConnector.Disconnect(r.Context(), strings.TrimSpace(req.ProfileID)); err != nil {
+			http.Error(w, `{"error":"telegram_disconnect_failed"}`, http.StatusBadRequest)
+			return
+		}
+		status, _ := telegramConnector.Status(r.Context(), strings.TrimSpace(req.ProfileID))
+		_ = json.NewEncoder(w).Encode(status)
+	})
+
+	mux.HandleFunc("/api/telegram/catalog-captures", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramCatalogCaptureRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		media, err := telegramCatalogCaptureMedia(req.Media)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_telegram_media"}`, http.StatusBadRequest)
+			return
+		}
+		svc := telegramcapture.NewServiceWithMedia(profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}, chatSvc, mediaService)
+		result, err := svc.IngestCatalogCapture(r.Context(), telegramcapture.CaptureInput{
+			SenderID:       req.SenderID,
+			ChatID:         req.ChatID,
+			MessageID:      req.MessageID,
+			Text:           req.Text,
+			Barcode:        req.Barcode,
+			GroupingHint:   req.GroupingHint,
+			SourceMetadata: req.SourceMetadata,
+			Draft: telegramcapture.Draft{
+				PartNumber:       req.Draft.PartNumber,
+				Title:            req.Draft.Title,
+				Brand:            req.Draft.Brand,
+				Category:         req.Draft.Category,
+				LookupSource:     req.Draft.LookupSource,
+				LookupURL:        req.Draft.LookupURL,
+				LookupConfidence: req.Draft.LookupConfidence,
+			},
+			Media: media,
+		})
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			var followUp telegramcapture.DraftNeedsFollowUpError
+			if errors.As(err, &followUp) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_capture_needs_follow_up",
+					"reason":         followUp.Reason,
+					"missing_fields": followUp.MissingFields,
+					"telegram_reply": followUp.Reply,
+				})
+				return
+			}
+			http.Error(w, `{"error":"failed_to_ingest_telegram_capture"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/webhook/catalog-captures", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
+		var update telegramcapture.WebhookUpdate
+		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		input, err := telegramcapture.CaptureInputFromWebhookUpdate(update, telegramcapture.Draft{})
+		if err != nil {
+			http.Error(w, `{"error":"invalid_telegram_webhook_update"}`, http.StatusBadRequest)
+			return
+		}
+		authorizer := telegramConnectorAuthorizer(r.Context(), profiles)
+		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), input.SenderID, input.ChatID)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		if draft, ok, err := telegramCatalogCaptureLocalBarcodeDraft(r.Context(), conn, authorized.ProfileID, input.Barcode); err != nil {
+			http.Error(w, `{"error":"failed_to_lookup_telegram_barcode"}`, http.StatusBadRequest)
+			return
+		} else if ok {
+			input.Draft = draft
+		}
+		svc := telegramcapture.NewServiceWithMedia(authorizer, chatSvc, mediaService)
+		result, err := svc.IngestCatalogCapture(r.Context(), input)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			var followUp telegramcapture.DraftNeedsFollowUpError
+			if errors.As(err, &followUp) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_capture_needs_follow_up",
+					"reason":         followUp.Reason,
+					"missing_fields": followUp.MissingFields,
+					"telegram_reply": followUp.Reply,
+				})
+				return
+			}
+			http.Error(w, `{"error":"failed_to_ingest_telegram_capture"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/agent-text", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
+		var req telegramAgentTextRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		authorizer := telegramConnectorAuthorizer(r.Context(), profiles)
+		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				if profileID := strings.TrimSpace(req.ProfileID); profileID != "" {
+					if inboxErr := recordProviderWorkflowFailure(r.Context(), chatSvc, profileID, "telegram", "Telegram", "telegram.agent_text", "authorize_sender_chat", "Telegram Agent text needs an authorized sender/chat before Cabinet can route the message.", map[string]any{
+						"source_channel":    "telegram",
+						"source_surface":    "telegram.agent.text",
+						"source_message_id": req.MessageID,
+						"sender_known":      false,
+					}); inboxErr != nil {
+						logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.agent_text", "error": inboxErr.Error()})
+					}
+				}
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		req.ProfileID = strings.TrimSpace(authorized.ProfileID)
+		result, err := telegramAgentConversation.HandleText(r.Context(), req.ProfileID, req)
+		if err != nil {
+			if errors.Is(err, errTelegramAgentTextNeedsClarification) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_agent_text_needs_clarification",
+					"telegram_reply": telegramAgentClarificationReply(),
+				})
+				return
+			}
+			if errors.Is(err, errTelegramPrivateChatRequired) || errors.Is(err, errTelegramProfileMismatch) || errors.Is(err, errTelegramLegacyGrammar) {
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": "telegram_agent_request_rejected"})
+				return
+			}
+			http.Error(w, `{"error":"failed_to_route_telegram_agent_text"}`, http.StatusBadRequest)
+			return
+		}
+		if resolveErr := chatSvc.ResolveProviderWorkflowInboxEvents(r.Context(), authorized.ProfileID, "telegram", "telegram.agent_text", "agent_text_authorized", map[string]any{
+			"source_channel":      "telegram",
+			"source_surface":      "telegram.agent.text",
+			"source_message_id":   req.MessageID,
+			"sender_authorized":   true,
+			"workflow_result":     "routed",
+			"resolved_by_message": req.MessageID,
+		}); resolveErr != nil {
+			logSvc.Log(r.Context(), "error", "provider_workflow_inbox_event_resolve_failed", map[string]any{"provider": "telegram", "workflow_action_id": "telegram.agent_text", "error": resolveErr.Error()})
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/agent-text-callbacks", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
+		var req telegramAgentTextCallbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		authorizer := telegramConnectorAuthorizer(r.Context(), profiles)
+		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := telegramAgentConversation.HandleCallback(r.Context(), authorized.ProfileID, req)
+		if err != nil {
+			status := http.StatusConflict
+			if errors.Is(err, errTelegramPrivateChatRequired) || errors.Is(err, errTelegramPreviewScope) || errors.Is(err, errTelegramLegacyGrammar) {
+				status = http.StatusForbidden
+			}
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "telegram_agent_callback_rejected"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/catalog-capture-callbacks", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !telegrambotconnector.IsInProcessRequest(r.Context()) {
+			http.Error(w, `{"error":"telegram_connector_only"}`, http.StatusForbidden)
+			return
+		}
+		var req telegramCatalogCaptureCallbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		svc := telegramcapture.NewServiceWithMedia(telegramConnectorAuthorizer(r.Context(), profiles), chatSvc, mediaService)
+		result, err := svc.HandleCatalogCaptureCallback(r.Context(), telegramcapture.CallbackInput{
+			SenderID:     req.SenderID,
+			ChatID:       req.ChatID,
+			CallbackData: req.CallbackData,
+		})
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_handle_telegram_capture_callback"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/external-intake-proofs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramExternalIntakeProofRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if missing := missingTelegramExternalIntakeProofFields(req); len(missing) > 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "invalid_external_intake_proof",
+				"missing_fields": missing,
+				"next_action":    "provide_authorized_runtime_source_and_non_secret_openai_provider_evidence",
+			})
+			return
+		}
+		authorizer := profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}
+		if _, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID); err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		thread, err := chatSvc.GetThread(r.Context(), req.ProfileID, req.SourceThreadID)
+		if err != nil {
+			http.Error(w, `{"error":"source_thread_not_found"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := chatSvc.GetActionPreview(r.Context(), req.ProfileID, req.PreviewID)
+		if err != nil || preview.ThreadID != thread.ID {
+			http.Error(w, `{"error":"preview_not_found_for_source_thread"}`, http.StatusBadRequest)
+			return
+		}
+		run, err := chatSvc.CreateWorkflowRun(r.Context(), chat.CreateWorkflowRunInput{
+			ProfileID:         req.ProfileID,
+			WorkflowID:        "telegram-openai-external-intake-proof",
+			CapabilityID:      strings.TrimSpace(req.CapabilityID),
+			SourceChannel:     "telegram",
+			SourceThreadID:    thread.ID,
+			SourceMessageID:   strings.TrimSpace(req.SourceMessageID),
+			ConfirmationState: req.ConfirmationState,
+			Input: map[string]any{
+				"sender_id":    strings.TrimSpace(req.SenderID),
+				"chat_id":      strings.TrimSpace(req.ChatID),
+				"preview_id":   strings.TrimSpace(req.PreviewID),
+				"proof_source": "approved_runtime_packet",
+			},
+			ProviderTrace: nonSecretProviderTrace(req.ProviderTrace),
+		})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_create_external_intake_proof"}`, http.StatusBadRequest)
+			return
+		}
+		run, err = chatSvc.UpdateWorkflowRun(r.Context(), chat.UpdateWorkflowRunInput{
+			ProfileID:         req.ProfileID,
+			RunID:             run.ID,
+			Status:            "completed",
+			ConfirmationState: req.ConfirmationState,
+			ProviderTrace:     run.ProviderTrace,
+			Result: map[string]any{
+				"proof_packet":       "authorized_telegram_openai_external_intake",
+				"preview_id":         strings.TrimSpace(req.PreviewID),
+				"thread_id":          thread.ID,
+				"source_message_id":  strings.TrimSpace(req.SourceMessageID),
+				"confirmation_state": strings.TrimSpace(req.ConfirmationState),
+			},
+		})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_complete_external_intake_proof"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":           true,
+			"workflow_run": run,
+		})
+	})
 	mux.HandleFunc("/api/chat/threads", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -3569,6 +5886,595 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/chat/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		route := strings.TrimSpace(r.URL.Query().Get("route"))
+		if route == "" {
+			route = "/"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id":       profileID,
+			"route":            route,
+			"capabilities":     assistantCapabilityRegistry(),
+			"guided_workflows": chat.GuidedWorkflowRegistry(),
+			"policy":           "preview-before-apply",
+			"confirm_apply":    true,
+		})
+	})
+	mux.HandleFunc("/api/agent/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		policy, err := profiles.GetAgentAuthorityPolicy(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentSkillRegistry(profileID)
+		_ = json.NewEncoder(w).Encode(buildAgentCapabilityExplanation(profileID, registry, policy))
+	})
+	mux.HandleFunc("/api/agent/skills", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentSkillRegistry(profileID)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id": profileID,
+			"skills":     registry.List(),
+		})
+	})
+	mux.HandleFunc("/api/agent/skills/import", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID  string `json:"profile_id"`
+			SourceType string `json:"source_type"`
+			Path       string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(req.ProfileID)
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		sourceType := strings.ToLower(strings.TrimSpace(req.SourceType))
+		sourcePath := strings.TrimSpace(req.Path)
+		if sourcePath == "" {
+			http.Error(w, `{"error":"path_required"}`, http.StatusBadRequest)
+			return
+		}
+		if sourceType == "" {
+			if strings.HasSuffix(strings.ToLower(sourcePath), ".cabinet-skill.zip") || strings.HasSuffix(strings.ToLower(sourcePath), ".zip") {
+				sourceType = "zip"
+			} else {
+				sourceType = "folder"
+			}
+		}
+		importer := agentskills.SkillImporter{
+			Registry: agentSkillRegistry(profileID),
+			Store:    agentSkillStore,
+		}
+		var result agentskills.SkillImportResult
+		switch sourceType {
+		case "folder", "directory":
+			result = importer.ImportSkillFolder(profileID, sourcePath, agentskills.ArchiveValidationOptions{})
+		case "zip", "archive":
+			result = importer.ImportSkillZipArchive(profileID, sourcePath, agentskills.ArchiveValidationOptions{})
+		default:
+			http.Error(w, `{"error":"unsupported_source_type"}`, http.StatusBadRequest)
+			return
+		}
+		if result.State == agentskills.ImportInstalledDisabled || result.State == agentskills.ImportInstalledEnabled {
+			agentSkillMu.Lock()
+			replaced := false
+			for i, skill := range agentImportedSkills {
+				if skill.ID == result.Skill.ID {
+					agentImportedSkills[i] = result.Skill
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				agentImportedSkills = append(agentImportedSkills, result.Skill)
+			}
+			if err := persistAgentSkillState(r.Context(), conn, agentImportedSkills, agentSkillStore.ListAll()); err != nil {
+				agentSkillMu.Unlock()
+				http.Error(w, `{"error":"failed_to_persist_imported_skill"}`, http.StatusInternalServerError)
+				return
+			}
+			agentSkillMu.Unlock()
+			_ = json.NewEncoder(w).Encode(result)
+			return
+		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/agent/skills/state", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			SkillID   string `json:"skill_id"`
+			Enabled   bool   `json:"enabled"`
+			Confirm   bool   `json:"confirm"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(req.ProfileID)
+		skillID := strings.TrimSpace(req.SkillID)
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		if skillID == "" {
+			http.Error(w, `{"error":"skill_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		registry := agentSkillRegistry(profileID)
+		skill, ok := registry.Resolve(skillID)
+		if !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if skill.BuiltIn || skill.Source == agentskills.SourceBuiltIn {
+			http.Error(w, `{"error":"built_in_skill_state_locked"}`, http.StatusConflict)
+			return
+		}
+		if req.Enabled && (skill.SafetyLevel == agentskills.SafetyExternalWrite || skill.SafetyLevel == agentskills.SafetyDestructive) && !req.Confirm {
+			http.Error(w, `{"error":"strong_confirmation_required"}`, http.StatusConflict)
+			return
+		}
+		state, err := agentSkillStore.SetEnabled(profileID, skillID, req.Enabled)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_update_skill_state"}`, http.StatusInternalServerError)
+			return
+		}
+		agentSkillMu.Lock()
+		if err := persistAgentSkillState(r.Context(), conn, agentImportedSkills, agentSkillStore.ListAll()); err != nil {
+			agentSkillMu.Unlock()
+			http.Error(w, `{"error":"failed_to_persist_skill_state"}`, http.StatusInternalServerError)
+			return
+		}
+		agentSkillMu.Unlock()
+		registry = agentSkillRegistry(profileID)
+		updatedSkill, _ := registry.Resolve(skillID)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id": profileID,
+			"state":      state,
+			"skill":      updatedSkill,
+		})
+	})
+	mux.HandleFunc("/api/agent/skills/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			previewID := strings.TrimSpace(r.URL.Query().Get("preview_id"))
+			if profileID == "" || previewID == "" {
+				http.Error(w, `{"error":"profile_id_and_preview_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, profileID, previewID)
+			if err != nil {
+				var authorityErr *agentAdminAuthorityError
+				if errors.As(err, &authorityErr) {
+					writeAgentAdminAuthorityError(w, err)
+				} else {
+					writeAgentSkillPreviewLifecycleError(w, err)
+				}
+				return
+			}
+			if adminAuthority.UserID != "" {
+				r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+			}
+			preview, err := readDurableAgentSkillPreviewResponse(r.Context(), conn, agentSkillRegistry(profileID), profileID, previewID)
+			if err != nil {
+				writeAgentSkillPreviewLifecycleError(w, err)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req = normalizeAgentSkillContextRequest(req)
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		var adminAuthority agentAdminAuthority
+		var err error
+		req, adminAuthority, err = authorizeAgentUsersRequest(r.Context(), conn, req)
+		if err != nil {
+			writeAgentAdminAuthorityError(w, err)
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+		}
+		registry := agentSkillRegistry(req.ProfileID)
+		if _, ok := registry.Resolve(req.SkillID); !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		if clarification, ok := agentSkillInboxNotificationContextClarification(r.Context(), conn, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.PreviewAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
+		preview, err := registry.Preview(req)
+		if err != nil {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if preview.ConfirmationRequired && (preview.Blocker == "" || preview.Blocker == "confirmation_required") {
+			durablePreview, err := createDurableAgentSkillPreview(r.Context(), conn, req, preview)
+			if err != nil {
+				writeAgentSkillPreviewLifecycleError(w, err)
+				return
+			}
+			preview = bindDurableAgentSkillPreviewResponse(preview, durablePreview)
+		}
+		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-preview", req, authority, preview, preview.Target); err != nil {
+			http.Error(w, `{"error":"agent_skill_workflow_timeline_failed"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
+	mux.HandleFunc("/api/agent/skills/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req = normalizeAgentSkillContextRequest(req)
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.PreviewID) != "" {
+			adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, req.ProfileID, req.PreviewID)
+			if err != nil {
+				var authorityErr *agentAdminAuthorityError
+				if errors.As(err, &authorityErr) {
+					writeAgentAdminAuthorityError(w, err)
+				} else {
+					writeAgentSkillPreviewLifecycleError(w, err)
+				}
+				return
+			}
+			if adminAuthority.UserID != "" {
+				r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+			}
+			preview, err := applyDurableAgentSkillPreview(r.Context(), conn, chatSvc, profiles, backupSvc, agentSkillRegistry(req.ProfileID), req)
+			if err != nil {
+				writeAgentSkillPreviewLifecycleError(w, err)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
+		var adminAuthority agentAdminAuthority
+		var err error
+		req, adminAuthority, err = authorizeAgentUsersRequest(r.Context(), conn, req)
+		if err != nil {
+			writeAgentAdminAuthorityError(w, err)
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+		}
+		registry := agentSkillRegistry(req.ProfileID)
+		skill, ok := registry.Resolve(req.SkillID)
+		if !ok {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if skill.SafetyLevel == agentskills.SafetyDestructive || skill.Permissions.Destructive {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":       "agent_destructive_preview_required",
+				"recoverable": true,
+				"next_action": "Create a durable preview, review its target and impact, then use the dedicated strong-confirmation control.",
+			})
+			return
+		}
+		if clarification, ok := agentSkillContextClarification(registry, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		if clarification, ok := agentSkillInboxNotificationContextClarification(r.Context(), conn, req); ok {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(clarification)
+			return
+		}
+		authority, err := reviewAgentSkillAuthority(r.Context(), profiles, registry, req, "direct-api")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.ApplyAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
+		preview, err := registry.Preview(req)
+		if err != nil {
+			http.Error(w, `{"error":"skill_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if preview.ConfirmationRequired && !req.Confirm {
+			preview.Allowed = false
+			preview.Blocker = "confirmation_required"
+			http.Error(w, `{"error":"confirmation_required"}`, http.StatusConflict)
+			return
+		}
+		result, blocker, err := applyAgentSkill(r.Context(), conn, chatSvc, req.SkillID, req.ProfileID, req.Parameters)
+		if err != nil {
+			preview.Allowed = false
+			preview.Blocker = blocker
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
+		if err := appendAgentAuthorityDecisionAudit(r.Context(), profiles, authority, agentSkillAuthorityRequest(req), "applied"); err != nil {
+			http.Error(w, `{"error":"agent_authority_audit_failed"}`, http.StatusInternalServerError)
+			return
+		}
+		preview.Allowed = true
+		preview.PreviewOnly = false
+		preview.MutationApplied = preview.ConfirmationRequired
+		preview.Blocker = ""
+		preview.NextAction = ""
+		preview.Target = result
+		if _, err := recordDirectAgentSkillWorkflowRun(r.Context(), chatSvc, "agent-skill-direct-apply", req, authority, preview, result); err != nil {
+			http.Error(w, `{"error":"agent_skill_workflow_timeline_failed"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
+	mux.HandleFunc("/api/agent/skills/confirm-destructive", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.PreviewID) == "" {
+			http.Error(w, `{"error":"preview_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, req.ProfileID, req.PreviewID)
+		if err != nil {
+			var authorityErr *agentAdminAuthorityError
+			if errors.As(err, &authorityErr) {
+				writeAgentAdminAuthorityError(w, err)
+			} else {
+				writeAgentSkillPreviewLifecycleError(w, err)
+			}
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+		}
+		confirmation, err := issueAgentStrongConfirmation(r.Context(), conn, profiles, backupSvc, agentSkillRegistry(req.ProfileID), req)
+		if err != nil {
+			writeAgentSkillPreviewLifecycleError(w, err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(confirmation)
+	})
+	mux.HandleFunc("/api/agent/skills/cancel", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req agentskills.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.PreviewID) == "" {
+			http.Error(w, `{"error":"preview_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		adminAuthority, err := authorizeDurableAgentUsersPreview(r.Context(), conn, req.ProfileID, req.PreviewID)
+		if err != nil {
+			var authorityErr *agentAdminAuthorityError
+			if errors.As(err, &authorityErr) {
+				writeAgentAdminAuthorityError(w, err)
+			} else {
+				writeAgentSkillPreviewLifecycleError(w, err)
+			}
+			return
+		}
+		if adminAuthority.UserID != "" {
+			r = r.WithContext(withAgentAdminAuthority(r.Context(), adminAuthority))
+		}
+		preview, err := cancelDurableAgentSkillPreviewResponse(r.Context(), conn, chatSvc, agentSkillRegistry(req.ProfileID), req)
+		if err != nil {
+			writeAgentSkillPreviewLifecycleError(w, err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
+	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			runs, err := chatSvc.ListWorkflowRuns(r.Context(), profileID, strings.TrimSpace(r.URL.Query().Get("thread_id")))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_workflow_runs"}`, http.StatusBadRequest)
+				return
+			}
+			runs = filterUnauthorizedAgentAdminWorkflowRuns(r.Context(), conn, profileID, runs)
+			_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs})
+		case http.MethodPost:
+			var req chat.CreateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if workflowRunInputRequiresAgentAdminAuthority(req) {
+				authority, err := resolveAgentAdminAuthority(r.Context(), conn, req.ProfileID)
+				if err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+				req = sanitizeAgentAdminWorkflowInput(req, authority)
+			}
+			run, err := chatSvc.CreateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(run)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/workflow-runs/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		runID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/chat/workflow-runs/"))
+		if runID == "" {
+			http.Error(w, `{"error":"run_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			run, err := chatSvc.GetWorkflowRun(r.Context(), profileID, runID)
+			if err != nil {
+				http.Error(w, `{"error":"workflow_run_not_found"}`, http.StatusNotFound)
+				return
+			}
+			if workflowRunRequiresAgentAdminAuthority(run) {
+				if _, err := resolveAgentAdminAuthority(r.Context(), conn, profileID); err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+			}
+			_ = json.NewEncoder(w).Encode(run)
+		case http.MethodPatch:
+			var req chat.UpdateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			req.RunID = runID
+			currentRun, err := chatSvc.GetWorkflowRun(r.Context(), req.ProfileID, runID)
+			if err != nil {
+				http.Error(w, `{"error":"workflow_run_not_found"}`, http.StatusNotFound)
+				return
+			}
+			if workflowRunRequiresAgentAdminAuthority(currentRun) || workflowRunUpdateRequiresAgentAdminAuthority(req) {
+				authority, err := resolveAgentAdminAuthority(r.Context(), conn, req.ProfileID)
+				if err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+				req = sanitizeAgentAdminWorkflowUpdate(req, authority)
+			}
+			run, err := chatSvc.UpdateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_update_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(run)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/api/chat/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -3584,49 +6490,110 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_list_chat_messages"}`, http.StatusInternalServerError)
 				return
 			}
+			messages = filterUnauthorizedAgentAdminMessages(r.Context(), conn, profileID, messages)
 			_ = json.NewEncoder(w).Encode(map[string]any{"messages": messages})
 		case http.MethodPost:
 			var req struct {
-				ProfileID string         `json:"profile_id"`
-				ThreadID  string         `json:"thread_id"`
-				Role      string         `json:"role"`
-				Content   string         `json:"content"`
-				Context   map[string]any `json:"context"`
+				ProfileID     string         `json:"profile_id"`
+				ThreadID      string         `json:"thread_id"`
+				Role          string         `json:"role"`
+				Content       string         `json:"content"`
+				Context       map[string]any `json:"context"`
+				AgentContext  map[string]any `json:"agent_context"`
+				AttachmentIDs []string       `json:"attachment_ids"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			message, err := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, req.Context)
+			if strings.TrimSpace(strings.ToLower(req.Role)) != "user" {
+				http.Error(w, `{"error":"public_chat_messages_require_user_role"}`, http.StatusForbidden)
+				return
+			}
+			if key, found := publicChatTrustedEvidenceKey(req.Context); found {
+				http.Error(w, fmt.Sprintf(`{"error":"trusted_agent_evidence_rejected","key":%q}`, key), http.StatusBadRequest)
+				return
+			}
+			if key, found := publicChatTrustedEvidenceKey(req.AgentContext); found {
+				http.Error(w, fmt.Sprintf(`{"error":"trusted_agent_evidence_rejected","key":%q}`, key), http.StatusBadRequest)
+				return
+			}
+			if messageContainsAgentUsersEvidence(req.Context) || messageContainsAgentUsersEvidence(req.AgentContext) {
+				if _, err := resolveAgentAdminAuthority(r.Context(), conn, req.ProfileID); err != nil {
+					writeAgentAdminAuthorityError(w, err)
+					return
+				}
+				req.Context = withoutClientAssertedAdminAuthority(req.Context)
+				req.AgentContext = withoutClientAssertedAdminAuthority(req.AgentContext)
+			}
+			messageContext := agentcontext.WithEnvelope(req.Context, agentcontext.NormalizeInput{
+				ProfileID:     req.ProfileID,
+				ThreadID:      req.ThreadID,
+				IntentText:    req.Content,
+				Context:       req.Context,
+				AgentContext:  req.AgentContext,
+				AttachmentIDs: req.AttachmentIDs,
+			})
+			message, err := chatSvc.CreateMessageWithAttachments(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, messageContext, req.AttachmentIDs)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_chat_message"}`, http.StatusBadRequest)
 				return
 			}
 			response := map[string]any{"message": message}
 			if strings.EqualFold(strings.TrimSpace(req.Role), "user") {
-				if assistantContext, ok := req.Context["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
-					inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
-						ProfileID: req.ProfileID,
-						ThreadID:  req.ThreadID,
-						Source:    "assistant_handoff",
-						Status:    "queued",
-						Title:     "Assistant handoff queued",
-						Summary:   strings.TrimSpace(req.Content),
-						Metadata: map[string]any{
-							"assistant": assistantContext,
-							"route":     req.Context["route"],
-							"selection": req.Context["selection"],
-						},
-					})
-					if inboxErr == nil {
-						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", "Assistant handoff queued in Inbox.", map[string]any{
-							"assistant_handoff": map[string]any{
-								"status":        "queued",
-								"inbox_item_id": inboxItem.ID,
+				if assistantContext, ok := messageContext["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
+					if appControl, handled := dispatchChatMessageAppControl(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
+						response["app_control"] = appControl
+					} else if chatMessageRequiresAssistantHandoff(req.Content) &&
+						(!chatMessageNeedsNaturalLanguageAgentPlanning(req.Content) ||
+							chatMessageExplicitlyRequestsAsyncHandoff(req.Content)) {
+						inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
+							ProfileID: req.ProfileID,
+							ThreadID:  req.ThreadID,
+							Source:    "assistant_handoff",
+							Status:    "queued",
+							Title:     "Assistant handoff queued",
+							Summary:   strings.TrimSpace(req.Content),
+							Metadata: map[string]any{
+								"assistant":     assistantContext,
+								"route":         messageContext["route"],
+								"selection":     messageContext["selection"],
+								"agent_context": messageContext["agent_context"],
+							},
+						})
+						if inboxErr == nil {
+							assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", "Assistant handoff queued in Inbox.", map[string]any{
+								"assistant_handoff": map[string]any{
+									"status":        "queued",
+									"inbox_item_id": inboxItem.ID,
+								},
+							})
+							if assistantErr == nil {
+								response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
+							}
+						}
+					} else if chatMessageRequestsAgentCapabilityExplanation(req.Content) {
+						policy, policyErr := profiles.GetAgentAuthorityPolicy(r.Context(), req.ProfileID)
+						if policyErr == nil {
+							explanation := buildAgentCapabilityExplanation(req.ProfileID, agentSkillRegistry(req.ProfileID), policy)
+							if agentCapabilities, handled := dispatchChatAgentCapabilityExplanation(r.Context(), chatSvc, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID, explanation); handled {
+								response["agent_capabilities"] = agentCapabilities
+							}
+						}
+					} else if agentPlanner, handled := dispatchChatAgentProviderPlanner(r.Context(), conn, chatSvc, assistantProviders, agentSkillRegistry(req.ProfileID), req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
+						response["agent_planner"] = agentPlanner
+					} else if assistantResponse, handled := dispatchChatDirectAssistantProvider(r.Context(), chatSvc, assistantProviders, req.ProfileID, req.ThreadID, req.Content, messageContext, message.ID); handled {
+						response["assistant_response"] = assistantResponse
+					} else {
+						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", directAssistantChatResponse(req.Content), map[string]any{
+							"assistant_response": map[string]any{
+								"mode":          "direct",
+								"source":        "deterministic_chat_fallback",
+								"source_msg_id": message.ID,
 							},
 						})
 						if assistantErr == nil {
-							response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
+							response["assistant_response"] = map[string]any{"mode": "direct", "thread_message": assistantMessage}
 						}
 					}
 				}
@@ -3639,6 +6606,29 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/chat/inbox", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			var req struct {
+				ProfileID string                          `json:"profile_id"`
+				Records   []chat.NotificationHistoryInput `json:"records"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			var items []chat.InboxItem
+			for _, record := range req.Records {
+				record.ProfileID = req.ProfileID
+				item, err := chatSvc.CreateNotificationHistoryItem(r.Context(), record)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_record_notification_history"}`, http.StatusBadRequest)
+					return
+				}
+				items = append(items, item)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+			return
+		}
 		if r.Method != http.MethodGet {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
@@ -3707,7 +6697,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		defer file.Close()
-		attachment, err := chatSvc.SaveAttachment(r.Context(), profileID, threadID, hdr.Filename, hdr.Header.Get("Content-Type"), file)
+		attachment, err := mediaService.SaveWorkspaceAttachment(r.Context(), profileID, threadID, hdr.Filename, hdr.Header.Get("Content-Type"), file)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_save_attachment"}`, http.StatusBadRequest)
 			return
@@ -3717,6 +6707,17 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/chat/actions/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			previewID := strings.TrimSpace(r.URL.Query().Get("preview_id"))
+			preview, err := chatSvc.GetActionPreview(r.Context(), profileID, previewID)
+			if err != nil {
+				http.Error(w, `{"error":"chat_action_preview_not_found"}`, http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(preview)
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
@@ -3726,9 +6727,23 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		authority, err := reviewChatActionAuthority(r.Context(), profiles, req, "chat")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.PreviewAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		preview, err := chatSvc.PreviewAction(r.Context(), req)
 		if err != nil {
-			http.Error(w, `{"error":"failed_to_preview_chat_action"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed_to_preview_chat_action", "detail": err.Error()})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(preview)
@@ -3744,9 +6759,49 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		if !req.Confirm {
+			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := chatSvc.GetActionPreview(r.Context(), req.ProfileID, req.PreviewID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		authority, err := reviewChatActionApplyAuthority(r.Context(), profiles, req, preview, "chat")
+		if err != nil {
+			http.Error(w, `{"error":"agent_authority_policy_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		if !authority.ApplyAllowed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":     authority.Blocker,
+				"authority": authority,
+			})
+			return
+		}
 		result, err := chatSvc.ApplyAction(r.Context(), req)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/chat/actions/cancel", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req chat.ApplyActionInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := chatSvc.CancelAction(r.Context(), req)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_cancel_chat_action"}`, http.StatusBadRequest)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(result)
@@ -3757,11 +6812,16 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		snap, err := dataService.ExportSnapshot(r.Context())
+		profileID := ""
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
+			profileID = active.ID
+		}
+		snap, err := dataService.ExportSnapshotForProfile(r.Context(), profileID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_export_snapshot"}`, http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Content-Disposition", `attachment; filename="cabinet-data-snapshot.json"`)
 		_ = json.NewEncoder(w).Encode(snap)
 	})
 	mux.HandleFunc("/api/data/export/csv/items", func(w http.ResponseWriter, r *http.Request) {
@@ -3769,12 +6829,17 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		csvText, err := dataService.ExportItemsCSV(r.Context())
+		profileID := ""
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
+			profileID = active.ID
+		}
+		csvText, err := dataService.ExportItemsCSVForProfile(r.Context(), profileID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_export_csv"}`, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", `attachment; filename="cabinet-items.csv"`)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(csvText))
 	})
@@ -3812,11 +6877,15 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := dataService.ApplyImport(r.Context(), req.Snapshot, req.Options); err != nil {
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil && req.Options.ProfileID == "" {
+			req.Options.ProfileID = active.ID
+		}
+		sum, err := dataService.ApplyImport(r.Context(), req.Snapshot, req.Options)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_import"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(sum)
 	})
 	mux.HandleFunc("/api/data/import/csv/dry-run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3860,11 +6929,15 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_parse_csv"}`, http.StatusBadRequest)
 			return
 		}
-		if err := dataService.ApplyImport(r.Context(), snap, req.Options); err != nil {
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil && req.Options.ProfileID == "" {
+			req.Options.ProfileID = active.ID
+		}
+		sum, err := dataService.ApplyImport(r.Context(), snap, req.Options)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_import"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(sum)
 	})
 	mux.HandleFunc("/api/data/reindex", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3872,11 +6945,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		if err := dataService.Reindex(r.Context()); err != nil {
+		result, err := dataService.Reindex(r.Context())
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_reindex"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/data/rebuild-thumbnails", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3895,6 +6969,255 @@ func New(cfg config.Config) (*App, error) {
 			"rebuilt_photos": rebuiltPhotos,
 		})
 	})
+	mux.HandleFunc("/api/media/assets", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			active, err := profiles.GetActiveProfile(r.Context())
+			if err != nil || strings.TrimSpace(active.ID) == "" {
+				http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+				return
+			}
+			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "multipart/form-data") {
+				http.Error(w, `{"error":"multipart_form_data_required"}`, http.StatusBadRequest)
+				return
+			}
+			if err := r.ParseMultipartForm(16 << 20); err != nil {
+				http.Error(w, `{"error":"invalid_multipart"}`, http.StatusBadRequest)
+				return
+			}
+			file, hdr, err := r.FormFile("file")
+			if err != nil {
+				http.Error(w, `{"error":"file_required"}`, http.StatusBadRequest)
+				return
+			}
+			defer file.Close()
+			mimeType := strings.TrimSpace(hdr.Header.Get("Content-Type"))
+			if !isSupportedMediaUpload(mimeType, hdr.Filename) {
+				http.Error(w, `{"error":"unsupported_media_type"}`, http.StatusUnsupportedMediaType)
+				return
+			}
+			if mimeType == "" || strings.EqualFold(mimeType, "application/octet-stream") {
+				mimeType = mediaUploadContentType(hdr.Filename)
+			}
+			threadID := ""
+			threads, err := chatSvc.ListThreads(r.Context(), active.ID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_media_upload_threads"}`, http.StatusBadRequest)
+				return
+			}
+			for _, thread := range threads {
+				if strings.EqualFold(strings.TrimSpace(thread.Title), "Media Uploads") {
+					threadID = thread.ID
+					break
+				}
+			}
+			if threadID == "" {
+				thread, err := chatSvc.CreateThread(r.Context(), active.ID, "Media Uploads", map[string]any{
+					"source": "media.workspace",
+				})
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_create_media_upload_thread"}`, http.StatusBadRequest)
+					return
+				}
+				threadID = thread.ID
+			}
+			attachment, err := mediaService.SaveWorkspaceAttachment(r.Context(), active.ID, threadID, hdr.Filename, mimeType, file)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_save_media_asset"}`, http.StatusBadRequest)
+				return
+			}
+			title := strings.TrimSpace(r.FormValue("title"))
+			source := strings.TrimSpace(r.FormValue("source"))
+			notes := strings.TrimSpace(r.FormValue("notes"))
+			if title == "" {
+				title = attachment.Filename
+			}
+			if _, err := chatSvc.CreateMessage(r.Context(), active.ID, threadID, "user", "Media asset added from Media workspace.", map[string]any{
+				"source":        "media.workspace",
+				"asset_id":      attachment.ID,
+				"title":         title,
+				"origin":        source,
+				"notes":         notes,
+				"filename":      attachment.Filename,
+				"mime_type":     attachment.MimeType,
+				"metadata_flow": "add-media-dialog",
+			}); err != nil {
+				http.Error(w, `{"error":"failed_to_save_media_metadata"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"asset_id":  attachment.ID,
+				"filename":  attachment.Filename,
+				"mime_type": attachment.MimeType,
+				"title":     title,
+				"source":    source,
+				"notes":     notes,
+			})
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		list, err := mediaService.ListWorkspaceAssets(r.Context(), active.ID, r.URL.Query().Get("filter"))
+		if err != nil {
+			http.Error(w, `{"error":"media_assets_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(list)
+	})
+	mux.HandleFunc("/api/media/assets/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPatch {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !strings.HasSuffix(r.URL.Path, "/metadata") {
+			http.Error(w, `{"error":"media_asset_route_not_found"}`, http.StatusNotFound)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		assetID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/media/assets/"), "/metadata")
+		assetID, err = url.PathUnescape(strings.Trim(assetID, "/"))
+		if err != nil || strings.TrimSpace(assetID) == "" {
+			http.Error(w, `{"error":"media_asset_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req media.WorkspaceAssetMetadataUpdate
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_media_metadata_update"}`, http.StatusBadRequest)
+			return
+		}
+		asset, err := mediaService.UpdateWorkspaceAssetMetadata(r.Context(), active.ID, assetID, req)
+		if err != nil {
+			http.Error(w, `{"error":"media_metadata_update_failed"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(asset)
+	})
+	mux.HandleFunc("/api/media/assignments/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			AssetID    string `json:"asset_id"`
+			TargetType string `json:"target_type"`
+			TargetID   string `json:"target_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_media_assignment_preview"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := mediaService.PreviewAssignment(r.Context(), active.ID, req.AssetID, req.TargetType, req.TargetID)
+		if err != nil {
+			http.Error(w, `{"error":"media_assignment_preview_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
+	mux.HandleFunc("/api/media/assignments", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			AssetID    string `json:"asset_id"`
+			TargetType string `json:"target_type"`
+			TargetID   string `json:"target_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_media_assignment"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := mediaService.ApplyAssignment(r.Context(), active.ID, req.AssetID, req.TargetType, req.TargetID)
+		if err != nil {
+			http.Error(w, `{"error":"media_assignment_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/media/downloads/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			AssetIDs []string `json:"asset_ids"`
+			Filter   string   `json:"filter"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_media_download_preview"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := mediaService.PreviewDownload(r.Context(), active.ID, req.AssetIDs, req.Filter)
+		if err != nil {
+			http.Error(w, `{"error":"media_download_preview_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
+	mux.HandleFunc("/api/media/downloads", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			AssetIDs []string `json:"asset_ids"`
+			Filter   string   `json:"filter"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"invalid_media_download"}`, http.StatusBadRequest)
+			return
+		}
+		bundle, err := mediaService.BuildDownload(r.Context(), active.ID, req.AssetIDs, req.Filter)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"media_download_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", bundle.ContentType)
+		w.Header().Set("Content-Disposition", contentDispositionAttachment(bundle.Filename))
+		w.Header().Set("X-Cabinet-Media-Asset-Count", strconv.Itoa(len(bundle.AssetIDs)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bundle.Bytes)
+	})
 	mux.HandleFunc("/api/data/repair", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -3906,7 +7229,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_repair_check"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"integrity_check": result})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/backup/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3914,12 +7237,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		path, err := backupSvc.CreateBackup(r.Context())
+		result, err := backupSvc.CreateBackup(r.Context())
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_create_backup"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"backup_path": path})
+		_ = json.NewEncoder(w).Encode(map[string]any{"backup": result})
 	})
 	mux.HandleFunc("/api/backup/list", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3934,6 +7257,26 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"backups": backups})
 	})
+	mux.HandleFunc("/api/backup/download", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		backupPath, err := backupSvc.ResolveBackupPath(r.URL.Query().Get("file_name"))
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"backup_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if strings.EqualFold(filepath.Ext(backupPath), ".zip") {
+			w.Header().Set("Content-Type", "application/zip")
+		} else {
+			w.Header().Set("Content-Type", "application/octet-stream")
+		}
+		w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(backupPath)+`"`)
+		http.ServeFile(w, r, backupPath)
+	})
 	mux.HandleFunc("/api/backup/restore", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -3941,17 +7284,23 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		var req struct {
-			BackupPath string `json:"backup_path"`
+			BackupPath     string `json:"backup_path"`
+			ConfirmRestore bool   `json:"confirm_restore"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := backupSvc.RestoreBackup(req.BackupPath); err != nil {
+		if !req.ConfirmRestore {
+			http.Error(w, `{"error":"restore_confirmation_required","recovery":"set confirm_restore to true after reviewing the selected backup"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := backupSvc.RestoreBackup(req.BackupPath)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_restore_backup"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"restore": result})
 	})
 	mux.HandleFunc("/api/items/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3973,6 +7322,14 @@ func New(cfg config.Config) (*App, error) {
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			settings := map[string]string{}
+			if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+				settings, _ = profiles.GetSettings(r.Context(), active.ID)
+			}
+			if validationErr := validateInventoryItemTaxonomy(req.Changes, nil, settings); validationErr != nil {
+				writeInventoryTaxonomyValidationError(w, validationErr)
 				return
 			}
 			result, err := collectionRepo.BulkEditItems(r.Context(), req.ItemIDs, req.Changes)
@@ -4048,6 +7405,15 @@ func New(cfg config.Config) (*App, error) {
 			var req collection.Item
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			settings := map[string]string{}
+			if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+				settings, _ = profiles.GetSettings(r.Context(), active.ID)
+			}
+			current, _ := collectionRepo.GetItemByID(r.Context(), itemID)
+			if validationErr := validateInventoryItemTaxonomy(req, &current, settings); validationErr != nil {
+				writeInventoryTaxonomyValidationError(w, validationErr)
 				return
 			}
 			updated, err := collectionRepo.UpdateItem(r.Context(), itemID, req)
@@ -4457,6 +7823,44 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "session_token": sessionToken})
 	})
+	mux.HandleFunc("/api/auth/local/session", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !localSessionBootstrapAllowed(cfg, zitadelAuth, r) {
+			http.Error(w, `{"error":"local_session_bootstrap_forbidden"}`, http.StatusForbidden)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(req.ProfileID) == "" || strings.TrimSpace(active.ID) != strings.TrimSpace(req.ProfileID) {
+			http.Error(w, `{"error":"local_session_profile_forbidden"}`, http.StatusForbidden)
+			return
+		}
+		registrationRequired, err := authService.RequiresRegistration(r.Context(), active.ID)
+		if err != nil {
+			http.Error(w, `{"error":"local_session_unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+		if !registrationRequired {
+			http.Error(w, `{"error":"passkey_authentication_required"}`, http.StatusConflict)
+			return
+		}
+		sessionToken, err := authService.CreateUnlockedSession(active.ID)
+		if err != nil {
+			http.Error(w, `{"error":"local_session_unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "session_token": sessionToken})
+	})
 	mux.HandleFunc("/api/auth/session/validate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4489,6 +7893,13 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		if strings.TrimSpace(req.SessionToken) == "" {
+			req.SessionToken = strings.TrimSpace(r.Header.Get("X-Cabinet-Session"))
+		}
+		if strings.TrimSpace(req.SessionToken) == "" {
+			http.Error(w, `{"error":"session_token_required"}`, http.StatusBadRequest)
+			return
+		}
 		authService.LockUnlockedSession(req.SessionToken)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
@@ -4496,6 +7907,9 @@ func New(cfg config.Config) (*App, error) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if rejectLegacyCloudBootstrapInZitadel(w, zitadelAuth) {
 			return
 		}
 		var req struct {
@@ -4506,7 +7920,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "zitadel" {
 			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
 			return
 		}
@@ -4528,24 +7942,23 @@ func New(cfg config.Config) (*App, error) {
 		if role == "" {
 			role = "member"
 		}
-		plan := strings.TrimSpace(strings.ToLower(claimAsString(claims, "plan")))
+		plan := normalizePlan(claimAsString(claims, "plan"))
 		entitlementSource := "billing"
-		if plan == "" {
-			plan = strings.TrimSpace(strings.ToLower(claimAsString(claims, "cabinet_plan")))
+		if plan == "free" && strings.TrimSpace(claimAsString(claims, "plan")) == "" {
+			plan = normalizePlan(claimAsString(claims, "cabinet_plan"))
 		}
 		if override, ok := cloudEntitlements.Get(userID); ok {
 			plan = override
 			entitlementSource = "override"
 		}
-		if plan == "" {
-			plan = "free"
+		if strings.TrimSpace(claimAsString(claims, "plan")) == "" && strings.TrimSpace(claimAsString(claims, "cabinet_plan")) == "" && entitlementSource == "billing" {
 			entitlementSource = "trial"
 		}
 		features := entitlementFeaturesFromPlan(plan)
 		_ = persistCloudPlan(r.Context(), conn, userID, plan)
 		_ = persistCloudSessionContext(r.Context(), conn, userID, email, role)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"provider":           "clerk",
+			"provider":           "zitadel",
 			"user_id":            userID,
 			"email":              email,
 			"role":               role,
@@ -4576,7 +7989,7 @@ func New(cfg config.Config) (*App, error) {
 			role = "member"
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"provider": "clerk",
+			"provider": "zitadel",
 			"user_id":  strings.TrimSpace(userID),
 			"email":    strings.TrimSpace(email),
 			"role":     strings.TrimSpace(strings.ToLower(role)),
@@ -4584,7 +7997,7 @@ func New(cfg config.Config) (*App, error) {
 			"features": entitlementFeaturesFromPlan(plan),
 		})
 	})
-	mux.HandleFunc("/api/auth/cloud/clerk/webhook", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/cloud/zitadel/webhook", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -4595,7 +8008,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_body"}`, http.StatusBadRequest)
 			return
 		}
-		secret := strings.TrimSpace(os.Getenv("CABINET_CLERK_WEBHOOK_SECRET"))
+		secret := strings.TrimSpace(os.Getenv("CABINET_ZITADEL_WEBHOOK_SECRET"))
 		if secret == "" {
 			secret = "dev-secret"
 		}
@@ -4609,7 +8022,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		userID, plan, err := clerkWebhookPlanTransition(payload)
+		userID, plan, err := zitadelWebhookPlanTransition(payload)
 		if err != nil {
 			http.Error(w, `{"error":"invalid_webhook_payload"}`, http.StatusBadRequest)
 			return
@@ -4637,7 +8050,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "zitadel" {
 			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
 			return
 		}
@@ -4737,12 +8150,42 @@ func New(cfg config.Config) (*App, error) {
 	})
 
 	protectedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requiresUnlockedSession(r) {
+		if isInitialSetupBootstrapRequest(cfg, r) {
+			initialSetupBootstrapMu.Lock()
+			if isInitialSetupBootstrapRequest(cfg, r) {
+				defer initialSetupBootstrapMu.Unlock()
+				mux.ServeHTTP(w, r)
+				return
+			}
+			initialSetupBootstrapMu.Unlock()
+		}
+		if requiresZitadelSession(zitadelAuth, r) {
+			remoteSession, err := zitadelAuth.validateZitadelRequestSession(r)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				http.Error(w, `{"error":"authentication_required"}`, http.StatusUnauthorized)
+				return
+			}
+			if requiresZitadelAdminRole(r) && !remoteSession.Identity.hasRole("cabinet.admin") {
+				w.Header().Set("Content-Type", "application/json")
+				http.Error(w, `{"error":"insufficient_role"}`, http.StatusForbidden)
+				return
+			}
+			r = attachZitadelServerSessionPrincipal(r, remoteSession)
+			mux.ServeHTTP(w, r)
+			return
+		}
+		r = attachLocalServerSessionPrincipal(r, authService)
+		if !requiresUnlockedSession(cfg, r) {
 			mux.ServeHTTP(w, r)
 			return
 		}
 		active, err := profiles.GetActiveProfile(r.Context())
 		if err != nil {
+			if strings.EqualFold(cfg.BindMode, "lan") {
+				writeAuthenticationRequired(w)
+				return
+			}
 			mux.ServeHTTP(w, r)
 			return
 		}
@@ -4752,12 +8195,21 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if registrationRequired {
+			if strings.EqualFold(cfg.BindMode, "lan") {
+				writeAuthenticationRequired(w)
+				return
+			}
 			mux.ServeHTTP(w, r)
 			return
 		}
 		token := sessionTokenFromRequest(r)
 		if token != "" {
-			if err := authService.ValidateUnlockedSession(token); err != nil {
+			boundProfileID, err := authService.ValidateUnlockedSessionProfile(token)
+			if err != nil || strings.TrimSpace(boundProfileID) != strings.TrimSpace(active.ID) {
+				if strings.EqualFold(cfg.BindMode, "lan") {
+					writeAuthenticationRequired(w)
+					return
+				}
 				http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
 				return
 			}
@@ -4766,6 +8218,10 @@ func New(cfg config.Config) (*App, error) {
 		}
 		if authService.HasUnlockedSession(active.ID) {
 			mux.ServeHTTP(w, r)
+			return
+		}
+		if strings.EqualFold(cfg.BindMode, "lan") {
+			writeAuthenticationRequired(w)
 			return
 		}
 		http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
@@ -4779,25 +8235,30 @@ func New(cfg config.Config) (*App, error) {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           runtimeLogs.wrapHandler(protectedMux),
+		Handler:           runtimeLogs.wrapHandler(requestBoundaryHandler(cfg, protectedMux)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ErrorLog:          log.New(runtimeLogs.errorWriter(), "", 0),
 	}
 
 	a := &App{
-		cfg:           cfg,
-		db:            conn,
-		srv:           srv,
-		backupSvc:     backupSvc,
-		authService:   authService,
-		openapiSpec:   openapiSpec,
-		runtimeLogs:   runtimeLogs,
-		runtimeStopCh: runtimeStopCh,
+		cfg:                     cfg,
+		db:                      conn,
+		srv:                     srv,
+		backupSvc:               backupSvc,
+		authService:             authService,
+		openapiSpec:             openapiSpec,
+		runtimeLogs:             runtimeLogs,
+		runtimeStopCh:           runtimeStopCh,
+		agentPreviewCleanupStop: make(chan struct{}),
+		agentPreviewCleanupDone: make(chan struct{}),
+		telegramConnector:       telegramConnector,
 		startupNotice: func(line string) {
 			log.Print(line)
 		},
 		startupIsTTY: isRuntimeTTY,
 	}
+	_ = cleanupExpiredDurableAgentSkillPreviews(context.Background(), conn, time.Now().UTC().Format(time.RFC3339Nano))
+	go runDurableAgentSkillPreviewCleanup(conn, a.agentPreviewCleanupStop, a.agentPreviewCleanupDone)
 
 	return a, nil
 }
@@ -4809,7 +8270,6 @@ type runtimeSetupRequest struct {
 	StorageDataDir       string `json:"storage_data_dir"`
 	PortableMode         bool   `json:"portable_mode"`
 	AuthMode             string `json:"auth_mode"`
-	ClerkPublishableKey  string `json:"clerk_publishable_key"`
 	RuntimePortMode      string `json:"runtime_port_mode"`
 	RuntimeFixedPort     int    `json:"runtime_fixed_port"`
 	FeatureChat          *bool  `json:"feature_chat"`
@@ -4858,13 +8318,31 @@ type runtimeSetupRuntimeConfig struct {
 }
 
 type runtimeSetupAuthConfig struct {
-	Mode  string                      `json:"mode"`
-	Clerk runtimeSetupClerkAuthConfig `json:"clerk"`
+	Mode    string                        `json:"mode"`
+	Zitadel runtimeSetupZitadelAuthConfig `json:"zitadel"`
 }
 
-type runtimeSetupClerkAuthConfig struct {
-	PublishableKey string `json:"publishableKey"`
-	Enabled        bool   `json:"enabled"`
+type runtimeSetupZitadelAuthConfig struct{}
+
+func (authConfig *runtimeSetupAuthConfig) UnmarshalJSON(data []byte) error {
+	type authAlias runtimeSetupAuthConfig
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for key := range raw {
+		switch key {
+		case "mode", "zitadel":
+		default:
+			return fmt.Errorf("auth.%s is not supported; expected auth.mode and auth.zitadel only", key)
+		}
+	}
+	var decoded authAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*authConfig = runtimeSetupAuthConfig(decoded)
+	return nil
 }
 
 type runtimeSetupBootstrapConfig struct {
@@ -5030,18 +8508,11 @@ func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidatio
 	if authMode == "" {
 		authMode = "local"
 	}
-	if authMode != "local" && authMode != "clerk" {
+	if authMode != "local" && authMode != "zitadel" {
 		return &runtimeSetupValidationError{
 			Code:    "SETUP_AUTH_MODE_INVALID",
-			Message: "Auth mode must be local or clerk.",
+			Message: "Auth mode must be local or zitadel.",
 			Field:   "auth_mode",
-		}
-	}
-	if authMode == "clerk" && strings.TrimSpace(req.ClerkPublishableKey) == "" {
-		return &runtimeSetupValidationError{
-			Code:    "SETUP_CLERK_PUBLISHABLE_KEY_REQUIRED",
-			Message: "Clerk publishable key is required.",
-			Field:   "clerk_publishable_key",
 		}
 	}
 	portMode := strings.TrimSpace(strings.ToLower(req.RuntimePortMode))
@@ -5142,11 +8613,8 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			ResolvedURL: fmt.Sprintf("http://%s:%d", host, port),
 		},
 		Auth: runtimeSetupAuthConfig{
-			Mode: authMode,
-			Clerk: runtimeSetupClerkAuthConfig{
-				PublishableKey: strings.TrimSpace(req.ClerkPublishableKey),
-				Enabled:        authMode == "clerk",
-			},
+			Mode:    authMode,
+			Zitadel: runtimeSetupZitadelAuthConfig{},
 		},
 		Bootstrap: runtimeSetupBootstrapConfig{
 			Workspace:       workspace,
@@ -5245,11 +8713,8 @@ func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {
 	if authMode == "" {
 		return fmt.Errorf("auth.mode is required")
 	}
-	if authMode != "local" && authMode != "clerk" {
-		return fmt.Errorf("auth.mode must be local or clerk")
-	}
-	if authMode == "clerk" && strings.TrimSpace(payload.Auth.Clerk.PublishableKey) == "" {
-		return fmt.Errorf("auth.clerk.publishableKey is required for clerk mode")
+	if authMode != "local" && authMode != "zitadel" {
+		return fmt.Errorf("auth.mode must be local or zitadel")
 	}
 	if strings.TrimSpace(payload.Meta.CreatedAt) == "" {
 		return fmt.Errorf("meta.createdAt is required")
@@ -5260,10 +8725,36 @@ func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {
 	return nil
 }
 
+func validateRuntimeSetupRawAuthSchema(raw []byte) error {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return nil
+	}
+	authRaw, ok := root["auth"]
+	if !ok {
+		return nil
+	}
+	var auth map[string]json.RawMessage
+	if err := json.Unmarshal(authRaw, &auth); err != nil {
+		return fmt.Errorf("auth must be an object")
+	}
+	for key := range auth {
+		switch key {
+		case "mode", "zitadel":
+		default:
+			return fmt.Errorf("auth.%s is not supported; expected auth.mode and auth.zitadel only", key)
+		}
+	}
+	return nil
+}
+
 func importRuntimeSetupConfigFromPath(cfg config.Config, sourcePath string) (runtimeSetupConfigFile, error) {
 	raw, err := os.ReadFile(strings.TrimSpace(sourcePath))
 	if err != nil {
 		return runtimeSetupConfigFile{}, fmt.Errorf("failed to read source config")
+	}
+	if err := validateRuntimeSetupRawAuthSchema(raw); err != nil {
+		return runtimeSetupConfigFile{}, fmt.Errorf("source config validation failed: %v", err)
 	}
 	var payload runtimeSetupConfigFile
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -5334,9 +8825,15 @@ func loadOpenAPISpec(cfg config.Config) []byte {
 	return nil
 }
 
-func requiresUnlockedSession(r *http.Request) bool {
+func requiresUnlockedSession(cfg config.Config, r *http.Request) bool {
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
 		return false
+	}
+	if cfg.EnableE2EHooks {
+		return false
+	}
+	if strings.EqualFold(cfg.BindMode, "lan") {
+		return !isPublicAPIRequest(r)
 	}
 	switch r.Method {
 	case http.MethodPost, http.MethodPut, http.MethodDelete:
@@ -5352,7 +8849,162 @@ func requiresUnlockedSession(r *http.Request) bool {
 	if r.URL.Path == "/api/profiles" || r.URL.Path == "/api/profiles/active" {
 		return false
 	}
+	if companionSelfAuthenticatedPath(r.URL.Path) {
+		return false
+	}
 	return true
+}
+
+func isInitialSetupBootstrapRequest(cfg config.Config, r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost || !runtimeSetupRequired(cfg) {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/runtime/setup-complete", "/api/runtime/setup-import", "/api/runtime/setup-storage-validate":
+		return true
+	default:
+		return false
+	}
+}
+
+func isPublicAPIRequest(r *http.Request) bool {
+	if r == nil || !strings.HasPrefix(r.URL.Path, "/api/") {
+		return false
+	}
+	if companionSelfAuthenticatedPath(r.URL.Path) {
+		return true
+	}
+	switch r.URL.Path {
+	case "/api/runtime", "/api/runtime/setup-status", "/api/openapi.yaml", "/api/auth/provider-options":
+		return r.Method == http.MethodGet
+	case "/api/auth/webauthn/login/begin", "/api/auth/webauthn/login/finish", "/api/auth/local/session",
+		"/api/auth/session/validate", "/api/auth/session/lock",
+		"/api/auth/recovery/reset/begin":
+		return r.Method == http.MethodPost
+	case "/api/auth/requirements":
+		return r.Method == http.MethodGet
+	case "/api/auth/zitadel/login", "/api/auth/zitadel/callback", "/api/auth/zitadel/session":
+		return r.Method == http.MethodGet
+	case "/api/auth/zitadel/refresh", "/api/auth/zitadel/logout":
+		return r.Method == http.MethodPost
+	default:
+		return false
+	}
+}
+
+func localSessionBootstrapAllowed(cfg config.Config, boundary *zitadelAuthBoundary, r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost || strings.EqualFold(cfg.BindMode, "lan") || (boundary != nil && boundary.enabled()) {
+		return false
+	}
+	host := strings.TrimSpace(r.Host)
+	hostname := host
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		hostname = strings.Trim(parsedHost, "[]")
+	}
+	if !strings.EqualFold(hostname, "localhost") {
+		ip := net.ParseIP(hostname)
+		if ip == nil || !ip.IsLoopback() {
+			return false
+		}
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	return origin != "" && requestOriginMatchesHost(origin, r.Host) && strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")), "same-origin")
+}
+
+func writeAuthenticationRequired(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	http.Error(w, `{"error":"authentication_required"}`, http.StatusUnauthorized)
+}
+
+func requestBoundaryHandler(cfg config.Config, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/api/companion/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !requestHostAllowed(cfg, r.Host) {
+			http.Error(w, `{"error":"untrusted_host"}`, http.StatusForbidden)
+			return
+		}
+		fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+		if fetchSite == "cross-site" {
+			http.Error(w, `{"error":"cross_site_request_blocked"}`, http.StatusForbidden)
+			return
+		}
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" && !requestOriginMatchesHost(origin, r.Host) {
+			http.Error(w, `{"error":"untrusted_origin"}`, http.StatusForbidden)
+			return
+		}
+		if origin != "" && isStateChangingMethod(r.Method) && strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "text/plain") {
+			http.Error(w, `{"error":"unsupported_content_type"}`, http.StatusUnsupportedMediaType)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func requestHostAllowed(cfg config.Config, rawHost string) bool {
+	host := strings.TrimSpace(strings.ToLower(rawHost))
+	if host == "" {
+		return false
+	}
+	for _, rawOrigin := range []string{cfg.WebAuthnOrigin, os.Getenv("CABINET_PUBLIC_ORIGIN")} {
+		parsed, err := url.Parse(strings.TrimSpace(rawOrigin))
+		if err == nil && strings.EqualFold(parsed.Host, host) {
+			return true
+		}
+	}
+	hostname := host
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		hostname = strings.Trim(parsedHost, "[]")
+	}
+	if strings.EqualFold(hostname, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(hostname)
+	if ip == nil {
+		return false
+	}
+	if strings.EqualFold(cfg.BindMode, "lan") {
+		return true
+	}
+	return ip.IsLoopback()
+}
+
+func requestOriginMatchesHost(rawOrigin, rawHost string) bool {
+	origin, err := url.Parse(strings.TrimSpace(rawOrigin))
+	if err != nil || origin.Scheme == "" || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" {
+		return false
+	}
+	if origin.Scheme != "http" && origin.Scheme != "https" {
+		return false
+	}
+	return strings.EqualFold(origin.Host, strings.TrimSpace(rawHost))
+}
+
+func isStateChangingMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func companionSelfAuthenticatedPath(path string) bool {
+	switch path {
+	case "/api/companion/pairing/requests",
+		"/api/companion/pairing/exchanges",
+		"/api/companion/session",
+		"/api/companion/session/rotate",
+		"/api/companion/modules",
+		"/api/companion/payloads",
+		"/api/companion/media-submissions":
+		return true
+	default:
+		return false
+	}
 }
 
 func sessionTokenFromRequest(r *http.Request) string {
@@ -5530,20 +9182,23 @@ func buildSentryCompatibleEnvelope(eventType, category, message, sessionID strin
 		level = "error"
 	}
 	eventID, _ := randomToken(12)
+	redactedDetails, _ := logging.RedactValue(details).(map[string]any)
+	sessionContext := map[string]any{}
+	if strings.TrimSpace(sessionID) != "" {
+		sessionContext["id"] = "[REDACTED_SESSION]"
+	}
 	return map[string]any{
 		"event_id":  eventID,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"level":     level,
-		"message":   strings.TrimSpace(message),
+		"message":   logging.RedactSensitive(strings.TrimSpace(message)),
 		"tags": map[string]any{
 			"category": strings.TrimSpace(strings.ToLower(category)),
 			"type":     strings.TrimSpace(strings.ToLower(eventType)),
 		},
 		"contexts": map[string]any{
-			"session": map[string]any{
-				"id": strings.TrimSpace(sessionID),
-			},
-			"diagnostics": details,
+			"session":     sessionContext,
+			"diagnostics": redactedDetails,
 		},
 	}
 }
@@ -5600,6 +9255,19 @@ func parseCloudAuthClaims(token string) (map[string]any, error) {
 		return nil, fmt.Errorf("strict cloud auth verification enabled but CABINET_CLOUD_AUTH_HS256_SECRET missing")
 	}
 	return parseVerifiedHS256JWTPayload(token, secret)
+}
+
+func rejectLegacyCloudBootstrapInZitadel(w http.ResponseWriter, boundary *zitadelAuthBoundary) bool {
+	if boundary == nil || !boundary.enabled() {
+		return false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	http.Error(w, `{"error":"legacy_cloud_bootstrap_disabled"}`, http.StatusGone)
+	return true
+}
+
+func credentialFreeLocalCompanionManagementAllowed(cfg config.Config, boundary *zitadelAuthBoundary) bool {
+	return !strings.EqualFold(cfg.BindMode, "lan") && (boundary == nil || !boundary.enabled())
 }
 
 func parseVerifiedHS256JWTPayload(token, secret string) (map[string]any, error) {
@@ -5922,7 +9590,102 @@ func normalizeStringList(input []string, fallback []string) []string {
 	return out
 }
 
-func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {
+type inventoryTaxonomyValidationError struct {
+	Field   string
+	Value   string
+	Message string
+}
+
+func (e *inventoryTaxonomyValidationError) Error() string {
+	return e.Message
+}
+
+func writeInventoryTaxonomyValidationError(w http.ResponseWriter, validationErr *inventoryTaxonomyValidationError) {
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error":   "invalid_taxonomy_value",
+		"field":   validationErr.Field,
+		"value":   validationErr.Value,
+		"message": validationErr.Message,
+	})
+}
+
+func validateInventoryItemTaxonomy(item collection.Item, existing *collection.Item, settings map[string]string) *inventoryTaxonomyValidationError {
+	scales := parseItemTypeConditionScalesSetting(settings["grading.enums.item_type_condition_scales"])
+	packagingGrades := parseStringArraySetting(settings["grading.enums.packaging"], defaultPackagingGrades())
+
+	itemType := strings.TrimSpace(item.ItemType)
+	if itemType == "" && existing != nil {
+		itemType = strings.TrimSpace(existing.ItemType)
+	}
+	if strings.TrimSpace(item.ItemType) != "" && !itemTypeExists(scales, item.ItemType) {
+		return &inventoryTaxonomyValidationError{
+			Field:   "item_type",
+			Value:   strings.TrimSpace(item.ItemType),
+			Message: "item_type must match a configured item type condition scale for the active profile",
+		}
+	}
+
+	condition := strings.TrimSpace(item.Condition)
+	if condition != "" && !conditionExistsForItemType(scales, itemType, condition) {
+		return &inventoryTaxonomyValidationError{
+			Field:   "condition",
+			Value:   condition,
+			Message: "condition must match the configured condition scale for the selected item type",
+		}
+	}
+
+	packagingGrade := strings.TrimSpace(item.PackagingGradeType)
+	if packagingGrade != "" && !displayListContains(packagingGrades, packagingGrade) {
+		return &inventoryTaxonomyValidationError{
+			Field:   "packaging_grade_type",
+			Value:   packagingGrade,
+			Message: "packaging_grade_type must match a configured packaging grade for the active profile",
+		}
+	}
+	return nil
+}
+
+func itemTypeExists(scales []itemTypeConditionScale, value string) bool {
+	clean := strings.TrimSpace(value)
+	for _, scale := range scales {
+		if strings.EqualFold(strings.TrimSpace(scale.ItemType), clean) {
+			return true
+		}
+	}
+	return false
+}
+
+func conditionExistsForItemType(scales []itemTypeConditionScale, itemType string, condition string) bool {
+	clean := strings.TrimSpace(condition)
+	selectedType := strings.TrimSpace(itemType)
+	if selectedType == "" {
+		for _, scale := range scales {
+			if displayListContains(scale.Conditions, clean) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, scale := range scales {
+		if strings.EqualFold(strings.TrimSpace(scale.ItemType), selectedType) {
+			return displayListContains(scale.Conditions, clean)
+		}
+	}
+	return false
+}
+
+func displayListContains(values []string, value string) bool {
+	clean := strings.TrimSpace(value)
+	for _, candidate := range values {
+		if strings.EqualFold(strings.TrimSpace(candidate), clean) {
+			return true
+		}
+	}
+	return false
+}
+
+func zitadelWebhookPlanTransition(payload map[string]any) (string, string, error) {
 	data, _ := payload["data"].(map[string]any)
 	if data == nil {
 		return "", "", fmt.Errorf("missing data")
@@ -5948,10 +9711,16 @@ func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) 
 
 func normalizePlan(plan string) string {
 	normalized := strings.TrimSpace(strings.ToLower(plan))
-	if normalized == "" {
+	switch normalized {
+	case "", "free", "mvp":
 		return "free"
+	case "plus", "creator":
+		return "plus"
+	case "pro", "paid", "teams":
+		return "pro"
+	default:
+		return normalized
 	}
-	return normalized
 }
 
 func parseUnverifiedJWTPayload(token string) (map[string]any, error) {
@@ -5995,23 +9764,37 @@ func firstProviderInScope(scope []string) string {
 	return ""
 }
 
+func providerScopeIncludes(scope []string, providerID string) bool {
+	want := strings.TrimSpace(strings.ToLower(providerID))
+	if want == "" {
+		return false
+	}
+	for _, raw := range scope {
+		if strings.TrimSpace(strings.ToLower(raw)) == want {
+			return true
+		}
+	}
+	return false
+}
+
 func entitlementFeaturesFromPlan(plan string) []string {
-	switch strings.TrimSpace(strings.ToLower(plan)) {
-	case "teams", "pro", "paid", "plus":
+	switch normalizePlan(plan) {
+	case "pro":
 		return []string{"collection_core", "ai_assist", "price_tracking", "scanner_automation"}
-	case "creator":
-		return []string{"collection_core", "ai_assist", "scanner_automation"}
-	case "mvp":
-		return []string{"collection_core"}
+	case "plus":
+		return []string{"collection_core", "price_tracking", "scanner_automation"}
 	default:
 		return []string{"collection_core"}
 	}
 }
 
-func cloudPlanHasFeature(plan, feature string) bool {
+func planHasFeature(plan, feature string) bool {
 	target := strings.TrimSpace(strings.ToLower(feature))
 	if target == "" {
 		return true
+	}
+	if target == "collection_unlimited" {
+		return normalizePlan(plan) == "plus" || normalizePlan(plan) == "pro"
 	}
 	for _, entry := range entitlementFeaturesFromPlan(plan) {
 		if strings.TrimSpace(strings.ToLower(entry)) == target {
@@ -6019,6 +9802,12 @@ func cloudPlanHasFeature(plan, feature string) bool {
 		}
 	}
 	return false
+}
+
+const freeTierItemLimit = 250
+
+func cloudPlanHasFeature(plan, feature string) bool {
+	return planHasFeature(plan, feature)
 }
 
 func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
@@ -6033,6 +9822,1415 @@ func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
 	return "disabled"
 }
 
+func ebayProviderErrorNextAction(providerErr *ebay.ProviderError) string {
+	if providerErr == nil {
+		return "check_provider_health_and_credentials"
+	}
+	switch providerErr.ErrorCode {
+	case "PROVIDER_AUTH_MISSING", "PROVIDER_AUTH_INVALID":
+		return "review_provider_credentials_and_health"
+	case "PROVIDER_QUERY_INVALID":
+		return "edit_ebay_query_criteria"
+	default:
+		return "check_provider_health_and_credentials"
+	}
+}
+
+func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map[string]any {
+	base := map[string]any{
+		"provider": "openai",
+	}
+	if profiles == nil {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating OpenAI."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	active, err := profiles.GetActiveProfile(ctx)
+	if err != nil || strings.TrimSpace(active.ID) == "" {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating OpenAI."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	settings, err := profiles.GetSettings(ctx, strings.TrimSpace(active.ID))
+	if err != nil {
+		settings = map[string]string{}
+	}
+	activeMethod := strings.TrimSpace(settings["openai.active_auth_method"])
+	if activeMethod == "" {
+		activeMethod = strings.TrimSpace(settings["openai_active_auth_method"])
+	}
+	base["auth_method"] = activeMethod
+
+	switch activeMethod {
+	case "api_key":
+		key, err := profiles.GetSecret(ctx, strings.TrimSpace(active.ID), "openai_api_key")
+		if err != nil || strings.TrimSpace(key) == "" {
+			base["status"] = "needs_config"
+			base["code"] = "OPENAI_API_KEY_MISSING"
+			base["credential_present"] = false
+			base["message"] = "OpenAI API-key mode is selected, but no API key secret is stored for the active profile."
+			base["next_action"] = "connect_openai_api_key"
+			return base
+		}
+		base["status"] = "ready"
+		base["code"] = "OPENAI_API_KEY_PRESENT"
+		base["credential_present"] = true
+		base["message"] = "OpenAI API-key credentials are stored for the active profile."
+		base["next_action"] = "run_openai_test"
+		return base
+	case "browser_auth":
+		state := strings.TrimSpace(settings["openai.browser_auth_state"])
+		artifactPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+		proofState, proofArtifactID, proofMessage, proofPassed := openAIBrowserAuthProviderTestProof(settings)
+		base["browser_auth_state"] = map[bool]string{true: state, false: "setup_needed"}[state != ""]
+		base["credential_present"] = artifactPresent
+		base["provider_test_passed"] = proofPassed
+		if proofArtifactID != "" {
+			base["provider_test_artifact_id"] = proofArtifactID
+		}
+		if proofState != "" {
+			base["provider_test_state"] = proofState
+		}
+		if strings.EqualFold(state, "connected") && artifactPresent && proofPassed {
+			base["status"] = "ready"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED"
+			base["message"] = "OpenAI Browser Auth has verified profile proof and passed provider-test evidence."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "run_openai_workflow"
+			return base
+		}
+		if strings.EqualFold(state, "connected") && artifactPresent && strings.EqualFold(proofState, "failed") {
+			base["status"] = "failed"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_FAILED"
+			base["message"] = "OpenAI Browser Auth provider-test proof failed."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "review_browser_auth_provider_test_proof"
+			return base
+		}
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_BROWSER_AUTH_PROOF_REQUIRED"
+		base["message"] = "Browser Auth requires a verifiable callback/artifact and provider-test proof before Cabinet marks OpenAI ready."
+		base["next_action"] = "complete_browser_auth_provider_test_adapter"
+		return base
+	default:
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_AUTH_METHOD_REQUIRED"
+		base["credential_present"] = false
+		base["message"] = "Choose OpenAI API-key mode or complete verified Browser Auth before running OpenAI workflows."
+		base["next_action"] = "connect_openai_api_key_or_browser_auth"
+		return base
+	}
+}
+
+func telegramProviderHealth(ctx context.Context, profiles *profile.Repository) map[string]any {
+	return telegramProviderHealthForProfile(ctx, profiles, "")
+}
+
+func telegramProviderHealthForProfile(ctx context.Context, profiles *profile.Repository, profileID string) map[string]any {
+	base := map[string]any{
+		"provider": "telegram",
+	}
+	if profiles == nil {
+		base["status"] = "needs_config"
+		base["state"] = "disabled"
+		base["code"] = "TELEGRAM_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating Telegram channel setup."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		active, err := profiles.GetActiveProfile(ctx)
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			base["status"] = "needs_config"
+			base["state"] = "disabled"
+			base["code"] = "TELEGRAM_PROFILE_REQUIRED"
+			base["message"] = "Select an active profile before validating Telegram channel setup."
+			base["next_action"] = "select_profile"
+			return base
+		}
+		profileID = strings.TrimSpace(active.ID)
+	} else if _, err := profiles.GetByID(ctx, profileID); err != nil {
+		base["status"] = "needs_config"
+		base["state"] = "disabled"
+		base["code"] = "TELEGRAM_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating Telegram channel setup."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	base["profile_id"] = profileID
+	settings, err := profiles.GetSettings(ctx, profileID)
+	if err != nil {
+		settings = map[string]string{}
+	}
+	if key, secretErr := profiles.GetSecret(ctx, profileID, "telegram_bot_token"); secretErr == nil && strings.TrimSpace(key) != "" {
+		settings["telegram.bot_token_secret_present"] = "true"
+	}
+	senderChatReady := telegramCatalogCaptureConfigured(settings)
+	botTokenPresent := telegramBotTokenPresent(settings)
+	botValidated := strings.TrimSpace(settings["telegram.bot_id"]) != "" && strings.TrimSpace(settings["telegram.polling.tested_at"]) != ""
+	webhookConflict := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.webhook_conflict"]), "true")
+	paused := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.paused"]), "true")
+
+	base["sender_chat_authorized"] = senderChatReady
+	base["bot_token_present"] = botTokenPresent
+	base["bot_validated"] = botValidated
+	base["webhook_conflict"] = webhookConflict
+	base["transport"] = "long_polling"
+	base["public_listener"] = false
+	base["paused"] = paused
+	base["credential_returned"] = false
+
+	switch {
+	case !botTokenPresent:
+		base["status"] = "needs_config"
+		base["state"] = "disabled"
+		base["code"] = "TELEGRAM_BOT_TOKEN_REQUIRED"
+		base["message"] = "Paste and validate a write-only BotFather token before Cabinet starts Telegram polling."
+		base["next_action"] = "test_connection"
+	case !botValidated:
+		base["status"] = "needs_config"
+		base["state"] = "degraded"
+		base["code"] = "TELEGRAM_BOT_VALIDATION_REQUIRED"
+		base["message"] = "The Telegram token is stored but has not passed a live getMe validation."
+		base["next_action"] = "test_connection"
+	case webhookConflict:
+		base["status"] = "blocked"
+		base["state"] = "webhook_conflict"
+		base["code"] = "TELEGRAM_WEBHOOK_CONFLICT"
+		base["message"] = "This bot has a webhook. Remove it explicitly before outbound-only polling starts."
+		base["next_action"] = "resolve_webhook_conflict"
+	case !senderChatReady:
+		base["status"] = "needs_config"
+		base["state"] = "pairing_required"
+		base["code"] = "TELEGRAM_PAIRING_REQUIRED"
+		base["message"] = "Create a short-lived pairing code and send it from a private Telegram chat."
+		base["next_action"] = "create_pairing_code"
+	case paused:
+		base["status"] = "paused"
+		base["state"] = "paused"
+		base["code"] = "TELEGRAM_POLLING_PAUSED"
+		base["message"] = "Telegram polling is paused for this Cabinet profile."
+		base["next_action"] = "resume_polling"
+	default:
+		base["status"] = "ok"
+		base["state"] = "connected"
+		base["code"] = "TELEGRAM_CHANNEL_READY"
+		base["message"] = "Telegram is paired through outbound-only long polling and ready for Cabinet Agent messages."
+		base["next_action"] = "talk_to_cabinet"
+	}
+	return base
+}
+
+func telegramProviderTest(ctx context.Context, profiles *profile.Repository, profileID string) (map[string]any, int) {
+	health := telegramProviderHealthForProfile(ctx, profiles, profileID)
+	health["provider_test_passed"] = false
+	health["checked_at"] = time.Now().UTC().Format(time.RFC3339)
+	if health["code"] == "TELEGRAM_CHANNEL_READY" {
+		health["provider_test_passed"] = true
+		return health, http.StatusOK
+	}
+	if health["code"] == "TELEGRAM_PROFILE_REQUIRED" {
+		return health, http.StatusBadRequest
+	}
+	return health, http.StatusConflict
+}
+
+func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc *ai.Service, profileID string) (map[string]any, int) {
+	base := map[string]any{
+		"provider":             "openai",
+		"provider_test_passed": false,
+		"checked_at":           time.Now().UTC().Format(time.RFC3339),
+	}
+	if profiles == nil {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before testing OpenAI."
+		base["next_action"] = "select_profile"
+		return base, http.StatusBadRequest
+	}
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		active, err := profiles.GetActiveProfile(ctx)
+		if err == nil {
+			profileID = strings.TrimSpace(active.ID)
+		}
+	}
+	if profileID == "" {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before testing OpenAI."
+		base["next_action"] = "select_profile"
+		return base, http.StatusBadRequest
+	}
+	base["profile_id"] = profileID
+	settings, err := profiles.GetSettings(ctx, profileID)
+	if err != nil {
+		settings = map[string]string{}
+	}
+	activeMethod := strings.TrimSpace(settings["openai.active_auth_method"])
+	if activeMethod == "" {
+		activeMethod = strings.TrimSpace(settings["openai_active_auth_method"])
+	}
+	base["auth_method"] = activeMethod
+	baseURL := strings.TrimSpace(settings["openai_base_url"])
+	if baseURL != "" {
+		base["base_domain"] = providerBaseDomain(baseURL)
+	}
+
+	switch activeMethod {
+	case "api_key":
+		key, err := profiles.GetSecret(ctx, profileID, "openai_api_key")
+		if err != nil || strings.TrimSpace(key) == "" {
+			base["status"] = "needs_config"
+			base["code"] = "OPENAI_API_KEY_MISSING"
+			base["credential_present"] = false
+			base["message"] = "OpenAI API-key mode is selected, but no API key secret is stored for the active profile."
+			base["next_action"] = "connect_openai_api_key"
+			return base, http.StatusBadRequest
+		}
+		base["credential_present"] = true
+		localAISvc := aiSvc
+		if localAISvc == nil || baseURL != "" {
+			localAISvc = ai.NewService(ai.Config{BaseURL: baseURL})
+		}
+		if err := localAISvc.TestConnectivity(ctx, key); err != nil {
+			base["status"] = "failed"
+			base["code"] = "OPENAI_PROVIDER_TEST_FAILED"
+			base["message"] = "OpenAI provider test failed: " + err.Error()
+			base["next_action"] = "review_openai_credentials_and_provider_status"
+			return base, http.StatusBadRequest
+		}
+		base["status"] = "ready"
+		base["code"] = "OPENAI_PROVIDER_TEST_PASSED"
+		base["message"] = "OpenAI provider test passed for the active profile."
+		base["next_action"] = "run_openai_workflow"
+		base["provider_test_passed"] = true
+		return base, http.StatusOK
+	case "browser_auth":
+		state := strings.TrimSpace(settings["openai.browser_auth_state"])
+		artifactPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+		proofState, proofArtifactID, proofMessage, proofPassed := openAIBrowserAuthProviderTestProof(settings)
+		base["browser_auth_state"] = map[bool]string{true: state, false: "setup_needed"}[state != ""]
+		base["credential_present"] = artifactPresent
+		if proofArtifactID != "" {
+			base["provider_test_artifact_id"] = proofArtifactID
+		}
+		if proofState != "" {
+			base["provider_test_state"] = proofState
+		}
+		if !strings.EqualFold(state, "connected") || !artifactPresent {
+			base["status"] = "needs_config"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROOF_REQUIRED"
+			base["message"] = "Browser Auth requires a verified callback or artifact before provider-test proof can be accepted."
+			base["next_action"] = "complete_browser_auth_verification"
+			return base, http.StatusBadRequest
+		}
+		if strings.EqualFold(proofState, "failed") && proofArtifactID != "" {
+			base["status"] = "failed"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_FAILED"
+			base["message"] = "OpenAI Browser Auth provider-test proof failed."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "review_browser_auth_provider_test_proof"
+			return base, http.StatusBadRequest
+		}
+		if proofPassed {
+			base["status"] = "ready"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED"
+			base["message"] = "OpenAI Browser Auth provider-test proof passed for the active profile."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "run_openai_workflow"
+			base["provider_test_passed"] = true
+			return base, http.StatusOK
+		}
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PROOF_REQUIRED"
+		base["message"] = "Browser Auth requires a verified runtime provider-test adapter proof before Cabinet can mark OpenAI live-provider tested."
+		base["next_action"] = "complete_browser_auth_provider_test_adapter"
+		return base, http.StatusBadRequest
+	default:
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_AUTH_METHOD_REQUIRED"
+		base["credential_present"] = false
+		base["message"] = "Choose OpenAI API-key mode or complete verified Browser Auth before running OpenAI provider tests."
+		base["next_action"] = "connect_openai_api_key_or_browser_auth"
+		return base, http.StatusBadRequest
+	}
+}
+
+func reviewAgentSkillAuthority(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	return reviewAgentSkillAuthorityWithStrongConfirmation(ctx, profiles, registry, req, entryPoint, false)
+}
+
+func reviewAgentSkillAuthorityWithStrongConfirmation(ctx context.Context, profiles *profile.Repository, registry agentskills.Registry, req agentskills.PreviewRequest, entryPoint string, strongConfirmationVerified bool) (agentskills.AgentAuthorityReview, error) {
+	if profiles == nil {
+		return agentskills.AgentAuthorityReview{}, fmt.Errorf("profile repository required")
+	}
+	policy, err := profiles.GetAgentAuthorityPolicy(ctx, strings.TrimSpace(req.ProfileID))
+	if err != nil {
+		policy = profile.AgentAuthorityPolicy{
+			ProfileID: strings.TrimSpace(req.ProfileID),
+			Mode:      profile.AgentAuthorityModeAskBeforeLocalChanges,
+		}
+	}
+	authorityReq := agentSkillAuthorityRequest(req)
+	strongConfirmation := ""
+	if strongConfirmationVerified {
+		strongConfirmation = "server-issued-action-specific-confirmation"
+	}
+	review, err := registry.ReviewAuthority(authorityReq, agentskills.AgentAuthorityPolicy{
+		ProfileID:              policy.ProfileID,
+		Mode:                   agentskills.AgentAuthorityMode(policy.Mode),
+		ExternalWriteApproved:  policy.ExternalWriteApproved,
+		EntryPoint:             strings.TrimSpace(entryPoint),
+		StrongConfirmationText: strongConfirmation,
+	})
+	if err != nil {
+		return agentskills.AgentAuthorityReview{}, err
+	}
+	if err := appendAgentAuthorityDecisionAudit(ctx, profiles, review, authorityReq, agentAuthorityAuditOutcome(review)); err != nil {
+		return agentskills.AgentAuthorityReview{}, err
+	}
+	return review, nil
+}
+
+func recordDirectAgentSkillWorkflowRun(ctx context.Context, chatSvc *chat.Service, workflowID string, req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, target map[string]any) (chat.WorkflowRun, error) {
+	if chatSvc == nil {
+		return chat.WorkflowRun{}, fmt.Errorf("chat service required")
+	}
+	sourceChannel := strings.TrimSpace(req.SourceChannel)
+	if sourceChannel == "" {
+		sourceChannel = "direct-api"
+	}
+	confirmationState := directAgentSkillConfirmationState(preview, req.Confirm)
+	uiTargets := directAgentSkillUITargets(req)
+	shellCommands := directAgentSkillShellCommands(req)
+	providerReadinessIDs, providerIDs := directAgentSkillProviderReadiness(req)
+	input := map[string]any{
+		"skill_id":        req.SkillID,
+		"source_surface":  strings.TrimSpace(req.SourceSurface),
+		"parameter_count": len(req.Parameters),
+		"authority": map[string]any{
+			"decision":              authority.Decision,
+			"allowed":               authority.Allowed,
+			"preview_allowed":       authority.PreviewAllowed,
+			"apply_allowed":         authority.ApplyAllowed,
+			"confirmation_required": authority.ConfirmationRequired,
+			"blocker":               authority.Blocker,
+		},
+	}
+	if adminEvidence := agentAdminAuthorityEvidence(ctx); len(adminEvidence) > 0 {
+		input["admin_authority"] = adminEvidence
+	}
+	if len(uiTargets) > 0 {
+		input["ui_targets"] = uiTargets
+	}
+	if len(shellCommands) > 0 {
+		input["shell_commands"] = shellCommands
+	}
+	if len(providerReadinessIDs) > 0 {
+		input["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		input["provider_ids"] = providerIDs
+	}
+	run, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         req.ProfileID,
+		WorkflowID:        workflowID,
+		CapabilityID:      req.SkillID,
+		SourceChannel:     sourceChannel,
+		SourceThreadID:    strings.TrimSpace(req.SourceThreadID),
+		SourceMessageID:   strings.TrimSpace(req.SourceMessageID),
+		Input:             input,
+		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
+		ConfirmationState: confirmationState,
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands, providerReadinessIDs, providerIDs),
+	})
+	if err != nil {
+		return chat.WorkflowRun{}, err
+	}
+	result := map[string]any{
+		"skill_id":               req.SkillID,
+		"allowed":                preview.Allowed,
+		"authority_outcome":      agentAuthorityAuditOutcome(authority),
+		"confirmation_required":  preview.ConfirmationRequired,
+		"confirmation_state":     confirmationState,
+		"mutation_applied":       preview.MutationApplied,
+		"preview_only":           preview.PreviewOnly,
+		"source_surface":         strings.TrimSpace(req.SourceSurface),
+		"source_channel":         sourceChannel,
+		"source_thread_id":       strings.TrimSpace(req.SourceThreadID),
+		"source_message_id":      strings.TrimSpace(req.SourceMessageID),
+		"target_summary_present": len(target) > 0,
+	}
+	if adminEvidence := agentAdminAuthorityEvidence(ctx); len(adminEvidence) > 0 {
+		result["admin_authority"] = adminEvidence
+	}
+	if strings.TrimSpace(preview.PreviewID) != "" {
+		result["preview_id"] = preview.PreviewID
+		result["preview_status"] = preview.PreviewStatus
+		result["expires_at"] = preview.ExpiresAt
+	}
+	if len(uiTargets) > 0 {
+		result["ui_targets"] = uiTargets
+	}
+	if len(shellCommands) > 0 {
+		result["shell_commands"] = shellCommands
+	}
+	if len(providerReadinessIDs) > 0 {
+		result["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		result["provider_ids"] = providerIDs
+	}
+	if operation := stringMapParam(target, "operation"); operation != "" {
+		result["operation"] = operation
+	}
+	return chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         req.ProfileID,
+		RunID:             run.ID,
+		Status:            "completed",
+		ProviderTrace:     directAgentSkillWorkflowProviderTrace(sourceChannel, authority),
+		Result:            result,
+		ConfirmationState: confirmationState,
+		BulkItems:         directAgentSkillWorkflowSteps(req, authority, preview, confirmationState, uiTargets, shellCommands, providerReadinessIDs, providerIDs),
+	})
+}
+
+func directAgentSkillUITargets(req agentskills.PreviewRequest) []string {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.UITargets) == 0 {
+		return nil
+	}
+	targets := make([]string, 0, len(skill.UITargets))
+	for _, target := range skill.UITargets {
+		target = strings.TrimSpace(target)
+		if target != "" {
+			targets = append(targets, target)
+		}
+	}
+	return targets
+}
+
+func directAgentSkillShellCommands(req agentskills.PreviewRequest) []string {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.ShellCommands) == 0 {
+		return nil
+	}
+	commands := make([]string, 0, len(skill.ShellCommands))
+	for _, command := range skill.ShellCommands {
+		command = strings.TrimSpace(command)
+		if command != "" {
+			commands = append(commands, command)
+		}
+	}
+	return commands
+}
+
+func directAgentSkillProviderReadiness(req agentskills.PreviewRequest) ([]string, []string) {
+	registry := agentskills.NewRegistry(nil)
+	skill, ok := registry.Resolve(req.SkillID)
+	if !ok || len(skill.RequiredProviders) == 0 {
+		return nil, nil
+	}
+	readiness := make([]string, 0, len(skill.RequiredProviders))
+	for _, provider := range skill.RequiredProviders {
+		provider = strings.TrimSpace(provider)
+		if provider != "" {
+			readiness = append(readiness, provider)
+		}
+	}
+	providers := make([]string, 0, 1)
+	if provider := strings.TrimSpace(stringMapParam(req.Parameters, "provider")); provider != "" {
+		providers = append(providers, provider)
+	}
+	return readiness, providers
+}
+
+func directAgentSkillConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
+	switch strings.TrimSpace(preview.PreviewStatus) {
+	case "applied":
+		return "confirmed"
+	case "cancelled":
+		return "cancelled"
+	case "expired":
+		return "expired"
+	case "failed":
+		return "failed"
+	}
+	if preview.ConfirmationRequired {
+		if confirmed && preview.MutationApplied {
+			return "confirmed"
+		}
+		return "preview_required"
+	}
+	return "not_required"
+}
+
+func directAgentSkillWorkflowProviderTrace(sourceChannel string, authority agentskills.AgentAuthorityReview) map[string]any {
+	return map[string]any{
+		"provider":           "cabinet-agent-skill-registry",
+		"mode":               "governed_skill_preview_apply_timeline",
+		"source_channel":     sourceChannel,
+		"authority_decision": authority.Decision,
+		"authority_outcome":  agentAuthorityAuditOutcome(authority),
+		"live_provider":      false,
+	}
+}
+
+func directAgentSkillWorkflowSteps(req agentskills.PreviewRequest, authority agentskills.AgentAuthorityReview, preview agentskills.PreviewResponse, confirmationState string, uiTargets, shellCommands, providerReadinessIDs, providerIDs []string) []map[string]any {
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	previewStatus := "completed"
+	if preview.ConfirmationRequired && confirmationState == "preview_required" {
+		previewStatus = "needs_input"
+	}
+	resolveResult := map[string]any{
+		"source_surface": strings.TrimSpace(req.SourceSurface),
+		"source_channel": strings.TrimSpace(req.SourceChannel),
+	}
+	if len(uiTargets) > 0 {
+		resolveResult["ui_targets"] = uiTargets
+	}
+	if len(shellCommands) > 0 {
+		resolveResult["shell_command_ids"] = shellCommands
+	}
+	if len(providerReadinessIDs) > 0 {
+		resolveResult["provider_readiness_ids"] = providerReadinessIDs
+	}
+	if len(providerIDs) > 0 {
+		resolveResult["provider_ids"] = providerIDs
+	}
+	steps := []map[string]any{
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "resolve-skill",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result":      resolveResult,
+		},
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "authority-review",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"decision":        authority.Decision,
+				"outcome":         agentAuthorityAuditOutcome(authority),
+				"preview_allowed": authority.PreviewAllowed,
+				"apply_allowed":   authority.ApplyAllowed,
+			},
+		},
+		{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "preview",
+			"skill_id":    req.SkillID,
+			"status":      previewStatus,
+			"occurred_at": occurredAt,
+			"result": map[string]any{
+				"confirmation_required": preview.ConfirmationRequired,
+				"mutation_applied":      false,
+			},
+		},
+	}
+	if confirmationState == "confirmed" || confirmationState == "not_required" {
+		applyResult := map[string]any{
+			"confirmation_state": confirmationState,
+			"mutation_applied":   preview.MutationApplied,
+		}
+		if len(shellCommands) > 0 {
+			applyResult["shell_command_ids"] = shellCommands
+			applyResult["dispatch_boundary"] = "shell_command_bus"
+			applyResult["dispatch_outcome"] = "preview_only_no_mutation"
+		}
+		if len(providerReadinessIDs) > 0 {
+			applyResult["provider_readiness_ids"] = providerReadinessIDs
+			applyResult["dispatch_boundary"] = "provider_readiness_registry"
+			applyResult["dispatch_outcome"] = "preview_only_no_mutation"
+		}
+		if len(providerIDs) > 0 {
+			applyResult["provider_ids"] = providerIDs
+		}
+		steps = append(steps, map[string]any{
+			"kind":        "agent_skill_execution_step",
+			"step_id":     "apply",
+			"skill_id":    req.SkillID,
+			"status":      "completed",
+			"occurred_at": occurredAt,
+			"result":      applyResult,
+		})
+	}
+	return steps
+}
+
+type agentCapabilityExplanationResponse struct {
+	ProfileID      string                       `json:"profile_id"`
+	AuthorityMode  string                       `json:"authority_mode"`
+	Capabilities   []agentCapabilityExplanation `json:"capabilities"`
+	Source         string                       `json:"source"`
+	NoSecretValues bool                         `json:"no_secret_values"`
+}
+
+type agentCapabilityExplanation struct {
+	SkillID           string                        `json:"skill_id"`
+	DisplayName       string                        `json:"display_name"`
+	Description       string                        `json:"description"`
+	Category          string                        `json:"category"`
+	Status            agentskills.Status            `json:"status"`
+	SafetyLevel       agentskills.SafetyLevel       `json:"safety_level"`
+	CapabilityState   string                        `json:"capability_state"`
+	ExecutionBoundary string                        `json:"execution_boundary"`
+	RequiredContext   []string                      `json:"required_context"`
+	RequiredSetup     []string                      `json:"required_setup,omitempty"`
+	Capabilities      []string                      `json:"capabilities,omitempty"`
+	GuidedWorkflows   []string                      `json:"guided_workflows,omitempty"`
+	UITargets         []string                      `json:"ui_targets,omitempty"`
+	Authority         agentCapabilityAuthorityState `json:"authority"`
+	NextAction        string                        `json:"next_action,omitempty"`
+}
+
+type agentCapabilityAuthorityState struct {
+	Decision   string `json:"decision"`
+	Blocker    string `json:"blocker,omitempty"`
+	NextAction string `json:"next_action,omitempty"`
+}
+
+func buildAgentCapabilityExplanation(profileID string, registry agentskills.Registry, policy profile.AgentAuthorityPolicy) agentCapabilityExplanationResponse {
+	mode := policy.Mode
+	if mode == "" {
+		mode = profile.AgentAuthorityModeAskBeforeLocalChanges
+	}
+	skills := registry.List()
+	out := make([]agentCapabilityExplanation, 0, len(skills))
+	for _, skill := range skills {
+		out = append(out, explainAgentCapabilitySkill(profileID, skill, mode, policy.ExternalWriteApproved))
+	}
+	return agentCapabilityExplanationResponse{
+		ProfileID:      profileID,
+		AuthorityMode:  mode,
+		Capabilities:   out,
+		Source:         "agent_skill_registry_and_profile_authority_policy",
+		NoSecretValues: true,
+	}
+}
+
+func explainAgentCapabilitySkill(profileID string, skill agentskills.Skill, mode string, externalWriteApproved bool) agentCapabilityExplanation {
+	_ = profileID
+	authority := explainAgentCapabilityAuthority(skill, mode, externalWriteApproved)
+	state := agentCapabilityState(skill, authority)
+	nextAction := skill.NextAction
+	if nextAction == "" {
+		nextAction = agentCapabilityNextAction(state, skill, authority)
+	}
+	return agentCapabilityExplanation{
+		SkillID:           skill.ID,
+		DisplayName:       skill.DisplayName,
+		Description:       skill.Description,
+		Category:          skill.Category,
+		Status:            skill.Status,
+		SafetyLevel:       skill.SafetyLevel,
+		CapabilityState:   state,
+		ExecutionBoundary: agentCapabilityExecutionBoundary(skill),
+		RequiredContext:   append([]string(nil), skill.RequiredContext...),
+		RequiredSetup:     agentCapabilityRequiredSetup(skill),
+		Capabilities:      append([]string(nil), skill.Capabilities...),
+		GuidedWorkflows:   append([]string(nil), skill.GuidedWorkflows...),
+		UITargets:         append([]string(nil), skill.UITargets...),
+		Authority:         authority,
+		NextAction:        nextAction,
+	}
+}
+
+func explainAgentCapabilityAuthority(skill agentskills.Skill, mode string, externalWriteApproved bool) agentCapabilityAuthorityState {
+	if !skill.Enabled {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "skill_disabled",
+			NextAction: firstNonEmptyString(skill.NextAction, "Enable this skill for the active profile before using it."),
+		}
+	}
+	if !skill.Executable {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "skill_not_executable",
+			NextAction: firstNonEmptyString(skill.NextAction, "Complete the linked implementation or setup before using this skill."),
+		}
+	}
+	isMutation := skill.Permissions.LocalWrite || skill.Permissions.ExternalWrite || skill.Permissions.Destructive
+	if mode == profile.AgentAuthorityModeReadOnly && isMutation {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "agent_authority_read_only",
+			NextAction: "Switch the profile Agent authority mode before previewing or applying mutating skills.",
+		}
+	}
+	if skill.Permissions.ExternalWrite && (mode != profile.AgentAuthorityModeApprovedExternalActions || !externalWriteApproved) {
+		return agentCapabilityAuthorityState{
+			Decision:   "blocked",
+			Blocker:    "agent_authority_external_write_not_approved",
+			NextAction: "Approve external Agent actions for this profile before running external-write skills.",
+		}
+	}
+	if skill.Permissions.Destructive {
+		return agentCapabilityAuthorityState{
+			Decision:   "confirm_required",
+			Blocker:    "strong_confirmation_required",
+			NextAction: "Review the destructive target and impact summary, then provide action-specific confirmation.",
+		}
+	}
+	if skill.Permissions.RequiresConfirm {
+		return agentCapabilityAuthorityState{
+			Decision:   "confirm_required",
+			Blocker:    "confirmation_required",
+			NextAction: "Review the preview and confirm before Cabinet applies this skill.",
+		}
+	}
+	return agentCapabilityAuthorityState{Decision: "allowed"}
+}
+
+func agentCapabilityState(skill agentskills.Skill, authority agentCapabilityAuthorityState) string {
+	if !skill.Enabled || skill.Status == agentskills.StatusDisabled {
+		return "disabled"
+	}
+	if !skill.Executable || skill.Status == agentskills.StatusInvalid || skill.Status == agentskills.StatusRequiresImplementation {
+		return "unavailable"
+	}
+	if authority.Blocker == "agent_authority_read_only" || authority.Blocker == "agent_authority_external_write_not_approved" {
+		return "blocked_by_policy"
+	}
+	if authority.Decision == "confirm_required" {
+		return "confirm_required"
+	}
+	if len(agentCapabilityRequiredSetup(skill)) > 0 {
+		return "setup_required"
+	}
+	return "available"
+}
+
+func agentCapabilityExecutionBoundary(skill agentskills.Skill) string {
+	switch {
+	case skill.Permissions.Destructive:
+		return "destructive_confirmation"
+	case skill.Permissions.ExternalWrite:
+		return "external_write_confirmation"
+	case skill.Permissions.RequiresConfirm:
+		return "preview_then_confirm"
+	case skill.SafetyLevel == agentskills.SafetyPreviewOnly:
+		return "preview_only"
+	default:
+		return "read_only"
+	}
+}
+
+func agentCapabilityRequiredSetup(skill agentskills.Skill) []string {
+	setup := append([]string(nil), skill.RequiredProviders...)
+	for _, ctx := range skill.RequiredContext {
+		switch ctx {
+		case "provider", "setup_payload", "provider_secret", "storage", "backup_target", "selected_file", "selected_backup", "export_scope", "admin_session":
+			setup = append(setup, ctx)
+		}
+	}
+	return uniqueNonEmptyStrings(setup)
+}
+
+func agentCapabilityNextAction(state string, skill agentskills.Skill, authority agentCapabilityAuthorityState) string {
+	if authority.NextAction != "" {
+		return authority.NextAction
+	}
+	switch state {
+	case "disabled":
+		return "Enable this skill for the active profile before using it."
+	case "unavailable":
+		return "Complete the linked implementation or setup before using this skill."
+	case "setup_required":
+		return "Complete the required setup or provide the required context before using this skill."
+	case "confirm_required":
+		return "Review the preview and confirm before Cabinet applies this skill."
+	default:
+		if skill.SafetyLevel == agentskills.SafetyReadOnly {
+			return "Ask Agent to run this read-only skill from the current profile."
+		}
+		return "Ask Agent to prepare a governed preview from the current profile."
+	}
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func appendAgentAuthorityDecisionAudit(ctx context.Context, profiles *profile.Repository, review agentskills.AgentAuthorityReview, req agentskills.PreviewRequest, outcome string) error {
+	return profiles.AppendAgentAuthorityDecisionAudit(ctx, profile.AgentAuthorityDecisionAudit{
+		ProfileID:      review.ProfileID,
+		EntryPoint:     review.EntryPoint,
+		SkillID:        review.SkillID,
+		Mode:           string(review.Mode),
+		SafetyLevel:    string(review.SafetyLevel),
+		Decision:       review.Decision,
+		Outcome:        strings.TrimSpace(outcome),
+		Blocker:        review.Blocker,
+		SourceSurface:  req.SourceSurface,
+		SourceChannel:  req.SourceChannel,
+		SourceThreadID: req.SourceThreadID,
+		PayloadRef:     agentAuthorityPayloadRef(req.Parameters),
+	})
+}
+
+func agentAuthorityAuditOutcome(review agentskills.AgentAuthorityReview) string {
+	if review.ApplyAllowed {
+		return "apply_allowed"
+	}
+	if review.PreviewAllowed {
+		return "preview_allowed"
+	}
+	return "blocked"
+}
+
+func agentAuthorityPayloadRef(parameters map[string]any) map[string]any {
+	if len(parameters) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(parameters))
+	for key := range parameters {
+		trimmed := strings.TrimSpace(key)
+		if trimmed != "" {
+			keys = append(keys, trimmed)
+		}
+	}
+	sort.Strings(keys)
+	return map[string]any{
+		"parameter_count": len(keys),
+		"parameter_keys":  keys,
+	}
+}
+
+func reviewChatActionAuthority(ctx context.Context, profiles *profile.Repository, req chat.PreviewActionInput, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	skillID := agentSkillIDForChatAction(req.CapabilityID, req.Action)
+	if skillID == "" {
+		return agentskills.AgentAuthorityReview{PreviewAllowed: true, ApplyAllowed: true, Decision: "allowed"}, nil
+	}
+	return reviewAgentSkillAuthority(ctx, profiles, agentskills.NewRegistry(nil), agentskills.PreviewRequest{
+		SkillID:        skillID,
+		ProfileID:      strings.TrimSpace(req.ProfileID),
+		Confirm:        false,
+		SourceSurface:  "chats.main",
+		SourceChannel:  "in-app",
+		SourceThreadID: strings.TrimSpace(req.ThreadID),
+		Parameters:     copyActionPayload(req.Payload),
+	}, entryPoint)
+}
+
+func reviewChatActionApplyAuthority(ctx context.Context, profiles *profile.Repository, req chat.ApplyActionInput, preview chat.ActionPreview, entryPoint string) (agentskills.AgentAuthorityReview, error) {
+	skillID := agentSkillIDForChatAction(preview.CapabilityID, preview.Action)
+	if skillID == "" {
+		return agentskills.AgentAuthorityReview{PreviewAllowed: true, ApplyAllowed: true, Decision: "allowed"}, nil
+	}
+	return reviewAgentSkillAuthority(ctx, profiles, agentskills.NewRegistry(nil), agentskills.PreviewRequest{
+		SkillID:        skillID,
+		ProfileID:      strings.TrimSpace(req.ProfileID),
+		Confirm:        req.Confirm,
+		SourceSurface:  "chats.main",
+		SourceChannel:  "in-app",
+		SourceThreadID: strings.TrimSpace(req.ThreadID),
+		Parameters:     map[string]any{"preview_id": strings.TrimSpace(req.PreviewID)},
+	}, entryPoint)
+}
+
+func agentSkillIDForChatAction(capabilityID, action string) string {
+	switch strings.TrimSpace(capabilityID) {
+	case "inventory.item.create":
+		return "cabinet.inventory.create_item"
+	case "inventory.item.update", "update_open_item_title":
+		return "cabinet.inventory.update_item"
+	case "wishlist.entry.create":
+		return "cabinet.wishlist.create_entry"
+	case "collections.item.assign":
+		return "cabinet.collections.assign_item"
+	}
+	switch strings.TrimSpace(action) {
+	case "create_item_stub", "create_inventory_item":
+		return "cabinet.inventory.create_item"
+	case "update_inventory_item", "update_open_item_title":
+		return "cabinet.inventory.update_item"
+	case "create_wishlist_entry":
+		return "cabinet.wishlist.create_entry"
+	case "assign_collection_item":
+		return "cabinet.collections.assign_item"
+	default:
+		return ""
+	}
+}
+
+func copyActionPayload(payload map[string]any) map[string]any {
+	if payload == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(payload))
+	for key, value := range payload {
+		out[key] = value
+	}
+	return out
+}
+
+func normalizeAgentSkillContextRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
+	ctx := req.AgentContext
+	if len(ctx) == 0 {
+		return req
+	}
+	if req.Parameters == nil {
+		req.Parameters = map[string]any{}
+	} else {
+		params := make(map[string]any, len(req.Parameters)+8)
+		for key, value := range req.Parameters {
+			params[key] = value
+		}
+		req.Parameters = params
+	}
+
+	if strings.TrimSpace(req.ProfileID) == "" {
+		req.ProfileID = agentContextString(ctx, "profile_id")
+	}
+	if strings.TrimSpace(req.SourceSurface) == "" {
+		req.SourceSurface = firstNonEmptyString(agentContextString(ctx, "surface_id"), agentContextString(ctx, "route_id"))
+	}
+	if strings.TrimSpace(req.SourceChannel) == "" {
+		req.SourceChannel = agentContextString(ctx, "source_channel")
+	}
+	if strings.TrimSpace(req.SourceThreadID) == "" {
+		req.SourceThreadID = agentContextString(ctx, "thread_id")
+	}
+	if strings.TrimSpace(req.SourceMessageID) == "" {
+		req.SourceMessageID = agentContextString(ctx, "message_id")
+	}
+
+	putAgentContextParamIfMissing(req.Parameters, "workspace_id", firstNonEmptyString(
+		agentContextString(ctx, "workspace_id"),
+		agentContextString(ctx, "surface_id"),
+		agentContextString(ctx, "route_id"),
+	))
+	putAgentContextParamIfMissing(req.Parameters, "route_id", agentContextString(ctx, "route_id"))
+	putAgentContextParamIfMissing(req.Parameters, "permission_state", agentContextString(ctx, "permission_state"))
+	putAgentContextParamIfMissing(req.Parameters, "admin_session", agentContextString(ctx, "admin_session"))
+	putAgentContextParamIfMissing(req.Parameters, "setup_state", agentContextString(ctx, "setup_state"))
+	putAgentContextParamIfMissing(req.Parameters, "workflow_run_id", agentContextString(ctx, "workflow_run_id"))
+
+	selected := mapValue(ctx["selected_record"])
+	selectedType := agentContextString(selected, "type")
+	selectedID := agentContextString(selected, "id")
+	putAgentContextParamIfMissing(req.Parameters, "selected_record_type", selectedType)
+	putAgentContextParamIfMissing(req.Parameters, "selected_record_id", selectedID)
+	switch selectedType {
+	case "inventory_item", "item":
+		putAgentContextParamIfMissing(req.Parameters, "item_id", selectedID)
+	case "media", "media_asset":
+		putAgentContextParamIfMissing(req.Parameters, "media_id", selectedID)
+	case "wishlist_entry":
+		putAgentContextParamIfMissing(req.Parameters, "wishlist_entry_id", selectedID)
+	case "inbox_notification", "notification":
+		putAgentContextParamIfMissing(req.Parameters, "selected_notification", selectedID)
+	case "collection":
+		putAgentContextParamIfMissing(req.Parameters, "collection_name", selectedID)
+	}
+	selectedNotification := mapValue(ctx["selected_notification"])
+	selectedNotificationID := agentContextString(selectedNotification, "id")
+	putAgentContextParamIfMissing(req.Parameters, "selected_notification", selectedNotificationID)
+	putAgentContextParamIfMissing(req.Parameters, "notification_id", selectedNotificationID)
+	putAgentContextParamIfMissing(req.Parameters, "target_notification", selectedNotificationID)
+
+	for _, raw := range anySlice(ctx["media_ids"]) {
+		if mediaID := strings.TrimSpace(fmt.Sprintf("%v", raw)); mediaID != "" {
+			putAgentContextParamIfMissing(req.Parameters, "media_id", mediaID)
+			break
+		}
+	}
+	for _, raw := range anySlice(ctx["attachment_ids"]) {
+		if attachmentID := strings.TrimSpace(fmt.Sprintf("%v", raw)); attachmentID != "" {
+			putAgentContextParamIfMissing(req.Parameters, "attachment_id", attachmentID)
+			break
+		}
+	}
+	return req
+}
+
+func agentSkillInboxNotificationContextClarification(ctx context.Context, conn *sql.DB, req agentskills.PreviewRequest) (map[string]any, bool) {
+	if conn == nil || !strings.HasPrefix(strings.TrimSpace(req.SkillID), "cabinet.inbox.") {
+		return nil, false
+	}
+	notificationID := firstNonEmptyString(
+		stringMapParam(req.Parameters, "notification_id"),
+		stringMapParam(req.Parameters, "target_notification"),
+		stringMapParam(req.Parameters, "selected_notification"),
+	)
+	if strings.TrimSpace(notificationID) == "" {
+		return nil, false
+	}
+	var existing string
+	err := conn.QueryRowContext(ctx, `
+		SELECT id
+		FROM chat_inbox_items
+		WHERE profile_id = ? AND id = ?
+	`, strings.TrimSpace(req.ProfileID), strings.TrimSpace(notificationID)).Scan(&existing)
+	if err == nil {
+		return nil, false
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return map[string]any{
+			"error":           "missing_context",
+			"blocker":         "missing_context",
+			"skill_id":        strings.TrimSpace(req.SkillID),
+			"missing_context": []string{"stale_selected_notification"},
+			"clarification": map[string]string{
+				"stale_selected_notification": agentSkillContextGuidance("stale_selected_notification"),
+			},
+			"stale_notification_id": strings.TrimSpace(notificationID),
+			"next_action":           "Select a current Inbox notification before previewing or applying this skill.",
+		}, true
+	}
+	return nil, false
+}
+
+func agentSkillContextClarification(registry agentskills.Registry, req agentskills.PreviewRequest) (map[string]any, bool) {
+	if len(req.AgentContext) == 0 {
+		return nil, false
+	}
+	review, err := registry.ReviewRequirements(req)
+	if err != nil {
+		return nil, false
+	}
+	missing := append([]string(nil), review.MissingContext...)
+	for _, contextName := range review.RequiredContext {
+		switch contextName {
+		case "selected_item", "target_item":
+			if agentSkillHasAnyParam(req.Parameters, "item_id", "selected_item", "target_item") {
+				missing = removeMissingContext(missing, contextName)
+			} else {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "selected_media", "media":
+			if agentSkillHasAnyParam(req.Parameters, "media_id", "selected_media", "media", "attachment_id") {
+				missing = removeMissingContext(missing, contextName)
+			} else {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "provider":
+			if agentSkillHasAnyParam(req.Parameters, "provider_id", "provider_name", "provider") {
+				missing = removeMissingContext(missing, contextName)
+			} else {
+				missing = appendMissingContext(missing, contextName)
+			}
+		case "wanted_item_details":
+			if agentSkillHasAnyParam(req.Parameters, "item_id") ||
+				(agentSkillHasAnyParam(req.Parameters, "part_number") && agentSkillHasAnyParam(req.Parameters, "title")) {
+				missing = removeMissingContext(missing, contextName)
+			} else {
+				missing = appendMissingContext(missing, contextName)
+			}
+		}
+	}
+	if strings.TrimSpace(req.SourceSurface) == "" && !agentSkillHasAnyParam(req.Parameters, "route_id") {
+		missing = appendMissingContext(missing, "route")
+	}
+	setupState := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", req.Parameters["setup_state"])))
+	if setupState != "ready" {
+		missing = appendMissingContext(missing, "setup_state")
+	}
+	if len(missing) == 0 {
+		return nil, false
+	}
+	guidance := map[string]string{}
+	for _, contextName := range missing {
+		guidance[contextName] = agentSkillContextGuidance(contextName)
+	}
+	return map[string]any{
+		"error":           "missing_context",
+		"blocker":         "missing_context",
+		"skill_id":        review.SkillID,
+		"missing_context": missing,
+		"clarification":   guidance,
+		"next_action":     "Ask for or capture the missing Agent context before previewing or applying this skill.",
+	}, true
+}
+
+func appendMissingContext(missing []string, contextName string) []string {
+	contextName = strings.TrimSpace(contextName)
+	if contextName == "" {
+		return missing
+	}
+	for _, existing := range missing {
+		if existing == contextName {
+			return missing
+		}
+	}
+	return append(missing, contextName)
+}
+
+func removeMissingContext(missing []string, contextName string) []string {
+	contextName = strings.TrimSpace(contextName)
+	filtered := make([]string, 0, len(missing))
+	for _, existing := range missing {
+		if strings.TrimSpace(existing) != contextName {
+			filtered = append(filtered, existing)
+		}
+	}
+	return filtered
+}
+
+func agentSkillContextGuidance(contextName string) string {
+	switch contextName {
+	case "profile":
+		return "Select or create the active Cabinet profile for this Agent request."
+	case "workspace":
+		return "Open the Cabinet workspace that owns the requested records."
+	case "thread":
+		return "Attach the active chat thread before invoking this Agent skill."
+	case "route":
+		return "Launch Agent from a Cabinet route or provide the target route in the context envelope."
+	case "selected_item", "target_item":
+		return "Select the inventory item that Agent should use as the target."
+	case "selected_media", "media":
+		return "Select the media asset that Agent should use as the target."
+	case "provider":
+		return "Choose the integration or marketplace provider before invoking this skill."
+	case "setup_state":
+		return "Complete the required setup so the Agent context reports setup_state=ready."
+	case "stale_selected_notification":
+		return "Reopen the current Inbox notification before invoking this Agent skill; stale notification context cannot be used."
+	default:
+		return "Provide this required Cabinet context before invoking the Agent skill."
+	}
+}
+
+func agentContextString(ctx map[string]any, key string) string {
+	value, ok := ctx[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprintf("%v", value))
+}
+
+func putAgentContextParamIfMissing(params map[string]any, key, value string) {
+	if strings.TrimSpace(value) == "" || agentSkillHasAnyParam(params, key) {
+		return
+	}
+	params[key] = value
+}
+
+func agentSkillAuthorityRequest(req agentskills.PreviewRequest) agentskills.PreviewRequest {
+	if req.Parameters == nil {
+		req.Parameters = map[string]any{}
+	} else {
+		params := make(map[string]any, len(req.Parameters)+2)
+		for key, value := range req.Parameters {
+			params[key] = value
+		}
+		req.Parameters = params
+	}
+	if !agentSkillHasAnyParam(req.Parameters, "workspace_id", "workspace") {
+		req.Parameters["workspace_id"] = "direct-api"
+	}
+	if strings.TrimSpace(req.SourceThreadID) == "" {
+		req.SourceThreadID = "direct-api"
+	}
+	for _, key := range []string{
+		"backup_target",
+		"collection_name",
+		"destination",
+		"discovery_result",
+		"export_scope",
+		"line_item",
+		"media",
+		"media_id",
+		"media_source",
+		"provider_id",
+		"purchase_details",
+		"purchase_source",
+		"selected_backup",
+		"selected_file",
+		"selected_notification",
+		"settings_account",
+		"settings_profile",
+		"storage",
+		"setup_payload",
+		"target_email",
+		"target_item",
+		"target_order",
+		"target_role",
+		"target_user",
+		"watch_query",
+		"wishlist_entry",
+	} {
+		if !agentSkillHasAnyParam(req.Parameters, key) {
+			req.Parameters[key] = "direct-api"
+		}
+	}
+	return req
+}
+
+func agentSkillHasAnyParam(params map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		value, ok := params[key]
+		if !ok || value == nil {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func openAIBrowserAuthProviderTestProof(settings map[string]string) (string, string, string, bool) {
+	state := strings.ToLower(strings.TrimSpace(settings["openai.browser_auth_provider_test_state"]))
+	artifactID := strings.TrimSpace(settings["openai.browser_auth_provider_test_artifact_id"])
+	message := strings.TrimSpace(settings["openai.browser_auth_provider_test_message"])
+	return state, artifactID, message, state == "passed" && artifactID != ""
+}
+
+func providerBaseDomain(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || strings.TrimSpace(u.Host) == "" {
+		return ""
+	}
+	return u.Host
+}
+
+func providerHealthResponse(health map[string]string) map[string]any {
+	provider := strings.TrimSpace(health["provider"])
+	status := strings.TrimSpace(health["status"])
+	message := strings.TrimSpace(health["message"])
+	updatedAt := strings.TrimSpace(health["updated_at"])
+	retryAfterRaw := strings.TrimSpace(health["retry_after_seconds"])
+	if status == "" {
+		status = "unknown"
+	}
+	category, label, guidance := providerHealthTaxonomy(status, message, retryAfterRaw)
+
+	state := "disabled"
+	switch strings.ToLower(status) {
+	case "ok", "ready":
+		state = "ready"
+	case "error", "degraded", "auth_missing", "reauthentication_required", "rate_limited", "provider_unavailable", "partial_failure":
+		state = "degraded"
+	}
+
+	var lastError any
+	if message != "" && state != "ready" {
+		lastError = message
+	}
+
+	var updated any
+	if updatedAt != "" {
+		updated = updatedAt
+	}
+
+	var retryAfter any
+	if retryAfterRaw != "" {
+		if parsed, err := strconv.Atoi(retryAfterRaw); err == nil && parsed > 0 {
+			retryAfter = parsed
+		}
+	}
+
+	var nextAction any
+	if state == "degraded" {
+		switch strings.ToLower(provider) {
+		case "ebay":
+			nextAction = "check_provider_health_and_credentials"
+		default:
+			nextAction = "review_provider_status"
+		}
+	}
+
+	return map[string]any{
+		"provider":            provider,
+		"status":              status,
+		"state":               state,
+		"category":            category,
+		"label":               label,
+		"guidance":            guidance,
+		"message":             message,
+		"last_error":          lastError,
+		"retry_after_seconds": retryAfter,
+		"next_action":         nextAction,
+		"updated_at":          updated,
+	}
+}
+
+func recordProviderWorkflowFailure(ctx context.Context, chatSvc *chat.Service, profileID, providerID, providerDisplayName, workflowActionID, requiredActionCode, statusMessage string, metadata map[string]any) error {
+	if chatSvc == nil {
+		return nil
+	}
+	statusMessage = strings.TrimSpace(statusMessage)
+	if statusMessage == "" {
+		statusMessage = strings.TrimSpace(providerDisplayName) + " workflow failed. Review provider health and credentials before retrying."
+	}
+	_, err := chatSvc.CreateProviderWorkflowInboxEvent(ctx, chat.ProviderWorkflowInboxEventInput{
+		ProfileID:           strings.TrimSpace(profileID),
+		ProviderID:          strings.TrimSpace(providerID),
+		ProviderDisplayName: strings.TrimSpace(providerDisplayName),
+		WorkflowActionID:    strings.TrimSpace(workflowActionID),
+		Severity:            "error",
+		RequiredActionCode:  strings.TrimSpace(requiredActionCode),
+		StatusMessage:       statusMessage,
+		TargetRoute:         "/integrations",
+		OccurredAt:          time.Now().UTC().Format(time.RFC3339),
+		Metadata:            metadata,
+	})
+	return err
+}
+
+func providerHealthTaxonomy(status, message, retryAfterRaw string) (string, string, string) {
+	normalizedStatus := strings.TrimSpace(strings.ToLower(status))
+	normalizedMessage := strings.TrimSpace(strings.ToLower(message))
+	retryAfter, _ := strconv.Atoi(strings.TrimSpace(retryAfterRaw))
+
+	switch {
+	case normalizedStatus == "" || normalizedStatus == "unknown":
+		return "not_checked", "Not checked yet", "Run or validate a provider search to collect health evidence."
+	case normalizedStatus == "ok" || normalizedStatus == "ready":
+		return "healthy", "Connected / healthy", "Provider health is current and ready for Market Watch runs."
+	case strings.Contains(normalizedStatus, "partial") || strings.Contains(normalizedMessage, "partial"):
+		return "partially_failed", "Partially failed", "Review the failed provider details while keeping successful provider results available."
+	case retryAfter > 0 || strings.Contains(normalizedStatus, "rate") || strings.Contains(normalizedMessage, "rate limit") || strings.Contains(normalizedMessage, "too many requests"):
+		return "rate_limited", "Rate limited", "Wait for the provider retry window, then run the watch again."
+	case strings.Contains(normalizedStatus, "reauth") || strings.Contains(normalizedMessage, "reauth") || strings.Contains(normalizedMessage, "expired") || strings.Contains(normalizedMessage, "invalid credential"):
+		return "needs_reauthentication", "Needs re-authentication", "Reconnect or refresh provider credentials before retrying Market Watch runs."
+	case strings.Contains(normalizedStatus, "setup") || strings.Contains(normalizedStatus, "auth") || strings.Contains(normalizedMessage, "missing credential") || strings.Contains(normalizedMessage, "missing token") || strings.Contains(normalizedMessage, "auth missing"):
+		return "needs_setup", "Needs setup", "Save provider credentials and marketplace setup before running Market Watch."
+	case strings.Contains(normalizedStatus, "unavailable") || strings.Contains(normalizedMessage, "unavailable") || strings.Contains(normalizedMessage, "timeout") || strings.Contains(normalizedMessage, "upstream"):
+		return "provider_unavailable", "Provider unavailable", "Check provider status and retry when the upstream service recovers."
+	default:
+		return "failed", "Failed", "Review provider health, credentials, and retry guidance before running watches."
+	}
+}
+
 func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scanner.Service, amazonMode string, settings map[string]string) []map[string]any {
 	familyOverrides := map[string]string{}
 	if conn != nil {
@@ -6040,104 +11238,122 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			familyOverrides = loaded
 		}
 	}
-	base := []map[string]any{
-		{
-			"provider_id":         "ebay",
-			"display_name":        "eBay",
-			"base_domain":         "ebay.com",
-			"api_family":          "official_api",
-			"api_support_profile": "rest_v1",
-			"active_mode":         "official_api",
-			"integration_mode":    "official_api",
-			"api_available":       true,
-			"auth_requirement":    "api_key",
-			"auth_mode":           "api_key",
-			"capabilities": map[string]bool{
-				"search":            true,
-				"stock_observation": false,
-				"pricing":           true,
-				"health":            true,
-			},
-			"state":              "ready",
-			"setup_instructions": "Add eBay API token and marketplace, validate health, then run scanner query sets.",
-		},
-		{
-			"provider_id":          "amazon",
-			"display_name":         "Amazon",
-			"base_domain":          "amazon.com",
-			"api_family":           "official_api",
-			"api_support_profile":  "program_api_v1",
-			"active_mode":          map[bool]string{true: "program_api", false: "disabled"}[amazonMode == "program_api"],
-			"integration_mode":     amazonMode,
-			"api_available":        amazonMode == "program_api",
-			"auth_requirement":     "oauth",
-			"auth_mode":            "hybrid",
-			"eligibility_required": true,
-			"policy_scope_note":    "Program API access eligibility controls availability.",
-			"capabilities": map[string]bool{
-				"search":            amazonMode == "program_api",
-				"stock_observation": false,
-				"pricing":           amazonMode == "program_api",
-				"health":            true,
-			},
-			"state":              map[bool]string{true: "ready", false: "disabled"}[amazonMode == "program_api"],
-			"setup_instructions": "Configure Amazon credentials and eligibility mode before running provider scans.",
-		},
+	openAIActiveMethod := strings.TrimSpace(settings["openai.active_auth_method"])
+	openAIAPIKeyPresent := openAIActiveMethod == "api_key" && strings.EqualFold(strings.TrimSpace(settings["openai.api_key_secret_present"]), "true")
+	openAIBrowserState := strings.TrimSpace(settings["openai.browser_auth_state"])
+	openAIBrowserCredentialPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+	openAIBrowserProofState, openAIBrowserProofArtifactID, _, openAIBrowserProviderTestPassed := openAIBrowserAuthProviderTestProof(settings)
+	openAIBrowserReady := openAIActiveMethod == "browser_auth" && strings.EqualFold(openAIBrowserState, "connected") && openAIBrowserCredentialPresent && openAIBrowserProviderTestPassed
+	openAIReady := openAIAPIKeyPresent || openAIBrowserReady
+	telegramSenderChatReady := telegramCatalogCaptureConfigured(settings)
+	telegramBotReady := telegramBotTokenPresent(settings)
+	telegramBotValidated := strings.TrimSpace(settings["telegram.bot_id"]) != "" && strings.TrimSpace(settings["telegram.polling.tested_at"]) != ""
+	telegramWebhookConflict := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.webhook_conflict"]), "true")
+	telegramPaused := strings.EqualFold(strings.TrimSpace(settings["telegram.polling.paused"]), "true")
+	telegramReady := telegramSenderChatReady && telegramBotReady && telegramBotValidated && !telegramWebhookConflict && !telegramPaused
+	telegramConnectionState := telegramChannelConnectionState(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused)
+	telegramNextAction := telegramSetupNextAction(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused)
+	base := []map[string]any{}
+	for _, manifest := range coreIntegrationProviderManifests(amazonMode) {
+		provider := manifest.payload()
+		switch manifest.ProviderID {
+		case "openai":
+			provider["active_mode"] = openAIActiveMethod
+			provider["active_auth_method"] = openAIActiveMethod
+			provider["auth_methods"] = map[string]any{
+				"api_key": map[string]any{
+					"state":              map[bool]string{true: "connected", false: "setup_needed"}[openAIAPIKeyPresent],
+					"connected":          openAIAPIKeyPresent,
+					"credential_present": openAIAPIKeyPresent,
+				},
+				"browser_auth": map[string]any{
+					"state":                     map[bool]string{true: openAIBrowserState, false: "setup_needed"}[openAIBrowserState != ""],
+					"connected":                 openAIBrowserReady,
+					"credential_present":        openAIBrowserCredentialPresent,
+					"provider_test_passed":      openAIBrowserProviderTestPassed,
+					"provider_test_state":       openAIBrowserProofState,
+					"provider_test_artifact_id": openAIBrowserProofArtifactID,
+					"setup_message":             "Browser Auth requires a verifiable callback/artifact and provider-test proof before Cabinet marks OpenAI connected.",
+				},
+			}
+			provider["model_options"] = []string{"gpt-5.6-luna", "gpt-4o-mini", "gpt-4.1-mini"}
+			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[openAIReady]
+			provider["setup_schema"] = openAIRegistrySetupSchema()
+			provider["setup_status"] = openAIRegistrySetupStatus(settings, openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProofState, openAIBrowserProviderTestPassed, openAIReady)
+			provider["actions"] = openAIRegistryAssistantActions(openAIReady, openAIRegistrySetupNextAction(openAIActiveMethod, openAIAPIKeyPresent, openAIBrowserState, openAIBrowserCredentialPresent, openAIBrowserProviderTestPassed))
+		case "anthropic", "google":
+			provider["state"] = "disabled"
+			provider["health"] = map[string]any{
+				"status":      "disabled",
+				"state":       "disabled_placeholder",
+				"message":     fmt.Sprintf("%s assistant provider adapter is not yet supported.", manifest.DisplayName),
+				"next_action": "wait_for_supported_assistant_provider_adapter",
+			}
+			provider["setup_status"] = map[string]any{
+				"validation_status": "disabled",
+				"workflow_state":    "adapter_not_supported",
+				"next_action":       "wait_for_supported_assistant_provider_adapter",
+			}
+		case "telegram":
+			provider["active_mode"] = telegramConnectionState
+			provider["auth_methods"] = map[string]any{
+				"sender_chat": map[string]any{
+					"state":              map[bool]string{true: "paired", false: "pairing_required"}[telegramSenderChatReady],
+					"connected":          telegramSenderChatReady,
+					"credential_present": telegramSenderChatReady,
+					"setup_message":      "Pair one private Telegram chat with a short-lived single-use /start code; Cabinet records numeric IDs automatically.",
+				},
+				"bot_token": map[string]any{
+					"state":              map[bool]string{true: "validated", false: "setup_needed"}[telegramBotValidated],
+					"connected":          telegramBotValidated,
+					"credential_present": telegramBotReady,
+					"setup_message":      "Validate the write-only BotFather token with Telegram getMe before polling.",
+				},
+				"polling": map[string]any{
+					"state":           telegramConnectionState,
+					"connected":       telegramReady,
+					"public_listener": false,
+					"setup_message":   "Cabinet receives Telegram updates with outbound-only long polling.",
+				},
+			}
+			provider["state"] = map[bool]string{true: "ready", false: "needs_config"}[telegramReady]
+			provider["health"] = map[string]any{
+				"status":      map[bool]string{true: "ok", false: "needs_config"}[telegramReady],
+				"state":       telegramConnectionState,
+				"message":     telegramSetupMessage(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused),
+				"next_action": telegramNextAction,
+			}
+			provider["setup_status"] = map[string]any{
+				"auth_mode":            "bot_token_private_pairing",
+				"sender_chat_state":    map[bool]string{true: "paired", false: "pairing_required"}[telegramSenderChatReady],
+				"bot_token_state":      map[bool]string{true: "stored", false: "missing"}[telegramBotReady],
+				"bot_validation_state": map[bool]string{true: "validated", false: "pending"}[telegramBotValidated],
+				"transport":            "long_polling",
+				"public_listener":      false,
+				"webhook_state":        map[bool]string{true: "conflict", false: "not_configured"}[telegramWebhookConflict],
+				"runtime_proof":        map[bool]string{true: "ready", false: "pending_live_channel_check"}[telegramReady],
+				"workflow_state":       map[bool]string{true: "telegram_channel_ready_for_validation", false: "telegram_setup_required"}[telegramReady],
+				"next_action":          telegramNextAction,
+			}
+			provider["actions"] = telegramRegistryActions(telegramReady, telegramNextAction)
+		case "ebay":
+			provider["has_token"] = strings.TrimSpace(settings["ebay_bearer_token"]) != ""
+			provider["setup_status"] = ebaySetupStatus(settings, "")
+			provider["seller_operations"] = ebay.SellerOperationStatuses(nil)
+			provider["state"] = "ready"
+		case "amazon":
+			provider["eligibility_required"] = true
+			provider["policy_scope_note"] = "Program API access eligibility controls availability."
+			provider["state"] = map[bool]string{true: "ready", false: "disabled"}[amazonMode == "program_api"]
+		}
+		base = append(base, provider)
 	}
 
 	auDomains := resolveAUWebshopDomains(settings)
 	for _, d := range auDomains {
-		apiFamily := "web_ingestion"
-		activeMode := "web_ingestion"
-		integrationMode := "web_ingestion"
-		supportProfile := "html_fallback"
-		if d == "voglers.com.au" {
-			apiFamily = "bigcommerce"
-			activeMode = "storefront_public"
-			integrationMode = "storefront_access"
-			supportProfile = "bigcommerce_storefront_v1"
-		}
-		if d == "mrtoys.com.au" {
-			apiFamily = "doofinder"
-			activeMode = "hashid_search"
-			integrationMode = "api_family_search"
-			supportProfile = "doofinder_hashid_v1"
-		}
-		if d == "bonzaslotcars.com.au" {
-			apiFamily = "woo_store_api"
-			activeMode = "store_api_first"
-			supportProfile = "store_v1"
-		}
-		if d == "frontlinehobbies.com.au" {
-			apiFamily = "algolia"
-			activeMode = "algolia_runtime"
-			supportProfile = "algolia_runtime_v1"
-		}
-		if d == "hobbytechtoys.com.au" {
-			apiFamily = "boost_shopify"
-			activeMode = "boost_api"
-			supportProfile = "boost_v2"
-		}
-		base = append(base, map[string]any{
-			"provider_id":         "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
-			"display_name":        d,
-			"base_domain":         d,
-			"api_family":          apiFamily,
-			"api_support_profile": supportProfile,
-			"active_mode":         activeMode,
-			"integration_mode":    integrationMode,
-			"api_available":       d == "voglers.com.au" || d == "mrtoys.com.au",
-			"auth_requirement":    "none",
-			"auth_mode":           "none",
-			"capabilities": map[string]bool{
-				"search":            true,
-				"stock_observation": true,
-				"pricing":           true,
-				"health":            true,
-			},
-			"state":              "ready",
-			"setup_instructions": "Webshop ingestion uses crawl parsing and does not require API credentials.",
-		})
+		provider := auWebshopProviderManifest(d).payload()
+		provider["state"] = "ready"
+		base = append(base, provider)
 	}
 
 	for _, provider := range base {
@@ -6163,12 +11379,23 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		}
 
 		healthStatus := "unknown"
-		healthMessage := ""
+		healthPayload := map[string]any{
+			"status":              healthStatus,
+			"state":               "disabled",
+			"message":             "",
+			"last_error":          nil,
+			"retry_after_seconds": nil,
+			"next_action":         nil,
+			"last_checked_at":     nil,
+			"updated_at":          nil,
+		}
 		lastChecked := any(nil)
 		lastRunStatus := "never"
 		lastRunFinished := any(nil)
 		if scannerSvc != nil {
 			if health, err := scannerSvc.ProviderHealth(ctx, providerID); err == nil {
+				healthPayload = providerHealthResponse(health)
+				healthPayload["last_checked_at"] = healthPayload["updated_at"]
 				if v := strings.TrimSpace(health["status"]); v != "" {
 					healthStatus = v
 					switch v {
@@ -6180,25 +11407,79 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 						lastRunStatus = "failed"
 					}
 				}
-				if v := strings.TrimSpace(health["message"]); v != "" {
-					healthMessage = v
-				}
 				if v := strings.TrimSpace(health["updated_at"]); v != "" {
 					lastChecked = v
 					lastRunFinished = v
 				}
 			}
+			if healthStatus == "unknown" {
+				scopeHealthID := providerHealthIDForRegistry(provider)
+				if scopeHealthID != "" && scopeHealthID != providerID {
+					if health, err := scannerSvc.ProviderHealth(ctx, scopeHealthID); err == nil && strings.TrimSpace(health["status"]) != "unknown" {
+						healthPayload = providerHealthResponse(health)
+						healthPayload["provider"] = providerID
+						healthPayload["evidence_provider"] = scopeHealthID
+						healthPayload["last_checked_at"] = healthPayload["updated_at"]
+						if v := strings.TrimSpace(health["status"]); v != "" {
+							healthStatus = v
+							switch v {
+							case "ok", "ready":
+								lastRunStatus = "success"
+							default:
+								lastRunStatus = "failed"
+							}
+						}
+						if v := strings.TrimSpace(health["updated_at"]); v != "" {
+							lastChecked = v
+							lastRunFinished = v
+						}
+					}
+				}
+			}
 		}
-		provider["health"] = map[string]any{
-			"status":          healthStatus,
-			"message":         healthMessage,
-			"last_checked_at": lastChecked,
+		healthPayload["last_checked_at"] = lastChecked
+		provider["health"] = healthPayload
+		if strings.EqualFold(providerID, "openai") {
+			provider["health"] = openAIRegistryHealthPayload(
+				openAIReady,
+				openAIActiveMethod,
+				openAIAPIKeyPresent,
+				openAIBrowserState,
+				openAIBrowserCredentialPresent,
+				openAIBrowserProviderTestPassed,
+			)
+		}
+		if strings.EqualFold(providerID, "anthropic") || strings.EqualFold(providerID, "google") {
+			provider["health"] = map[string]any{
+				"status":      "disabled",
+				"state":       "disabled_placeholder",
+				"message":     fmt.Sprintf("%s assistant provider adapter is not yet supported.", fmt.Sprintf("%v", provider["display_name"])),
+				"next_action": "wait_for_supported_assistant_provider_adapter",
+			}
+		}
+		if strings.EqualFold(providerID, "telegram") {
+			provider["health"] = map[string]any{
+				"status":      map[bool]string{true: "ready", false: "needs_config"}[telegramReady],
+				"state":       telegramConnectionState,
+				"message":     telegramSetupMessage(telegramBotReady, telegramBotValidated, telegramWebhookConflict, telegramSenderChatReady, telegramPaused),
+				"next_action": telegramNextAction,
+			}
+			provider["actions"] = telegramRegistryActions(telegramReady, telegramNextAction)
 		}
 		provider["last_run"] = map[string]any{
 			"status":      lastRunStatus,
 			"finished_at": lastRunFinished,
 		}
+		if strings.EqualFold(providerID, "ebay") {
+			provider["setup_status"] = ebaySetupStatus(settings, healthStatus)
+		}
+		applyBetaMarketWatchReleaseStatus(provider, settings)
 		baseDomain := normalizeProviderDomain(fmt.Sprintf("%v", provider["base_domain"]))
+		if _, hasSetupSchema := provider["setup_schema"]; !hasSetupSchema {
+			if schema, ok := providerConfigSchemaForRef(fmt.Sprintf("%v", provider["config_schema_ref"])); ok {
+				provider["setup_schema"] = schema
+			}
+		}
 		if overrideFamily, ok := familyOverrides[baseDomain]; ok && strings.TrimSpace(overrideFamily) != "" {
 			provider["api_family"] = strings.TrimSpace(overrideFamily)
 			switch strings.TrimSpace(strings.ToLower(overrideFamily)) {
@@ -6236,6 +11517,309 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	return base
 }
 
+func applyBetaMarketWatchReleaseStatus(provider map[string]any, settings map[string]string) {
+	scope := strings.TrimSpace(fmt.Sprintf("%v", provider["market_watch_scope"]))
+	if scope == "" {
+		return
+	}
+
+	providerID := strings.TrimSpace(fmt.Sprintf("%v", provider["provider_id"]))
+	health := mapValue(provider["health"])
+	healthStatus := strings.TrimSpace(fmt.Sprintf("%v", health["status"]))
+	liveValidated := healthStatus == "ok" || healthStatus == "ready"
+	workflowRefs := providerWorkflowRefs(provider)
+
+	switch providerID {
+	case "ebay":
+		hasToken := strings.TrimSpace(settings["ebay_bearer_token"]) != ""
+		provider["live_evidence_required"] = true
+		if !hasToken {
+			provider["state"] = "needs_config"
+			provider["beta_release_status"] = "setup_required"
+			provider["live_evidence_state"] = "missing_credentials"
+			provider["setup_instructions"] = "Store eBay credentials and run live provider proof before using eBay for beta Market Watch."
+			provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "connect_ebay_credentials_and_run_live_provider_proof")
+			return
+		}
+		if liveValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		provider["beta_release_status"] = "live_evidence_required"
+		provider["live_evidence_state"] = "credentials_present_proof_pending"
+		provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "run_live_provider_proof_before_beta_release")
+	case "amazon":
+		if !strings.EqualFold(fmt.Sprintf("%v", provider["state"]), "ready") {
+			provider["beta_release_status"] = "disabled_unsupported"
+			provider["live_evidence_state"] = "unsupported_for_beta"
+			provider["actions"] = workflowActionsForRefs(workflowRefs, "disabled", "choose_supported_beta_market_watch_provider")
+		}
+	case "au-webshop-frontlinehobbies-com-au":
+		provider["live_evidence_required"] = true
+		evidenceProvider := strings.TrimSpace(fmt.Sprintf("%v", health["evidence_provider"]))
+		healthMessage := strings.TrimSpace(fmt.Sprintf("%v", health["message"]))
+		browserValidated := liveValidated && evidenceProvider == "frontlinehobbies" && strings.Contains(healthMessage, "browser_companion")
+		if browserValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		provider["beta_release_status"] = "browser_companion_live_evidence_required"
+		provider["live_evidence_state"] = "external_user_present_evidence_required"
+		provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "pair_browser_companion_and_attach_user_present_search_evidence")
+	case "au-webshop-bonzaslotcars-com-au":
+		provider["live_evidence_required"] = true
+		evidenceProvider := strings.TrimSpace(fmt.Sprintf("%v", health["evidence_provider"]))
+		healthMessage := strings.TrimSpace(fmt.Sprintf("%v", health["message"]))
+		browserValidated := liveValidated && evidenceProvider == "bonzaslotcars" && strings.Contains(healthMessage, "browser_companion")
+		if browserValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		provider["beta_release_status"] = "browser_companion_live_evidence_required"
+		provider["live_evidence_state"] = "external_user_present_evidence_required"
+		provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "pair_browser_companion_and_attach_user_present_search_evidence")
+	default:
+		provider["live_evidence_required"] = true
+		if liveValidated {
+			provider["beta_release_status"] = "available_live_validated"
+			provider["live_evidence_state"] = "validated"
+			return
+		}
+		if strings.EqualFold(fmt.Sprintf("%v", provider["api_family"]), "woo_store_api") {
+			provider["beta_release_status"] = "manual_url_capture_only"
+			provider["live_evidence_state"] = "headless_or_manual_capture_required"
+			provider["actions"] = workflowActionsForRefs(workflowRefs, "setup_needed", "use_manual_url_capture_or_attach_live_probe_evidence")
+			return
+		}
+		provider["beta_release_status"] = "beta_limited"
+		provider["live_evidence_state"] = "public_provider_probe_required"
+	}
+}
+
+func providerWorkflowRefs(provider map[string]any) []string {
+	rawRefs, ok := provider["workflow_refs"].([]string)
+	if ok {
+		return append([]string{}, rawRefs...)
+	}
+	refs := []string{}
+	for _, raw := range anySlice(provider["workflow_refs"]) {
+		if ref := strings.TrimSpace(fmt.Sprintf("%v", raw)); ref != "" {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
+}
+
+func providerHealthIDForRegistry(provider map[string]any) string {
+	scope := strings.TrimSpace(fmt.Sprintf("%v", provider["market_watch_scope"]))
+	if scope != "" {
+		return strings.ToLower(scope)
+	}
+	return strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", provider["provider_id"])))
+}
+
+func mapValue(v any) map[string]any {
+	if value, ok := v.(map[string]any); ok {
+		return value
+	}
+	return map[string]any{}
+}
+
+func anySlice(v any) []any {
+	if values, ok := v.([]any); ok {
+		return values
+	}
+	if values, ok := v.([]string); ok {
+		out := make([]any, 0, len(values))
+		for _, value := range values {
+			out = append(out, value)
+		}
+		return out
+	}
+	return nil
+}
+
+func openAIRegistryAssistantActions(ready bool, nextAction string) []map[string]any {
+	availability := "setup_needed"
+	requiredNextAction := any(nextAction)
+	if ready {
+		availability = "available"
+		requiredNextAction = nil
+	}
+	return workflowActionsForRefs([]string{"assistant.chat", "assistant.image_help", "assistant.content_generation"}, availability, requiredNextAction)
+}
+
+func telegramRegistryActions(ready bool, nextAction string) []map[string]any {
+	availability := "setup_needed"
+	requiredNextAction := any(nextAction)
+	if ready {
+		availability = "available"
+		requiredNextAction = nil
+	}
+	return workflowActionsForRefs([]string{"telegram.catalog_capture", "telegram.agent_text"}, availability, requiredNextAction)
+}
+
+func openAIRegistrySetupSchema() map[string]any {
+	schema, _ := providerConfigSchemaForRef("integrations/openai/auth")
+	return schema
+}
+
+func openAIRegistrySetupStatus(settings map[string]string, activeMethod string, apiKeyReady bool, browserState string, browserArtifactPresent bool, browserProviderTestState string, browserProviderTestPassed bool, ready bool) map[string]any {
+	if strings.TrimSpace(activeMethod) == "" {
+		activeMethod = "none"
+	}
+	apiKeyState := "missing"
+	if apiKeyReady {
+		apiKeyState = "stored"
+	}
+	if strings.TrimSpace(browserState) == "" {
+		browserState = "setup_needed"
+	}
+	browserArtifactState := "missing"
+	if browserArtifactPresent {
+		browserArtifactState = "present"
+	}
+	if strings.TrimSpace(browserProviderTestState) == "" {
+		browserProviderTestState = "not_run"
+	}
+	assistantDefaultProvider := strings.TrimSpace(settings["assistant_default_provider"])
+	if assistantDefaultProvider == "" {
+		assistantDefaultProvider = "openai"
+	}
+	assistantDefaultModel := strings.TrimSpace(settings["assistant_default_model"])
+	if assistantDefaultModel == "" {
+		assistantDefaultModel = "gpt-4o-mini"
+	}
+	return map[string]any{
+		"auth_mode":                         "hybrid",
+		"active_auth_method":                activeMethod,
+		"api_key_state":                     apiKeyState,
+		"browser_auth_state":                browserState,
+		"browser_auth_artifact_state":       browserArtifactState,
+		"browser_auth_provider_test_state":  browserProviderTestState,
+		"browser_auth_provider_test_passed": browserProviderTestPassed,
+		"validation_status":                 map[bool]string{true: "ready", false: "setup_needed"}[ready],
+		"assistant_default_provider":        assistantDefaultProvider,
+		"assistant_default_model":           assistantDefaultModel,
+		"workflow_state":                    map[bool]string{true: "assistant_workflows_ready", false: "provider_setup_required"}[ready],
+		"next_action":                       openAIRegistrySetupNextAction(activeMethod, apiKeyReady, browserState, browserArtifactPresent, browserProviderTestPassed),
+	}
+}
+
+func openAIRegistryHealthPayload(ready bool, activeMethod string, apiKeyReady bool, browserState string, browserArtifactPresent bool, browserProviderTestPassed bool) map[string]any {
+	status := "needs_config"
+	state := "provider_setup_required"
+	message := "Choose OpenAI API-key mode or complete verified Browser Auth before running OpenAI workflows."
+	if ready {
+		status = "ready"
+		state = "assistant_workflows_ready"
+		message = "OpenAI assistant provider setup is ready for workflow execution."
+	}
+	if activeMethod == "api_key" && !apiKeyReady {
+		message = "OpenAI API-key mode is selected, but no API key secret is stored for the active profile."
+	}
+	if activeMethod == "browser_auth" && (!strings.EqualFold(browserState, "connected") || !browserArtifactPresent) {
+		message = "OpenAI Browser Auth requires a verified auth artifact before Cabinet marks assistant workflows ready."
+	}
+	if activeMethod == "browser_auth" && strings.EqualFold(browserState, "connected") && browserArtifactPresent && !browserProviderTestPassed {
+		message = "OpenAI Browser Auth requires passed provider-test proof before assistant workflows can run."
+	}
+	return map[string]any{
+		"status":      status,
+		"state":       state,
+		"auth_method": map[bool]string{true: activeMethod, false: "none"}[strings.TrimSpace(activeMethod) != ""],
+		"message":     message,
+		"next_action": openAIRegistrySetupNextAction(activeMethod, apiKeyReady, browserState, browserArtifactPresent, browserProviderTestPassed),
+	}
+}
+
+func openAIRegistrySetupNextAction(activeMethod string, apiKeyReady bool, browserState string, browserArtifactPresent bool, browserProviderTestPassed bool) string {
+	switch activeMethod {
+	case "api_key":
+		if !apiKeyReady {
+			return "connect_openai_api_key"
+		}
+		return "run_openai_test"
+	case "browser_auth":
+		if !strings.EqualFold(browserState, "connected") || !browserArtifactPresent {
+			return "complete_browser_auth_artifact_proof"
+		}
+		if !browserProviderTestPassed {
+			return "run_browser_auth_provider_test"
+		}
+		return "run_openai_workflow"
+	default:
+		return "connect_openai_api_key_or_browser_auth"
+	}
+}
+
+func telegramCatalogCaptureConfigured(settings map[string]string) bool {
+	return strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != "" &&
+		strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != ""
+}
+
+func telegramBotTokenPresent(settings map[string]string) bool {
+	return strings.EqualFold(strings.TrimSpace(settings["telegram.bot_token_secret_present"]), "true") ||
+		strings.EqualFold(strings.TrimSpace(settings["telegram.bot_token_present"]), "true")
+}
+
+func telegramWebhookConfigured(settings map[string]string) bool {
+	return strings.EqualFold(strings.TrimSpace(settings["telegram.webhook_configured"]), "true") ||
+		strings.EqualFold(strings.TrimSpace(settings["telegram.webhook_url_set"]), "true")
+}
+
+func telegramChannelConnectionState(botTokenReady, botValidated, webhookConflict, paired, paused bool) string {
+	switch {
+	case !botTokenReady:
+		return "bot_token_required"
+	case !botValidated:
+		return "bot_validation_required"
+	case webhookConflict:
+		return "webhook_conflict"
+	case !paired:
+		return "pairing_required"
+	case paused:
+		return "paused"
+	default:
+		return "connected"
+	}
+}
+
+func telegramSetupNextAction(botTokenReady, botValidated, webhookConflict, paired, paused bool) string {
+	switch {
+	case !botTokenReady:
+		return "test_connection"
+	case !botValidated:
+		return "test_connection"
+	case webhookConflict:
+		return "resolve_webhook_conflict"
+	case !paired:
+		return "create_pairing_code"
+	case paused:
+		return "resume_polling"
+	default:
+		return "talk_to_cabinet"
+	}
+}
+
+func telegramSetupMessage(botTokenReady, botValidated, webhookConflict, paired, paused bool) string {
+	switch telegramSetupNextAction(botTokenReady, botValidated, webhookConflict, paired, paused) {
+	case "test_connection":
+		return "Paste a BotFather token and validate it with Telegram. Cabinet stores the token write-only."
+	case "resolve_webhook_conflict":
+		return "This bot has an existing webhook. Remove it explicitly before outbound-only long polling starts."
+	case "create_pairing_code":
+		return "Create a short-lived pairing code and send its /start command to the bot in a private chat."
+	case "resume_polling":
+		return "Telegram polling is paused for this profile."
+	default:
+		return "Telegram is connected through outbound-only long polling with an exact private-chat profile mapping."
+	}
+}
+
 func defaultAUWebshopDomains() []string {
 	return []string{
 		"bonzaslotcars.com.au",
@@ -6247,6 +11831,43 @@ func defaultAUWebshopDomains() []string {
 		"mrtoys.com.au",
 		"hobbyco.com.au",
 		"metrohobbies.com.au",
+	}
+}
+
+func ebaySetupStatus(settings map[string]string, providerHealthStatus string) map[string]any {
+	hasToken := strings.TrimSpace(settings["ebay_bearer_token"]) != ""
+	marketplace := strings.TrimSpace(settings["ebay_marketplace"])
+	if marketplace == "" {
+		marketplace = "unset"
+	}
+	tokenState := "token_required"
+	validationStatus := "needs_credentials"
+	healthState := "disabled"
+	nextAction := "save_ebay_credentials_and_marketplace"
+	if hasToken {
+		tokenState = "stored"
+	}
+	if hasToken && marketplace != "unset" {
+		validationStatus = "ready"
+		healthState = "ready"
+		nextAction = "run_ebay_query_sets_from_market_watch"
+	}
+	if hasToken && marketplace != "unset" {
+		switch strings.ToLower(strings.TrimSpace(providerHealthStatus)) {
+		case "error", "failed", "degraded":
+			validationStatus = "degraded"
+			healthState = "degraded"
+			nextAction = "check_provider_health_and_credentials"
+		}
+	}
+	return map[string]any{
+		"auth_mode":         "api_key",
+		"marketplace":       marketplace,
+		"token_state":       tokenState,
+		"validation_status": validationStatus,
+		"health_state":      healthState,
+		"next_action":       nextAction,
+		"base_url_set":      strings.TrimSpace(settings["ebay_base_url"]) != "",
 	}
 }
 
@@ -6306,26 +11927,56 @@ func providerSettingsKeys(providerID string) providerSettingKeySet {
 	}
 }
 
-func buildAmazonCandidateContract(qs scanner.QuerySet) []map[string]any {
+type amazonContractProvider struct {
+	candidates []scanner.CandidateInput
+}
+
+func (p amazonContractProvider) Search(context.Context, scanner.QuerySet) ([]scanner.CandidateInput, error) {
+	return p.candidates, nil
+}
+
+func (p amazonContractProvider) ProviderID() string {
+	return "amazon"
+}
+
+func buildAmazonCandidateContract(qs scanner.QuerySet) []scanner.CandidateInput {
 	keyword := "collectible"
 	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
 		keyword = strings.TrimSpace(qs.Keywords[0])
 	}
-	return []map[string]any{
+	return []scanner.CandidateInput{
 		{
-			"listing_id": "amazon-" + strings.ToLower(strings.ReplaceAll(keyword, " ", "-")) + "-001",
-			"title":      "Amazon " + keyword + " listing",
-			"price": map[string]any{
-				"amount":   39.99,
-				"currency": "AUD",
-			},
-			"url":    "https://amazon.com/dp/example",
-			"seller": "amazon-marketplace",
-			"source": map[string]any{
-				"provider_id": "amazon",
-			},
+			ListingID:  "amazon-" + strings.ToLower(strings.ReplaceAll(keyword, " ", "-")) + "-001",
+			Title:      "Amazon " + keyword + " listing",
+			Price:      39.99,
+			Currency:   "AUD",
+			URL:        "https://amazon.com/dp/example",
+			Seller:     "amazon-marketplace",
+			Source:     "amazon",
+			StockState: "available",
+			StockCount: -1,
 		},
 	}
+}
+
+func buildAmazonCandidateResponseContract(candidates []scanner.CandidateInput) []map[string]any {
+	out := make([]map[string]any, 0, len(candidates))
+	for _, candidate := range candidates {
+		out = append(out, map[string]any{
+			"listing_id": candidate.ListingID,
+			"title":      candidate.Title,
+			"price": map[string]any{
+				"amount":   candidate.Price,
+				"currency": candidate.Currency,
+			},
+			"url":    candidate.URL,
+			"seller": candidate.Seller,
+			"source": map[string]any{
+				"provider_id": candidate.Source,
+			},
+		})
+	}
+	return out
 }
 
 type frontlineAlgoliaConfig struct {
@@ -6359,12 +12010,17 @@ type hobbytechBoostConfig struct {
 }
 
 type bonzaProductResponse struct {
-	ID                int    `json:"id"`
-	Name              string `json:"name"`
-	Permalink         string `json:"permalink"`
-	Price             string `json:"prices"`
-	IsInStock         *bool  `json:"is_in_stock"`
-	LowStockRemaining *int   `json:"low_stock_remaining"`
+	ID                int                     `json:"id"`
+	Name              string                  `json:"name"`
+	Slug              string                  `json:"slug"`
+	Permalink         string                  `json:"permalink"`
+	Description       string                  `json:"description"`
+	Prices            bonzaProductPrices      `json:"prices"`
+	IsInStock         *bool                   `json:"is_in_stock"`
+	LowStockRemaining *int                    `json:"low_stock_remaining"`
+	Categories        []bonzaProductName      `json:"categories"`
+	Attributes        []bonzaProductAttribute `json:"attributes"`
+	Images            []bonzaProductImage     `json:"images"`
 }
 
 type bonzaSearchResult struct {
@@ -6372,6 +12028,85 @@ type bonzaSearchResult struct {
 	ObservedPageSize int              `json:"observed_page_size"`
 	ItemsPerPageUsed int              `json:"items_per_page_used"`
 	Candidates       []map[string]any `json:"candidates"`
+}
+
+type bonzaProductPrices struct {
+	CurrencyCode string `json:"currency_code"`
+	Price        string `json:"price"`
+}
+
+type bonzaProductName struct {
+	Name string `json:"name"`
+}
+
+type bonzaProductAttribute struct {
+	Name    string                      `json:"name"`
+	Terms   bonzaProductAttributeValues `json:"terms"`
+	Options bonzaProductAttributeValues `json:"options"`
+}
+
+type bonzaProductImage struct {
+	Src string `json:"src"`
+}
+
+type bonzaProductAttributeValues []string
+
+func (values *bonzaProductAttributeValues) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*values = nil
+		return nil
+	}
+	var stringsOnly []string
+	if err := json.Unmarshal(data, &stringsOnly); err == nil {
+		*values = compactBonzaAttributeValues(stringsOnly)
+		return nil
+	}
+	var namedValues []bonzaProductName
+	if err := json.Unmarshal(data, &namedValues); err != nil {
+		return err
+	}
+	out := make([]string, 0, len(namedValues))
+	for _, value := range namedValues {
+		out = append(out, value.Name)
+	}
+	*values = compactBonzaAttributeValues(out)
+	return nil
+}
+
+func compactBonzaAttributeValues(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, value := range in {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+type providerProductURLRoute struct {
+	OriginalURL   string `json:"original_url"`
+	NormalizedURL string `json:"normalized_url"`
+	Host          string `json:"host"`
+	Path          string `json:"path"`
+	Provider      string `json:"provider"`
+	Family        string `json:"family"`
+	Slug          string `json:"slug,omitempty"`
+	Action        string `json:"action"`
+}
+
+type providerProductDraft struct {
+	ProviderProductID string            `json:"provider_product_id"`
+	Title             string            `json:"title"`
+	SourceURL         string            `json:"source_url"`
+	Description       string            `json:"description"`
+	Price             float64           `json:"price"`
+	Currency          string            `json:"currency"`
+	StockState        string            `json:"stock_state"`
+	StockCount        int               `json:"stock_count"`
+	Categories        []string          `json:"categories"`
+	Attributes        map[string]string `json:"attributes"`
+	ImageURLs         []string          `json:"image_urls"`
+	Evidence          map[string]any    `json:"evidence"`
 }
 
 const frontlineAlgoliaCacheKey = "frontline_algolia_last_known_good"
@@ -6386,6 +12121,83 @@ func parsePositiveInt(raw string, fallback int) int {
 	return parsed
 }
 
+func purchaseInboxCardToItem(card ebaypurchasecapture.PurchaseCard) collection.Item {
+	title := strings.TrimSpace(firstNonEmptyString(card.PurchasedIdentity, card.ListingTitle))
+	partNumber := strings.TrimSpace(firstNonEmptyString(card.ListingID, card.TransactionID, ebaypurchasecapture.PurchaseItemKey(card)))
+	return collection.Item{
+		Brand:      "Unknown",
+		Category:   "General",
+		PartNumber: partNumber,
+		Title:      title,
+		Status:     "active",
+		Notes:      appendPurchaseInboxNote("", card),
+		SourceURLs: appendPurchaseInboxSourceURL(nil, card.ItemURL),
+		Tags:       []string{"purchase-inbox", "ebay-purchase"},
+	}
+}
+
+func appendPurchaseInboxNote(existing string, card ebaypurchasecapture.PurchaseCard) string {
+	parts := []string{"Purchase Inbox confirmed eBay capture"}
+	if v := strings.TrimSpace(card.OrderID); v != "" {
+		parts = append(parts, "order "+v)
+	}
+	if v := strings.TrimSpace(card.TransactionID); v != "" {
+		parts = append(parts, "transaction "+v)
+	}
+	if v := strings.TrimSpace(card.ListingID); v != "" {
+		parts = append(parts, "listing "+v)
+	}
+	if card.Quantity > 0 {
+		parts = append(parts, fmt.Sprintf("quantity %d", card.Quantity))
+	}
+	if v := strings.TrimSpace(card.ItemPrice); v != "" {
+		parts = append(parts, "price "+v)
+	}
+	note := strings.Join(parts, "; ") + "."
+	if strings.TrimSpace(existing) == "" {
+		return note
+	}
+	if strings.Contains(existing, note) {
+		return existing
+	}
+	return strings.TrimSpace(existing) + "\n" + note
+}
+
+func appendPurchaseInboxSourceURL(existing []string, rawURL string) []string {
+	trimmed := strings.TrimSpace(rawURL)
+	out := append([]string{}, existing...)
+	if trimmed == "" {
+		return out
+	}
+	for _, value := range out {
+		if strings.TrimSpace(value) == trimmed {
+			return out
+		}
+	}
+	return append(out, trimmed)
+}
+
+func purchaseInboxActionAudit(card ebaypurchasecapture.PurchaseCard, itemID string) map[string]any {
+	return map[string]any{
+		"source":         "ebay_purchase_capture",
+		"item_id":        strings.TrimSpace(itemID),
+		"target_key":     ebaypurchasecapture.PurchaseItemKey(card),
+		"order_id":       strings.TrimSpace(card.OrderID),
+		"listing_id":     strings.TrimSpace(card.ListingID),
+		"transaction_id": strings.TrimSpace(card.TransactionID),
+		"confirmed":      true,
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func discoverFrontlineAlgoliaConfig(
 	ctx context.Context,
 	conn *sql.DB,
@@ -6394,7 +12206,7 @@ func discoverFrontlineAlgoliaConfig(
 	fallbackAssetURLs []string,
 ) (frontlineAlgoliaConfig, bool, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
 	candidates = append(candidates, strings.TrimSpace(assetURL))
@@ -6530,6 +12342,125 @@ func readFrontlineAlgoliaCache(ctx context.Context, conn *sql.DB) (frontlineAlgo
 	return config, nil
 }
 
+func defaultFrontlineAlgoliaSearchURL(config frontlineAlgoliaConfig) string {
+	appID := strings.ToLower(strings.TrimSpace(config.ApplicationID))
+	index := ""
+	if len(config.IndexNames) > 0 {
+		index = strings.TrimSpace(config.IndexNames[0])
+	}
+	if appID == "" || index == "" {
+		return ""
+	}
+	return "https://" + appID + "-dsn.algolia.net/1/indexes/" + url.PathEscape(index) + "/query"
+}
+
+func runFrontlineAlgoliaSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL string,
+	qs scanner.QuerySet,
+	config frontlineAlgoliaConfig,
+	baseURL string,
+	itemsPerPage int,
+) ([]map[string]any, int, error) {
+	if client == nil {
+		client = providerHTTPClient()
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, 0, fmt.Errorf("frontline search url is required")
+	}
+	query := strings.TrimSpace(qs.Name)
+	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+		query = strings.TrimSpace(qs.Keywords[0])
+	}
+	if query == "" {
+		query = "collectible"
+	}
+	if itemsPerPage <= 0 {
+		itemsPerPage = 24
+	}
+	if itemsPerPage > 50 {
+		itemsPerPage = 50
+	}
+	requestBody, err := json.Marshal(map[string]string{
+		"params": url.Values{
+			"query":       []string{query},
+			"hitsPerPage": []string{strconv.Itoa(itemsPerPage)},
+			"page":        []string{"0"},
+		}.Encode(),
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal frontline search request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(searchURL), bytes.NewReader(requestBody))
+	if err != nil {
+		return nil, 0, fmt.Errorf("build frontline search request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Algolia-Application-Id", strings.TrimSpace(config.ApplicationID))
+	req.Header.Set("X-Algolia-API-Key", strings.TrimSpace(config.SearchKey))
+	req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech/cabinet)")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("run frontline search request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, 0, fmt.Errorf("frontline search returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, 0, fmt.Errorf("read frontline search response: %w", err)
+	}
+	var payload struct {
+		Hits   []map[string]any `json:"hits"`
+		NBHits int              `json:"nbHits"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, 0, fmt.Errorf("decode frontline response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Hits))
+	for _, hit := range payload.Hits {
+		id := firstNonEmptyString(
+			stringCandidateValue(hit["objectID"]),
+			stringCandidateValue(hit["id"]),
+			stringCandidateValue(hit["sku"]),
+		)
+		if id == "" {
+			continue
+		}
+		title := firstNonEmptyString(
+			stringCandidateValue(hit["title"]),
+			stringCandidateValue(hit["name"]),
+			stringCandidateValue(hit["product_name"]),
+		)
+		link := firstNonEmptyString(
+			stringCandidateValue(hit["url"]),
+			stringCandidateValue(hit["link"]),
+			stringCandidateValue(hit["handle"]),
+		)
+		if link != "" && !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
+			link = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(link, "/")
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id": "frontline-" + id,
+			"title":      title,
+			"url":        link,
+			"price":      numericCandidateValue(firstNonNil(hit["price"], hit["price_value"], hit["sale_price"])),
+			"image":      firstNonEmptyString(stringCandidateValue(hit["image"]), stringCandidateValue(hit["image_url"])),
+			"source":     "frontlinehobbies",
+			"seller":     "frontlinehobbies.com.au",
+		})
+	}
+	total := payload.NBHits
+	if total == 0 {
+		total = len(candidates)
+	}
+	return candidates, total, nil
+}
+
 func discoverDoofinderConfig(
 	ctx context.Context,
 	conn *sql.DB,
@@ -6538,7 +12469,7 @@ func discoverDoofinderConfig(
 	fallbackAssetURLs []string,
 ) (doofinderConfig, bool, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
 	candidates = append(candidates, strings.TrimSpace(assetURL))
@@ -6652,7 +12583,7 @@ func runDoofinderSearch(
 	hashID, baseURL, providerDomain string,
 ) ([]map[string]any, int, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(searchURL) == "" {
 		return nil, 0, fmt.Errorf("doofinder search url is required")
@@ -6742,7 +12673,7 @@ func runBigCommerceStorefrontSearch(
 	providerDomain string,
 ) ([]map[string]any, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(searchURL) == "" {
 		return nil, fmt.Errorf("bigcommerce storefront search url is required")
@@ -6752,7 +12683,12 @@ func runBigCommerceStorefrontSearch(
 		return nil, fmt.Errorf("parse bigcommerce storefront url: %w", err)
 	}
 	params := parsed.Query()
-	params.Set("q", strings.TrimSpace(query))
+	if strings.EqualFold(path.Base(parsed.Path), "search.php") {
+		params.Set("search_query", strings.TrimSpace(query))
+		params.Set("section", "product")
+	} else {
+		params.Set("q", strings.TrimSpace(query))
+	}
 	params.Set("page", strconv.Itoa(page))
 	params.Set("limit", strconv.Itoa(pageSize))
 	parsed.RawQuery = params.Encode()
@@ -6784,6 +12720,10 @@ func runBigCommerceStorefrontSearch(
 		} `json:"products"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
+		candidates := bigCommerceCandidatesFromSearchHTML(string(body), providerDomain)
+		if len(candidates) > 0 {
+			return candidates, nil
+		}
 		return nil, fmt.Errorf("decode bigcommerce storefront response: %w", err)
 	}
 	candidates := make([]map[string]any, 0, len(payload.Products))
@@ -6805,13 +12745,477 @@ func runBigCommerceStorefrontSearch(
 	return candidates, nil
 }
 
+func bigCommerceCandidatesFromSearchHTML(body, providerDomain string) []map[string]any {
+	cardPattern := regexp.MustCompile(`(?is)(?:data-product-id|data-entity-id)=["']([^"']+)["'].*?<h3[^>]*class=["'][^"']*card-title[^"']*["'][^>]*>.*?<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>.*?data-product-price-with-tax[^>]*class=["'][^"']*price[^"']*["'][^>]*>(.*?)</span>`)
+	matches := cardPattern.FindAllStringSubmatch(body, -1)
+	candidates := make([]map[string]any, 0, len(matches))
+	for _, match := range matches {
+		if len(match) < 5 {
+			continue
+		}
+		id := strings.TrimSpace(html.UnescapeString(match[1]))
+		rawURL := strings.TrimSpace(html.UnescapeString(match[2]))
+		title := strings.TrimSpace(stripHTMLTags(html.UnescapeString(match[3])))
+		price := strings.TrimSpace(stripHTMLTags(html.UnescapeString(match[4])))
+		if id == "" || title == "" || rawURL == "" {
+			continue
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id": "bigcommerce-" + id,
+			"title":      title,
+			"url":        rawURL,
+			"price":      price,
+			"source":     providerDomain,
+			"seller":     providerDomain,
+		})
+	}
+	return candidates
+}
+
+func stripHTMLTags(value string) string {
+	return strings.Join(strings.Fields(regexp.MustCompile(`(?is)<[^>]+>`).ReplaceAllString(value, " ")), " ")
+}
+
+func runLightspeedStorefrontSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL, query, providerDomain string,
+) ([]map[string]any, error) {
+	if client == nil {
+		client = providerHTTPClient()
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, fmt.Errorf("lightspeed storefront search url is required")
+	}
+	parsed, err := url.Parse(strings.TrimSpace(searchURL))
+	if err != nil {
+		return nil, fmt.Errorf("parse lightspeed storefront url: %w", err)
+	}
+	params := parsed.Query()
+	params.Set("q", strings.TrimSpace(query))
+	parsed.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build lightspeed storefront request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run lightspeed storefront request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("lightspeed storefront returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read lightspeed storefront response: %w", err)
+	}
+	var payload struct {
+		Products []struct {
+			ID           any      `json:"id"`
+			Title        string   `json:"title"`
+			FullTitle    string   `json:"fulltitle"`
+			URL          string   `json:"url"`
+			Image        string   `json:"image"`
+			Price        any      `json:"price"`
+			PriceIncl    any      `json:"price_incl"`
+			SKU          string   `json:"sku"`
+			ArticleCode  string   `json:"article_code"`
+			Brand        string   `json:"brand"`
+			Category     string   `json:"category"`
+			Categories   []string `json:"categories"`
+			StockLevel   any      `json:"stock_level"`
+			StockState   string   `json:"stock_state"`
+			Availability string   `json:"availability"`
+			Description  string   `json:"description"`
+		} `json:"products"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode lightspeed storefront response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Products))
+	missingCoreFields := 0
+	for _, product := range payload.Products {
+		id := firstNonEmptyString(strings.TrimSpace(fmt.Sprintf("%v", product.ID)), product.SKU, product.ArticleCode)
+		title := firstNonEmptyString(product.Title, product.FullTitle)
+		productURL := normalizeProviderProductURL("https://"+providerDomain, product.URL)
+		price := numericCurrencyValue(firstNonNil(product.Price, product.PriceIncl))
+		if id == "" || title == "" || productURL == "" || price <= 0 {
+			missingCoreFields++
+			continue
+		}
+		stockState := strings.TrimSpace(product.StockState)
+		if stockState == "" {
+			stockState = stockStateFromAvailability(product.Availability)
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id":  "lightspeed-" + id,
+			"title":       title,
+			"url":         productURL,
+			"price":       price,
+			"currency":    "AUD",
+			"image":       normalizeProviderProductURL("https://"+providerDomain, product.Image),
+			"sku":         strings.TrimSpace(product.SKU),
+			"brand":       strings.TrimSpace(product.Brand),
+			"category":    firstNonEmptyString(product.Category, firstString(product.Categories)),
+			"categories":  product.Categories,
+			"description": stripHTMLText(product.Description),
+			"stock_state": stockState,
+			"stock_count": int(numericCurrencyValue(product.StockLevel)),
+			"source":      "acercmodels",
+			"seller":      providerDomain,
+		})
+	}
+	if len(candidates) == 0 && missingCoreFields > 0 {
+		return candidates, fmt.Errorf("lightspeed parser health failed: %d product records missing title/url/price/id", missingCoreFields)
+	}
+	return candidates, nil
+}
+
+func runShopifyStorefrontSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL, query, providerDomain string,
+) ([]map[string]any, error) {
+	if client == nil {
+		client = providerHTTPClient()
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, fmt.Errorf("shopify storefront search url is required")
+	}
+	parsed, err := url.Parse(strings.TrimSpace(searchURL))
+	if err != nil {
+		return nil, fmt.Errorf("parse shopify storefront url: %w", err)
+	}
+	params := parsed.Query()
+	params.Set("q", strings.TrimSpace(query))
+	if params.Get("limit") == "" {
+		params.Set("limit", "24")
+	}
+	parsed.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build shopify storefront request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run shopify storefront request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("shopify storefront returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read shopify storefront response: %w", err)
+	}
+	var payload struct {
+		Products []shopifyStorefrontProduct `json:"products"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode shopify storefront response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Products))
+	missingCoreFields := 0
+	for _, product := range payload.Products {
+		id := strings.TrimSpace(fmt.Sprintf("%v", product.ID))
+		variant := firstShopifyVariant(product.Variants)
+		title := strings.TrimSpace(product.Title)
+		productURL := normalizeProviderProductURL("https://"+providerDomain, "/products/"+strings.TrimSpace(product.Handle))
+		price := numericCurrencyValue(variant.Price)
+		if id == "" || title == "" || strings.TrimSpace(product.Handle) == "" || price <= 0 {
+			missingCoreFields++
+			continue
+		}
+		imageURL := strings.TrimSpace(product.Image.Src)
+		if imageURL == "" && len(product.Images) > 0 {
+			imageURL = strings.TrimSpace(product.Images[0].Src)
+		}
+		stockState := "unknown"
+		if variant.Available {
+			stockState = "in_stock"
+		} else if strings.TrimSpace(fmt.Sprintf("%v", variant.ID)) != "" {
+			stockState = "out_of_stock"
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id":        "shopify-" + id,
+			"title":             title,
+			"url":               productURL,
+			"price":             price,
+			"sale_price":        numericCurrencyValue(variant.CompareAtPrice),
+			"currency":          "AUD",
+			"image":             normalizeProviderProductURL("https://"+providerDomain, imageURL),
+			"sku":               strings.TrimSpace(variant.SKU),
+			"brand":             strings.TrimSpace(product.Vendor),
+			"category":          strings.TrimSpace(product.ProductType),
+			"categories":        shopifyTags(product.Tags),
+			"description":       stripHTMLText(product.BodyHTML),
+			"stock_state":       stockState,
+			"stock_count":       int(numericCurrencyValue(variant.InventoryQuantity)),
+			"source":            marketWatchScopeForAUWebshopDomain(providerDomain),
+			"seller":            providerDomain,
+			"extraction_method": "shopify_products_json",
+		})
+	}
+	if len(candidates) == 0 && missingCoreFields > 0 {
+		return candidates, fmt.Errorf("shopify parser health failed: %d product records missing title/handle/price/id", missingCoreFields)
+	}
+	return candidates, nil
+}
+
+func runGenericStructuredStorefrontProduct(ctx context.Context, client *http.Client, productURL, providerDomain string) ([]map[string]any, error) {
+	if client == nil {
+		client = providerHTTPClient()
+	}
+	if strings.TrimSpace(productURL) == "" {
+		return nil, fmt.Errorf("generic structured storefront product url is required")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, productURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build generic structured storefront request: %w", err)
+	}
+	req.Header.Set("User-Agent", "Cabinet/0.1 source-matching")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run generic structured storefront request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("generic structured storefront returned status %d", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read generic structured storefront response: %w", err)
+	}
+
+	product, ok := firstJSONLDProduct(string(raw))
+	if !ok {
+		return nil, fmt.Errorf("generic structured storefront parser health failed: product JSON-LD not found")
+	}
+	candidate := genericStructuredProductCandidate(product, productURL, providerDomain)
+	if stringCandidateValue(candidate["title"]) == "" || stringCandidateValue(candidate["url"]) == "" || numericCandidateValue(candidate["price"]) == 0 {
+		return []map[string]any{candidate}, fmt.Errorf("generic structured storefront parser health failed: product record missing title/url/price")
+	}
+	return []map[string]any{candidate}, nil
+}
+
+func firstJSONLDProduct(body string) (map[string]any, bool) {
+	scriptPattern := regexp.MustCompile(`(?is)<script[^>]*type=["']application/ld\+json["'][^>]*>(.*?)</script>`)
+	for _, match := range scriptPattern.FindAllStringSubmatch(body, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		var payload any
+		decoded := html.UnescapeString(strings.TrimSpace(match[1]))
+		if err := json.Unmarshal([]byte(decoded), &payload); err != nil {
+			continue
+		}
+		if product, ok := findJSONLDProduct(payload); ok {
+			return product, true
+		}
+	}
+	return nil, false
+}
+
+func findJSONLDProduct(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			if product, ok := findJSONLDProduct(item); ok {
+				return product, true
+			}
+		}
+	case map[string]any:
+		if jsonLDTypeMatches(typed["@type"], "Product") {
+			return typed, true
+		}
+		for _, key := range []string{"@graph", "mainEntity", "itemListElement"} {
+			if nested, ok := typed[key]; ok {
+				if product, found := findJSONLDProduct(nested); found {
+					return product, true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+func jsonLDTypeMatches(value any, want string) bool {
+	switch typed := value.(type) {
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), want)
+	case []any:
+		for _, item := range typed {
+			if jsonLDTypeMatches(item, want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func genericStructuredProductCandidate(product map[string]any, requestURL, providerDomain string) map[string]any {
+	offers := firstMapValue(product["offers"])
+	title := stringCandidateValue(product["name"])
+	productURL := firstNonEmptyString(stringCandidateValue(offers["url"]), stringCandidateValue(product["url"]), requestURL)
+	resolvedURL := resolveStorefrontURL(productURL, requestURL)
+	sku := stringCandidateValue(product["sku"])
+	listingID := firstNonEmptyString(sku, path.Base(strings.TrimRight(resolvedURL, "/")), strings.ToLower(strings.ReplaceAll(title, " ", "-")))
+	brand := stringCandidateValue(product["brand"])
+	if brandMap := firstMapValue(product["brand"]); len(brandMap) > 0 {
+		brand = stringCandidateValue(brandMap["name"])
+	}
+	category := stringCandidateValue(product["category"])
+	availability := strings.ToLower(stringCandidateValue(offers["availability"]))
+	stockState := "unknown"
+	if strings.Contains(availability, "instock") {
+		stockState = "in_stock"
+	} else if strings.Contains(availability, "outofstock") || strings.Contains(availability, "soldout") {
+		stockState = "out_of_stock"
+	}
+
+	return map[string]any{
+		"listing_id":        "generic-structured-" + strings.ReplaceAll(normalizeProviderDomain(providerDomain), ".", "-") + "-" + listingID,
+		"title":             title,
+		"brand":             brand,
+		"sku":               sku,
+		"url":               resolvedURL,
+		"price":             numericCandidateValue(firstNonEmptyString(stringCandidateValue(offers["price"]), stringCandidateValue(product["price"]))),
+		"currency":          firstNonEmptyString(stringCandidateValue(offers["priceCurrency"]), "AUD"),
+		"image":             firstImageValue(product["image"]),
+		"description":       stripHTMLText(stringCandidateValue(product["description"])),
+		"category":          category,
+		"categories":        compactStringValues([]string{category, brand}),
+		"source":            marketWatchScopeForAUWebshopDomain(providerDomain),
+		"seller":            normalizeProviderDomain(providerDomain),
+		"stock_state":       stockState,
+		"extraction_method": "json_ld_product",
+	}
+}
+
+func firstMapValue(value any) map[string]any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed
+	case []any:
+		for _, item := range typed {
+			if mapped := firstMapValue(item); len(mapped) > 0 {
+				return mapped
+			}
+		}
+	}
+	return map[string]any{}
+}
+
+func firstImageValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []any:
+		for _, item := range typed {
+			if image := firstImageValue(item); image != "" {
+				return image
+			}
+		}
+	case map[string]any:
+		return stringCandidateValue(typed["url"])
+	}
+	return ""
+}
+
+func resolveStorefrontURL(raw, base string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil {
+		return strings.TrimSpace(raw)
+	}
+	if parsed.IsAbs() {
+		return parsed.String()
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil || baseURL == nil {
+		return strings.TrimSpace(raw)
+	}
+	return baseURL.ResolveReference(parsed).String()
+}
+
+func compactStringValues(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+type shopifyStorefrontProduct struct {
+	ID          any                        `json:"id"`
+	Title       string                     `json:"title"`
+	Handle      string                     `json:"handle"`
+	Vendor      string                     `json:"vendor"`
+	ProductType string                     `json:"product_type"`
+	BodyHTML    string                     `json:"body_html"`
+	Tags        string                     `json:"tags"`
+	Variants    []shopifyStorefrontVariant `json:"variants"`
+	Images      []struct {
+		Src string `json:"src"`
+	} `json:"images"`
+	Image struct {
+		Src string `json:"src"`
+	} `json:"image"`
+}
+
+type shopifyStorefrontVariant struct {
+	ID                any    `json:"id"`
+	Title             string `json:"title"`
+	SKU               string `json:"sku"`
+	Price             any    `json:"price"`
+	CompareAtPrice    any    `json:"compare_at_price"`
+	Available         bool   `json:"available"`
+	InventoryQuantity any    `json:"inventory_quantity"`
+}
+
+func firstShopifyVariant(variants []shopifyStorefrontVariant) shopifyStorefrontVariant {
+	var zero shopifyStorefrontVariant
+	for _, variant := range variants {
+		if strings.TrimSpace(fmt.Sprintf("%v", variant.ID)) != "" || strings.TrimSpace(variant.SKU) != "" || numericCurrencyValue(variant.Price) > 0 {
+			return variant
+		}
+	}
+	return zero
+}
+
+func shopifyTags(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
 func runBigCommerceTokenSearch(
 	ctx context.Context,
 	client *http.Client,
 	graphURL, token, query, providerDomain string,
 ) ([]map[string]any, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(graphURL) == "" {
 		return nil, fmt.Errorf("bigcommerce graphql url is required")
@@ -6897,7 +13301,7 @@ func discoverHobbytechBoostConfig(
 	searchURL string,
 ) (hobbytechBoostConfig, bool, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
 	candidates = append(candidates, strings.TrimSpace(assetURL))
@@ -7023,7 +13427,7 @@ func runHobbytechSearch(
 	itemsPerPage int,
 ) ([]map[string]any, int, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if strings.TrimSpace(config.SearchURL) == "" {
 		return nil, 0, fmt.Errorf("hobbytech search endpoint missing")
@@ -7128,13 +13532,121 @@ func runHobbytechSearch(
 	return candidates, pageCount, nil
 }
 
+func runHobbytechShopifySuggestSearch(
+	ctx context.Context,
+	client *http.Client,
+	baseURL string,
+	qs scanner.QuerySet,
+	itemsPerPage int,
+) ([]map[string]any, int, error) {
+	if client == nil {
+		client = providerHTTPClient()
+	}
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return nil, 0, fmt.Errorf("hobbytech Shopify suggest base URL is required")
+	}
+	if itemsPerPage <= 0 {
+		itemsPerPage = 24
+	}
+	if itemsPerPage > 50 {
+		itemsPerPage = 50
+	}
+	query := strings.TrimSpace(qs.Name)
+	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+		query = strings.TrimSpace(qs.Keywords[0])
+	}
+	if query == "" {
+		query = "collectible"
+	}
+	suggestURL, err := url.Parse(baseURL + "/search/suggest.json")
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse hobbytech Shopify suggest URL: %w", err)
+	}
+	params := suggestURL.Query()
+	params.Set("q", query)
+	params.Set("resources[type]", "product")
+	params.Set("resources[limit]", strconv.Itoa(itemsPerPage))
+	suggestURL.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, suggestURL.String(), nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("build hobbytech Shopify suggest request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Cabinet/0.1 source-matching")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("run hobbytech Shopify suggest request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, 0, fmt.Errorf("hobbytech Shopify suggest returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read hobbytech Shopify suggest response: %w", err)
+	}
+	var payload struct {
+		Resources struct {
+			Results struct {
+				Products []struct {
+					ID        any    `json:"id"`
+					Title     string `json:"title"`
+					URL       string `json:"url"`
+					Price     any    `json:"price"`
+					Available bool   `json:"available"`
+					Image     string `json:"image"`
+					Body      string `json:"body"`
+				} `json:"products"`
+			} `json:"results"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, 0, fmt.Errorf("decode hobbytech Shopify suggest response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Resources.Results.Products))
+	missingCoreFields := 0
+	for _, product := range payload.Resources.Results.Products {
+		id := strings.TrimSpace(fmt.Sprintf("%v", product.ID))
+		title := strings.TrimSpace(product.Title)
+		productURL := normalizeHobbytechProductURL(baseURL, product.URL)
+		price := numericCurrencyValue(product.Price)
+		if id == "" || title == "" || productURL == "" || price <= 0 {
+			missingCoreFields++
+			continue
+		}
+		stockState := "out_of_stock"
+		if product.Available {
+			stockState = "in_stock"
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id":        "shopify-suggest-" + id,
+			"title":             title,
+			"url":               productURL,
+			"price":             price,
+			"currency":          "AUD",
+			"image":             normalizeProviderProductURL(baseURL, product.Image),
+			"description":       stripHTMLText(product.Body),
+			"stock_state":       stockState,
+			"source":            "hobbytechtoys",
+			"seller":            "hobbytechtoys.com.au",
+			"extraction_method": "shopify_search_suggest_json",
+		})
+	}
+	if len(candidates) == 0 && missingCoreFields > 0 {
+		return candidates, 1, fmt.Errorf("hobbytech Shopify suggest parser health failed: %d product records missing title/url/price/id", missingCoreFields)
+	}
+	return candidates, 1, nil
+}
+
 func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs scanner.QuerySet, itemsPerPage int) (bonzaSearchResult, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
 		return bonzaSearchResult{}, fmt.Errorf("bonza base_url is required")
 	}
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	if itemsPerPage <= 0 {
 		itemsPerPage = 36
@@ -7216,6 +13728,11 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 				"listing_id":  listingID,
 				"title":       strings.TrimSpace(product.Name),
 				"url":         permalink,
+				"price":       parseWooCommerceMinorUnitPrice(product.Prices.Price),
+				"currency":    strings.TrimSpace(product.Prices.CurrencyCode),
+				"image":       firstBonzaImageURL(product.Images),
+				"category":    firstBonzaCategoryName(product.Categories),
+				"categories":  bonzaCategoryNames(product.Categories),
 				"source":      "bonzaslotcars",
 				"seller":      "bonzaslotcars.com.au",
 				"stock_state": stockState,
@@ -7244,6 +13761,584 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 		ItemsPerPageUsed: itemsPerPage,
 		Candidates:       candidates,
 	}, nil
+}
+
+func detectProviderProductURL(raw string) (providerProductURLRoute, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return providerProductURLRoute{}, fmt.Errorf("url is required")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" {
+		return providerProductURLRoute{}, fmt.Errorf("invalid provider url")
+	}
+	host := strings.ToLower(strings.TrimPrefix(parsed.Hostname(), "www."))
+	pathValue := "/" + strings.Trim(strings.TrimSpace(parsed.EscapedPath()), "/")
+	if pathValue == "/" {
+		pathValue = "/"
+	}
+	route := providerProductURLRoute{
+		OriginalURL: strings.TrimSpace(raw),
+		Host:        host,
+		Path:        pathValue,
+	}
+	switch host {
+	case "bonzaslotcars.com.au":
+		route.Provider = "bonzaslotcars"
+		route.Family = "woocommerce"
+	default:
+		return providerProductURLRoute{}, fmt.Errorf("unsupported provider host")
+	}
+	parts := strings.Split(strings.Trim(pathValue, "/"), "/")
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "product") && strings.TrimSpace(parts[1]) != "" {
+		route.Slug = strings.TrimSpace(parts[1])
+		route.Action = "ingest_product_url"
+		route.NormalizedURL = "https://" + host + "/product/" + route.Slug + "/"
+		return route, nil
+	}
+	route.Action = "unsupported_page"
+	route.NormalizedURL = "https://" + host + pathValue
+	if !strings.HasSuffix(route.NormalizedURL, "/") {
+		route.NormalizedURL += "/"
+	}
+	return route, nil
+}
+
+func persistProviderURLManualReviewCapture(ctx context.Context, profiles *profile.Repository, collectionRepo *collection.Repository, rawURL, provider, family, fallbackState string, staticExtractionAttempted bool, reason string) (map[string]any, error) {
+	if profiles == nil || collectionRepo == nil {
+		return nil, fmt.Errorf("manual review capture dependencies are unavailable")
+	}
+	active, err := profiles.GetActiveProfile(ctx)
+	if err != nil || strings.TrimSpace(active.ID) == "" {
+		return nil, fmt.Errorf("active profile not set")
+	}
+	trimmedURL := strings.TrimSpace(rawURL)
+	item := collection.Item{
+		PartNumber:  providerURLManualReviewPartNumber(trimmedURL),
+		Title:       providerURLManualReviewTitle(trimmedURL),
+		Brand:       "Unknown",
+		Category:    "Provider URL Review",
+		ItemType:    "General",
+		Status:      "active",
+		Priority:    "medium",
+		Description: "Manual provider URL capture retained for review after Cabinet could not complete automatic static product extraction.",
+		Notes: strings.Join([]string{
+			"provider=" + strings.TrimSpace(provider),
+			"family=" + strings.TrimSpace(family),
+			"fallback_state=" + strings.TrimSpace(fallbackState),
+			fmt.Sprintf("static_extraction_attempted=%t", staticExtractionAttempted),
+			"reason=" + strings.TrimSpace(reason),
+		}, "\n"),
+		Tags: []string{
+			"provider-ingest",
+			"manual-url-capture",
+			"provider-review",
+			strings.ReplaceAll(strings.TrimSpace(fallbackState), "_", "-"),
+		},
+		SourceURLs: []string{trimmedURL},
+	}
+	created, err := collectionRepo.CreateItemForProfile(ctx, strings.TrimSpace(active.ID), item)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"status":                      "manual_review",
+		"item_id":                     created.ID,
+		"title":                       created.Title,
+		"source_url":                  trimmedURL,
+		"fallback_state":              fallbackState,
+		"static_extraction_attempted": staticExtractionAttempted,
+		"next_action":                 "review_captured_url_before_headless_opt_in",
+	}, nil
+}
+
+func providerURLManualReviewPartNumber(rawURL string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(rawURL)))
+	return "PROVIDER-URL-" + strings.ToUpper(fmt.Sprintf("%x", sum[:4]))
+}
+
+func providerURLManualReviewTitle(rawURL string) string {
+	trimmed := strings.TrimSpace(rawURL)
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Hostname() == "" {
+		return "Manual review: provider URL"
+	}
+	host := strings.ToLower(strings.TrimPrefix(parsed.Hostname(), "www."))
+	pathValue := strings.Trim(strings.TrimSpace(parsed.EscapedPath()), "/")
+	if pathValue == "" {
+		return "Manual review: " + host
+	}
+	return "Manual review: " + host + "/" + pathValue
+}
+
+func ingestBonzaProductURL(ctx context.Context, client *http.Client, baseURL string, route providerProductURLRoute) (providerProductDraft, error) {
+	if client == nil {
+		client = providerHTTPClient()
+	}
+	search := strings.ReplaceAll(strings.TrimSpace(route.Slug), "-", " ")
+	requestURL := fmt.Sprintf("%s/wp-json/wc/store/v1/products?search=%s&per_page=5",
+		strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		url.QueryEscape(search),
+	)
+	products, err := fetchBonzaProductURLProducts(ctx, client, requestURL)
+	if err != nil {
+		return providerProductDraft{}, err
+	}
+	for _, product := range products {
+		if !bonzaProductMatchesRoute(product, route) {
+			continue
+		}
+		return bonzaProductDraft(product, route), nil
+	}
+	return providerProductDraft{}, fmt.Errorf("bonza product %q not found", route.Slug)
+}
+
+func fetchBonzaProductURLProducts(ctx context.Context, client *http.Client, requestURL string) ([]bonzaProductResponse, error) {
+	if client == nil {
+		client = providerHTTPClient()
+	}
+	requestClient := *client
+	requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := fetchBonzaProductURLProductsResponse(ctx, &requestClient, requestURL)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("bonza product ingest returned status %d", resp.StatusCode)
+	}
+	var products []bonzaProductResponse
+	decodeErr := json.NewDecoder(resp.Body).Decode(&products)
+	resp.Body.Close()
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode bonza product ingest response: %w", decodeErr)
+	}
+	return products, nil
+}
+
+var errBonzaBrowserActionRequired = errors.New("bonza browser action required")
+
+func fetchBonzaProductURLProductsResponse(ctx context.Context, client *http.Client, requestURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build bonza product ingest request: %w", err)
+	}
+	applyBonzaProductURLRequestHeaders(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request bonza product ingest: %w", err)
+	}
+	if readBonzaSucuriChallenge(resp) {
+		return nil, errBonzaBrowserActionRequired
+	}
+	return resp, nil
+}
+
+func applyBonzaProductURLRequestHeaders(req *http.Request) {
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-AU,en;q=0.9")
+	req.Header.Set("User-Agent", "Cabinet/1.0 (+local catalogue source matching)")
+	if req.URL != nil {
+		req.Header.Set("Referer", strings.TrimRight(req.URL.Scheme+"://"+req.URL.Host, "/")+"/")
+	}
+}
+
+func readBonzaSucuriChallenge(resp *http.Response) bool {
+	if resp == nil || resp.Body == nil {
+		return false
+	}
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	redirect := resp.StatusCode >= http.StatusMultipleChoices && resp.StatusCode < http.StatusBadRequest
+	if !redirect && !strings.Contains(contentType, "text/html") {
+		return false
+	}
+	const maximumChallengeBody = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maximumChallengeBody+1))
+	resp.Body.Close()
+	if err != nil || len(body) > maximumChallengeBody {
+		return false
+	}
+	content := string(body)
+	if strings.Contains(content, "sucuri_cloudproxy_js") {
+		return true
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return false
+}
+
+func bonzaProductMatchesRoute(product bonzaProductResponse, route providerProductURLRoute) bool {
+	if strings.EqualFold(strings.TrimSpace(product.Slug), strings.TrimSpace(route.Slug)) {
+		return true
+	}
+	permalink := strings.TrimRight(strings.ToLower(strings.TrimSpace(product.Permalink)), "/")
+	normalized := strings.TrimRight(strings.ToLower(strings.TrimSpace(route.NormalizedURL)), "/")
+	return permalink != "" && permalink == normalized
+}
+
+func bonzaProductDraft(product bonzaProductResponse, route providerProductURLRoute) providerProductDraft {
+	rawStock, stockState, stockCount := deriveBonzaStockSignal(context.Background(), nil, "", product)
+	_ = rawStock
+	if product.IsInStock != nil && *product.IsInStock && stockCount > 0 {
+		stockState = "in_stock"
+	}
+	categories := make([]string, 0, len(product.Categories))
+	for _, category := range product.Categories {
+		if value := strings.TrimSpace(category.Name); value != "" {
+			categories = append(categories, value)
+		}
+	}
+	attributes := map[string]string{}
+	for _, attribute := range product.Attributes {
+		name := strings.TrimSpace(attribute.Name)
+		if name == "" {
+			continue
+		}
+		values := append([]string{}, attribute.Terms...)
+		values = append(values, attribute.Options...)
+		for _, value := range values {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				attributes[name] = trimmed
+				break
+			}
+		}
+	}
+	images := make([]string, 0, len(product.Images))
+	for _, image := range product.Images {
+		if src := strings.TrimSpace(image.Src); src != "" {
+			images = append(images, src)
+		}
+	}
+	observedAt := time.Now().UTC().Format(time.RFC3339)
+	return providerProductDraft{
+		ProviderProductID: strconv.Itoa(product.ID),
+		Title:             strings.TrimSpace(product.Name),
+		SourceURL:         route.NormalizedURL,
+		Description:       stripHTMLText(product.Description),
+		Price:             parseWooCommerceMinorUnitPrice(product.Prices.Price),
+		Currency:          strings.TrimSpace(product.Prices.CurrencyCode),
+		StockState:        stockState,
+		StockCount:        stockCount,
+		Categories:        categories,
+		Attributes:        attributes,
+		ImageURLs:         images,
+		Evidence: map[string]any{
+			"provider":            "bonzaslotcars",
+			"family":              "woocommerce",
+			"extraction_method":   "store_api",
+			"provider_product_id": strconv.Itoa(product.ID),
+			"original_url":        route.OriginalURL,
+			"normalized_url":      route.NormalizedURL,
+			"observed_at":         observedAt,
+			"source_summary":      "WooCommerce Store API product detail",
+		},
+	}
+}
+
+type providerProductDuplicateCandidate struct {
+	ItemID     string   `json:"item_id"`
+	Title      string   `json:"title"`
+	SourceURLs []string `json:"source_urls"`
+	Reasons    []string `json:"reasons"`
+}
+
+func providerProductDuplicateCandidates(items []collection.Item, route providerProductURLRoute, draft providerProductDraft) []providerProductDuplicateCandidate {
+	normalizedSource := strings.TrimRight(strings.ToLower(strings.TrimSpace(firstNonEmptyString(draft.SourceURL, route.NormalizedURL))), "/")
+	providerProductID := strings.TrimSpace(draft.ProviderProductID)
+	out := make([]providerProductDuplicateCandidate, 0)
+	for _, item := range items {
+		reasons := make([]string, 0, 2)
+		for _, sourceURL := range item.SourceURLs {
+			if normalizedSource != "" && strings.TrimRight(strings.ToLower(strings.TrimSpace(sourceURL)), "/") == normalizedSource {
+				reasons = append(reasons, "source_url")
+				break
+			}
+		}
+		if providerProductID != "" && strings.Contains(strings.ToLower(item.Notes), strings.ToLower("provider_product_id="+providerProductID)) {
+			reasons = append(reasons, "provider_product_id")
+		}
+		if len(reasons) == 0 {
+			continue
+		}
+		out = append(out, providerProductDuplicateCandidate{
+			ItemID:     item.ID,
+			Title:      item.Title,
+			SourceURLs: item.SourceURLs,
+			Reasons:    reasons,
+		})
+	}
+	if out == nil {
+		return []providerProductDuplicateCandidate{}
+	}
+	return out
+}
+
+func parseWooCommerceMinorUnitPrice(raw string) float64 {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0
+	}
+	if strings.Contains(value, ".") {
+		parsed, _ := strconv.ParseFloat(value, 64)
+		return parsed
+	}
+	cents, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0
+	}
+	return cents / 100
+}
+
+func stripHTMLText(raw string) string {
+	withoutTags := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(raw, " ")
+	return strings.Join(strings.Fields(withoutTags), " ")
+}
+
+func bonzaCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "bonzaslotcars")
+}
+
+func hobbytechCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "hobbytechtoys")
+}
+
+func frontlineCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "frontlinehobbies")
+}
+
+func lightspeedCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "acercmodels")
+}
+
+func shopifyCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, marketWatchScopeForAUWebshopDomain(providerDomain))
+}
+
+func genericStructuredStorefrontCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, marketWatchScopeForAUWebshopDomain(providerDomain))
+}
+
+func doofinderCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, providerDomain)
+}
+
+func bigCommerceCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, providerDomain)
+}
+
+func providerCandidatesForScanner(candidates []map[string]any, defaultSource string) []scanner.CandidateInput {
+	out := make([]scanner.CandidateInput, 0, len(candidates))
+	for _, candidate := range candidates {
+		listingID := strings.TrimSpace(fmt.Sprint(candidate["listing_id"]))
+		title := stringCandidateValue(candidate["title"])
+		sourceURL := stringCandidateValue(candidate["url"])
+		if listingID == "" || title == "" || sourceURL == "" {
+			continue
+		}
+		out = append(out, scanner.CandidateInput{
+			ListingID:  listingID,
+			Title:      title,
+			Price:      numericCandidateValue(candidate["price"]),
+			Currency:   stringCandidateValue(candidate["currency"]),
+			URL:        sourceURL,
+			Image:      stringCandidateValue(candidate["image"]),
+			Seller:     stringCandidateValue(candidate["seller"]),
+			Source:     firstNonEmptyString(stringCandidateValue(candidate["source"]), defaultSource),
+			StockState: stringCandidateValue(candidate["stock_state"]),
+			StockCount: int(numericCandidateValue(candidate["stock_count"])),
+		})
+	}
+	return out
+}
+
+func firstBonzaCategoryName(categories []bonzaProductName) string {
+	names := bonzaCategoryNames(categories)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func bonzaCategoryNames(categories []bonzaProductName) []string {
+	out := make([]string, 0, len(categories))
+	for _, category := range categories {
+		if value := strings.TrimSpace(category.Name); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func firstBonzaImageURL(images []bonzaProductImage) string {
+	for _, image := range images {
+		if src := strings.TrimSpace(image.Src); src != "" {
+			return src
+		}
+	}
+	return ""
+}
+
+func normalizeScannerReviewApplyTarget(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), "wishlist") {
+		return "wishlist"
+	}
+	return "inventory"
+}
+
+func scannerReviewApplyItem(review scanner.RecognitionReview) collection.Item {
+	selected := review.SelectedCandidate
+	status := "active"
+	if review.Target == "wishlist" {
+		status = "wishlist"
+	}
+	return collection.Item{
+		Brand:      "Unknown",
+		Category:   "Cards",
+		ItemType:   "Trading Cards",
+		PartNumber: selected.ID,
+		Title:      selected.Title,
+		Status:     status,
+		Notes:      scannerReviewApplyEvidenceNote(review),
+		SourceURLs: scannerReviewApplySourceURLs(review),
+		Tags:       []string{"scanner-review"},
+	}
+}
+
+func scannerReviewApplyEvidenceNote(review scanner.RecognitionReview) string {
+	selected := review.SelectedCandidate
+	values := []string{
+		"scanner_review_apply",
+		"selected_candidate=" + selected.ID,
+		"confidence=" + strconv.FormatFloat(selected.Confidence, 'f', 2, 64),
+		"confidence_label=" + review.ConfidenceLabel,
+		"target=" + review.Target,
+	}
+	if review.ManualOverrideApplied {
+		values = append(values, "manual_override=true")
+	}
+	if selected.OverrideNote != "" {
+		values = append(values, "override_note="+selected.OverrideNote)
+	}
+	if mediaID := strings.TrimSpace(review.MediaEvidence["media_id"]); mediaID != "" {
+		values = append(values, "media_id="+mediaID)
+	} else if mediaID := strings.TrimSpace(review.TopCandidate.MediaID); mediaID != "" {
+		values = append(values, "media_id="+mediaID)
+	}
+	if mediaURL := strings.TrimSpace(review.MediaEvidence["media_url"]); mediaURL != "" {
+		values = append(values, "media_url="+mediaURL)
+	} else if mediaURL := strings.TrimSpace(review.TopCandidate.MediaURL); mediaURL != "" {
+		values = append(values, "media_url="+mediaURL)
+	}
+	if len(review.Provenance) > 0 {
+		values = append(values, "provenance="+strings.Join(review.Provenance, "|"))
+	}
+	return strings.Join(values, "; ")
+}
+
+func scannerReviewApplySourceURLs(review scanner.RecognitionReview) []string {
+	if value := strings.TrimSpace(review.MediaEvidence["media_url"]); value != "" {
+		return []string{value}
+	}
+	if value := strings.TrimSpace(review.TopCandidate.MediaURL); value != "" {
+		return []string{value}
+	}
+	return nil
+}
+
+func stringCandidateValue(raw any) string {
+	if raw == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(raw))
+}
+
+func firstNonNil(values ...any) any {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
+}
+
+func firstString(values []string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func numericCurrencyValue(raw any) float64 {
+	switch value := raw.(type) {
+	case string:
+		cleaned := regexp.MustCompile(`[^0-9.\-]+`).ReplaceAllString(value, "")
+		parsed, _ := strconv.ParseFloat(cleaned, 64)
+		return parsed
+	default:
+		return numericCandidateValue(raw)
+	}
+}
+
+func normalizeProviderProductURL(baseURL, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(raw, "/")
+}
+
+func normalizeHobbytechProductURL(baseURL, raw string) string {
+	normalized := normalizeProviderProductURL(baseURL, raw)
+	parsed, err := url.Parse(normalized)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+func stockStateFromAvailability(raw string) string {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case normalized == "":
+		return "unknown"
+	case strings.Contains(normalized, "out of stock") || strings.Contains(normalized, "sold out"):
+		return "out_of_stock"
+	case strings.Contains(normalized, "low stock") || strings.Contains(normalized, "limited"):
+		return "low_stock"
+	case strings.Contains(normalized, "in stock") || strings.Contains(normalized, "available"):
+		return "in_stock"
+	default:
+		return "unknown"
+	}
+}
+
+func numericCandidateValue(raw any) float64 {
+	switch value := raw.(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case json.Number:
+		parsed, _ := value.Float64()
+		return parsed
+	case string:
+		parsed, _ := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		return parsed
+	default:
+		return 0
+	}
 }
 
 func normalizeBonzaURL(baseURL, raw string) string {
@@ -7395,7 +14490,7 @@ func loadProviderFamilyOverrides(ctx context.Context, conn *sql.DB) (map[string]
 
 func detectProviderFamily(ctx context.Context, client *http.Client, providerURL, htmlInput string) (string, float64, []string, string, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = providerHTTPClient()
 	}
 	providerURL = strings.TrimSpace(providerURL)
 	if providerURL == "" {
@@ -7489,16 +14584,41 @@ func detectProviderFamily(ctx context.Context, client *http.Client, providerURL,
 	return best.name, best.score, best.evidence, domain, nil
 }
 
-func runtimeBuildMetadata() (string, string) {
-	version := "dev"
-	buildDate := "unknown"
+var (
+	buildVersion  string
+	buildRevision string
+	buildDate     string
+)
 
+func runtimeBuildMetadata() (string, string, string) {
 	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return version, buildDate
+	return runtimeBuildMetadataFromBuildInfo(info, ok)
+}
+
+func runtimeBuildMetadataFromBuildInfo(info *debug.BuildInfo, ok bool) (string, string, string) {
+	version := "dev"
+	resolvedBuildRevision := normalizeBuildRevision(buildRevision)
+	resolvedBuildDate := "unknown"
+
+	if resolvedBuildRevision != "unknown" {
+		short := resolvedBuildRevision
+		if len(short) > 12 {
+			short = short[:12]
+		}
+		version = "rev-" + short
+	}
+	if strings.TrimSpace(buildDate) != "" {
+		resolvedBuildDate = strings.TrimSpace(buildDate)
+	}
+	if strings.TrimSpace(buildVersion) != "" {
+		version = strings.TrimSpace(buildVersion)
 	}
 
-	if strings.TrimSpace(info.Main.Version) != "" && info.Main.Version != "(devel)" {
+	if !ok {
+		return version, resolvedBuildRevision, resolvedBuildDate
+	}
+
+	if strings.TrimSpace(buildVersion) == "" && strings.TrimSpace(info.Main.Version) != "" && info.Main.Version != "(devel)" {
 		version = info.Main.Version
 	}
 
@@ -7509,20 +14629,36 @@ func runtimeBuildMetadata() (string, string) {
 			vcsRevision = strings.TrimSpace(setting.Value)
 		case "vcs.time":
 			if strings.TrimSpace(setting.Value) != "" {
-				buildDate = strings.TrimSpace(setting.Value)
+				resolvedBuildDate = strings.TrimSpace(setting.Value)
 			}
 		}
 	}
+	if resolvedBuildRevision == "unknown" {
+		resolvedBuildRevision = normalizeBuildRevision(vcsRevision)
+	}
 
-	if vcsRevision != "" {
-		short := vcsRevision
+	if strings.TrimSpace(buildVersion) == "" && resolvedBuildRevision != "unknown" {
+		short := resolvedBuildRevision
 		if len(short) > 12 {
 			short = short[:12]
 		}
 		version = "rev-" + short
 	}
 
-	return version, buildDate
+	return version, resolvedBuildRevision, resolvedBuildDate
+}
+
+func normalizeBuildRevision(value string) string {
+	revision := strings.ToLower(strings.TrimSpace(value))
+	if len(revision) != 40 {
+		return "unknown"
+	}
+	for _, char := range revision {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			return "unknown"
+		}
+	}
+	return revision
 }
 
 func (a *App) Run(ctx context.Context) error {
@@ -7531,6 +14667,13 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	if a.backupSvc != nil {
 		a.backupSvc.Start(ctx)
+	}
+	if a.telegramConnector != nil {
+		go func() {
+			if err := a.telegramConnector.Run(ctx); err != nil && !errors.Is(err, context.Canceled) && a.runtimeLogs != nil {
+				a.runtimeLogs.writeErrorEvent("telegram_polling_stopped", err.Error(), map[string]any{"transport": "long_polling", "public_listener": false})
+			}
+		}()
 	}
 	pid := os.Getpid()
 	if err := writeRuntimePIDFile(a.cfg, pid); err != nil {
@@ -7781,6 +14924,14 @@ func (a *App) isTTYRuntimeOutput() bool {
 }
 
 func (a *App) closeRuntime(clean bool, reason, resolvedURL string) error {
+	if a.agentPreviewCleanupStop != nil {
+		a.agentPreviewCleanupOnce.Do(func() {
+			close(a.agentPreviewCleanupStop)
+			if a.agentPreviewCleanupDone != nil {
+				<-a.agentPreviewCleanupDone
+			}
+		})
+	}
 	if a.runtimeLogs != nil {
 		level := "info"
 		event := "shutdown"
@@ -7822,6 +14973,869 @@ func cleanReason(reason string) string {
 		return "shutdown"
 	}
 	return reason
+}
+
+func contentDispositionAttachment(filename string) string {
+	name := strings.TrimSpace(filename)
+	if name == "" {
+		name = "download"
+	}
+	name = strings.ReplaceAll(name, `\`, "_")
+	name = strings.ReplaceAll(name, `"`, "_")
+	return `attachment; filename="` + name + `"`
+}
+
+func isSupportedMediaUpload(mimeType, filename string) bool {
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	if strings.HasPrefix(mimeType, "image/") {
+		return true
+	}
+	return mediaUploadContentType(filename) != "application/octet-stream"
+}
+
+func mediaUploadContentType(filename string) string {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(filename))) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+type telegramCatalogCaptureRequest struct {
+	ProfileID    string `json:"profile_id"`
+	SenderID     string `json:"sender_id"`
+	ChatID       string `json:"chat_id"`
+	MessageID    string `json:"message_id"`
+	Text         string `json:"text"`
+	Barcode      string `json:"barcode"`
+	GroupingHint string `json:"grouping_hint"`
+	Draft        struct {
+		PartNumber       string `json:"part_number"`
+		Title            string `json:"title"`
+		Brand            string `json:"brand"`
+		Category         string `json:"category"`
+		LookupSource     string `json:"lookup_source"`
+		LookupURL        string `json:"lookup_url"`
+		LookupConfidence string `json:"lookup_confidence"`
+	} `json:"draft"`
+	Media          []telegramCatalogCaptureMediaRequest `json:"media"`
+	SourceMetadata map[string]any                       `json:"source_metadata"`
+}
+
+type telegramAgentTextRequest struct {
+	ProfileID      string                               `json:"profile_id"`
+	SenderID       string                               `json:"sender_id"`
+	ChatID         string                               `json:"chat_id"`
+	ChatType       string                               `json:"chat_type"`
+	MessageID      string                               `json:"message_id"`
+	Text           string                               `json:"text"`
+	SkillID        string                               `json:"skill_id"`
+	Confirm        bool                                 `json:"confirm"`
+	Parameters     map[string]any                       `json:"parameters"`
+	Media          []telegramCatalogCaptureMediaRequest `json:"media"`
+	SourceMetadata map[string]any                       `json:"source_metadata"`
+}
+
+type telegramAgentTextCallbackRequest struct {
+	SenderID        string `json:"sender_id"`
+	ChatID          string `json:"chat_id"`
+	ChatType        string `json:"chat_type"`
+	MessageID       string `json:"message_id"`
+	ThreadID        string `json:"thread_id"`
+	PreviewID       string `json:"preview_id"`
+	Confirmation    string `json:"confirmation"`
+	CallbackData    string `json:"callback_data"`
+	CallbackQueryID string `json:"callback_query_id"`
+}
+
+type telegramCatalogCaptureMediaRequest struct {
+	FileID        string `json:"file_id"`
+	FileUniqueID  string `json:"file_unique_id"`
+	FileSize      int    `json:"file_size"`
+	Filename      string `json:"filename"`
+	MIMEType      string `json:"mime_type"`
+	Kind          string `json:"kind"`
+	ContentBase64 string `json:"content_base64"`
+}
+
+type telegramCatalogCaptureCallbackRequest struct {
+	SenderID     string `json:"sender_id"`
+	ChatID       string `json:"chat_id"`
+	CallbackData string `json:"callback_data"`
+}
+
+type telegramExternalIntakeProofRequest struct {
+	ProfileID         string         `json:"profile_id"`
+	SenderID          string         `json:"sender_id"`
+	ChatID            string         `json:"chat_id"`
+	SourceThreadID    string         `json:"source_thread_id"`
+	SourceMessageID   string         `json:"source_message_id"`
+	CapabilityID      string         `json:"capability_id"`
+	PreviewID         string         `json:"preview_id"`
+	ConfirmationState string         `json:"confirmation_state"`
+	ProofApproved     bool           `json:"proof_approved"`
+	ProviderTrace     map[string]any `json:"provider_trace"`
+}
+
+type profileSettingsTelegramAuthorizer struct {
+	profiles  *profile.Repository
+	profileID string
+}
+
+type allProfilesTelegramAuthorizer struct {
+	profiles *profile.Repository
+}
+
+func telegramConnectorAuthorizer(ctx context.Context, profiles *profile.Repository) telegramcapture.Authorizer {
+	if profileID, ok := telegrambotconnector.InProcessProfile(ctx); ok {
+		return profileSettingsTelegramAuthorizer{profiles: profiles, profileID: profileID}
+	}
+	// White-box legacy route tests predate the connector profile marker. The
+	// production Manager always supplies it before invoking the gateway.
+	return allProfilesTelegramAuthorizer{profiles: profiles}
+}
+
+func (a profileSettingsTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (telegramcapture.AuthorizedProfile, error) {
+	profileID := strings.TrimSpace(a.profileID)
+	if profileID == "" || a.profiles == nil {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	settings, err := a.profiles.GetSettings(ctx, profileID)
+	if err != nil {
+		return telegramcapture.AuthorizedProfile{}, err
+	}
+	if strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != strings.TrimSpace(senderID) {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	if strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != strings.TrimSpace(chatID) {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	return telegramcapture.AuthorizedProfile{ProfileID: profileID}, nil
+}
+
+func (a allProfilesTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (telegramcapture.AuthorizedProfile, error) {
+	if a.profiles == nil || strings.TrimSpace(senderID) == "" || strings.TrimSpace(chatID) == "" {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	profiles, err := a.profiles.List(ctx)
+	if err != nil {
+		return telegramcapture.AuthorizedProfile{}, err
+	}
+	for _, candidate := range profiles {
+		settings, err := a.profiles.GetSettings(ctx, candidate.ID)
+		if err != nil {
+			return telegramcapture.AuthorizedProfile{}, err
+		}
+		if strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != strings.TrimSpace(senderID) {
+			continue
+		}
+		if strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != strings.TrimSpace(chatID) {
+			continue
+		}
+		return telegramcapture.AuthorizedProfile{ProfileID: candidate.ID}, nil
+	}
+	return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+}
+
+func telegramCatalogCaptureLocalBarcodeDraft(ctx context.Context, conn *sql.DB, profileID, barcodeValue string) (telegramcapture.Draft, bool, error) {
+	profileID = strings.TrimSpace(profileID)
+	barcodeValue = strings.TrimSpace(barcodeValue)
+	if conn == nil || profileID == "" || barcodeValue == "" {
+		return telegramcapture.Draft{}, false, nil
+	}
+
+	var itemID string
+	var draft telegramcapture.Draft
+	err := conn.QueryRowContext(ctx, `
+		SELECT c.id, c.part_number, c.title, c.brand, c.category
+		FROM item_barcodes b
+		JOIN canonical_items c ON c.id = b.item_id
+		WHERE b.barcode = ?
+			AND c.profile_id = ?
+			AND COALESCE(c.deleted_at, '') = ''
+		ORDER BY b.created_at ASC
+		LIMIT 1
+	`, barcodeValue, profileID).Scan(&itemID, &draft.PartNumber, &draft.Title, &draft.Brand, &draft.Category)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return telegramcapture.Draft{}, false, nil
+		}
+		return telegramcapture.Draft{}, false, err
+	}
+	draft.LookupSource = "barcode_local"
+	draft.LookupURL = "/api/barcodes/" + url.PathEscape(barcodeValue)
+	draft.LookupConfidence = "high"
+	return draft, strings.TrimSpace(itemID) != "", nil
+}
+
+func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]telegramcapture.MediaInput, error) {
+	out := make([]telegramcapture.MediaInput, 0, len(media))
+	for _, item := range media {
+		var reader io.Reader = strings.NewReader("")
+		if raw := strings.TrimSpace(item.ContentBase64); raw != "" {
+			decoded, err := base64.StdEncoding.DecodeString(raw)
+			if err != nil {
+				return nil, err
+			}
+			reader = bytes.NewReader(decoded)
+		}
+		out = append(out, telegramcapture.MediaInput{
+			FileID:       strings.TrimSpace(item.FileID),
+			FileUniqueID: strings.TrimSpace(item.FileUniqueID),
+			FileSize:     item.FileSize,
+			Filename:     strings.TrimSpace(item.Filename),
+			MIMEType:     strings.TrimSpace(item.MIMEType),
+			Kind:         strings.TrimSpace(item.Kind),
+			Reader:       reader,
+		})
+	}
+	return out, nil
+}
+
+var errTelegramAgentTextNeedsClarification = errors.New("telegram agent text needs clarification")
+
+func handleTelegramAgentText(ctx context.Context, profiles *profile.Repository, chatSvc *chat.Service, conn *sql.DB, req telegramAgentTextRequest) (map[string]any, error) {
+	profileID := strings.TrimSpace(req.ProfileID)
+	skillID := strings.TrimSpace(req.SkillID)
+	text := strings.TrimSpace(req.Text)
+	if profileID == "" || strings.TrimSpace(req.SenderID) == "" || strings.TrimSpace(req.ChatID) == "" {
+		return nil, telegramcapture.ErrUnauthorizedSender
+	}
+	if skillID == "" || text == "" {
+		return nil, errTelegramAgentTextNeedsClarification
+	}
+	params := req.Parameters
+	if params == nil {
+		params = map[string]any{}
+	}
+	mediaContext := telegramAgentMediaContext(req.Media)
+	threadMetadata := map[string]any{
+		"source_channel":    "telegram",
+		"source_surface":    "telegram.agent.text",
+		"source_chat_id":    strings.TrimSpace(req.ChatID),
+		"source_sender_id":  strings.TrimSpace(req.SenderID),
+		"source_message_id": strings.TrimSpace(req.MessageID),
+		"skill_id":          skillID,
+	}
+	if len(mediaContext) > 0 {
+		threadMetadata["media"] = mediaContext
+		threadMetadata["media_count"] = len(mediaContext)
+	}
+	thread, err := chatSvc.CreateThread(ctx, profileID, telegramAgentThreadTitle(text), threadMetadata)
+	if err != nil {
+		return nil, err
+	}
+	attachmentIDs := make([]string, 0, len(req.Media))
+	mediaInputs, err := telegramCatalogCaptureMedia(req.Media)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range mediaInputs {
+		filename := strings.TrimSpace(item.Filename)
+		if filename == "" {
+			filename = strings.TrimSpace(item.FileID)
+		}
+		if filename == "" {
+			return nil, fmt.Errorf("telegram media filename or file_id is required")
+		}
+		attachment, saveErr := chatSvc.SaveAttachment(ctx, profileID, thread.ID, filename, strings.TrimSpace(item.MIMEType), item.Reader)
+		if saveErr != nil {
+			return nil, saveErr
+		}
+		attachmentIDs = append(attachmentIDs, attachment.ID)
+	}
+	messageContext := map[string]any{
+		"source_channel":    "telegram",
+		"source_surface":    "telegram.agent.text",
+		"source_chat_id":    strings.TrimSpace(req.ChatID),
+		"source_sender_id":  strings.TrimSpace(req.SenderID),
+		"source_message_id": strings.TrimSpace(req.MessageID),
+		"skill_id":          skillID,
+	}
+	if len(req.SourceMetadata) > 0 {
+		messageContext["source_metadata"] = req.SourceMetadata
+	}
+	if len(mediaContext) > 0 {
+		messageContext["media"] = mediaContext
+		messageContext["media_count"] = len(mediaContext)
+	}
+	message, err := chatSvc.CreateMessageWithAttachmentProvenance(ctx, profileID, thread.ID, "user", text, messageContext, attachmentIDs, "telegram_media", "telegram")
+	if err != nil {
+		return nil, err
+	}
+	previewReq := agentskills.PreviewRequest{
+		SkillID:         skillID,
+		ProfileID:       profileID,
+		Confirm:         req.Confirm,
+		SourceSurface:   "telegram.agent.text",
+		SourceChannel:   "telegram",
+		SourceThreadID:  thread.ID,
+		SourceMessageID: strings.TrimSpace(req.MessageID),
+		Parameters:      params,
+	}
+	registry := agentskills.NewRegistry(nil)
+	if _, ok := registry.Resolve(skillID); !ok {
+		return nil, fmt.Errorf("skill_not_found")
+	}
+	authority, err := reviewAgentSkillAuthority(ctx, profiles, registry, previewReq, "telegram")
+	if err != nil {
+		return nil, err
+	}
+	var preview agentskills.PreviewResponse
+	if authority.PreviewAllowed {
+		preview, err = registry.Preview(previewReq)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		skill, _ := registry.Resolve(skillID)
+		preview = agentskills.PreviewResponse{
+			SkillID:              skill.ID,
+			Status:               skill.Status,
+			SafetyLevel:          skill.SafetyLevel,
+			Executable:           skill.Executable,
+			Allowed:              false,
+			PreviewOnly:          true,
+			MutationApplied:      false,
+			ConfirmationRequired: authority.ConfirmationRequired,
+			SourceSurface:        previewReq.SourceSurface,
+			SourceChannel:        previewReq.SourceChannel,
+			SourceThreadID:       previewReq.SourceThreadID,
+			SourceMessageID:      previewReq.SourceMessageID,
+			Blocker:              authority.Blocker,
+			NextAction:           authority.NextAction,
+		}
+	}
+	workflowRun, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         profileID,
+		WorkflowID:        "telegram-agent-skill-text",
+		CapabilityID:      skillID,
+		SourceChannel:     "telegram",
+		SourceThreadID:    thread.ID,
+		SourceMessageID:   strings.TrimSpace(req.MessageID),
+		ConfirmationState: telegramAgentConfirmationState(preview, req.Confirm),
+		Input: map[string]any{
+			"text":       text,
+			"skill_id":   skillID,
+			"parameters": params,
+			"media":      mediaContext,
+		},
+		ProviderTrace: map[string]any{
+			"provider":       "cabinet-agent-skill-registry",
+			"source_channel": "telegram",
+			"mode":           "governed_skill_preview_before_apply",
+			"live_provider":  false,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var skillResult map[string]any
+	if authority.ApplyAllowed && (preview.Allowed || (preview.ConfirmationRequired && req.Confirm)) {
+		skillResult, _, err = applyAgentSkill(ctx, conn, chatSvc, skillID, profileID, params)
+		if err != nil {
+			preview.Allowed = false
+			preview.Blocker = "skill_apply_failed"
+		} else {
+			preview.PreviewOnly = false
+			preview.MutationApplied = preview.ConfirmationRequired
+			preview.Target = skillResult
+		}
+	}
+	var actionPreview chat.ActionPreview
+	if preview.ConfirmationRequired && !req.Confirm {
+		actionPreview, err = telegramAgentActionPreview(ctx, chatSvc, profileID, thread.ID, skillID, params)
+		if err != nil {
+			return nil, err
+		}
+	}
+	reviewURL := telegramAgentReviewURL(profileID, thread.ID, actionPreview.ID)
+	workflowRun, err = chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         profileID,
+		RunID:             workflowRun.ID,
+		Status:            "completed",
+		ConfirmationState: telegramAgentConfirmationState(preview, req.Confirm),
+		ProviderTrace:     workflowRun.ProviderTrace,
+		Result: map[string]any{
+			"skill_id":            skillID,
+			"allowed":             preview.Allowed,
+			"confirmation_state":  telegramAgentConfirmationState(preview, req.Confirm),
+			"review_url":          reviewURL,
+			"preview_id":          actionPreview.ID,
+			"mutation_applied":    preview.MutationApplied,
+			"telegram_reply_text": telegramAgentReplyText(preview),
+			"media":               mediaContext,
+			"media_count":         len(mediaContext),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var inboxItem chat.InboxItem
+	if preview.ConfirmationRequired && !req.Confirm {
+		inboxItem, err = chatSvc.CreateInboxItem(ctx, chat.InboxItem{
+			ProfileID: profileID,
+			ThreadID:  thread.ID,
+			Source:    "telegram_agent_text",
+			Status:    "queued",
+			Title:     "Telegram Agent request needs review",
+			Summary:   "Review and confirm the Telegram Agent skill request before Cabinet mutates state.",
+			Metadata: map[string]any{
+				"skill_id":            skillID,
+				"workflow_run_id":     workflowRun.ID,
+				"source_channel":      "telegram",
+				"source_chat_id":      strings.TrimSpace(req.ChatID),
+				"source_sender_id":    strings.TrimSpace(req.SenderID),
+				"source_message_id":   strings.TrimSpace(req.MessageID),
+				"confirmation_state":  "preview_required",
+				"review_url":          reviewURL,
+				"preview_id":          actionPreview.ID,
+				"action_preview":      actionPreview,
+				"preview":             preview,
+				"media":               mediaContext,
+				"media_count":         len(mediaContext),
+				"telegram_reply_text": telegramAgentReplyText(preview),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return map[string]any{
+		"profile_id":     profileID,
+		"thread":         thread,
+		"message":        message,
+		"preview":        preview,
+		"action_preview": actionPreview,
+		"workflow_run":   workflowRun,
+		"inbox_item":     inboxItem,
+		"telegram_reply": telegramAgentReply(preview, reviewURL),
+	}, nil
+}
+
+func telegramAgentMediaContext(media []telegramCatalogCaptureMediaRequest) []map[string]any {
+	out := make([]map[string]any, 0, len(media))
+	for _, item := range media {
+		fileID := strings.TrimSpace(item.FileID)
+		filename := strings.TrimSpace(item.Filename)
+		fileUniqueID := strings.TrimSpace(item.FileUniqueID)
+		mimeType := strings.TrimSpace(item.MIMEType)
+		kind := strings.TrimSpace(item.Kind)
+		if fileID == "" && filename == "" && fileUniqueID == "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"file_id":        fileID,
+			"file_unique_id": fileUniqueID,
+			"file_size":      item.FileSize,
+			"filename":       filename,
+			"mime_type":      mimeType,
+			"kind":           kind,
+		})
+	}
+	return out
+}
+
+func handleTelegramAgentTextCallback(ctx context.Context, chatSvc *chat.Service, profileID string, req telegramAgentTextCallbackRequest) (map[string]any, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID := strings.TrimSpace(req.ThreadID)
+	previewID := strings.TrimSpace(req.PreviewID)
+	confirmation := strings.ToLower(strings.TrimSpace(req.Confirmation))
+	if confirmation == "" {
+		confirmation = telegramAgentConfirmationFromCallbackData(req.CallbackData)
+	}
+	if profileID == "" || threadID == "" || previewID == "" {
+		return nil, fmt.Errorf("profile_id, thread_id and preview_id are required")
+	}
+	preview, err := chatSvc.GetActionPreview(ctx, profileID, previewID)
+	if err != nil {
+		return nil, err
+	}
+	if preview.ThreadID != threadID {
+		return nil, fmt.Errorf("preview does not belong to source thread")
+	}
+	var actionResult chat.ApplyActionResult
+	switch confirmation {
+	case "confirm", "confirmed":
+		actionResult, err = chatSvc.ApplyAction(ctx, chat.ApplyActionInput{
+			ProfileID: profileID,
+			ThreadID:  threadID,
+			PreviewID: previewID,
+			Confirm:   true,
+		})
+	case "cancel", "cancelled", "canceled":
+		actionResult, err = chatSvc.CancelAction(ctx, chat.ApplyActionInput{
+			ProfileID: profileID,
+			ThreadID:  threadID,
+			PreviewID: previewID,
+		})
+	default:
+		err = fmt.Errorf("unsupported confirmation action")
+	}
+	if err != nil {
+		return nil, err
+	}
+	confirmationState := "cancelled"
+	if actionResult.Applied {
+		confirmationState = "confirmed"
+	}
+	proofRun, err := chatSvc.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         profileID,
+		WorkflowID:        "telegram-agent-text-callback",
+		CapabilityID:      preview.CapabilityID,
+		SourceChannel:     "telegram",
+		SourceThreadID:    threadID,
+		SourceMessageID:   strings.TrimSpace(req.MessageID),
+		ConfirmationState: confirmationState,
+		Input: map[string]any{
+			"sender_id":         strings.TrimSpace(req.SenderID),
+			"chat_id":           strings.TrimSpace(req.ChatID),
+			"preview_id":        previewID,
+			"callback_data":     strings.TrimSpace(req.CallbackData),
+			"callback_query_id": strings.TrimSpace(req.CallbackQueryID),
+		},
+		ProviderTrace: map[string]any{
+			"provider":       "telegram-agent-text-callback",
+			"source_channel": "telegram",
+			"mode":           "external_channel_preview_confirmation",
+			"live_provider":  false,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	proofRun, err = chatSvc.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         profileID,
+		RunID:             proofRun.ID,
+		Status:            "completed",
+		ProviderTrace:     proofRun.ProviderTrace,
+		ConfirmationState: confirmationState,
+		Result: map[string]any{
+			"preview_id":         previewID,
+			"thread_id":          threadID,
+			"source_message_id":  strings.TrimSpace(req.MessageID),
+			"confirmation_state": confirmationState,
+			"mutation_applied":   actionResult.Applied,
+			"action":             actionResult.Action,
+			"item_id":            actionResult.ItemID,
+			"title":              actionResult.Title,
+			"part_number":        actionResult.PartNumber,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	reply := telegramcapture.TelegramReply{
+		Text:              "Cabinet recorded the Telegram Agent review decision.",
+		ReviewURL:         telegramAgentReviewURL(profileID, threadID, previewID),
+		ConfirmationState: confirmationState,
+		Actions:           []string{"open_cabinet_review"},
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: "Open Cabinet review", Kind: "url", Action: "open_cabinet_review", URL: telegramAgentReviewURL(profileID, threadID, previewID)},
+		},
+	}
+	return map[string]any{
+		"ok":                 true,
+		"profile_id":         profileID,
+		"thread_id":          threadID,
+		"preview_id":         previewID,
+		"confirmation_state": confirmationState,
+		"action_result":      actionResult,
+		"workflow_run":       proofRun,
+		"telegram_reply":     reply,
+	}, nil
+}
+
+func telegramAgentConfirmationFromCallbackData(callbackData string) string {
+	callbackData = strings.ToLower(strings.TrimSpace(callbackData))
+	if strings.Contains(callbackData, ":cancel:") || strings.HasSuffix(callbackData, ":cancel") {
+		return "cancel"
+	}
+	if strings.Contains(callbackData, ":confirm:") || strings.HasSuffix(callbackData, ":confirm") {
+		return "confirm"
+	}
+	return ""
+}
+
+func telegramAgentThreadTitle(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "Telegram Agent request"
+	}
+	if len(text) > 64 {
+		text = text[:64]
+	}
+	return "Telegram Agent: " + text
+}
+
+func telegramAgentReviewURL(profileID, threadID, previewID string) string {
+	values := url.Values{}
+	values.Set("profile_id", strings.TrimSpace(profileID))
+	values.Set("thread_id", strings.TrimSpace(threadID))
+	if previewID = strings.TrimSpace(previewID); previewID != "" {
+		values.Set("preview_id", previewID)
+	}
+	return "/chats?" + values.Encode()
+}
+
+func telegramAgentActionPreview(ctx context.Context, chatSvc *chat.Service, profileID, threadID, skillID string, params map[string]any) (chat.ActionPreview, error) {
+	capabilityID, payload, ok := telegramAgentActionPreviewPayload(skillID, params)
+	if !ok {
+		return chat.ActionPreview{}, nil
+	}
+	return chatSvc.PreviewAction(ctx, chat.PreviewActionInput{
+		ProfileID:    profileID,
+		ThreadID:     threadID,
+		CapabilityID: capabilityID,
+		Payload:      payload,
+	})
+}
+
+func telegramAgentActionPreviewPayload(skillID string, params map[string]any) (string, map[string]any, bool) {
+	payload := map[string]any{}
+	for key, value := range params {
+		payload[key] = value
+	}
+	switch strings.TrimSpace(skillID) {
+	case "cabinet.inventory.create_item":
+		return "inventory.item.create", payload, true
+	case "cabinet.inventory.update_item":
+		return "inventory.item.update", payload, true
+	case "cabinet.inventory.assign_to_collection":
+		return "collections.item.assign", payload, true
+	default:
+		return "", nil, false
+	}
+}
+
+func telegramAgentConfirmationState(preview agentskills.PreviewResponse, confirmed bool) string {
+	if preview.ConfirmationRequired {
+		if confirmed && preview.MutationApplied {
+			return "confirmed"
+		}
+		return "pending"
+	}
+	return "not_required"
+}
+
+func telegramAgentReply(preview agentskills.PreviewResponse, reviewURL string) telegramcapture.TelegramReply {
+	state := "completed"
+	actions := []string{"open_cabinet_review"}
+	if preview.ConfirmationRequired && !preview.MutationApplied {
+		state = "preview_required"
+		actions = append(actions, "confirm_in_cabinet")
+	}
+	return telegramcapture.TelegramReply{
+		Text:              telegramAgentReplyText(preview),
+		ReviewURL:         reviewURL,
+		ConfirmationState: state,
+		Actions:           actions,
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: "Open Cabinet review", Kind: "url", Action: "open_cabinet_review", URL: reviewURL},
+		},
+	}
+}
+
+func telegramAgentReplyText(preview agentskills.PreviewResponse) string {
+	if preview.ConfirmationRequired && !preview.MutationApplied {
+		return "Cabinet prepared a reviewable Agent preview. Open Cabinet to confirm or cancel before anything changes."
+	}
+	if preview.Allowed {
+		return "Cabinet processed the authorized Agent request and recorded the source evidence."
+	}
+	return "Cabinet needs more context before it can safely run that Agent skill."
+}
+
+func telegramAgentClarificationReply() telegramcapture.TelegramReply {
+	return telegramcapture.TelegramReply{
+		Text:              "Cabinet needs a supported Agent skill and enough context before it can route this Telegram request.",
+		ConfirmationState: "clarification_required",
+		Actions:           []string{"provide_skill_or_context"},
+	}
+}
+
+func missingTelegramExternalIntakeProofFields(req telegramExternalIntakeProofRequest) []string {
+	var missing []string
+	requiredStrings := map[string]string{
+		"profile_id":         req.ProfileID,
+		"sender_id":          req.SenderID,
+		"chat_id":            req.ChatID,
+		"source_thread_id":   req.SourceThreadID,
+		"source_message_id":  req.SourceMessageID,
+		"capability_id":      req.CapabilityID,
+		"preview_id":         req.PreviewID,
+		"confirmation_state": req.ConfirmationState,
+	}
+	names := make([]string, 0, len(requiredStrings))
+	for name := range requiredStrings {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if strings.TrimSpace(requiredStrings[name]) == "" {
+			missing = append(missing, name)
+		}
+	}
+	if !req.ProofApproved {
+		missing = append(missing, "proof_approved")
+	}
+	if !isTelegramCatalogCapability(req.CapabilityID) {
+		missing = append(missing, "capability_id.catalog_add_from")
+	}
+	if !isAllowedExternalProofConfirmation(req.ConfirmationState) {
+		missing = append(missing, "confirmation_state.valid")
+	}
+	if provider, _ := req.ProviderTrace["provider"].(string); strings.TrimSpace(provider) != "openai" {
+		missing = append(missing, "provider_trace.provider")
+	}
+	if !truthy(req.ProviderTrace["live_provider"]) {
+		missing = append(missing, "provider_trace.live_provider")
+	}
+	if requestID, _ := req.ProviderTrace["request_id"].(string); strings.TrimSpace(requestID) == "" {
+		missing = append(missing, "provider_trace.request_id")
+	}
+	if resultID, _ := req.ProviderTrace["result_id"].(string); strings.TrimSpace(resultID) == "" {
+		missing = append(missing, "provider_trace.result_id")
+	}
+	if value, ok := req.ProviderTrace["credential_returned"]; !ok || truthy(value) {
+		missing = append(missing, "provider_trace.credential_returned_false")
+	}
+	for _, key := range []string{"api_key", "token", "secret", "authorization"} {
+		if _, ok := req.ProviderTrace[key]; ok {
+			missing = append(missing, "provider_trace.no_"+key)
+		}
+	}
+	return missing
+}
+
+func isTelegramCatalogCapability(capabilityID string) bool {
+	switch strings.TrimSpace(capabilityID) {
+	case "catalog_add_from_photo", "catalog_add_from_barcode", "catalog_add_from_text":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAllowedExternalProofConfirmation(state string) bool {
+	switch strings.TrimSpace(state) {
+	case "pending", "confirmed", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func truthy(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
+}
+
+func boolSetting(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func mcpDiagnosticOutcomeFromSettings(settings map[string]string) *mcpserver.DiagnosticOutcome {
+	outcome := &mcpserver.DiagnosticOutcome{
+		OperationID: strings.TrimSpace(settings["mcp.diagnostics.last_operation_id"]),
+		Capability:  strings.TrimSpace(settings["mcp.diagnostics.last_capability"]),
+		Method:      strings.TrimSpace(settings["mcp.diagnostics.last_method"]),
+		InputClass:  strings.TrimSpace(settings["mcp.diagnostics.last_input_class"]),
+		Outcome:     strings.TrimSpace(settings["mcp.diagnostics.last_outcome"]),
+		ErrorClass:  strings.TrimSpace(settings["mcp.diagnostics.last_error_class"]),
+	}
+	if outcome.OperationID == "" && outcome.Capability == "" && outcome.Method == "" && outcome.InputClass == "" && outcome.Outcome == "" && outcome.ErrorClass == "" {
+		return nil
+	}
+	return outcome
+}
+
+func nonSecretProviderTrace(in map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range in {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "api_key", "token", "secret", "authorization":
+			continue
+		default:
+			out[key] = value
+		}
+	}
+	out["credential_returned"] = false
+	out["proof_packet"] = "authorized_telegram_openai_external_intake"
+	return out
+}
+
+func loadAgentSkillImportedSkills(ctx context.Context, conn *sql.DB) []agentskills.Skill {
+	var raw string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, agentSkillImportedStateKey).Scan(&raw); err != nil {
+		return nil
+	}
+	var skills []agentskills.Skill
+	if err := json.Unmarshal([]byte(raw), &skills); err != nil {
+		return nil
+	}
+	return skills
+}
+
+func loadAgentSkillInstalledStates(ctx context.Context, conn *sql.DB) []agentskills.InstalledSkillState {
+	var raw string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, agentSkillInstalledStateKey).Scan(&raw); err != nil {
+		return nil
+	}
+	var states []agentskills.InstalledSkillState
+	if err := json.Unmarshal([]byte(raw), &states); err != nil {
+		return nil
+	}
+	return states
+}
+
+func persistAgentSkillState(ctx context.Context, conn *sql.DB, imported []agentskills.Skill, installed []agentskills.InstalledSkillState) error {
+	importedJSON, err := json.Marshal(imported)
+	if err != nil {
+		return fmt.Errorf("encode imported skills: %w", err)
+	}
+	installedJSON, err := json.Marshal(installed)
+	if err != nil {
+		return fmt.Errorf("encode installed skill states: %w", err)
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, agentSkillImportedStateKey, string(importedJSON)); err != nil {
+		return fmt.Errorf("persist imported skills: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, agentSkillInstalledStateKey, string(installedJSON)); err != nil {
+		return fmt.Errorf("persist installed skill states: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (a *App) close() error {

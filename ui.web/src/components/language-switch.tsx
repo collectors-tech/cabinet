@@ -23,7 +23,8 @@ const languages: LanguageOption[] = [
 export function LanguageSwitch() {
   const { i18n, t } = useTranslation('common')
   const current =
-    languages.find((lang) => i18n.language.startsWith(lang.code)) ?? languages[0]
+    languages.find((lang) => i18n.language.startsWith(lang.code)) ??
+    languages[0]
 
   return (
     <DropdownMenu modal={false}>

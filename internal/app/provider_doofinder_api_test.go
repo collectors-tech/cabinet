@@ -211,6 +211,8 @@ window.doofinder_config = {
 		Total          int              `json:"total"`
 		Candidates     []map[string]any `json:"candidates"`
 		Discovery      map[string]any   `json:"discovery"`
+		Run            map[string]any   `json:"run"`
+		RunSummary     map[string]any   `json:"run_summary"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode run payload: %v", err)
@@ -232,11 +234,174 @@ window.doofinder_config = {
 	if payload.Discovery["source"] == "" {
 		t.Fatalf("expected discovery source in telemetry, got=%v", payload.Discovery)
 	}
+	if saved, ok := payload.Run["saved"].(float64); !ok || int(saved) != 2 {
+		t.Fatalf("expected persisted run saved=2, got %+v", payload.Run)
+	}
+	if total, ok := payload.RunSummary["candidates_total"].(float64); !ok || int(total) != 2 {
+		t.Fatalf("expected run summary candidates_total=2, got %+v", payload.RunSummary)
+	}
+	for _, candidate := range payload.Candidates {
+		source, _ := candidate["source"].(string)
+		if source != "mrtoys.com.au" {
+			t.Fatalf("expected persisted Doofinder candidate source=mrtoys.com.au, got %+v", candidate)
+		}
+	}
 	if lastOrigin != "https://www.mrtoys.com.au" {
 		t.Fatalf("expected origin header to match provider domain, got=%q", lastOrigin)
 	}
 	if !strings.HasPrefix(lastReferer, "https://www.mrtoys.com.au") {
 		t.Fatalf("expected referer header to match provider domain, got=%q", lastReferer)
 	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	if len(querySetPayload.QuerySets) != 1 {
+		t.Fatalf("expected one reloaded query set, got %+v", querySetPayload.QuerySets)
+	}
+	latest := querySetPayload.QuerySets[0]
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected Doofinder run to persist succeeded snapshot, got %+v", latest)
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 2 {
+		t.Fatalf("expected Doofinder run to persist candidate count=2, got %+v", latest)
+	}
 }
 
+func TestDoofinderRunFailureCreatesProviderWorkflowInboxEvent(t *testing.T) {
+	t.Parallel()
+
+	dfServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "doofinder unavailable", http.StatusServiceUnavailable)
+	}))
+	defer dfServer.Close()
+
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/assets/df.js" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript")
+		_, _ = w.Write([]byte(`
+window.doofinder_config = {
+  store: "5f1f7b26-6e08-4aac-a336-9f008fcb5315",
+  zone: "eu1",
+  search_engines: {
+    products: { hashid: "df-abc-123" }
+  }
+};
+`))
+	}))
+	defer assetServer.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"DoofinderFailureProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	settingsBody := `{"settings":{"integration.mrtoys-com-au.base_url":"https://www.mrtoys.com.au","integration.mrtoys-com-au.provider_scope":"doofinder"}}`
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"AFX","keywords":["AFX"],"provider_scope":["mrtoys.com.au"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	runBody := fmt.Sprintf(`{"query_set_id":"%s","asset_url":"%s/assets/df.js","search_url":"%s/5/search","provider_domain":"mrtoys.com.au","page_size":24}`, qs.ID, assetServer.URL, dfServer.URL)
+	run := doRequest(t, a, http.MethodPost, "/api/providers/doofinder/run", strings.NewReader(runBody), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("expected failed Doofinder run status=400, got=%d body=%s", run.Code, run.Body.String())
+	}
+
+	inbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if inbox.Code != http.StatusOK {
+		t.Fatalf("inbox status=%d body=%s", inbox.Code, inbox.Body.String())
+	}
+	var inboxPayload struct {
+		Items []struct {
+			Source   string         `json:"source"`
+			Status   string         `json:"status"`
+			Title    string         `json:"title"`
+			Summary  string         `json:"summary"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(inbox.Body).Decode(&inboxPayload); err != nil {
+		t.Fatalf("decode inbox payload: %v", err)
+	}
+	if len(inboxPayload.Items) != 1 {
+		t.Fatalf("expected one provider workflow Inbox event, got %+v", inboxPayload.Items)
+	}
+	item := inboxPayload.Items[0]
+	if item.Source != "provider_workflow" || item.Status != "unread" || item.Title != "mrtoys.com.au workflow failed" {
+		t.Fatalf("unexpected provider workflow Inbox item shell: %+v", item)
+	}
+	for _, want := range []string{"status 503", "doofinder"} {
+		if !strings.Contains(strings.ToLower(item.Summary), want) {
+			t.Fatalf("expected Inbox summary to preserve provider failure detail %q, got %q", want, item.Summary)
+		}
+	}
+	expectedMetadata := map[string]string{
+		"provider_id":           "au-webshop-mrtoys-com-au",
+		"provider_display_name": "mrtoys.com.au",
+		"workflow_action_id":    "market_watch.run",
+		"required_action_code":  "check_provider_health_and_retry",
+		"category":              "integration_workflow",
+		"severity":              "error",
+		"target_route":          "/integrations",
+		"query_set_id":          qs.ID,
+		"provider_error_code":   "FAILED_TO_RUN_DOOFINDER_PROVIDER",
+		"health_impact":         "updates_provider_health",
+		"provider_domain":       "mrtoys.com.au",
+		"asset_url":             assetServer.URL + "/assets/df.js",
+		"search_url":            dfServer.URL + "/5/search",
+	}
+	for key, want := range expectedMetadata {
+		if got := fmt.Sprintf("%v", item.Metadata[key]); got != want {
+			t.Fatalf("Inbox metadata[%s] got %q want %q; metadata=%+v", key, got, want, item.Metadata)
+		}
+	}
+
+	repeat := doRequest(t, a, http.MethodPost, "/api/providers/doofinder/run", strings.NewReader(runBody), map[string]string{"Content-Type": "application/json"})
+	if repeat.Code != http.StatusBadRequest {
+		t.Fatalf("expected repeat failed Doofinder run status=400, got=%d body=%s", repeat.Code, repeat.Body.String())
+	}
+	repeatedInbox := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+profile.ID, nil, nil)
+	if repeatedInbox.Code != http.StatusOK {
+		t.Fatalf("repeated inbox status=%d body=%s", repeatedInbox.Code, repeatedInbox.Body.String())
+	}
+	var repeatedPayload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(repeatedInbox.Body).Decode(&repeatedPayload); err != nil {
+		t.Fatalf("decode repeated inbox payload: %v", err)
+	}
+	if len(repeatedPayload.Items) != 1 {
+		t.Fatalf("expected repeated Doofinder provider workflow failures to coalesce into one Inbox item, got %+v", repeatedPayload.Items)
+	}
+}

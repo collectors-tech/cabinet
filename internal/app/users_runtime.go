@@ -250,8 +250,16 @@ func inviteRuntimeUser(ctx context.Context, conn *sql.DB, profileID, email, role
 	if username == "" {
 		return runtimeUser{}, fmt.Errorf("invalid_invite")
 	}
-	for _, existing := range users {
+	for i, existing := range users {
 		if strings.EqualFold(existing.Email, email) {
+			if existing.Status == "invited" {
+				users[i].Role = role
+				users[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+				if err := putRuntimeUsers(ctx, conn, profileID, users); err != nil {
+					return runtimeUser{}, err
+				}
+				return users[i], nil
+			}
 			return runtimeUser{}, fmt.Errorf("user_already_exists")
 		}
 	}
@@ -284,6 +292,20 @@ func updateRuntimeUser(ctx context.Context, conn *sql.DB, profileID, id, firstNa
 		if users[i].ID != id {
 			continue
 		}
+		nextRole := users[i].Role
+		if strings.TrimSpace(role) != "" {
+			nextRole = normalizeUserRole(role)
+		}
+		nextStatus := users[i].Status
+		if normalizedStatus := normalizeUserStatus(status); normalizedStatus != "" {
+			nextStatus = normalizedStatus
+		}
+		if isProtectedLocalOwner(users[i]) && (nextRole != "admin" || nextStatus != "active") {
+			return runtimeUser{}, fmt.Errorf("protected_admin_required")
+		}
+		if protectedUserChangeLeavesNoAdmin(users, users[i].ID, nextRole, nextStatus) {
+			return runtimeUser{}, fmt.Errorf("protected_admin_required")
+		}
 		if trimmed := strings.TrimSpace(firstName); trimmed != "" {
 			users[i].FirstName = trimmed
 		}
@@ -299,10 +321,8 @@ func updateRuntimeUser(ctx context.Context, conn *sql.DB, profileID, id, firstNa
 		if strings.TrimSpace(phoneNumber) != "" {
 			users[i].PhoneNumber = strings.TrimSpace(phoneNumber)
 		}
-		if normalizedStatus := normalizeUserStatus(status); normalizedStatus != "" {
-			users[i].Status = normalizedStatus
-		}
-		users[i].Role = normalizeUserRole(role)
+		users[i].Status = nextStatus
+		users[i].Role = nextRole
 		users[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		if err := putRuntimeUsers(ctx, conn, profileID, users); err != nil {
 			return runtimeUser{}, err
@@ -321,6 +341,9 @@ func deleteRuntimeUser(ctx context.Context, conn *sql.DB, profileID, id string) 
 	removed := false
 	for _, user := range users {
 		if user.ID == id {
+			if isProtectedLocalOwner(user) || protectedUserChangeLeavesNoAdmin(users, user.ID, "", "") {
+				return fmt.Errorf("protected_admin_required")
+			}
 			removed = true
 			continue
 		}
@@ -330,6 +353,28 @@ func deleteRuntimeUser(ctx context.Context, conn *sql.DB, profileID, id string) 
 		return fmt.Errorf("user_not_found")
 	}
 	return putRuntimeUsers(ctx, conn, profileID, next)
+}
+
+func protectedUserChangeLeavesNoAdmin(users []runtimeUser, changedID, nextRole, nextStatus string) bool {
+	activeAdmins := 0
+	for _, user := range users {
+		role := user.Role
+		status := user.Status
+		if user.ID == changedID {
+			role = nextRole
+			status = nextStatus
+		}
+		if role == "admin" && status == "active" {
+			activeAdmins++
+		}
+	}
+	return activeAdmins == 0
+}
+
+func isProtectedLocalOwner(user runtimeUser) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(user.Username)), "owner_") &&
+		strings.HasSuffix(strings.ToLower(strings.TrimSpace(user.Email)), "@cabinet.local") &&
+		user.Role == "admin"
 }
 
 func usersStateKey(profileID string) string {

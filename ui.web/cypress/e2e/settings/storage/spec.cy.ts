@@ -1,9 +1,8 @@
 describe('settings/storage', () => {
   function signInToStorage() {
+    cy.stubLocalServerSession('default')
     cy.visit('/sign-in?redirect=%2Fsettings%2Fstorage')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.contains('button', 'Open local workspace').click()
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
       /^\/settings\/storage\/?$/
@@ -13,6 +12,94 @@ describe('settings/storage', () => {
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-012 uses the route header as the only visible page title', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-header-title"]')
+      .should('be.visible')
+      .and('contain.text', 'Storage Settings')
+    cy.get('main').find('h1').should('not.exist')
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-013 keeps storage actions scoped to cards, rows, and dialogs', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: {
+        backups: [
+          {
+            path: 'C:/cabinet/backups/cabinet-2026-04-21-120000.db',
+            file_name: 'cabinet-2026-04-21-120000.db',
+            size_bytes: 2048,
+            created_at: '2026-04-21T12:00:00Z',
+            archive_format: 'db',
+            download_url: '/api/backup/download?file_name=cabinet-2026-04-21-120000.db',
+            integrity_check: 'ok',
+          },
+        ],
+      },
+    }).as('backupList')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-global-header-actions"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="settings-storage-backup-section"]').within(() => {
+      cy.get('[data-testid="settings-storage-backup-run"]')
+        .scrollIntoView()
+        .should('be.visible')
+      cy.get('[data-testid="settings-storage-backup-table"]').should(
+        'be.visible'
+      )
+    })
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .within(() => {
+        cy.get('[data-testid="settings-storage-backup-download"]').should(
+          'be.visible'
+        )
+        cy.get('[data-testid="settings-storage-backup-restore"]').click()
+      })
+    cy.get('[data-testid="settings-storage-restore-confirm"]').within(() => {
+      cy.get('[data-testid="settings-storage-restore-submit"]').should(
+        'be.visible'
+      )
+    })
   })
 
   it('UI-SCREEN-SETTINGS-STORAGE-004 renders storage paths and keeps diagnostics actions disabled in degraded mode', () => {
@@ -52,6 +139,7 @@ describe('settings/storage', () => {
     cy.contains('button', 'Reindex Search').should('be.disabled')
     cy.contains('button', 'Rebuild Thumbnails').should('be.disabled')
     cy.contains('Diagnostics actions are unavailable while storage info is degraded.')
+      .scrollIntoView()
       .should('be.visible')
   })
 
@@ -80,7 +168,7 @@ describe('settings/storage', () => {
       'be.visible'
     )
 
-    cy.contains('button', 'Retry').click()
+    cy.get('[data-testid="settings-storage-retry"]').click()
     cy.wait('@storageInfo')
     cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
     cy.contains('Storage information is unavailable right now.').should(
@@ -118,6 +206,35 @@ describe('settings/storage', () => {
     )
   })
 
+  it('UI-SCREEN-SETTINGS-STORAGE-006 reports Reindex Search failure without route reload', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('POST', '/api/data/reindex', {
+      statusCode: 500,
+      body: { error: 'failed_to_reindex' },
+    }).as('reindexSearch')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.contains('button', 'Reindex Search').click()
+    cy.wait('@reindexSearch')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Search reindex failed. Try again when runtime diagnostics are healthy.'
+    )
+  })
+
   it('UI-SCREEN-SETTINGS-STORAGE-006 runs Rebuild Thumbnails and reports deterministic feedback', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -146,8 +263,47 @@ describe('settings/storage', () => {
     )
   })
 
+  it('UI-SCREEN-SETTINGS-STORAGE-006 reports Rebuild Thumbnails failure without route reload', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('POST', '/api/data/rebuild-thumbnails', {
+      statusCode: 500,
+      body: { error: 'failed_to_rebuild_thumbnails' },
+    }).as('rebuildThumbnails')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.contains('button', 'Rebuild Thumbnails').click()
+    cy.wait('@rebuildThumbnails')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Thumbnail rebuild failed. Check diagnostics health and try again.'
+    )
+  })
+
   it('UI-SCREEN-SETTINGS-STORAGE-007 creates, lists, and restores backups from Settings Storage', () => {
-    const backups = ['C:/cabinet/backups/cabinet-2026-04-21-120000.db']
+    const backups = [
+      {
+        path: 'C:/cabinet/backups/cabinet-2026-04-21-120000.db',
+        file_name: 'cabinet-2026-04-21-120000.db',
+        size_bytes: 2048,
+        created_at: '2026-04-21T12:00:00Z',
+        archive_format: 'db',
+        download_url: '/api/backup/download?file_name=cabinet-2026-04-21-120000.db',
+        integrity_check: 'ok',
+      },
+    ]
 
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -167,19 +323,34 @@ describe('settings/storage', () => {
       })
     }).as('backupList')
     cy.intercept('POST', '/api/backup/run', (req) => {
-      backups.unshift('C:/cabinet/backups/cabinet-2026-04-21-130000.db')
+      backups.unshift({
+        path: 'C:/cabinet/backups/cabinet-backup-2026-04-21-130000.zip',
+        file_name: 'cabinet-backup-2026-04-21-130000.zip',
+        size_bytes: 4096,
+        created_at: '2026-04-21T13:00:00Z',
+        archive_format: 'zip',
+        download_url: '/api/backup/download?file_name=cabinet-backup-2026-04-21-130000.zip',
+        integrity_check: 'ok',
+      })
       req.reply({
         statusCode: 200,
-        body: { backup_path: backups[0] },
+        body: { backup: backups[0] },
       })
     }).as('backupRun')
     cy.intercept('POST', '/api/backup/restore', (req) => {
       expect(req.body).to.deep.equal({
-        backup_path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
+        backup_path: 'C:/cabinet/backups/cabinet-backup-2026-04-21-130000.zip',
+        confirm_restore: true,
       })
       req.reply({
         statusCode: 200,
-        body: { ok: true },
+        body: {
+          restore: {
+            restored_path: 'C:/cabinet/backups/cabinet-backup-2026-04-21-130000.zip',
+            restored_at: '2026-04-21T13:05:00Z',
+            integrity_check: 'ok',
+          },
+        },
       })
     }).as('backupRestore')
 
@@ -188,19 +359,40 @@ describe('settings/storage', () => {
     cy.wait('@storageInfo')
     cy.wait('@backupList')
 
+    cy.get('[data-testid="settings-storage-backup-table"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.get('[data-testid="settings-storage-backup-row"]').should('have.length', 1)
-    cy.get('[data-testid="settings-storage-backup-run"]').click()
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .should('contain', 'Legacy database snapshot')
+      .and('contain', 'Valid')
+    cy.get('[data-testid="settings-storage-backup-run"]')
+      .scrollIntoView()
+      .click()
     cy.wait('@backupRun')
     cy.wait('@backupList')
-    cy.get('[data-testid="settings-storage-action-status"]').should(
-      'contain',
-      'Backup created successfully.'
-    )
     cy.get('[data-testid="settings-storage-backup-row"]').should('have.length', 2)
     cy.get('[data-testid="settings-storage-backup-row"]').first().should(
       'contain',
-      'cabinet-2026-04-21-130000.db'
+      'cabinet-backup-2026-04-21-130000.zip'
     )
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .should('contain', 'ZIP archive')
+      .and('contain', 'Generated ZIP archive')
+      .find('[data-testid="settings-storage-backup-download"]')
+      .should('have.attr', 'href', '/api/backup/download?file_name=cabinet-backup-2026-04-21-130000.zip')
+      .and('have.attr', 'download', 'cabinet-backup-2026-04-21-130000.zip')
+
+    cy.get('[data-testid="settings-storage-backup-sort-file"]').click()
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .should('contain', 'cabinet-2026-04-21-120000.db')
+    cy.get('[data-testid="settings-storage-backup-sort-created"]').click()
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .should('contain', 'cabinet-backup-2026-04-21-130000.zip')
 
     cy.get('[data-testid="settings-storage-backup-row"]')
       .first()
@@ -229,7 +421,19 @@ describe('settings/storage', () => {
     }).as('storageInfo')
     cy.intercept('GET', '/api/backup/list', {
       statusCode: 200,
-      body: { backups: ['C:/cabinet/backups/cabinet-2026-04-21-090000.db'] },
+      body: {
+        backups: [
+          {
+            path: 'C:/cabinet/backups/cabinet-2026-04-21-090000.db',
+            file_name: 'cabinet-2026-04-21-090000.db',
+            size_bytes: 1024,
+            created_at: '2026-04-21T09:00:00Z',
+            archive_format: 'db',
+            download_url: '/api/backup/download?file_name=cabinet-2026-04-21-090000.db',
+            integrity_check: 'ok',
+          },
+        ],
+      },
     }).as('backupList')
     cy.intercept('POST', '/api/backup/restore', {
       statusCode: 400,
@@ -327,4 +531,95 @@ describe('settings/storage', () => {
       'Database integrity check failed.'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-011 shows media migration preflight counts and recovery records', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+        migration_preflight: {
+          state: 'needs_repair',
+          dry_run: true,
+          summary: {
+            discovered: 6,
+            pending: 2,
+            already_migrated: 1,
+            duplicate: 1,
+            missing: 1,
+            orphan: 1,
+            failed: 1,
+          },
+          records: [
+            {
+              id: 'photo-duplicate',
+              record_type: 'inventory_photo',
+              filename: 'front.jpg',
+              classification: 'duplicate',
+              path_class: 'legacy_media',
+              recovery_action:
+                'Resolve duplicate source references before applying migration.',
+            },
+            {
+              id: 'attach-missing',
+              record_type: 'chat_attachment',
+              filename: 'receipt.pdf',
+              classification: 'missing',
+              path_class: 'legacy_external',
+              recovery_action:
+                'Restore or relink the missing source before migration.',
+            },
+          ],
+        },
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-migration-preflight"]').should(
+      'contain',
+      'Media migration'
+    )
+    cy.get('[data-testid="settings-storage-migration-preflight"]').should(
+      'contain',
+      'Needs repair'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      'Discovered'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      '6'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      'Pending'
+    )
+    cy.get('[data-testid="settings-storage-migration-summary"]').should(
+      'contain',
+      '2'
+    )
+    cy.get('[data-testid="settings-storage-migration-record"]').should(
+      'have.length',
+      2
+    )
+    cy.get('[data-testid="settings-storage-migration-record"]')
+      .first()
+      .should('contain', 'photo-duplicate')
+      .and('contain', 'duplicate')
+      .and('contain', 'Resolve duplicate source references')
+  })
+
 })

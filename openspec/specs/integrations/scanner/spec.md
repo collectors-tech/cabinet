@@ -26,6 +26,13 @@ Cabinet SHALL log failures and support retry by query set.
 - **WHEN** client calls `POST /api/scanner/failures/retry` with `query_set_id=q1`
 - **THEN** runtime MUST return `200`, mark retry requested, and append retry activity to scanner logs
 
+#### Scenario: Profile-scoped failure evidence
+- **GIVEN** one active profile has a failed saved-search run and another profile has a separate query set
+- **WHEN** clients list failures or reload query-set run snapshots for each profile
+- **THEN** failure rows and `last_run_status=failed` metadata MUST be visible only to the profile that owns the failed query set
+- **AND** other profiles MUST continue to show their query-set run status without leaked failure messages
+- **AND** provider failure rows MUST include the raw failure reason plus deterministic `retry_guidance` and `next_action` fields so clients can route recovery without parsing the error message.
+
 ### Requirement INTEGRATION-015: Scanner normalization MUST map provider outputs to common candidate schema
 Cabinet MUST normalize all provider outputs (official APIs and web ingestion) to shared candidate/pricing/stock fields before persistence.
 

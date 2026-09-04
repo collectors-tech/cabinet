@@ -60,6 +60,7 @@ describe('ui-foundation-accessibility', () => {
       statusCode: 200,
       body: { id: 'profile-a11y' },
     }).as('profile')
+    cy.stubLocalServerSession('profile-a11y')
     signInToInventory()
     cy.wait('@items')
     cy.wait('@profile')
@@ -98,7 +99,7 @@ describe('ui-foundation-accessibility', () => {
     cy.contains('Status:').should('be.visible')
     cy.get('button[aria-label="Switch to rows view"]').focus().type('{enter}')
     cy.get('table').should('be.visible')
-    cy.get('input[placeholder^="Filter by title or"]')
+    cy.get('[data-testid="inventory-table-search-input"]')
       .should('be.visible')
       .focus()
       .type('missing-a11y-item{enter}')

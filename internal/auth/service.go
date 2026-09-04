@@ -234,24 +234,32 @@ func (s *Service) CreateUnlockedSession(profileID string) (string, error) {
 }
 
 func (s *Service) ValidateUnlockedSession(token string) error {
+	_, err := s.ValidateUnlockedSessionProfile(token)
+	return err
+}
+
+// ValidateUnlockedSessionProfile validates an opaque local session and returns
+// the profile that the server bound to it at authentication time. Callers must
+// never infer this profile from a request body or browser state.
+func (s *Service) ValidateUnlockedSessionProfile(token string) (string, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return fmt.Errorf("session token is required")
+		return "", fmt.Errorf("session token is required")
 	}
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, ok := s.unlockedSessions[token]
 	if !ok {
-		return fmt.Errorf("session not found")
+		return "", fmt.Errorf("session not found")
 	}
 	if now.After(st.ExpiresAt) || now.Sub(st.LastActive) > s.autoLockTimeout {
 		delete(s.unlockedSessions, token)
-		return fmt.Errorf("session locked")
+		return "", fmt.Errorf("session locked")
 	}
 	st.LastActive = now
 	s.unlockedSessions[token] = st
-	return nil
+	return strings.TrimSpace(st.ProfileID), nil
 }
 
 func (s *Service) LockUnlockedSession(token string) {

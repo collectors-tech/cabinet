@@ -3,9 +3,11 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -29,7 +31,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
-	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", path)
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -57,10 +59,166 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			value TEXT NOT NULL,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
+		`CREATE TABLE IF NOT EXISTS telegram_connector_state (
+			profile_id TEXT PRIMARY KEY,
+			update_offset INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS telegram_pairing_requests (
+			code_hash TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			consumed_at TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_telegram_pairing_profile_expiry ON telegram_pairing_requests(profile_id, expires_at);`,
 		`CREATE TABLE IF NOT EXISTS profiles (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS companion_pairing_requests (
+			id TEXT PRIMARY KEY,
+			exchange_verifier TEXT NOT NULL,
+			pairing_code TEXT NOT NULL,
+			device_id TEXT NOT NULL,
+			device_name TEXT NOT NULL,
+			origin TEXT NOT NULL,
+			protocol_version TEXT NOT NULL,
+			requested_capabilities_json TEXT NOT NULL DEFAULT '[]',
+			granted_capabilities_json TEXT NOT NULL DEFAULT '[]',
+			profile_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			approved_at TEXT NOT NULL DEFAULT '',
+			exchanged_at TEXT NOT NULL DEFAULT ''
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_companion_pairing_status_expires ON companion_pairing_requests(status, expires_at);`,
+		`CREATE TABLE IF NOT EXISTS companion_sessions (
+			id TEXT PRIMARY KEY,
+			credential_verifier TEXT NOT NULL UNIQUE,
+			cabinet_instance_id TEXT NOT NULL,
+			profile_id TEXT NOT NULL,
+			device_id TEXT NOT NULL,
+			device_name TEXT NOT NULL,
+			origin TEXT NOT NULL,
+			protocol_version TEXT NOT NULL,
+			capabilities_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			last_used_at TEXT NOT NULL DEFAULT '',
+			revoked_at TEXT NOT NULL DEFAULT '',
+			rotated_from_id TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_companion_sessions_profile ON companion_sessions(profile_id, revoked_at, expires_at);`,
+		`CREATE TABLE IF NOT EXISTS companion_audit_events (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			action TEXT NOT NULL,
+			result_code TEXT NOT NULL,
+			origin TEXT NOT NULL DEFAULT '',
+			remote_address TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_companion_audit_profile_created ON companion_audit_events(profile_id, created_at);`,
+		`CREATE TABLE IF NOT EXISTS companion_captures (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			module_id TEXT NOT NULL,
+			module_version TEXT NOT NULL,
+			schema_version TEXT NOT NULL,
+			provider_id TEXT NOT NULL,
+			integration_instance_id TEXT NOT NULL,
+			payload_type TEXT NOT NULL,
+			source_url TEXT NOT NULL,
+			captured_at TEXT NOT NULL,
+			page_complete INTEGER NOT NULL DEFAULT 0,
+			payload_hash TEXT NOT NULL,
+			idempotency_key TEXT NOT NULL,
+			redaction_summary_json TEXT NOT NULL DEFAULT '[]',
+			raw_payload_json TEXT NOT NULL,
+			state TEXT NOT NULL,
+			attempt_count INTEGER NOT NULL DEFAULT 0,
+			last_error TEXT NOT NULL DEFAULT '',
+			checkpoint_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			cancelled_at TEXT NOT NULL DEFAULT '',
+			UNIQUE(profile_id, idempotency_key),
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_companion_captures_profile_state ON companion_captures(profile_id, state, created_at);`,
+		`CREATE TABLE IF NOT EXISTS companion_observations (
+			id TEXT PRIMARY KEY,
+			capture_id TEXT NOT NULL,
+			profile_id TEXT NOT NULL,
+			provider_id TEXT NOT NULL,
+			integration_instance_id TEXT NOT NULL,
+			listing_key TEXT NOT NULL,
+			payload_type TEXT NOT NULL,
+			normalized_json TEXT NOT NULL,
+			confidence REAL NOT NULL DEFAULT 0,
+			review_required INTEGER NOT NULL DEFAULT 0,
+			first_seen TEXT NOT NULL,
+			last_seen TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(profile_id, integration_instance_id, listing_key, payload_type),
+			FOREIGN KEY (capture_id) REFERENCES companion_captures(id) ON DELETE CASCADE,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_companion_observations_profile_provider ON companion_observations(profile_id, provider_id, last_seen);`,
+		`CREATE TABLE IF NOT EXISTS companion_purchase_inbox (
+			id TEXT PRIMARY KEY,
+			capture_id TEXT NOT NULL,
+			profile_id TEXT NOT NULL,
+			provider_id TEXT NOT NULL,
+			order_key TEXT NOT NULL,
+			item_key TEXT NOT NULL,
+			card_json TEXT NOT NULL,
+			state TEXT NOT NULL DEFAULT 'review',
+			linked_item_id TEXT NOT NULL DEFAULT '',
+			first_seen TEXT NOT NULL,
+			last_seen TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(profile_id, provider_id, item_key),
+			FOREIGN KEY (capture_id) REFERENCES companion_captures(id) ON DELETE CASCADE,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_companion_purchase_inbox_profile_state ON companion_purchase_inbox(profile_id, state, last_seen);`,
+		`CREATE TABLE IF NOT EXISTS companion_media_assets (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			content_hash TEXT NOT NULL,
+			filename TEXT NOT NULL,
+			mime_type TEXT NOT NULL,
+			byte_size INTEGER NOT NULL,
+			width INTEGER NOT NULL DEFAULT 0,
+			height INTEGER NOT NULL DEFAULT 0,
+			original_path TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			UNIQUE(profile_id, content_hash),
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS companion_media_links (
+			asset_id TEXT NOT NULL,
+			capture_id TEXT NOT NULL,
+			field_name TEXT NOT NULL,
+			idempotency_key TEXT NOT NULL,
+			source_url TEXT NOT NULL DEFAULT '',
+			provenance_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(asset_id, capture_id, field_name),
+			UNIQUE(capture_id, idempotency_key),
+			FOREIGN KEY (asset_id) REFERENCES companion_media_assets(id) ON DELETE CASCADE,
+			FOREIGN KEY (capture_id) REFERENCES companion_captures(id) ON DELETE CASCADE
 		);`,
 		`CREATE TABLE IF NOT EXISTS profile_settings (
 			profile_id TEXT NOT NULL,
@@ -224,7 +382,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL DEFAULT '',
 			query_set_id TEXT NOT NULL,
-			listing_id TEXT NOT NULL UNIQUE,
+			listing_id TEXT NOT NULL,
 			title TEXT NOT NULL,
 			price REAL NOT NULL DEFAULT 0,
 			shipping REAL NOT NULL DEFAULT 0,
@@ -235,11 +393,45 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			status TEXT NOT NULL DEFAULT 'new',
 			source TEXT NOT NULL DEFAULT '',
+			observed_currency TEXT NOT NULL DEFAULT '',
+			reviewer_notes TEXT NOT NULL DEFAULT '',
+			source_result_url TEXT NOT NULL DEFAULT '',
 			stock_state TEXT NOT NULL DEFAULT 'unknown',
 			stock_count INTEGER NOT NULL DEFAULT -1,
+			listing_created_at TEXT NOT NULL DEFAULT '',
+			listing_updated_at TEXT NOT NULL DEFAULT '',
 			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_scanner_candidates_query_set_id ON scanner_candidates(query_set_id);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_scanner_candidates_result_scope ON scanner_candidates(profile_id, query_set_id, source, listing_id);`,
+		`CREATE TABLE IF NOT EXISTS scanner_candidate_decision_history (
+			id TEXT PRIMARY KEY,
+			candidate_id TEXT NOT NULL,
+			from_status TEXT NOT NULL DEFAULT '',
+			to_status TEXT NOT NULL,
+			reason TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_scanner_candidate_decision_history_candidate_id ON scanner_candidate_decision_history(candidate_id);`,
+		`CREATE TABLE IF NOT EXISTS scanner_runs (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			query_set_id TEXT NOT NULL DEFAULT '',
+			provider TEXT NOT NULL DEFAULT '',
+			trigger_type TEXT NOT NULL DEFAULT 'manual',
+			started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			finished_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			status TEXT NOT NULL,
+			result_count INTEGER NOT NULL DEFAULT 0,
+			new_result_count INTEGER NOT NULL DEFAULT 0,
+			error_category TEXT NOT NULL DEFAULT '',
+			error_message TEXT NOT NULL DEFAULT '',
+			retry_guidance TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_scanner_runs_query_set_id ON scanner_runs(query_set_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_scanner_runs_profile_id ON scanner_runs(profile_id);`,
 		`CREATE TABLE IF NOT EXISTS scanner_matches (
 			candidate_id TEXT PRIMARY KEY,
 			item_id TEXT NOT NULL DEFAULT '',
@@ -254,10 +446,12 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			provider TEXT PRIMARY KEY,
 			status TEXT NOT NULL,
 			message TEXT NOT NULL DEFAULT '',
+			retry_after_seconds INTEGER NOT NULL DEFAULT 0,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS scanner_failures (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			query_set_id TEXT NOT NULL DEFAULT '',
 			provider TEXT NOT NULL,
 			message TEXT NOT NULL,
@@ -281,17 +475,20 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			profile_id TEXT NOT NULL DEFAULT '',
 			item_id TEXT NOT NULL UNIQUE,
 			target_price REAL NOT NULL DEFAULT 0,
+			currency TEXT NOT NULL DEFAULT 'USD',
 			priority TEXT NOT NULL DEFAULT 'normal',
 			notes TEXT NOT NULL DEFAULT '',
 			highlight_hit INTEGER NOT NULL DEFAULT 1,
 			below_target_now INTEGER NOT NULL DEFAULT 0,
 			owned INTEGER NOT NULL DEFAULT 0,
+			delivered INTEGER NOT NULL DEFAULT 0,
 			price_paid REAL NOT NULL DEFAULT 0,
 			purchase_url TEXT NOT NULL DEFAULT '',
 			purchase_date TEXT NOT NULL DEFAULT '',
 			purchase_condition TEXT NOT NULL DEFAULT '',
 			quantity INTEGER NOT NULL DEFAULT 0,
 			needed_quantity INTEGER NOT NULL DEFAULT 1,
+			deleted INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
@@ -353,6 +550,61 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_expected_arrivals_profile_item_status ON expected_arrivals(profile_id, item_id, status, created_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_expected_arrivals_lifecycle_entry_id ON expected_arrivals(lifecycle_entry_id);`,
+		`CREATE TABLE IF NOT EXISTS forwarder_packages (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			provider TEXT NOT NULL,
+			source TEXT NOT NULL,
+			external_package_id TEXT NOT NULL,
+			shipment_id TEXT NOT NULL DEFAULT '',
+			tracking_number TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL,
+			received_at TEXT NOT NULL DEFAULT '',
+			sender TEXT NOT NULL DEFAULT '',
+			warehouse_location TEXT NOT NULL DEFAULT '',
+			weight_grams INTEGER NOT NULL DEFAULT 0,
+			provenance_key TEXT NOT NULL,
+			raw_payload_json TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(profile_id, provider, source, external_package_id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_forwarder_packages_profile_status ON forwarder_packages(profile_id, status, updated_at);`,
+		`CREATE TABLE IF NOT EXISTS forwarder_package_links (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			package_id TEXT NOT NULL UNIQUE,
+			item_id TEXT NOT NULL,
+			lifecycle_entry_id TEXT NOT NULL DEFAULT '',
+			expected_arrival_id TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT 'manual',
+			decision TEXT NOT NULL DEFAULT 'confirmed',
+			notes TEXT NOT NULL DEFAULT '',
+			audit_trail_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (package_id) REFERENCES forwarder_packages(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_forwarder_package_links_profile_item ON forwarder_package_links(profile_id, item_id, updated_at);`,
+		`CREATE TABLE IF NOT EXISTS forwarder_package_link_events (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			package_id TEXT NOT NULL,
+			link_id TEXT NOT NULL DEFAULT '',
+			action TEXT NOT NULL,
+			item_id TEXT NOT NULL DEFAULT '',
+			lifecycle_entry_id TEXT NOT NULL DEFAULT '',
+			expected_arrival_id TEXT NOT NULL DEFAULT '',
+			previous_item_id TEXT NOT NULL DEFAULT '',
+			previous_lifecycle_entry_id TEXT NOT NULL DEFAULT '',
+			previous_expected_arrival_id TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
+			audit_trail_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (package_id) REFERENCES forwarder_packages(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_forwarder_package_link_events_package ON forwarder_package_link_events(profile_id, package_id, created_at);`,
 		`CREATE TABLE IF NOT EXISTS ai_failures (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -377,6 +629,33 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_threads_profile_id ON chat_threads(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS telegram_agent_threads (
+			profile_id TEXT NOT NULL,
+			sender_id TEXT NOT NULL,
+			chat_id TEXT NOT NULL,
+			thread_id TEXT NOT NULL UNIQUE,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(profile_id, sender_id, chat_id),
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+			FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_telegram_agent_threads_thread ON telegram_agent_threads(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS telegram_agent_deliveries (
+			profile_id TEXT NOT NULL,
+			sender_id TEXT NOT NULL,
+			chat_id TEXT NOT NULL,
+			delivery_kind TEXT NOT NULL,
+			delivery_id TEXT NOT NULL,
+			request_fingerprint TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'processing',
+			response_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(profile_id, sender_id, chat_id, delivery_kind, delivery_id),
+			FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_telegram_agent_deliveries_status ON telegram_agent_deliveries(profile_id, status, updated_at);`,
 		`CREATE TABLE IF NOT EXISTS chat_messages (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -403,6 +682,21 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_attachments_thread_id ON chat_attachments(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS media_asset_links (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			asset_id TEXT NOT NULL,
+			asset_type TEXT NOT NULL,
+			target_type TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT 'media.workspace',
+			audit_summary TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(profile_id, asset_id, target_type, target_id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_media_asset_links_profile_asset ON media_asset_links(profile_id, asset_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_media_asset_links_profile_target ON media_asset_links(profile_id, target_type, target_id);`,
 		`CREATE TABLE IF NOT EXISTS chat_inbox_items (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -432,6 +726,67 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_action_previews_profile_id ON chat_action_previews(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS agent_skill_previews (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			skill_id TEXT NOT NULL,
+			source_surface TEXT NOT NULL DEFAULT '',
+			source_channel TEXT NOT NULL DEFAULT '',
+			source_thread_id TEXT NOT NULL DEFAULT '',
+			source_message_id TEXT NOT NULL DEFAULT '',
+			agent_context_json TEXT NOT NULL DEFAULT '{}',
+			parameters_json TEXT NOT NULL DEFAULT '{}',
+			target_json TEXT NOT NULL DEFAULT '{}',
+			result_json TEXT NOT NULL DEFAULT '{}',
+			secret_ref TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'previewed',
+			error_code TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			applied_at TEXT,
+			cancelled_at TEXT,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_skill_previews_profile_status ON agent_skill_previews(profile_id, status);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_skill_previews_expiry ON agent_skill_previews(status, expires_at);`,
+		`CREATE TABLE IF NOT EXISTS agent_skill_strong_confirmations (
+			id TEXT PRIMARY KEY,
+			preview_id TEXT NOT NULL,
+			profile_id TEXT NOT NULL,
+			skill_id TEXT NOT NULL,
+			target_fingerprint TEXT NOT NULL,
+			token_hash TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'confirmed',
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			used_at TEXT,
+			FOREIGN KEY (preview_id) REFERENCES agent_skill_previews(id) ON DELETE CASCADE,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_skill_strong_confirmation_preview ON agent_skill_strong_confirmations(preview_id, profile_id, status);`,
+		`CREATE TABLE IF NOT EXISTS assistant_workflow_runs (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			workflow_id TEXT NOT NULL,
+			capability_id TEXT NOT NULL,
+			source_channel TEXT NOT NULL DEFAULT 'in_app_chat',
+			source_thread_id TEXT NOT NULL DEFAULT '',
+			source_message_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL,
+			input_json TEXT NOT NULL DEFAULT '{}',
+			provider_trace_json TEXT NOT NULL DEFAULT '{}',
+			result_json TEXT NOT NULL DEFAULT '{}',
+			error_json TEXT NOT NULL DEFAULT '{}',
+			confirmation_state TEXT NOT NULL DEFAULT 'not_required',
+			bulk_items_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at TEXT NOT NULL DEFAULT '',
+			completed_at TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_assistant_workflow_runs_profile_status ON assistant_workflow_runs(profile_id, status, updated_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_assistant_workflow_runs_thread ON assistant_workflow_runs(profile_id, source_thread_id, updated_at);`,
 		`CREATE TABLE IF NOT EXISTS audit_events (
 			id TEXT PRIMARY KEY,
 			entity_type TEXT NOT NULL,
@@ -571,6 +926,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.profile_id: %w", err)
 	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "currency", "TEXT NOT NULL DEFAULT 'USD'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.currency: %w", err)
+	}
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "below_target_now", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.below_target_now: %w", err)
@@ -578,6 +937,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "owned", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.owned: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "delivered", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.delivered: %w", err)
 	}
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "price_paid", "REAL NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
@@ -602,6 +965,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "needed_quantity", "INTEGER NOT NULL DEFAULT 1"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.needed_quantity: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "deleted", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.deleted: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
 		conn.Close()
@@ -635,6 +1002,26 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.stock_count: %w", err)
 	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "observed_currency", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.observed_currency: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "reviewer_notes", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.reviewer_notes: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "source_result_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.source_result_url: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "listing_created_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.listing_created_at: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "listing_updated_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.listing_updated_at: %w", err)
+	}
 	if err := ensureColumn(ctx, tx, tx, "item_photos", "display_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure item_photos.display_order: %w", err)
@@ -643,9 +1030,76 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
 	}
+	if err := rebuildScannerCandidatesWithoutGlobalListingUnique(ctx, tx); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if err := rebuildScannerMatchesWithoutLegacyCandidateFK(ctx, tx); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_scanner_candidates_result_scope ON scanner_candidates(profile_id, query_set_id, source, listing_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates scoped result index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS scanner_candidate_decision_history (
+		id TEXT PRIMARY KEY,
+		candidate_id TEXT NOT NULL,
+		from_status TEXT NOT NULL DEFAULT '',
+		to_status TEXT NOT NULL,
+		reason TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+	);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidate_decision_history table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidate_decision_history_candidate_id ON scanner_candidate_decision_history(candidate_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidate_decision_history candidate index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS scanner_runs (
+		id TEXT PRIMARY KEY,
+		profile_id TEXT NOT NULL DEFAULT '',
+		query_set_id TEXT NOT NULL DEFAULT '',
+		provider TEXT NOT NULL DEFAULT '',
+		trigger_type TEXT NOT NULL DEFAULT 'manual',
+		started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		finished_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		status TEXT NOT NULL,
+		result_count INTEGER NOT NULL DEFAULT 0,
+		new_result_count INTEGER NOT NULL DEFAULT 0,
+		error_category TEXT NOT NULL DEFAULT '',
+		error_message TEXT NOT NULL DEFAULT '',
+		retry_guidance TEXT NOT NULL DEFAULT '',
+		FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
+	);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_runs table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_runs_query_set_id ON scanner_runs(query_set_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_runs query set index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_runs_profile_id ON scanner_runs(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_runs profile index: %w", err)
+	}
 	if err := ensureColumn(ctx, tx, tx, "scanner_failures", "query_set_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_failures.query_set_id: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_failures", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_failures.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "provider_health", "retry_after_seconds", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure provider_health.retry_after_seconds: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_failures_profile_id ON scanner_failures(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_failures profile index: %w", err)
 	}
 	if err := ensureColumn(ctx, tx, tx, "tracked_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
@@ -667,12 +1121,162 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure chat_messages.context_json: %w", err)
 	}
+	if err := ensureColumn(ctx, tx, tx, "forwarder_package_links", "decision", "TEXT NOT NULL DEFAULT 'confirmed'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure forwarder_package_links.decision: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "forwarder_package_links", "audit_trail_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure forwarder_package_links.audit_trail_json: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("commit migration tx: %w", err)
 	}
 
 	return conn, nil
+}
+
+func rebuildScannerCandidatesWithoutGlobalListingUnique(ctx context.Context, tx *sql.Tx) error {
+	var ddl string
+	if err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scanner_candidates'`).Scan(&ddl); err != nil {
+		return fmt.Errorf("inspect scanner_candidates schema: %w", err)
+	}
+	if !strings.Contains(strings.ToUpper(ddl), "LISTING_ID TEXT NOT NULL UNIQUE") {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE scanner_candidates RENAME TO scanner_candidates_legacy_unique_listing`); err != nil {
+		return fmt.Errorf("rename legacy scanner_candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE scanner_candidates (
+		id TEXT PRIMARY KEY,
+		profile_id TEXT NOT NULL DEFAULT '',
+		query_set_id TEXT NOT NULL,
+		listing_id TEXT NOT NULL,
+		title TEXT NOT NULL,
+		price REAL NOT NULL DEFAULT 0,
+		shipping REAL NOT NULL DEFAULT 0,
+		url TEXT NOT NULL,
+		image TEXT NOT NULL DEFAULT '',
+		seller TEXT NOT NULL DEFAULT '',
+		first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		status TEXT NOT NULL DEFAULT 'new',
+		source TEXT NOT NULL DEFAULT '',
+		observed_currency TEXT NOT NULL DEFAULT '',
+		reviewer_notes TEXT NOT NULL DEFAULT '',
+		source_result_url TEXT NOT NULL DEFAULT '',
+		stock_state TEXT NOT NULL DEFAULT 'unknown',
+		stock_count INTEGER NOT NULL DEFAULT -1,
+		listing_created_at TEXT NOT NULL DEFAULT '',
+		listing_updated_at TEXT NOT NULL DEFAULT '',
+		FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
+	);`); err != nil {
+		return fmt.Errorf("create rebuilt scanner_candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO scanner_candidates(
+		id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count, listing_created_at, listing_updated_at
+	)
+	SELECT id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url, stock_state, stock_count, '', ''
+	FROM scanner_candidates_legacy_unique_listing;`); err != nil {
+		return fmt.Errorf("copy rebuilt scanner_candidates: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE scanner_candidates_legacy_unique_listing`); err != nil {
+		return fmt.Errorf("drop legacy scanner_candidates: %w", err)
+	}
+	return nil
+}
+
+func rebuildScannerMatchesWithoutLegacyCandidateFK(ctx context.Context, tx *sql.Tx) error {
+	repairs := []struct {
+		table   string
+		create  string
+		columns string
+	}{
+		{
+			table: "scanner_candidate_decision_history",
+			create: `CREATE TABLE scanner_candidate_decision_history (
+				id TEXT PRIMARY KEY,
+				candidate_id TEXT NOT NULL,
+				from_status TEXT NOT NULL DEFAULT '',
+				to_status TEXT NOT NULL,
+				reason TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "id, candidate_id, from_status, to_status, reason, created_at",
+		},
+		{
+			table: "scanner_matches",
+			create: `CREATE TABLE scanner_matches (
+				candidate_id TEXT PRIMARY KEY,
+				item_id TEXT NOT NULL DEFAULT '',
+				state TEXT NOT NULL,
+				confidence REAL NOT NULL DEFAULT 0,
+				needs_review INTEGER NOT NULL DEFAULT 1,
+				extracted_part_number TEXT NOT NULL DEFAULT '',
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at",
+		},
+		{
+			table: "discovery_actions",
+			create: `CREATE TABLE discovery_actions (
+				id TEXT PRIMARY KEY,
+				candidate_id TEXT NOT NULL,
+				action_type TEXT NOT NULL,
+				payload_json TEXT NOT NULL DEFAULT '{}',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "id, candidate_id, action_type, payload_json, created_at",
+		},
+		{
+			table: "ignored_candidates",
+			create: `CREATE TABLE ignored_candidates (
+				candidate_id TEXT PRIMARY KEY,
+				ignored_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+			);`,
+			columns: "candidate_id, ignored_at",
+		},
+	}
+	for _, repair := range repairs {
+		if err := rebuildScannerCandidateReferenceTable(ctx, tx, repair.table, repair.create, repair.columns); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rebuildScannerCandidateReferenceTable(ctx context.Context, tx *sql.Tx, table, createSQL, columns string) error {
+	var ddl string
+	err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&ddl)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	if !strings.Contains(strings.ToLower(ddl), "scanner_candidates_legacy_unique_listing") {
+		return nil
+	}
+	legacyTable := table + "_legacy_candidate_fk"
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, table, legacyTable)); err != nil {
+		return fmt.Errorf("rename legacy %s: %w", table, err)
+	}
+	if _, err := tx.ExecContext(ctx, createSQL); err != nil {
+		return fmt.Errorf("create rebuilt %s: %w", table, err)
+	}
+	copySQL := fmt.Sprintf(`INSERT INTO %s(%s) SELECT %s FROM %s`, table, columns, columns, legacyTable)
+	if _, err := tx.ExecContext(ctx, copySQL); err != nil {
+		return fmt.Errorf("copy rebuilt %s: %w", table, err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DROP TABLE %s`, legacyTable)); err != nil {
+		return fmt.Errorf("drop legacy %s: %w", table, err)
+	}
+	return nil
 }
 
 func ensureColumn(ctx context.Context, query queryRower, exec execer, table, column, definition string) error {

@@ -5,6 +5,7 @@ type E2EBootstrapOptions = {
 type E2EBootstrapState = {
   profile_id: string;
   profile_name: string;
+  session_token: string;
   item_ids: string[];
   query_set_id: string;
   thread_id: string;
@@ -25,13 +26,14 @@ declare global {
         profile_key?: string;
         runtime?: { mode?: "auto" | "fixed"; fixed_port?: number };
       }): Chainable<void>;
+      stubLocalServerSession(profileId: string): Chainable<void>;
       useBootstrappedProfile(
         profileId: string,
         profileName: string,
         options?: {
           workspace?: boolean;
           path?: string;
-          shellWorkspace?: "navigation" | "assistant" | "inbox";
+          shellWorkspace?: "navigation" | "search" | "assistant" | "inbox";
         }
       ): Chainable<void>;
     }
@@ -39,6 +41,8 @@ declare global {
 }
 
 const AUTH_COOKIE_NAMES = ["thisisjustarandomstring", "cabinet_auth_user"] as const;
+const E2E_RESET_MAX_ATTEMPTS = 6;
+const E2E_RESET_RETRY_DELAY_MS = 1000;
 
 function expireAuthCookies(win: Window) {
   AUTH_COOKIE_NAMES.forEach((name) => {
@@ -47,7 +51,38 @@ function expireAuthCookies(win: Window) {
 }
 
 Cypress.Commands.add("e2eReset", () => {
-  cy.request("POST", "/api/test/reset", {}).its("status").should("eq", 200);
+  function resetWithRetry(attempt: number): Cypress.Chainable<void> {
+    return cy
+      .request({
+        method: "POST",
+        url: "/api/test/reset",
+        body: {},
+        failOnStatusCode: false,
+      })
+      .then((resp) => {
+        if (resp.status === 200) {
+          return;
+        }
+        if (attempt >= E2E_RESET_MAX_ATTEMPTS) {
+          expect(resp.status, "E2E reset status").to.eq(200);
+          return;
+        }
+        return cy
+          .wait(E2E_RESET_RETRY_DELAY_MS, { log: false })
+          .then(() => resetWithRetry(attempt + 1));
+      });
+  }
+
+  return cy
+    .window({ log: false })
+    .then((win) => {
+      if (win.location.href !== "about:blank") {
+        win.location.href = "about:blank";
+      }
+    })
+    .location("href", { log: false, timeout: 5000 })
+    .should("eq", "about:blank")
+    .then(() => resetWithRetry(1));
 });
 
 Cypress.Commands.add("e2eEnsureSignedOut", () => {
@@ -96,13 +131,17 @@ Cypress.Commands.add("e2eCompleteSetupHelper", (overrides = {}) => {
     .request("POST", "/api/runtime/setup-complete", {
       instance_name: instanceName,
       profile_key: profileKey,
-      auth: { mode: "local", clerk_publishable_key: "", clerk_sign_in_url: "" },
-      storage: { mode: "exe_local", data_dir: "", media_dir: "", portable_mode: false },
-      runtime: {
-        mode: runtimeMode,
-        fixed_port: runtimeMode === "fixed" ? fixedPort ?? 17880 : 0,
-      },
-      features: { scanner: true, providers: true, chat: true },
+      auth_mode: "local",
+      storage_mode: "exe_local",
+      storage_data_dir: "",
+      portable_mode: false,
+      runtime_port_mode: runtimeMode,
+      runtime_fixed_port: runtimeMode === "fixed" ? fixedPort ?? 17880 : 0,
+      feature_scanner: true,
+      feature_providers: true,
+      feature_chat: true,
+      bootstrap_workspace: "Local Workspace",
+      bootstrap_database_ref: "Primary DB",
     })
     .then((resp) => {
       expect(resp.status).to.eq(200);
@@ -110,10 +149,24 @@ Cypress.Commands.add("e2eCompleteSetupHelper", (overrides = {}) => {
     });
 });
 
+Cypress.Commands.add("stubLocalServerSession", (profileId: string) => {
+  cy.intercept("POST", "/api/auth/local/session", (request) => {
+    expect(request.body).to.deep.equal({ profile_id: profileId });
+    request.reply({
+      statusCode: 200,
+      body: {
+        ok: true,
+        session_token:
+          "test-only-opaque-profile-bound-session-credential-000000000001",
+      },
+    });
+  }).as("localServerSession");
+});
+
 Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: string, options?: {
   workspace?: boolean;
   path?: string;
-  shellWorkspace?: "navigation" | "assistant" | "inbox";
+  shellWorkspace?: "navigation" | "search" | "assistant" | "inbox";
 }) => {
   const withWorkspace = options?.workspace ?? true;
   const targetPath = options?.path ?? "/";
@@ -131,9 +184,7 @@ Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: 
       }
     },
   });
-  cy.get('input[name="email"]').clear().type("e2e-login-session@example.com");
-  cy.get('input[name="password"]').clear().type("password123");
-  cy.contains("button", "Sign in").click();
+  cy.contains("button", "Open local workspace").click();
   cy.location("pathname", { timeout: 15000 }).should("match", targetPathRegex);
   cy.get("body").then(($body) => {
     const preferredLabel = `Use ${profileName}`;

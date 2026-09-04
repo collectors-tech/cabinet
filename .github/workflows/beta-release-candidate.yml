@@ -1,0 +1,386 @@
+name: Beta Release Candidate Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact commit SHA to validate as the Cabinet beta release candidate
+        required: true
+        type: string
+      cypress_specs_override:
+        description: Optional exact comma-separated beta core Cypress pack override; empty uses release/beta-core-cypress-pack.json
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-candidate:
+    name: Validate exact candidate source
+    runs-on: windows-latest
+    steps:
+      - name: Validate exact SHA input
+        shell: pwsh
+        run: |
+          if ("${{ inputs.commit_sha }}" -notmatch "^[0-9a-fA-F]{40}$") {
+            throw "commit_sha must be a full 40-character Git commit SHA."
+          }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Confirm checked-out commit
+        id: commit
+        shell: pwsh
+        run: |
+          $actual = git rev-parse HEAD
+          if ($actual -ne "${{ inputs.commit_sha }}") {
+            throw "Expected ${{ inputs.commit_sha }} but checked out $actual"
+          }
+          if ((git status --porcelain).Length -gt 0) {
+            throw "Release candidate checkout is not clean."
+          }
+          "sha=$actual" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          New-Item -ItemType Directory -Force -Path .logs/release-candidate | Out-Null
+          "commit_sha=$actual" | Set-Content .logs/release-candidate/commit.txt
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+
+      - name: Install OpenSpec CLI
+        shell: pwsh
+        run: npm install -g @fission-ai/openspec@latest
+
+      - name: Install ui.web dependencies
+        shell: pwsh
+        run: npm --prefix ui.web ci
+
+      - name: Enforce production dependency security
+        shell: pwsh
+        run: |
+          npm run security:dependencies *>&1 | Tee-Object .logs/release-candidate/dependency-security.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "Production dependency security gate failed."
+          }
+
+      - name: Validate fixed beta core Cypress acceptance pack
+        id: cypress_pack
+        shell: pwsh
+        run: |
+          $specs = node scripts/validate-beta-core-cypress-pack.mjs --manifest release/beta-core-cypress-pack.json --spec-override "${{ inputs.cypress_specs_override }}" --output .logs/release-candidate/cypress-pack.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Fixed beta core Cypress pack validation failed."
+          }
+          if ([string]::IsNullOrWhiteSpace($specs)) {
+            throw "Fixed beta core Cypress pack resolved no specs."
+          }
+          "specs=$specs" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Strict OpenSpec validation
+        shell: pwsh
+        run: openspec validate --all --strict --no-interactive *>&1 | Tee-Object .logs/release-candidate/openspec.log
+
+      - name: UI production build
+        shell: pwsh
+        run: npm --prefix ui.web run build *>&1 | Tee-Object .logs/release-candidate/ui-build.log
+
+      - name: Browser Companion protocol lifecycle
+        shell: pwsh
+        run: node --test browser-extension/tests/*.test.mjs *>&1 | Tee-Object .logs/release-candidate/browser-companion-contract.log
+
+      - name: Package control tests
+        shell: pwsh
+        run: |
+          npm run test:companion-package *>&1 | Tee-Object .logs/release-candidate/browser-companion-package-test.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion package controls failed." }
+          npm run test:release-package *>&1 | Tee-Object .logs/release-candidate/cabinet-package-test.log
+          if ($LASTEXITCODE -ne 0) { throw "Cabinet release package controls failed." }
+
+      - name: Full Go test suite
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          go test ./... -count=1 -p 1 -parallel 4 -timeout 900s *>&1 | Tee-Object .logs/release-candidate/go-test.log
+          if ($LASTEXITCODE -ne 0) { throw "Full Go test suite failed with exit code $LASTEXITCODE" }
+
+      - name: OpenAPI parity and docs
+        shell: pwsh
+        run: |
+          go run ./cmd/openapi-parity-gate *>&1 | Tee-Object .logs/release-candidate/openapi-go.log
+          if ($LASTEXITCODE -ne 0) { throw "OpenAPI parity gate failed with exit code $LASTEXITCODE" }
+          npx --yes @redocly/cli@latest lint docs/api/openapi.yaml *>&1 | Tee-Object .logs/release-candidate/openapi-lint.log
+          if ($LASTEXITCODE -ne 0) { throw "OpenAPI lint failed with exit code $LASTEXITCODE" }
+          npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html *>&1 | Tee-Object .logs/release-candidate/openapi-build.log
+          if ($LASTEXITCODE -ne 0) { throw "OpenAPI docs build failed with exit code $LASTEXITCODE" }
+
+      - name: Build controlled Telegram Bot API fixture
+        shell: pwsh
+        run: |
+          $fixtureExecutable = Join-Path $env:RUNNER_TEMP "cabinet-telegram-test-fixture.exe"
+          go build -o $fixtureExecutable ./cmd/telegram-test-fixture
+          if ($LASTEXITCODE -ne 0) { throw "Controlled Telegram fixture build failed with exit code $LASTEXITCODE" }
+
+      - name: Cypress release pack
+        shell: pwsh
+        env:
+          CABINET_E2E_MODE: "1"
+          CABINET_OPEN_BROWSER: "0"
+          CABINET_ALLOW_INSECURE_SECRET_FALLBACK: "1"
+          CABINET_TELEGRAM_TEST_API_BASE_URL: "http://127.0.0.1:17994"
+          CYPRESS_telegramRuntimeFixture: "true"
+          CYPRESS_telegramFixtureControlURL: "http://127.0.0.1:17994"
+          CYPRESS_telegramBotToken: "123456:test-runtime-token"
+        run: |
+          if ($env:CYPRESS_telegramRuntimeFixture -ne "true" -or [string]::IsNullOrWhiteSpace($env:CYPRESS_telegramFixtureControlURL)) {
+            throw "Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden."
+          }
+          $pack = Get-Content .logs/release-candidate/cypress-pack.json -Raw | ConvertFrom-Json
+          if ($pack.version -lt 6 -or $pack.spec_count -ne 26 -or $pack.specs.Count -ne 26) {
+            throw "Fixed beta Cypress pack must resolve version 6 with exactly 26 specs."
+          }
+          $telegramFixtureSpecs = @(
+            "cypress/e2e/integrations/telegram-local-connector/spec.cy.ts",
+            "cypress/e2e/integrations/telegram-agent-conversation/spec.cy.ts"
+          )
+          $telegramFixtureStarted = $false
+          foreach ($spec in $pack.specs) {
+            if ($telegramFixtureSpecs -contains $spec) {
+              $fixtureExecutable = Join-Path $env:RUNNER_TEMP "cabinet-telegram-test-fixture.exe"
+              $fixturePIDPath = ".logs/release-candidate/telegram-fixture.pid"
+              $telegramFixtureStatusURL = "$($env:CYPRESS_telegramFixtureControlURL.TrimEnd('/'))/control/status"
+              if (-not $telegramFixtureStarted) {
+                $stdout = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stdout.log"
+                $stderr = Join-Path $PWD ".logs/release-candidate/telegram-fixture.stderr.log"
+                $fixture = Start-Process -FilePath $fixtureExecutable -ArgumentList @(
+                  "-listen", "127.0.0.1:17994"
+                ) -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+                $fixture.Id | Set-Content $fixturePIDPath
+                $ready = $false
+                for ($attempt = 0; $attempt -lt 40; $attempt++) {
+                  try {
+                    $response = Invoke-RestMethod -Uri $telegramFixtureStatusURL -TimeoutSec 1
+                    if ($response.ok -eq $true) { $ready = $true; break }
+                  } catch {}
+                  Start-Sleep -Milliseconds 250
+                }
+                if (-not $ready) { throw "Controlled Telegram fixture did not become ready before ${spec}." }
+                $telegramFixtureStarted = $true
+              }
+
+              $rawFixturePID = (Get-Content -Raw -LiteralPath $fixturePIDPath).Trim()
+              $fixturePID = 0
+              if (-not [int]::TryParse($rawFixturePID, [ref]$fixturePID) -or $fixturePID -le 0) {
+                throw "Controlled Telegram fixture PID is invalid before ${spec}."
+              }
+              $ownedFixture = Get-Process -Id $fixturePID -ErrorAction SilentlyContinue
+              if (-not $ownedFixture -or $ownedFixture.Path -ne $fixtureExecutable) {
+                throw "Controlled Telegram fixture is unavailable before ${spec}."
+              }
+              try {
+                $fixtureStatus = Invoke-RestMethod -Uri $telegramFixtureStatusURL -TimeoutSec 2
+              } catch {
+                throw "Controlled Telegram fixture health probe failed before ${spec}."
+              }
+              if ($fixtureStatus.ok -ne $true) {
+                throw "Controlled Telegram fixture is unhealthy before ${spec}."
+              }
+            }
+            $name = Split-Path (Split-Path $spec -Parent) -Leaf
+            pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec $spec -Browser chrome -Retries 0 -ExecutionTimeoutSec 300 -RequireE2EHooks -LogDir .logs/release-candidate/cypress -LogName "candidate-$name" *>&1 | Tee-Object -Append .logs/release-candidate/cypress.log
+            if ($LASTEXITCODE -ne 0) { throw "Candidate Cypress spec failed: $spec" }
+            $summaryPaths = @(Get-ChildItem .logs/release-candidate/cypress -Filter "*-candidate-$name.summary.json" | Select-Object -ExpandProperty FullName)
+            if ($summaryPaths.Count -ne 1) { throw "Candidate Cypress must produce exactly one summary for ${spec}; found $($summaryPaths.Count)." }
+            $summaryPath = $summaryPaths[0]
+            $summary = Get-Content $summaryPath -Raw | ConvertFrom-Json
+            if ($summary.runtime_revision -ne "${{ steps.commit.outputs.sha }}") {
+              throw "Candidate Cypress runtime revision mismatch for ${spec}: $($summary.runtime_revision)"
+            }
+            if ($summary.execution_timeout_sec -ne 300 -or $summary.runner_phase -ne "completed" -or $summary.exit_code -ne 0) {
+              throw "Candidate Cypress evidence is incomplete for ${spec}: $summaryPath"
+            }
+          }
+
+      - name: Stop controlled Telegram Bot API fixture
+        if: always()
+        shell: pwsh
+        run: |
+          $fixtureExecutable = Join-Path $env:RUNNER_TEMP "cabinet-telegram-test-fixture.exe"
+          $fixturePIDPath = ".logs/release-candidate/telegram-fixture.pid"
+          if (Test-Path -LiteralPath $fixturePIDPath) {
+            $rawFixturePID = (Get-Content -Raw -LiteralPath $fixturePIDPath).Trim()
+            $fixturePID = 0
+            if ([int]::TryParse($rawFixturePID, [ref]$fixturePID) -and $fixturePID -gt 0) {
+              $ownedFixture = Get-Process -Id $fixturePID -ErrorAction SilentlyContinue
+              if ($ownedFixture -and $ownedFixture.Path -eq $fixtureExecutable) {
+                Stop-Process -Id $fixturePID -Force -ErrorAction SilentlyContinue
+              } elseif ($ownedFixture) {
+                Write-Warning "Recorded Telegram fixture PID no longer belongs to the built fixture executable; no process was stopped."
+              }
+            } else {
+              Write-Warning "Recorded Telegram fixture PID is invalid; no process was stopped."
+            }
+          }
+
+      - name: Write release-candidate validation summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summary = @(
+            "# Cabinet beta release-candidate validation",
+            "",
+            "Commit SHA: ${{ steps.commit.outputs.sha }}",
+            "Workflow run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "Cypress pack manifest: release/beta-core-cypress-pack.json",
+            "Cypress specs: ${{ steps.cypress_pack.outputs.specs }}",
+            "Cypress pack evidence: .logs/release-candidate/cypress-pack.json",
+            "",
+            "Packaging runs only in the dependent job after every validation step passes.",
+            "This workflow validates the exact checkout only and does not merge develop into main."
+          )
+          $summary | Set-Content .logs/release-candidate/summary.md
+          $summary | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload release-candidate logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: beta-release-validation-${{ inputs.commit_sha }}
+          path: |
+            .logs/release-candidate
+            docs/api/index.html
+            ui.web/cypress/artifacts
+            ui.web/cypress/screenshots
+            ui.web/cypress/videos
+
+  package-candidate:
+    name: Package exact private candidate
+    needs: validate-candidate
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Confirm exact clean package source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -ne "${{ inputs.commit_sha }}") {
+            throw "Exact package checkout mismatch."
+          }
+          if ((git status --porcelain).Length -gt 0) {
+            throw "Exact package checkout is not clean."
+          }
+          New-Item -ItemType Directory -Force -Path .logs/release-candidate | Out-Null
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+
+      - name: Install ui.web dependencies
+        shell: pwsh
+        run: npm --prefix ui.web ci
+
+      - name: Enforce immutable Browser Companion version tag
+        shell: pwsh
+        run: |
+          $releaseConfig = Get-Content browser-extension/release.json -Raw | ConvertFrom-Json
+          $sourcePrefix = "${{ inputs.commit_sha }}".Substring(0, 12).ToLowerInvariant()
+          $candidateVersion = "$($releaseConfig.version_name_prefix).g$sourcePrefix"
+          $tag = "$($releaseConfig.immutable_tag_prefix)$candidateVersion"
+          $matchingTag = git tag --list $tag
+          if ($matchingTag) {
+            $tagCommit = git rev-list -n 1 $tag
+            if ($tagCommit -ne "${{ inputs.commit_sha }}") {
+              throw "Immutable Browser Companion version $candidateVersion is already tagged at $tagCommit."
+            }
+          }
+
+      - name: Build Windows portable package
+        shell: pwsh
+        run: ./scripts/package-installers.ps1 -ExpectedCommit "${{ inputs.commit_sha }}" -OutputDirectory "dist/cabinet" *>&1 | Tee-Object .logs/release-candidate/cabinet-package.log
+
+      - name: Verify exact Windows portable package
+        shell: pwsh
+        run: node scripts/verify-cabinet-release-package.mjs --manifest dist/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}" *>&1 | Tee-Object .logs/release-candidate/cabinet-package-verify.log
+
+      - name: Attest Windows portable package build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/cabinet/cabinet-*-windows-amd64-portable.zip
+
+      - name: Attest Windows portable package CycloneDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/cabinet/cabinet-*-windows-amd64-portable.zip
+          sbom-path: dist/cabinet/cabinet-*-sbom.cdx.json
+
+      - name: Build and verify exact Browser Companion packages
+        shell: pwsh
+        run: |
+          $epoch = git show -s --format=%ct HEAD
+          node scripts/package-browser-companion.mjs --source-commit "${{ inputs.commit_sha }}" --source-date-epoch $epoch --output dist/browser-companion *>&1 | Tee-Object .logs/release-candidate/browser-companion-package.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion packaging failed with exit code $LASTEXITCODE" }
+          node scripts/verify-browser-companion-package.mjs --manifest dist/browser-companion/browser-companion-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}" *>&1 | Tee-Object .logs/release-candidate/browser-companion-verify.log
+          if ($LASTEXITCODE -ne 0) { throw "Browser Companion verification failed with exit code $LASTEXITCODE" }
+
+      - name: Create exact combined candidate manifest
+        shell: pwsh
+        run: node scripts/create-beta-candidate-bundle.mjs --cabinet-manifest dist/cabinet/cabinet-release-manifest.json --companion-manifest dist/browser-companion/browser-companion-release-manifest.json --output dist/beta-candidate-bundle-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
+
+      - name: Write exact candidate summary
+        shell: pwsh
+        run: |
+          @(
+            "# Cabinet exact private candidate",
+            "",
+            "Commit SHA: ${{ inputs.commit_sha }}",
+            "Workflow run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID",
+            "",
+            "Cabinet manifest: dist/cabinet/cabinet-release-manifest.json",
+            "Browser Companion manifest: dist/browser-companion/browser-companion-release-manifest.json",
+            "Combined manifest: dist/beta-candidate-bundle-manifest.json",
+            "",
+            "This is a private/internal candidate. It does not publish a release or merge develop into main."
+          ) | Set-Content .logs/release-candidate/package-summary.md
+          Get-Content .logs/release-candidate/package-summary.md | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload exact release-candidate files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: beta-release-candidate-${{ inputs.commit_sha }}
+          if-no-files-found: error
+          path: |
+            .logs/release-candidate
+            dist/beta-candidate-bundle-manifest.json
+            dist/cabinet/cabinet-release-manifest.json
+            dist/cabinet/cabinet-*-windows-amd64-portable.zip
+            dist/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
+            dist/cabinet/cabinet-*-release-notes.md
+            dist/cabinet/cabinet-*-sbom.cdx.json
+            dist/browser-companion/browser-companion-release-manifest.json
+            dist/browser-companion/browser-companion-candidate-summary.md
+            dist/browser-companion/cabinet-browser-companion-*-release-notes.md
+            dist/browser-companion/cabinet-browser-companion-*.zip
+            dist/browser-companion/cabinet-browser-companion-*.zip.sha256

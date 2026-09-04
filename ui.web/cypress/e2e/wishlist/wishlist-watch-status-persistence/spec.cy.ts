@@ -3,6 +3,7 @@ describe("wishlist-watch-status-persistence", () => {
     cy.intercept("GET", "/api/wishlist").as("wishlistItems");
     cy.intercept("GET", "/api/items?status=wishlist").as("catalogItems");
     cy.intercept("GET", "/api/profiles/*/settings").as("profileSettings");
+    cy.intercept("PUT", "/api/wishlist").as("updateWishlist");
 
     cy.e2eReset();
     cy.e2eSetSetupState("present");
@@ -21,6 +22,7 @@ describe("wishlist-watch-status-persistence", () => {
         cy.request("POST", "/api/wishlist", {
           item_id: itemResp.body.id,
           target_price: 42,
+          currency: "AUD",
           priority: "medium",
           notes: "Seeded for status persistence",
           below_target_now: false,
@@ -42,19 +44,32 @@ describe("wishlist-watch-status-persistence", () => {
 
     cy.get('button[aria-label="Switch to rows view"]').click();
     cy.contains("Wishlist Manual Status Seed").should("be.visible");
-    cy.get('button[aria-label="Select all"]').click();
-    cy.get('button[aria-label="Update status"]').click();
-    cy.contains('[role="menuitem"]', "Below target").click({ force: true });
-
     cy.contains("Wishlist Manual Status Seed")
       .closest("tr")
-      .should("contain", "Below target");
+      .find('button[role="checkbox"]')
+      .click();
+    cy.get('button[aria-label="Update status"]').click();
+    cy.contains('[role="menuitem"]', "Below target").click({ force: true });
+    cy.wait("@updateWishlist").its("response.statusCode").should("eq", 200);
+
+    cy.request("GET", "/api/wishlist").then((response) => {
+      expect(response.status).to.eq(200);
+      const manualEntry = response.body.items.find(
+        (entry: { notes?: string }) =>
+          entry.notes === "Seeded for status persistence"
+      );
+      expect(manualEntry, "manual wishlist entry").not.to.eq(undefined);
+      expect(manualEntry.below_target_now).to.eq(true);
+    });
 
     cy.reload();
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
-    cy.contains("Wishlist Manual Status Seed")
-      .closest("tr")
-      .should("contain", "Below target");
+    cy.contains("button", "Cards").click();
+    cy.get('[data-testid="wishlist-table-search-input"]')
+      .clear()
+      .type("Seed");
+    cy.contains("Wishlist Manual Status Seed").should("be.visible");
+    cy.contains("Status: Below target").should("be.visible");
   });
 });

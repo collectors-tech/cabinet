@@ -1,14 +1,22 @@
 describe('ui-foundation-interactions', () => {
-  function signInWithRedirect(path: string, email: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type(email)
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    const expected = path.endsWith('/') ? path.slice(0, -1) : path
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      new RegExp(`^${expected}/?$`)
-    )
+  function signInWithRedirect(path: string) {
+    cy.e2eReset()
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eSetSetupState('present')
+      cy.e2eEnsureSignedOut()
+      cy.intercept('POST', '/api/auth/local/session', (request) => {
+        expect(String(request.body?.profile_id ?? '')).to.match(/\S/)
+        request.reply({
+          statusCode: 200,
+          body: {
+            ok: true,
+            session_token:
+              'test-only-opaque-profile-bound-session-credential-000000000001',
+          },
+        })
+      })
+      cy.useBootstrappedProfile(profile_id, profile_name, { path })
+    })
   }
 
   it('UI-FOUNDATION-INTERACTIONS-003 opens details on single click and edit on double-click for inventory rows', () => {
@@ -26,18 +34,22 @@ describe('ui-foundation-interactions', () => {
         ],
       },
     }).as('items')
-    signInWithRedirect('/inventory/', 'e2e-interactions@example.com')
+    signInWithRedirect('/inventory/')
     cy.wait('@items')
 
     cy.get('button[aria-label="Switch to rows view"]').click()
     cy.get('tbody tr').eq(0).find('td').eq(1).click()
-    cy.get('[data-testid="row-details-modal"]').should('be.visible')
+    cy.get('[data-testid="inventory-item-editor-panel"]').should('be.visible')
+    cy.get('[data-testid="inventory-item-editor-mode"]').should(
+      'contain',
+      'PN-INTERACT-1'
+    )
     cy.location('search').should('contain', 'selected=')
     cy.get('body').type('{esc}')
-    cy.get('[data-testid="row-details-modal"]').should('not.exist')
+    cy.get('[data-testid="inventory-item-editor-panel"]').should('not.exist')
 
     cy.get('tbody tr').eq(0).find('td').eq(1).dblclick()
-    cy.get('[data-testid="row-edit-modal"]').should('be.visible')
+    cy.get('[data-testid="inventory-item-edit-dialog"]').should('be.visible')
 
     cy.contains('Deleting tasks...').should('not.exist')
     cy.contains('Error').should('not.exist')
@@ -73,16 +85,16 @@ describe('ui-foundation-interactions', () => {
       body: 'test-image',
     })
 
-    signInWithRedirect('/inventory/', 'e2e-interactions-001@example.com')
+    signInWithRedirect('/inventory/')
     cy.wait('@items')
     cy.wait('@photos')
 
     cy.get('button[aria-label="Switch to rows view"]').click()
     cy.get('tbody tr').eq(0).find('td').eq(1).click()
-    cy.get('[data-testid="row-details-modal"]').should('be.visible')
-    cy.get('body').type('{esc}')
+    cy.get('[data-testid="inventory-item-editor-panel"]').should('be.visible')
 
-    cy.get('[data-testid="inventory-photo-thumb"]').first().click()
+    cy.get('[data-testid="inventory-item-gallery-thumb"]').first().click()
+    cy.get('[data-testid="inventory-item-gallery-open"]').click()
     cy.get('[data-testid="inventory-photo-fullscreen"]').should('be.visible')
     cy.get('[data-testid="inventory-photo-next"]').click()
     cy.get('[data-testid="inventory-photo-prev"]').click()
@@ -110,7 +122,7 @@ describe('ui-foundation-interactions', () => {
       },
     }).as('users')
 
-    signInWithRedirect('/users/', 'e2e-interactions-002@example.com')
+    signInWithRedirect('/users/')
     cy.wait('@users')
 
     cy.get('tbody tr').first().find('[role="checkbox"]').first().click({ force: true })
@@ -140,17 +152,19 @@ describe('ui-foundation-interactions', () => {
         ],
       },
     }).as('users')
-    signInWithRedirect('/users/', 'e2e-users@example.com')
+    signInWithRedirect('/users/')
     cy.wait('@users')
     cy.get('tbody tr').eq(0).find('td').eq(1).click()
-    cy.get('[data-testid="users-row-details-modal"]').should('be.visible')
+    cy.get('tbody tr').eq(0).should('have.attr', 'data-state', 'selected')
+    cy.get('[data-testid="users-details-sheet"]').should('not.exist')
     cy.location('search').should('contain', 'selected=')
+    cy.get('[data-testid="users-view-selected-action"]').click()
+    cy.get('[data-testid="users-details-fields"]').should('be.visible')
     cy.get('body').type('{esc}')
-    cy.get('[data-testid="users-row-details-modal"]').should('not.exist')
     cy.get('tbody tr').eq(0).find('td').eq(1).dblclick()
-    cy.get('[data-testid="users-row-edit-modal"]').should('be.visible')
+    cy.get('[data-testid="users-details-fields"]').should('be.visible')
     cy.get('body').type('{esc}')
-    cy.get('[data-testid="users-row-edit-modal"]').should('not.exist')
+    cy.get('[data-testid="users-details-sheet"]').should('not.exist')
 
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -184,7 +198,7 @@ describe('ui-foundation-interactions', () => {
       statusCode: 200,
       body: { settings: { 'integration.ebay.enabled': 'true' } },
     }).as('settings')
-    signInWithRedirect('/integrations/', 'e2e-inventory@example.com')
+    signInWithRedirect('/integrations/')
     cy.wait('@activeProfile')
     cy.wait('@registry')
     cy.wait('@settings')

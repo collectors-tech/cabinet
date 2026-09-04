@@ -44,19 +44,17 @@ export function normalizeDisplayOption(value: string): string {
 
 export function normalizeDisplayOptions(values: string[]): string[] {
   const seen = new Set<string>()
-  return values
-    .map(normalizeDisplayOption)
-    .filter((value) => {
-      if (value === '') {
-        return false
-      }
-      const key = value.toLowerCase()
-      if (seen.has(key)) {
-        return false
-      }
-      seen.add(key)
-      return true
-    })
+  return values.map(normalizeDisplayOption).filter((value) => {
+    if (value === '') {
+      return false
+    }
+    const key = value.toLowerCase()
+    if (seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
 }
 
 export function normalizeItemTypeConditionScales(
@@ -139,7 +137,9 @@ export function serializeItemTypeConditionScales(
 export function itemTypeOptions(
   values: InventoryItemTypeConditionScale[]
 ): string[] {
-  return normalizeItemTypeConditionScales(values).map((scale) => scale.item_type)
+  return normalizeItemTypeConditionScales(values).map(
+    (scale) => scale.item_type
+  )
 }
 
 export function conditionsForItemType(

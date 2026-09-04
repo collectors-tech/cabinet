@@ -37,7 +37,7 @@ func TestEbayProviderResponseContract(t *testing.T) {
 		{
 			name:                 "success returns normalized candidate fields",
 			serverStatus:         http.StatusOK,
-			serverBody:           `{"itemSummaries":[{"itemId":"v1|123|0","title":"AFX Mega G+ Camaro","price":{"value":"45.00"},"itemWebUrl":"https://ebay/item/123","image":{"imageUrl":"https://img/123.jpg"},"seller":{"username":"slot-seller"}}]}`,
+			serverBody:           `{"itemSummaries":[{"itemId":"v1|123|0","title":"AFX Mega G+ Camaro","price":{"value":"45.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/123","image":{"imageUrl":"https://img/123.jpg"},"seller":{"username":"slot-seller"}}]}`,
 			token:                "token-ok",
 			expectCandidateCount: 1,
 		},
@@ -261,8 +261,8 @@ func TestAUWebshopThrottlingConformanceOPS001_RegionAU(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider health: %v", err)
 	}
-	if health["status"] != "error" {
-		t.Fatalf("expected degraded/error provider state after repeated throttling failures, got %+v", health)
+	if health["status"] != "rate_limited" {
+		t.Fatalf("expected rate_limited provider state after repeated throttling failures, got %+v", health)
 	}
 	if strings.TrimSpace(health["message"]) == "" {
 		t.Fatalf("expected provider health message populated after throttling failures, got %+v", health)

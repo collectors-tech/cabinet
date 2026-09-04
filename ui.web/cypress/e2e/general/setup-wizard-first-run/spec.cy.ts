@@ -152,6 +152,10 @@ describe('SETUP-WIZ', () => {
 
       cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 6');
       cy.get('[data-testid="setup-storage-mode"]').should('have.value', 'exe_local');
+      cy.get('[data-testid="setup-storage-mode"] option:selected').should(
+        'have.text',
+        'local'
+      );
       cy.get('[data-testid="setup-storage-data-dir-preview"]')
         .should('be.visible')
         .and('contain.text', statusResponse.body.default_storage_data_dir);
@@ -187,10 +191,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
-<<<<<<< HEAD
-=======
     cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 6 OF 6');
->>>>>>> d335689 (#446 test(shell): align route and setup expectations)
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
 
@@ -252,50 +253,55 @@ describe('SETUP-WIZ', () => {
       });
   });
 
-  it('UC-SW-23 setup-wizard-auth-mode-switch toggles clerk controls and readiness state', () => {
+  it('UC-SW-23 setup-wizard-auth-mode-switch exposes only local and ZITADEL readiness state', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
 
     cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'local');
+    cy.get('[data-testid="setup-auth-mode"] option[value="clerk"]').should('not.exist');
     cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
-    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: Local auth');
+    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: local-device mode');
 
-    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').should('be.visible');
-    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Missing Clerk key');
+    cy.get('[data-testid="setup-auth-mode"]').select('zitadel');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('not.exist');
+    cy.get('[data-testid="setup-auth-readiness"]')
+      .should('contain.text', 'ZITADEL application')
+      .and('contain.text', 'callback');
 
     cy.get('[data-testid="setup-auth-mode"]').select('local');
     cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
-    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: Local auth');
+    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: local-device mode');
   });
 
-  it('UC-SW-24 setup-wizard-auth-readiness-missing blocks next with actionable message', () => {
+  it('UC-SW-24 setup-wizard-zitadel-readiness allows next without manual provider key entry', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
 
-    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
+    cy.get('[data-testid="setup-auth-mode"]').select('zitadel');
     cy.get('[data-testid="setup-next"]').click();
 
-    cy.get('[data-testid="setup-wizard-error"]')
-      .should('be.visible')
-      .and('contain.text', 'Clerk publishable key is required.');
-    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 4 OF 6');
+    cy.get('[data-testid="setup-wizard-error"]').should('not.exist');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 5 OF 6');
   });
 
-  it('UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config', () => {
+  it('SETUP-WIZ-015 + #1968 keeps unsupported provider key out of setup payload', () => {
     enterSetupFormMode();
-    cy.get('[data-testid="setup-instance-name"]').clear().type('Clerk Persist');
+    cy.get('[data-testid="setup-instance-name"]').clear().type('ZITADEL Setup');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
 
-    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').clear().type('pk_test_wave25');
-    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Configured');
+    cy.get('[data-testid="setup-auth-mode"]').select('zitadel');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('not.exist');
+    cy.get('[data-testid="setup-auth-readiness"]')
+      .should('contain.text', 'ZITADEL application')
+      .and('contain.text', 'required role grants');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-complete"]').click();
@@ -304,9 +310,36 @@ describe('SETUP-WIZ', () => {
     cy.request('GET', '/api/test/runtime/setup-config')
       .its('body')
       .then((payload) => {
-        expect(payload.auth.mode).to.eq('clerk');
-        expect(payload.auth.clerk.enabled).to.eq(true);
-        expect(payload.auth.clerk.publishableKey).to.eq('pk_test_wave25');
+        expect(payload.auth.mode).to.eq('zitadel');
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
+      });
+  });
+
+  it('UC-SW-25 setup-wizard-auth-readiness-configured persists ZITADEL auth config', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('ZITADEL Persist');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-auth-mode"]').select('zitadel');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('not.exist');
+    cy.get('[data-testid="setup-auth-readiness"]')
+      .should('contain.text', 'ZITADEL application')
+      .and('contain.text', 'required role grants');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+    cy.contains('Config complete').should('be.visible');
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.auth.mode).to.eq('zitadel');
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
       });
   });
 
@@ -371,8 +404,8 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-runtime-port-mode"]').select('fixed');
     cy.get('[data-testid="setup-runtime-fixed-port"]').type('{selectall}18888');
     cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').type('pk_test_review');
+    cy.get('[data-testid="setup-auth-mode"]').select('zitadel');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('not.exist');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-feature-chat"]').uncheck({ force: true });
     cy.get('[data-testid="setup-next"]').click();
@@ -400,6 +433,11 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-complete-config-path"]').should('be.visible');
     cy.get('[data-testid="setup-complete-runtime-url"]').should('contain.text', 'http://');
     cy.get('[data-testid="setup-complete-runtime-port"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-local-credentials"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-local-credentials"]').should(
+      'contain.text',
+      'Local device mode'
+    );
   });
 
   it('UC-SW-31 setup-wizard-review-create-action shows in-flight disabled state', () => {
@@ -480,6 +518,28 @@ describe('SETUP-WIZ', () => {
       .and('contain.text', 'Config folder');
   });
 
+  it('UC-SW-38 setup-wizard-local-completion-shows-working-login-credentials', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Local Credentials');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'local');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+
+    cy.get('[data-testid="setup-complete-local-credentials"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-local-credentials"]').should(
+      'contain.text',
+      'Local device mode'
+    );
+
+    cy.get('[data-testid="setup-open-cabinet"]').click();
+    cy.location('pathname', { timeout: 15000 }).should('eq', '/sign-in');
+    cy.get('[data-testid="setup-wizard"]').should('not.exist');
+  });
+
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Wave3 Instance');
@@ -488,8 +548,8 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
 
-    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').type('pk_test_wave3');
+    cy.get('[data-testid="setup-auth-mode"]').select('zitadel');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('not.exist');
     cy.get('[data-testid="setup-prev"]').click();
     cy.get('[data-testid="setup-prev"]').click();
     cy.get('[data-testid="setup-prev"]').click();
@@ -506,11 +566,9 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'clerk');
-    cy.get('[data-testid="setup-clerk-publishable-key"]').should(
-      'have.value',
-      'pk_test_wave3'
-    );
+    cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'zitadel');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-clerk-built-in-key"]').should('not.exist');
   });
 
   it('UC-SW-07 setup-wizard-complete-to-launch transitions to config complete with start action', () => {
@@ -573,7 +631,8 @@ describe('SETUP-WIZ', () => {
           /^http:\/\/(127\.0\.0\.1|0\.0\.0\.0):/
         );
         expect(payload.auth.mode).to.eq('local');
-        expect(payload.auth.clerk.enabled).to.eq(false);
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
         expect(String(payload.bootstrap.workspace).trim()).not.to.equal('');
         expect(payload.features.chat).to.eq(true);
         expect(payload.features.providers).to.eq(true);
@@ -582,32 +641,24 @@ describe('SETUP-WIZ', () => {
       });
   });
 
-  it('UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing', () => {
+  it('UC-SW-09 setup-wizard-zitadel-completes with canonical auth config', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
-    cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-wizard-error"]')
-      .should('be.visible')
-      .and('contain.text', 'Clerk publishable key is required');
-
-    cy.request({
-      method: 'GET',
-      url: '/api/test/runtime/setup-config',
-      failOnStatusCode: false,
-    }).then((response) => {
-      expect(response.status).to.eq(404);
-    });
-
-    cy.get('[data-testid="setup-clerk-publishable-key"]')
-      .clear()
-      .type('pk_test_123');
+    cy.get('[data-testid="setup-auth-mode"]').select('zitadel');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.auth.mode).to.eq('zitadel');
+        expect(payload.auth.zitadel).to.deep.eq({});
+        expect(payload.auth).not.to.have.property('clerk');
+      });
   });
 
   it('UC-SW-05 setup-wizard-not-in-home-shell keeps starter setup controls out of authenticated home', () => {
@@ -616,14 +667,7 @@ describe('SETUP-WIZ', () => {
       .should('eq', 200);
 
     cy.visit('/sign-in');
-    cy.get('input[name="email"]').type('e2e-setup-home@example.com');
-    cy.get('input[name="password"]').type('password123');
-    cy.contains('button', 'Sign in').click();
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/dashboard\/?$/
-    );
-    cy.contains('Home').should('be.visible');
+    cy.location('pathname', { timeout: 15000 }).should('eq', '/sign-in');
 
     cy.get('[data-testid="setup-wizard"]').should('not.exist');
     cy.contains('Starter Onboarding').should('not.exist');

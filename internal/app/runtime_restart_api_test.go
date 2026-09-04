@@ -12,6 +12,7 @@ func TestRuntimeShutdownEndpointAllowsLoopbackPost(t *testing.T) {
 
 	a := newTestApp(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/runtime/shutdown", strings.NewReader(`{"reason":"restart"}`))
+	req.Host = "127.0.0.1:8080"
 	req.RemoteAddr = "127.0.0.1:40123"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -31,6 +32,7 @@ func TestRuntimeShutdownEndpointRejectsNonLoopbackRequests(t *testing.T) {
 
 	a := newTestApp(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/runtime/shutdown", strings.NewReader(`{"reason":"restart"}`))
+	req.Host = "127.0.0.1:8080"
 	req.RemoteAddr = "192.168.1.55:40123"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()

@@ -10,13 +10,25 @@ Cabinet SHALL redirect unauthenticated users to login and preserve intended dest
 - **WHEN** router resolves route guards
 - **THEN** UI MUST redirect to sign-in and preserve redirect target for successful session bootstrap
 
-### Requirement UI-LOGIN-SESSION-002: Login state SHALL support deterministic error and retry behavior
-Cabinet SHALL surface actionable auth failure states and allow retry without hard refresh.
+### Requirement UI-LOGIN-SESSION-002: Local beta session entry SHALL not simulate password or passkey authentication
+Cabinet SHALL make local-device mode explicit and SHALL NOT present local password/passkey controls as verified authentication when no real credential ceremony is active.
 
-#### Scenario: Invalid credential or auth bootstrap failure
-- **GIVEN** sign-in request fails due to invalid credential or auth bootstrap error
-- **WHEN** login form submits
-- **THEN** UI MUST display inline error guidance and keep form state available for retry
+#### Scenario: Local-device mode states security boundary
+- **GIVEN** setup is complete and local identity mode is active
+- **WHEN** the sign-in screen renders
+- **THEN** UI MUST expose local-device workspace entry
+- **AND** UI MUST state that it does not verify password, passkey, cloud account, or encrypted-at-rest lock protection
+- **AND** UI MUST NOT store or trust `mock-access-token` or `mock-passkey-access-token`
+
+### Requirement UI-LOGIN-PASSWORD-MANAGER-001: Local-device sign-in SHALL not expose password-manager credential autofill fields
+Cabinet SHALL not render username/password autofill controls on the local-device sign-in surface when no password-backed authentication ceremony is active.
+
+#### Scenario: Local-device sign-in avoids credential autofill markup
+- **GIVEN** setup is complete and local identity mode is active
+- **WHEN** the user opens `/sign-in`
+- **THEN** UI MUST expose the local-device workspace entry and identity-mode indicator
+- **AND** UI MUST state that local-device mode does not verify a password
+- **AND** UI MUST NOT render a `form`, `input[name="email"]`, or `input[name="password"]` for password-manager autofill on that local-device surface
 
 ### Requirement UI-LOGIN-SESSION-003: Session entry SHALL support profile-aware activation
 Cabinet SHALL support selecting/activating profile context after successful authentication when multiple profiles exist.
@@ -64,3 +76,40 @@ After a local sign-out, Cabinet SHALL re-apply authenticated-route gating to the
 - **WHEN** the user signs out and then requests `/dashboard` again
 - **THEN** Cabinet MUST redirect to `/sign-in`
 - **AND** the previous authenticated dashboard content MUST not render until the user signs in again
+
+### Requirement UI-LOGIN-SESSION-008: Sign-in screen SHALL avoid redundant profile guidance copy
+Cabinet SHALL keep the sign-in screen focused on credential entry and existing account/legal links without rendering duplicate profile/database explanatory guidance.
+
+#### Scenario: Clean sign-in copy preserves entry links
+- **GIVEN** setup is complete and the user opens `/sign-in`
+- **WHEN** the sign-in form renders
+- **THEN** UI MUST NOT render the explanatory block beginning with "Sign in to unlock your Cabinet workspace."
+- **AND** the sign-in form, create-account link, forgot-password link, Terms of Service link, and Privacy Policy link MUST remain available
+
+### Requirement UI-LOGIN-SESSION-009: Cookie-backed sessions SHALL recover across browser reloads
+Cabinet SHALL recover a signed-in local session from persisted auth cookies after a browser reload so protected routes do not bounce back to sign-in.
+
+#### Scenario: Reload keeps authenticated route available
+- **GIVEN** a local user has signed in and reached a protected workspace route
+- **WHEN** the browser reloads on that protected route
+- **THEN** Cabinet MUST restore the session from auth cookies and keep the user on the protected route
+- **AND** the route MUST NOT show the sign-in form or a new unauthenticated redirect
+
+### Requirement UI-LOGIN-SESSION-010: Redirect guards SHALL preserve protected route query state
+Cabinet SHALL preserve protected deep-link path and query state through unauthenticated sign-in redirects while avoiding redundant root redirects.
+
+#### Scenario: Protected route query survives login
+- **GIVEN** user is unauthenticated and requests a protected deep link with query state such as `/inventory?view=table`
+- **WHEN** route guards redirect the user to sign-in and the user signs in successfully
+- **THEN** the post-login route MUST return to `/inventory`
+- **AND** the query state MUST remain available after session bootstrap
+
+### Requirement UI-LOGIN-SESSION-012: Local Agent requests SHALL carry a server-bound session credential
+Cabinet SHALL obtain an opaque server-issued local session for the active profile in local-device mode and use it only for same-origin protected Cabinet Chat and Agent requests.
+
+#### Scenario: Local Agent request carries memory-only server session
+- **GIVEN** a same-origin loopback local-device session opens a protected workspace route for the active profile
+- **WHEN** the user sends or previews a protected Chat or Agent action
+- **THEN** the request MUST include the server-issued `X-Cabinet-Session` credential bound to the active profile
+- **AND** missing, stale, wrong-profile, LAN-mode, ZITADEL-mode, or registered-passkey bootstrap attempts MUST fail closed
+- **AND** outside the one-time bootstrap response, the credential MUST NOT be persisted in cookies, browser storage, URLs, rendered DOM, Chat messages, workflow evidence, logs, or response bodies

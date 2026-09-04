@@ -87,26 +87,41 @@ describe("inventory responsive table-first redesign", () => {
       });
   }
 
+  function switchToRowsView() {
+    cy.get('button[aria-label="Switch to rows view"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .click()
+      .should("have.attr", "aria-pressed", "true");
+  }
+
   it("keeps desktop Inventory table-first with compact filters and page modals", () => {
     cy.viewport(1280, 800);
     signIn();
     cy.wait("@alphaPhotos");
 
     cy.contains("Collection Browser").should("not.exist");
-    cy.get('[data-testid="inventory-folder-tree"]').should("not.exist");
-    cy.get('[data-testid="inventory-folder-tree-legacy"]').should("not.be.visible");
-    cy.get('[data-testid="inventory-collection-filter"]').should("be.visible");
-    cy.get('[data-testid="inventory-collection-filter-select"]').should("be.visible");
+    cy.get('[data-testid="inventory-folder-tree"][role="tree"]').should("be.visible");
+    cy.get('[data-testid="inventory-folder-tree-legacy"]').should("not.exist");
+    cy.get('[data-testid="inventory-collection-filter"]').should("not.exist");
+    cy.get('[data-testid="inventory-collection-filter-select"]').should("not.exist");
+    cy.get('[data-testid="inventory-active-folder-control"]').should("be.visible");
     cy.get("table").should("be.visible");
     cy.contains("Responsive Alpha").should("be.visible");
     cy.contains("Responsive Bravo").should("be.visible");
     cy.get('[data-testid="inventory-photos-section"]').should("not.exist");
     cy.get('[data-testid="inventory-barcodes-section"]').should("not.exist");
 
-    cy.get('[data-testid="inventory-collection-filter-select"]').select("Store 1");
+    cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .should("be.visible")
+      .find('[data-testid="folder-tree-item-store-1"]')
+      .click();
     cy.get('[data-testid="inventory-collection-filter-selected"]').should("contain", "Store 1");
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
-    cy.get('[data-testid="inventory-collection-filter-select"]').select("All Items");
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-item-all-items"]')
+      .click();
     cy.get('[data-testid="inventory-collection-filter-selected"]').should("contain", "All Items");
 
     cy.get(
@@ -138,10 +153,15 @@ describe("inventory responsive table-first redesign", () => {
     signIn();
     cy.wait("@alphaPhotos");
 
-    cy.get('[data-testid="inventory-collection-filter"]').should("be.visible");
+    cy.get('[data-testid="inventory-folder-tree"][role="tree"]').should("be.visible");
+    cy.get('[data-testid="inventory-collection-filter"]').should("not.exist");
+    cy.get('[data-testid="inventory-active-folder-control"]')
+      .scrollIntoView()
+      .should("be.visible");
     cy.get("table").should("exist");
     cy.contains("Responsive Alpha").should("be.visible");
-    assertElementFitsViewport("inventory-collection-filter");
+    assertElementFitsViewport("inventory-workspace");
+    assertElementFitsViewport("inventory-active-folder-control");
     assertElementFitsViewport("inventory-photos-action");
     assertElementFitsViewport("inventory-barcodes-action");
     assertElementFitsViewport("inventory-new-action");
@@ -172,12 +192,26 @@ describe("inventory responsive table-first redesign", () => {
   it("keeps tablet editor panel navigation available from table rows", () => {
     cy.viewport(768, 1024);
     signIn();
+    cy.wait("@alphaPhotos");
+    switchToRowsView();
 
+    const alphaRowActions =
+      '[data-testid="inventory-item-row-item-responsive-alpha"] [data-testid="task-row-actions-trigger"]';
+    cy.get(alphaRowActions).scrollIntoView().should("be.visible");
+    cy.get(alphaRowActions)
+      .click()
+      .should("have.attr", "data-state", "open");
     cy.get(
-      '[data-testid="inventory-item-row-item-responsive-alpha"] [data-testid="task-row-actions-trigger"]'
-    ).trigger("pointerdown", { button: 0, pointerType: "mouse" });
-    cy.contains('[role="menuitem"]', "Edit").click({ force: true });
-    cy.get('[data-testid="inventory-item-editor-panel"]')
+      '[data-testid="task-row-actions-menu"][data-row-id="item-responsive-alpha"]'
+    )
+      .should("be.visible")
+      .find(
+        '[role="menuitem"][data-testid="task-row-action-edit"][data-row-id="item-responsive-alpha"]'
+      )
+      .should("be.visible")
+      .and("have.text", "Edit")
+      .click();
+    cy.get('[role="dialog"]')
       .should("be.visible")
       .and("contain", "Edit Item");
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Responsive Alpha");
@@ -187,7 +221,7 @@ describe("inventory responsive table-first redesign", () => {
     cy.get('[data-testid="inventory-item-editor-previous"]').click();
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Responsive Alpha");
     cy.get('[data-testid="inventory-item-editor-cancel"]').click();
-    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
+    cy.get('[role="dialog"]').should("not.exist");
 
     assertNoDocumentHorizontalOverflow();
   });

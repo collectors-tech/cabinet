@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "version": "0.1.0",
+  "version_name_prefix": "0.1.0-beta.10",
+  "channel": "private-beta",
+  "targets": ["chrome", "edge"],
+  "protocol_compatibility": {
+    "minimum": "1",
+    "maximum": "1"
+  },
+  "distribution": "verified_zip_load_unpacked",
+  "automatic_updates": false,
+  "immutable_tag_prefix": "browser-companion-v",
+  "permissions": ["alarms", "sidePanel", "scripting", "storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "http://[::1]/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "package_files": [
+    "PRIVACY.md",
+    "background/service-worker.mjs",
+    "content/provider-bridge.js",
+    "modules/bonzaslotcars.js",
+    "modules/frontlinehobbies.js",
+    "platform/browser-api.mjs",
+    "popup/popup-controller.mjs",
+    "popup/popup.css",
+    "popup/popup.html",
+    "runtime/capture-contract.mjs",
+    "runtime/config.mjs",
+    "runtime/durable-queue.mjs",
+    "runtime/module-contract.mjs",
+    "runtime/readiness.mjs",
+    "runtime/retry-governor.mjs",
+    "src/companion-client.mjs"
+  ]
+}

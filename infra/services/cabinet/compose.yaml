@@ -1,0 +1,53 @@
+services:
+  cabinet:
+    image: ${CABINET_IMAGE:?Set CABINET_IMAGE to a local tag or immutable registry digest}
+    restart: unless-stopped
+    init: true
+    command:
+      - --no-open-browser
+      - --listen
+      - 0.0.0.0:17880
+      - --data-dir
+      - /data
+      - --profile
+      - ${CABINET_PROFILE:?Set CABINET_PROFILE}
+      - --instance-name
+      - ${CABINET_INSTANCE_NAME:?Set CABINET_INSTANCE_NAME}
+    environment:
+      CABINET_BIND_MODE: lan
+      CABINET_HOST: 0.0.0.0
+      CABINET_PORT: "17880"
+      CABINET_DATA_DIR: /data
+      CABINET_DB_PATH: /data/cabinet.db
+      CABINET_OPEN_BROWSER: "false"
+      CABINET_ALLOW_PARALLEL: "false"
+      CABINET_E2E_MODE: "false"
+      CABINET_AUTH_IDENTITY_MODE: ${CABINET_AUTH_IDENTITY_MODE:-local}
+      CABINET_PUBLIC_ORIGIN: ${CABINET_PUBLIC_ORIGIN:?Set CABINET_PUBLIC_ORIGIN}
+      CABINET_ZITADEL_ISSUER: ${CABINET_ZITADEL_ISSUER:-}
+      CABINET_ZITADEL_PROJECT_ID: ${CABINET_ZITADEL_PROJECT_ID:-}
+      CABINET_ZITADEL_CLIENT_ID: ${CABINET_ZITADEL_CLIENT_ID:-}
+      CABINET_ZITADEL_CLIENT_SECRET: ${CABINET_ZITADEL_CLIENT_SECRET:-}
+      CABINET_ZITADEL_AUDIENCE: ${CABINET_ZITADEL_AUDIENCE:-}
+      CABINET_ZITADEL_REQUIRED_ROLES: ${CABINET_ZITADEL_REQUIRED_ROLES:-}
+      CABINET_ZITADEL_SCOPES: ${CABINET_ZITADEL_SCOPES:-}
+      CABINET_ZITADEL_ALLOW_INSECURE_HTTP: ${CABINET_ZITADEL_ALLOW_INSECURE_HTTP:-false}
+      CABINET_UPDATE_CHANNEL: ${CABINET_UPDATE_CHANNEL:-beta}
+      CABINET_WEBAUTHN_RP_ID: ${CABINET_WEBAUTHN_RP_ID:?Set CABINET_WEBAUTHN_RP_ID}
+      CABINET_WEBAUTHN_ORIGIN: ${CABINET_PUBLIC_ORIGIN:?Set CABINET_PUBLIC_ORIGIN}
+      CABINET_WEBAUTHN_RP_NAME: ${CABINET_WEBAUTHN_RP_NAME:-Cabinet}
+      CABINET_BACKUP_INTERVAL_MINUTES: ${CABINET_BACKUP_INTERVAL_MINUTES:-60}
+      TZ: ${TZ:-Australia/Melbourne}
+    expose:
+      - "17880"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:17880/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    stop_grace_period: 30s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

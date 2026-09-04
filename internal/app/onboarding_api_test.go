@@ -3,6 +3,8 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -33,17 +35,29 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 		t.Fatalf("first sample seed status=%d body=%s", firstSeed.Code, firstSeed.Body.String())
 	}
 	var firstPayload struct {
-		CreatedItems            int  `json:"created_items"`
-		CreatedWishlist         int  `json:"created_wishlist_entries"`
-		TotalItems              int  `json:"total_items"`
-		TotalWishlist           int  `json:"total_wishlist_entries"`
-		AlreadySeededForProfile bool `json:"already_seeded_for_profile"`
+		DatasetKind             string `json:"dataset_kind"`
+		DatasetLabel            string `json:"dataset_label"`
+		SampleDataDisclosure    string `json:"sample_data_disclosure"`
+		CreatedItems            int    `json:"created_items"`
+		CreatedWishlist         int    `json:"created_wishlist_entries"`
+		TotalItems              int    `json:"total_items"`
+		TotalWishlist           int    `json:"total_wishlist_entries"`
+		AlreadySeededForProfile bool   `json:"already_seeded_for_profile"`
 	}
 	if err := json.NewDecoder(firstSeed.Body).Decode(&firstPayload); err != nil {
 		t.Fatalf("decode first seed payload: %v", err)
 	}
 	if firstPayload.CreatedItems == 0 {
 		t.Fatalf("expected created_items > 0, got %+v", firstPayload)
+	}
+	if firstPayload.DatasetKind != "sample_showcase" {
+		t.Fatalf("expected sample_showcase dataset kind, got %+v", firstPayload)
+	}
+	if !strings.Contains(strings.ToLower(firstPayload.DatasetLabel), "sample") {
+		t.Fatalf("expected sample dataset label, got %+v", firstPayload)
+	}
+	if !strings.Contains(strings.ToLower(firstPayload.SampleDataDisclosure), "example records") {
+		t.Fatalf("expected explicit sample data disclosure, got %+v", firstPayload)
 	}
 	if firstPayload.AlreadySeededForProfile {
 		t.Fatalf("expected already_seeded_for_profile=false on first run, got %+v", firstPayload)
@@ -54,17 +68,25 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 		t.Fatalf("second sample seed status=%d body=%s", secondSeed.Code, secondSeed.Body.String())
 	}
 	var secondPayload struct {
-		CreatedItems            int  `json:"created_items"`
-		CreatedWishlist         int  `json:"created_wishlist_entries"`
-		TotalItems              int  `json:"total_items"`
-		TotalWishlist           int  `json:"total_wishlist_entries"`
-		AlreadySeededForProfile bool `json:"already_seeded_for_profile"`
+		DatasetKind             string `json:"dataset_kind"`
+		DatasetLabel            string `json:"dataset_label"`
+		SampleDataDisclosure    string `json:"sample_data_disclosure"`
+		CreatedItems            int    `json:"created_items"`
+		CreatedWishlist         int    `json:"created_wishlist_entries"`
+		TotalItems              int    `json:"total_items"`
+		TotalWishlist           int    `json:"total_wishlist_entries"`
+		AlreadySeededForProfile bool   `json:"already_seeded_for_profile"`
 	}
 	if err := json.NewDecoder(secondSeed.Body).Decode(&secondPayload); err != nil {
 		t.Fatalf("decode second seed payload: %v", err)
 	}
 	if secondPayload.CreatedItems != 0 {
 		t.Fatalf("expected no new items on second run, got %+v", secondPayload)
+	}
+	if secondPayload.DatasetKind != firstPayload.DatasetKind ||
+		secondPayload.DatasetLabel != firstPayload.DatasetLabel ||
+		secondPayload.SampleDataDisclosure != firstPayload.SampleDataDisclosure {
+		t.Fatalf("expected stable sample provenance across rerun, first=%+v second=%+v", firstPayload, secondPayload)
 	}
 	if !secondPayload.AlreadySeededForProfile {
 		t.Fatalf("expected already_seeded_for_profile=true on second run, got %+v", secondPayload)
@@ -138,6 +160,12 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 	if len(folderAssignments) < 30 {
 		t.Fatalf("expected folder assignments for richer sample inventory, got %d: %+v", len(folderAssignments), folderAssignments)
 	}
+	if settingsPayload.Settings["onboarding.sample_data.dataset_kind"] != "sample_showcase" {
+		t.Fatalf("expected persisted sample dataset kind, got %+v", settingsPayload.Settings)
+	}
+	if !strings.Contains(strings.ToLower(settingsPayload.Settings["onboarding.sample_data.disclosure"]), "example records") {
+		t.Fatalf("expected persisted sample disclosure, got %+v", settingsPayload.Settings)
+	}
 	seenFolders := make(map[string]struct{})
 	for itemID, folderName := range folderAssignments {
 		if strings.TrimSpace(itemID) == "" || strings.TrimSpace(folderName) == "" {
@@ -192,5 +220,61 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 	}
 	if !hasHighlightHit {
 		t.Fatalf("expected wishlist sample rows to include highlighted hit coverage, got %+v", wishlistPayload.Items)
+	}
+}
+
+func TestOnboardingSampleDataEndpointRollsBackDatabaseAndMediaOnFailure(t *testing.T) {
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P1"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	setActive := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if setActive.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", setActive.Code, setActive.Body.String())
+	}
+
+	if _, err := a.db.Exec(`
+		CREATE TRIGGER fail_onboarding_sample_price
+		BEFORE INSERT ON price_snapshots
+		WHEN NEW.id LIKE 'sample-price-%'
+		BEGIN
+			SELECT RAISE(ABORT, 'forced onboarding seed failure');
+		END;
+	`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	failedSeed := doRequest(t, a, http.MethodPost, "/api/onboarding/sample-data", nil, nil)
+	if failedSeed.Code != http.StatusBadRequest {
+		t.Fatalf("failed seed status=%d body=%s", failedSeed.Code, failedSeed.Body.String())
+	}
+
+	for table, query := range map[string]string{
+		"items":  `SELECT COUNT(*) FROM canonical_items WHERE profile_id = ?`,
+		"photos": `SELECT COUNT(*) FROM item_photos ip JOIN canonical_items ci ON ci.id = ip.item_id WHERE ci.profile_id = ?`,
+	} {
+		var count int
+		if err := a.db.QueryRow(query, p.ID).Scan(&count); err != nil {
+			t.Fatalf("count %s after rollback: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("expected no %s after rollback, got %d", table, count)
+		}
+	}
+
+	assetRoot := filepath.Join(a.cfg.DataDir, "media", "assets")
+	entries, err := os.ReadDir(assetRoot)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("read media assets after rollback: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no canonical media assets after rollback, got %d", len(entries))
 	}
 }

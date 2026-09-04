@@ -1,0 +1,18 @@
+{
+  "products": [
+    {
+      "id": 41001,
+      "title": "NSR Porsche 917K Gulf 1970",
+      "url": "/products/nsr-porsche-917k-gulf-1970",
+      "image": "https://acercmodels.com/cdn/shop/files/nsr-porsche-917k.jpg",
+      "price": "$139.95",
+      "sku": "NSR-0177SW",
+      "brand": "NSR",
+      "category": "Slot Cars",
+      "categories": ["Slot Cars", "1:32 Scale"],
+      "stock_level": 4,
+      "availability": "In stock",
+      "description": "<p>Lightspeed storefront fixture product for source matching.</p>"
+    }
+  ]
+}

@@ -45,7 +45,7 @@ func TestWave3ProGatedMutationEndpointsReturnDeterministic403AndNoSideEffects(t 
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+freeToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+freeToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if bootstrap.Code != http.StatusOK {

@@ -27,8 +27,11 @@ function SheetPortal({
 
 function SheetOverlay({
   className,
+  style,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+  const disablePointerEvents = className?.includes('pointer-events-none')
+
   return (
     <SheetPrimitive.Overlay
       data-slot='sheet-overlay'
@@ -36,6 +39,10 @@ function SheetOverlay({
         'fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
         className
       )}
+      style={{
+        ...style,
+        ...(disablePointerEvents ? { pointerEvents: 'none' } : {}),
+      }}
       {...props}
     />
   )
@@ -43,19 +50,23 @@ function SheetOverlay({
 
 function SheetContent({
   className,
+  hideOverlay = false,
+  overlayClassName,
   children,
   side = 'right',
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
+  hideOverlay?: boolean
+  overlayClassName?: string
   side?: 'top' | 'right' | 'bottom' | 'left'
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {hideOverlay ? null : <SheetOverlay className={overlayClassName} />}
       <SheetPrimitive.Content
         data-slot='sheet-content'
         className={cn(
-          'fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500',
+          'fixed z-[51] flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500',
           side === 'right' &&
             'inset-y-0 end-0 h-full w-3/4 border-s data-[state=closed]:slide-out-to-end data-[state=open]:slide-in-from-end sm:max-w-sm',
           side === 'left' &&

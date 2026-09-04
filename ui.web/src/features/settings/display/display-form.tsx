@@ -1,7 +1,7 @@
+import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { ProfileContextBlocked } from '../components/profile-context-blocked'
+import { recordSettingsFeedbackHistory } from '../settings-feedback-history'
 import { useProfileSettings } from '../use-profile-settings'
 
 const items = [
@@ -64,8 +65,7 @@ export function DisplayForm() {
     saving,
     saveSettings,
     reload,
-  } =
-    useProfileSettings()
+  } = useProfileSettings()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const form = useForm<DisplayFormValues>({
@@ -99,8 +99,26 @@ export function DisplayForm() {
         'display.items': data.items.join(','),
       })
       setSaveMessage('Display settings saved.')
+      recordSettingsFeedbackHistory({
+        id: 'settings-display-save-success',
+        level: 'success',
+        title: 'Display settings saved.',
+        summary: 'Display preference save feedback was preserved for review.',
+        source: 'display',
+        sourceLabel: 'Display',
+      })
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'failed_to_save_display')
+      const message =
+        err instanceof Error ? err.message : 'failed_to_save_display'
+      setSaveError(message)
+      recordSettingsFeedbackHistory({
+        id: 'settings-display-save-failed',
+        level: 'error',
+        title: 'Display settings failed to save.',
+        summary: message,
+        source: 'display',
+        sourceLabel: 'Display',
+      })
     }
   }
 
@@ -111,6 +129,15 @@ export function DisplayForm() {
           const selectedItems = form.getValues('items') ?? []
           if (selectedItems.length === 0) {
             event.preventDefault()
+            recordSettingsFeedbackHistory({
+              id: 'settings-display-selection-invalid',
+              level: 'warning',
+              title: 'Display selection is required.',
+              summary:
+                'Display settings rejected an empty sidebar selection before save.',
+              source: 'display',
+              sourceLabel: 'Display',
+            })
             form.setError('items', {
               type: 'manual',
               message: 'You have to select at least one item.',
@@ -123,7 +150,10 @@ export function DisplayForm() {
       >
         {error ? (
           profileContextMissing ? (
-            <ProfileContextBlocked error={error} onRetry={() => void reload()} />
+            <ProfileContextBlocked
+              error={error}
+              onRetry={() => void reload()}
+            />
           ) : (
             <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
               <p className='font-medium'>Failed to load display settings.</p>
@@ -153,22 +183,19 @@ export function DisplayForm() {
         {profileContextMissing ? null : (
           <>
             <FormField
-          control={form.control}
-          name='items'
-          render={() => (
-            <FormItem>
-              <div className='mb-4'>
-                <FormLabel className='text-base'>Sidebar</FormLabel>
-                <FormDescription>
-                  Select the items you want to display in the sidebar.
-                </FormDescription>
-              </div>
-              {items.map((item) => (
-                <FormField
-                  key={item.id}
-                  control={form.control}
-                  name='items'
-                  render={({ field }) => {
+              control={form.control}
+              name='items'
+              render={({ field }) => (
+                <FormItem>
+                  <div className='mb-4'>
+                    <FormLabel className='text-base'>Sidebar</FormLabel>
+                    <FormDescription>
+                      Select the items you want to display in the sidebar.
+                    </FormDescription>
+                  </div>
+                  {items.map((item) => {
+                    const selectedItems = field.value ?? []
+                    const checkboxID = `settings-display-${item.id}`
                     return (
                       <FormItem
                         key={item.id}
@@ -176,40 +203,45 @@ export function DisplayForm() {
                       >
                         <FormControl>
                           <Checkbox
+                            id={checkboxID}
                             data-testid={`settings-display-${item.id}`}
-                            checked={field.value?.includes(item.id)}
+                            checked={selectedItems.includes(item.id)}
                             onCheckedChange={(checked) => {
-                              return checked
-                                ? field.onChange([...field.value, item.id])
-                                : field.onChange(
-                                    field.value?.filter(
+                              field.onChange(
+                                checked
+                                  ? Array.from(
+                                      new Set([...selectedItems, item.id])
+                                    )
+                                  : selectedItems.filter(
                                       (value) => value !== item.id
                                     )
-                                  )
+                              )
                             }}
                           />
                         </FormControl>
-                        <FormLabel className='font-normal'>
+                        <FormLabel htmlFor={checkboxID} className='font-normal'>
                           {item.label}
                         </FormLabel>
                       </FormItem>
                     )
-                  }}
-                />
-              ))}
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='mt-3'
-                onClick={() => form.reset({ items: [] })}
-              >
-                Clear selection
-              </Button>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                  })}
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    className='mt-3'
+                    disabled={loading}
+                    onClick={() => {
+                      field.onChange([])
+                      form.clearErrors('items')
+                    }}
+                  >
+                    Clear selection
+                  </Button>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type='submit' disabled={saving || loading}>
               Update display
             </Button>

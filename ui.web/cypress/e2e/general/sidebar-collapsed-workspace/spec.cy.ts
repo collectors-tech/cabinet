@@ -1,9 +1,14 @@
 describe('sidebar-collapsed-workspace', () => {
   function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-shell-nav@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap().then((bootstrap) => {
+      cy.e2eSetSetupState('present')
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(bootstrap.profile_id)
+      cy.useBootstrappedProfile(bootstrap.profile_id, bootstrap.profile_name, {
+        path,
+      })
+    })
   }
 
   beforeEach(() => {
@@ -27,31 +32,57 @@ describe('sidebar-collapsed-workspace', () => {
     )
     cy.wait('@runtimeMeta')
 
-    cy.get('[data-slot="sidebar-trigger"]').first().click()
+    cy.get('[data-slot="sidebar"]')
+      .first()
+      .then(($sidebar) => {
+        if ($sidebar.attr('data-state') !== 'collapsed') {
+          cy.get('[data-slot="sidebar-trigger"]').first().click()
+        }
+      })
     cy.get('[data-slot="sidebar"]')
       .first()
       .should('have.attr', 'data-state', 'collapsed')
 
     cy.get('[data-testid="sidebar-runtime-meta"]').should('not.exist')
-    cy.get('[data-testid="shell-workspace-label"]')
-      .should('be.visible')
-      .and('have.text', 'Work')
+    cy.get('[data-testid="shell-workspace-label"]').should('not.exist')
     cy.get('[data-testid="shell-workspace-switcher"]').should(
       'not.contain',
       'Workspace'
     )
-    cy.get('[data-testid="shell-workspace-menu-trigger"]').should('be.visible')
-    cy.get('[data-testid="shell-workspace-navigation"]').should('not.exist')
-    cy.get('[data-testid="shell-workspace-assistant"]').should('not.exist')
+    cy.get('[data-testid="shell-workspace-menu-trigger"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Open workspace menu')
+    cy.get('[data-testid="shell-workspace-icon-rail"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-navigation"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Navigation workspace')
+    cy.get('[data-testid="shell-workspace-search"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Search workspace')
+    cy.get('[data-testid="shell-workspace-assistant"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Cabinet Agent')
+    cy.get('[data-testid="shell-workspace-bell"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Open notification inbox')
     cy.get('[data-testid="shell-workspace-inbox"]').should('not.exist')
+    cy.get('[data-testid="shell-workspace-switcher"]').should(
+      'not.contain',
+      'Search'
+    )
+    cy.get('[data-testid="shell-workspace-switcher"]').should(
+      'not.contain',
+      'Chat'
+    )
+    cy.get('[data-testid="shell-workspace-switcher"]').should(
+      'not.contain',
+      'Inbox'
+    )
 
     cy.get('[data-testid="shell-workspace-menu-trigger"]').click()
-    cy.get('[data-testid="shell-workspace-menu-navigation"]').should(
+    cy.get('[data-testid="shell-workspace-menu-customise-nav"]').should(
       'be.visible'
     )
-    cy.get('[data-testid="shell-workspace-menu-assistant"]').should(
-      'be.visible'
-    )
-    cy.get('[data-testid="shell-workspace-menu-inbox"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-menu-settings"]').should('be.visible')
   })
 })

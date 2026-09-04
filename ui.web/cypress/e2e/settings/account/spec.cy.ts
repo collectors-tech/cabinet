@@ -1,13 +1,10 @@
 describe('settings/account', () => {
   function signInToSettings() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2Faccount')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/settings\/account\/?$/
-    )
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/account',
+    })
   }
 
   beforeEach(() => {
@@ -29,10 +26,102 @@ describe('settings/account', () => {
     cy.contains('button[role="combobox"]', 'Japanese').should('be.visible')
   })
 
-  it('UI-SCREEN-SETTINGS-ACCOUNT-002 blocks invalid account submission with field errors', () => {
+  it('UI-SCREEN-SETTINGS-ACCOUNT-002/006 blocks invalid account submission without calling save', () => {
+    cy.intercept('PUT', '/api/profiles/*/settings').as('accountInvalidSave')
+
     cy.contains('button', 'Update account').should('not.be.disabled')
     cy.get('input[name="name"]').clear()
     cy.contains('button', 'Update account').click()
     cy.contains('Please enter your name.').should('be.visible')
+    cy.location('pathname').should('match', /^\/settings\/account\/?$/)
+    cy.get('@accountInvalidSave.all').should('have.length', 0)
+  })
+
+  it('UI-SCREEN-SETTINGS-ACCOUNT-004 retries account settings load failure without route reload', () => {
+    let settingsAttempt = 0
+    cy.intercept('GET', '/api/profiles/*/settings', (req) => {
+      settingsAttempt += 1
+      if (settingsAttempt === 1) {
+        req.reply({
+          statusCode: 503,
+          body: { error: 'profile_settings_unavailable' },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 200,
+        body: {
+          settings: {
+            'account.name': 'Retry Account Name',
+            'account.language': 'ko',
+            'account.dob': '1998-05-01T00:00:00.000Z',
+          },
+        },
+      })
+    }).as('accountSettings')
+
+    cy.reload()
+    cy.wait('@accountSettings')
+    cy.contains('Failed to load account settings.').should('be.visible')
+    cy.contains('button', 'Retry').click()
+    cy.wait('@accountSettings')
+
+    cy.location('pathname').should('match', /^\/settings\/account\/?$/)
+    cy.contains('Failed to load account settings.').should('not.exist')
+    cy.get('input[name="name"]').should('have.value', 'Retry Account Name')
+    cy.contains('button[role="combobox"]', 'Korean').should('be.visible')
+  })
+
+  it('UI-SCREEN-SETTINGS-ACCOUNT-005 preserves edited account fields when save fails', () => {
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 503,
+      body: { error: 'account_settings_save_unavailable' },
+    }).as('saveAccountFailure')
+
+    cy.contains('button', 'Update account').should('not.be.disabled')
+    cy.get('input[name="name"]').clear().type('Unsaved Account Name')
+    cy.get('[data-testid="settings-account-language-trigger"]').click()
+    cy.contains('[role="option"]', 'Chinese').click()
+    cy.contains('button', 'Update account').click()
+
+    cy.wait('@saveAccountFailure')
+      .its('request.body.settings')
+      .should('deep.include', {
+        'account.name': 'Unsaved Account Name',
+        'account.language': 'zh',
+      })
+    cy.contains('profile_settings_save_503').should('be.visible')
+    cy.contains('Account settings saved.').should('not.exist')
+    cy.location('pathname').should('match', /^\/settings\/account\/?$/)
+    cy.get('input[name="name"]').should('have.value', 'Unsaved Account Name')
+    cy.contains('button[role="combobox"]', 'Chinese').should('be.visible')
+    cy.contains('button', 'Update account').should('not.be.disabled')
+  })
+
+  it('UI-SCREEN-SETTINGS-ACCOUNT-007 blocks account edits when active profile is missing', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+
+    cy.visit('/settings/account')
+    cy.wait('@activeProfileMissing')
+
+    cy.location('pathname').should('match', /^\/settings\/account\/?$/)
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('Active profile is required.').should('be.visible')
+    cy.contains('button', 'Retry').should('be.visible')
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+    cy.contains('button', 'Update account').should('not.exist')
+    cy.get('input[name="name"]').should('not.exist')
+    cy.get('input[name="dob"]').should('not.exist')
+    cy.get('[data-testid="settings-account-language-trigger"]').should(
+      'not.exist'
+    )
+
+    cy.contains('button', 'Retry').click()
+    cy.wait('@activeProfileMissing')
   })
 })

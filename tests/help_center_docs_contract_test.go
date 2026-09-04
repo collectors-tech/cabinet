@@ -83,3 +83,76 @@ func TestUIElementsGuideDocumentsSharedControls(t *testing.T) {
 	}
 }
 
+func TestHelpCenterDocumentsInventoryTaxonomyWorkflow(t *testing.T) {
+	t.Parallel()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file location: runtime.Caller failed")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), ".."))
+
+	files := map[string]string{
+		"inventory": filepath.Join(repoRoot, "docs", "help-center", "sections", "inventory.md"),
+		"wishlist":  filepath.Join(repoRoot, "docs", "help-center", "sections", "wishlist.md"),
+		"settings":  filepath.Join(repoRoot, "docs", "help-center", "sections", "settings.md"),
+	}
+
+	combined := strings.Builder{}
+	for name, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s guide: %v", name, err)
+		}
+		combined.WriteString(strings.ToLower(string(data)))
+		combined.WriteByte('\n')
+	}
+
+	for _, requiredTerm := range []string{
+		"item type",
+		"condition scale",
+		"packaging grade",
+		"taxonomy",
+		"saved view",
+		"invalid_taxonomy_value",
+		"wishlist",
+	} {
+		if !strings.Contains(combined.String(), requiredTerm) {
+			t.Fatalf("help-center taxonomy workflow docs must mention %q", requiredTerm)
+		}
+	}
+}
+
+func TestIntegrationsGuideDocumentsEbaySetupWorkflow(t *testing.T) {
+	t.Parallel()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file location: runtime.Caller failed")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), ".."))
+	path := filepath.Join(repoRoot, "docs", "help-center", "sections", "integrations.md")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read integrations guide: %v", err)
+	}
+	content := strings.ToLower(string(data))
+
+	for _, requiredTerm := range []string{
+		"ebay setup",
+		"bearer token",
+		"marketplace",
+		"base url override",
+		"validate",
+		"market watch",
+		"provider_auth_missing",
+		"provider_auth_invalid",
+		"provider_search_failed",
+		"live credential",
+	} {
+		if !strings.Contains(content, requiredTerm) {
+			t.Fatalf("integrations guide must document eBay setup term %q", requiredTerm)
+		}
+	}
+}

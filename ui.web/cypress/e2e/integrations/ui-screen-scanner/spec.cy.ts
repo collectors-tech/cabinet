@@ -1,13 +1,15 @@
 describe('integrations/ui-screen-scanner', () => {
   function signInToScanner() {
-    cy.visit('/sign-in?redirect=%2Fscanner%2F')
-    cy.get('input[name="email"]').clear().type('e2e-scanner@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(profile_id)
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/scanner/' })
+    })
   }
 
   beforeEach(() => {
+    cy.e2eReset()
     cy.clearCookies()
     cy.clearLocalStorage()
   })
@@ -29,9 +31,18 @@ describe('integrations/ui-screen-scanner', () => {
     cy.wait(['@querySets', '@failures', '@providerHealth'])
 
     cy.location('pathname').should('match', /^\/scanner\/?$/)
-    cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('contain', 'Market Watch')
-    cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('not.contain', 'Scanner')
-    cy.contains('h1', 'Market Watch').should('be.visible')
+    cy.get('main').find('h1').should('not.exist')
+    cy.get('[data-testid="market-watch-header-title"]')
+      .should('contain', 'Market Watch')
+      .and(
+        'have.attr',
+        'title',
+        'Run saved market searches and review provider results.'
+      )
+    cy.get('[data-testid="scanner-empty-state"]').should(
+      'contain',
+      'Create your first saved integration search'
+    )
   })
 
   it('UI-SCREEN-SCANNER-001 supports query set create/load and run controls', () => {
@@ -82,7 +93,16 @@ describe('integrations/ui-screen-scanner', () => {
     cy.intercept('GET', '/api/scanner/failures', {
       statusCode: 200,
       body: {
-        failures: [{ id: 'failure-1', query_set_id: 'qs-9', provider: 'ebay', message: 'timeout' }],
+        failures: [
+          {
+            id: 'failure-1',
+            query_set_id: 'qs-9',
+            provider: 'ebay',
+            message: 'PROVIDER_AUTH_INVALID: eBay credentials were rejected',
+            retry_guidance: 'Review eBay credentials and provider health before retrying.',
+            next_action: 'check_provider_health_and_credentials',
+          },
+        ],
       },
     }).as('failures')
     cy.intercept('GET', '/api/provider/health?provider=ebay', {
@@ -98,6 +118,14 @@ describe('integrations/ui-screen-scanner', () => {
     cy.wait(['@querySets', '@failures', '@providerHealth'])
 
     cy.get('[data-testid="scanner-provider-health"]').should('contain', 'degraded')
+    cy.get('[data-testid="scanner-failures"]').within(() => {
+      cy.contains('ebay').should('be.visible')
+      cy.contains('PROVIDER_AUTH_INVALID: eBay credentials were rejected').should('be.visible')
+      cy.contains('Retry guidance: Review eBay credentials and provider health before retrying.').should(
+        'be.visible'
+      )
+      cy.contains('Next action: check_provider_health_and_credentials').should('be.visible')
+    })
     cy.get('[data-testid="scanner-retry-qs-9"]').click()
     cy.wait('@retryFailure')
     cy.get('[data-testid="scanner-action-status"]').should('contain', 'retry_requested_qs-9')
@@ -115,10 +143,10 @@ describe('integrations/ui-screen-scanner', () => {
       body: { status: 'ok' },
     }).as('providerHealth')
     cy.intercept('POST', '/api/scanner/query-sets', () => {
-      throw new Error('Create Query Set should stay client-side when required fields are blank')
+      throw new Error('Create Saved Watch should stay client-side when required fields are blank')
     }).as('createQuerySetBlocked')
     cy.intercept('POST', '/api/scanner/run/scheduled', () => {
-      throw new Error('Scheduled refresh should stay client-side when no query sets exist')
+      throw new Error('Scheduled refresh should stay client-side when no saved watches exist')
     }).as('scheduledRefreshBlocked')
 
     signInToScanner()
@@ -128,20 +156,20 @@ describe('integrations/ui-screen-scanner', () => {
     cy.get('[data-testid="scanner-create-query"]').click()
     cy.get('[data-testid="scanner-new-query-name-validation"]')
       .should('be.visible')
-      .and('contain', 'Query set name is required.')
+      .and('contain', 'Saved watch name is required.')
     cy.get('[data-testid="scanner-new-query-keywords-validation"]')
       .should('be.visible')
-      .and('contain', 'Enter at least one keyword before creating a query set.')
+      .and('contain', 'Enter at least one keyword before creating a saved watch.')
     cy.get('[data-testid="scanner-action-feedback"]')
-      .should('contain', 'Create Query Set requires the highlighted fields.')
-      .and('contain', 'Provide a query set name.')
-      .and('contain', 'Enter at least one keyword before creating a query set.')
+      .should('contain', 'Create Saved Watch requires the highlighted fields.')
+      .and('contain', 'Saved watch name is required.')
+      .and('contain', 'Enter at least one keyword before creating a saved watch.')
 
     cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
     cy.get('[data-testid="scanner-action-status"]').should('contain', 'scheduled_run_blocked_empty')
     cy.get('[data-testid="scanner-action-feedback"]')
-      .should('contain', 'Run Scheduled Refresh needs at least one runnable query set.')
-      .and('contain', 'Create a query set first.')
+      .should('contain', 'Run Scheduled Watches needs at least one runnable saved watch.')
+      .and('contain', 'Create a saved watch first.')
       .and('contain', 'Add keywords so the first scheduled run has valid criteria.')
 
     cy.intercept('GET', '/api/scanner/query-sets', {

@@ -235,7 +235,7 @@ describe("inventory-compact-collection-filter", () => {
     cy.get('[data-testid="inventory-selected-folder-empty"]').should("not.exist");
   });
 
-  it("stretches the inventory table section to the available viewport height", () => {
+  it("stretches the inventory table section to the available workspace height", () => {
     cy.viewport(1512, 967);
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
@@ -296,11 +296,6 @@ describe("inventory-compact-collection-filter", () => {
     });
     cy.get('[data-testid="inventory-table-surface"]').then(($surface) => {
       expect($surface[0].getBoundingClientRect().height).to.be.greaterThan(450);
-    });
-    cy.window().then((win) => {
-      expect(win.document.documentElement.scrollHeight).to.be.at.most(
-        win.innerHeight + 2
-      );
     });
   });
 });

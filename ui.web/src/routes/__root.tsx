@@ -2,6 +2,8 @@ import { type QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { toast } from 'sonner'
+import { installToastHistoryCapture } from '@/lib/toast-history'
 import { Toaster } from '@/components/ui/sonner'
 import { NavigationProgress } from '@/components/navigation-progress'
 import { GeneralError } from '@/features/errors/general-error'
@@ -11,6 +13,7 @@ export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({
   component: () => {
+    installToastHistoryCapture(toast)
     return (
       <>
         <NavigationProgress />

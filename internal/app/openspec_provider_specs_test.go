@@ -47,6 +47,329 @@ func TestProviderSpecsExistAndRegistryLinksThem(t *testing.T) {
 	}
 }
 
+func TestIntegrationRegistryOpenSpecCoversIssue1469Contracts(t *testing.T) {
+	t.Parallel()
+
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
+	if err != nil {
+		t.Fatalf("read provider registry spec: %v", err)
+	}
+	registry := string(registryBytes)
+
+	requiredSpecTokens := []string{
+		"INTEGRATION-027",
+		"provider manifests",
+		"setup schema",
+		"Schema-driven Add Integration setup",
+		"write-only field metadata",
+		"INTEGRATION-028",
+		"workflow/action metadata",
+		"remote writes that require explicit confirmation",
+		"INTEGRATION-029",
+		"profile-scoped integration instance",
+		"required-action code",
+		"INTEGRATION-030",
+		"Notification Inbox event",
+		"Provider setup schemas and Add Integration form rendering",
+	}
+	for _, token := range requiredSpecTokens {
+		if !strings.Contains(registry, token) {
+			t.Fatalf("provider registry spec missing #1469 coverage token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+
+	requiredTraceabilityTokens := []string{
+		"`INTEGRATION-027`",
+		"`INTEGRATION-028`",
+		"`INTEGRATION-029`",
+		"`INTEGRATION-030`",
+		"#1469",
+		"targeted Cypress Add Integration provider-selection/setup-schema rendering",
+		"Go status/inbox API tests",
+	}
+	for _, token := range requiredTraceabilityTokens {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1469 coverage token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract(t *testing.T) {
+	t.Parallel()
+
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
+	if err != nil {
+		t.Fatalf("read provider registry spec: %v", err)
+	}
+	registry := string(registryBytes)
+
+	requiredSpecTokens := []string{
+		"INTEGRATION-063",
+		"canonical registry definition",
+		"/api/providers/registry",
+		"/api/providers/:id/*",
+		"Add Integration UI list",
+		"Market Watch provider projection",
+		"marketplace",
+		"storefront/source matcher",
+		"browser-auth",
+		"chat/AI",
+		"notification",
+		"workflow/local",
+		"config form requirements",
+		"health/diagnostics",
+		"matching/import/export support",
+		"browser-auth/external-login behavior",
+	}
+	for _, token := range requiredSpecTokens {
+		if !strings.Contains(registry, token) {
+			t.Fatalf("provider registry spec missing #1463 consumer/category token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+
+	requiredTraceabilityTokens := []string{
+		"`INTEGRATION-063`",
+		"#1463",
+		"canonical provider registry consumers",
+		"marketplace, storefront/source matcher, browser-auth, chat/AI, notification, and workflow/local provider categories",
+		"TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract",
+	}
+	for _, token := range requiredTraceabilityTokens {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1463 consumer/category token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow(t *testing.T) {
+	t.Parallel()
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+
+	requiredGuideTokens := []string{
+		"internal/app/provider_registry_manifest.go",
+		"stable `provider_id`",
+		"`config_schema_ref`",
+		"`workflow_refs`",
+		"`capability_flags`",
+		"GET /api/providers/registry",
+		"GET /api/providers/:id/*",
+		"Add Integration provider list and details",
+		"Market Watch provider projection",
+		"schema-driven setup form rendering and field persistence",
+		"profile-scoped integration instances and secret storage",
+		"provider validation and health snapshots",
+		"Inbox-visible failure and required-action events",
+		"TestIntegrationRegistryOpenSpecCoversIssue1463ConsumerContract",
+	}
+	for _, token := range requiredGuideTokens {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1463 workflow token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+
+	requiredTraceabilityTokens := []string{
+		"docs/integrations/provider-authoring.md",
+		"TestIntegrationProviderAuthoringGuideCoversIssue1463Workflow",
+	}
+	for _, token := range requiredTraceabilityTokens {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1463 authoring guide token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationProviderAuthoringGuideCoversIssue1465WorkflowActions(t *testing.T) {
+	t.Parallel()
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+
+	requiredGuideTokens := []string{
+		"integrationWorkflowActionDefinitions",
+		"`workflow_refs`",
+		"`input_schema` and `output_schema`",
+		"`side_effect_level`",
+		"`confirmation_required`",
+		"`schedule_support`",
+		"`inbox_events`",
+		"`health_impact`",
+		"`execution_mode`",
+		"`read_only`, `preview_only`, `write`, or `destructive`",
+	}
+	for _, token := range requiredGuideTokens {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1465 workflow action token: %s", token)
+		}
+	}
+
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
+	if err != nil {
+		t.Fatalf("read provider registry spec: %v", err)
+	}
+	registry := string(registryBytes)
+	for _, token := range []string{
+		"INTEGRATION-064",
+		"Provider workflow registry MUST define execution contracts",
+		"`side_effect_level`",
+		"`inbox_events`",
+		"`health_impact`",
+		"`availability_state`",
+		"workflow failure and required-action outcomes MUST advertise Inbox event metadata",
+	} {
+		if !strings.Contains(registry, token) {
+			t.Fatalf("provider registry spec missing #1465 workflow action token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"`INTEGRATION-064`",
+		"#1465",
+		"TestProviderRegistryProjectsWorkflowActionRegistryMetadata",
+		"TestIntegrationProviderAuthoringGuideCoversIssue1465WorkflowActions",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1465 workflow action token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationProviderAuthoringGuideCoversIssue1468AcceptanceChecklist(t *testing.T) {
+	t.Parallel()
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+
+	for _, token := range []string{
+		"## Complete Example",
+		"ProviderID:        \"example-market\"",
+		"ConfigSchemaRef:   \"integrations/example-market/setup\"",
+		"WorkflowRefs:      []string{\"market_watch.run\", \"example.preview_listing\"}",
+		"SchemaRef:        \"integrations/example-market/setup\"",
+		"SecretTarget:     \"/api/profiles/:profileId/secrets\"",
+		"Type: \"secret\"",
+		"SecretKey: \"example_market_api_key\"",
+		"ID:                   \"example.preview_listing\"",
+		"SideEffectLevel:      \"preview_only\"",
+		"ConfirmationRequired: true",
+		"## Security Checklist",
+		"Registry, setup status, health, last-run, Inbox event, and UI payloads expose credential presence only",
+		"## Add Integration UI Checklist",
+		"provider-specific fields must not render before explicit selection",
+		"Disabled, deprecated, beta, setup-needed, and repair-needed states are visually distinct",
+		"`openspec validate --all --strict --no-interactive`",
+	} {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1468 acceptance token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"#1468",
+		"complete provider manifest, setup schema, and workflow/action examples",
+		"TestIntegrationProviderAuthoringGuideCoversIssue1468AcceptanceChecklist",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1468 authoring guide token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationRegistryOpenSpecCoversIssue1464ConfigSchemas(t *testing.T) {
+	t.Parallel()
+
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
+	if err != nil {
+		t.Fatalf("read provider registry spec: %v", err)
+	}
+	registry := string(registryBytes)
+	for _, token := range []string{
+		"INTEGRATION-065",
+		"Provider registry MUST publish typed setup schema definitions",
+		"`text`, `secret`, `url`, `number`, `select`, `multiselect`, `checkbox`, `textarea`, `file`, `oauth-connect`, and `browser-auth-status`",
+		"API key provider",
+		"Browser Auth provider",
+		"No-auth/static source provider",
+		"write-only fields MUST expose only field metadata, secret key alias, and credential-presence state",
+	} {
+		if !strings.Contains(registry, token) {
+			t.Fatalf("provider registry spec missing #1464 config-schema token: %s", token)
+		}
+	}
+
+	guideBytes, err := os.ReadFile("../../docs/integrations/provider-authoring.md")
+	if err != nil {
+		t.Fatalf("read provider authoring guide: %v", err)
+	}
+	guide := string(guideBytes)
+	for _, token := range []string{
+		"integrationConfigSchemaDefinitions",
+		"`validate_action`",
+		"`profile_secrets`",
+		"`browser-auth-status`",
+		"TestProviderRegistryProjectsConfigSchemaShapes",
+	} {
+		if !strings.Contains(guide, token) {
+			t.Fatalf("provider authoring guide missing #1464 config-schema token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"`INTEGRATION-065`",
+		"#1464",
+		"schema-driven integration config forms",
+		"TestProviderRegistryProjectsConfigSchemaShapes",
+		"TestIntegrationRegistryOpenSpecCoversIssue1464ConfigSchemas",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1464 config-schema token: %s", token)
+		}
+	}
+}
+
 func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing.T) {
 	t.Parallel()
 
@@ -78,6 +401,46 @@ func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing
 	for _, token := range requiredTokens {
 		if !strings.Contains(auSpec, token) {
 			t.Fatalf("AU webshop provider spec missing provider-family token: %s", token)
+		}
+	}
+}
+
+func TestBigCommerceVoglersIssue1497Traceability(t *testing.T) {
+	t.Parallel()
+
+	familySpecBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-api-families/spec.md")
+	if err != nil {
+		t.Fatalf("read provider family spec: %v", err)
+	}
+	familySpec := string(familySpecBytes)
+	for _, token := range []string{
+		"PROVIDER-FAMILY-006",
+		"BigCommerce public/storefront-access run",
+		"BigCommerce token-enabled run",
+		"storefront-accessible endpoints/content paths",
+		"capability limits",
+	} {
+		if !strings.Contains(familySpec, token) {
+			t.Fatalf("provider family spec missing #1497 BigCommerce token: %s", token)
+		}
+	}
+
+	traceabilityBytes, err := os.ReadFile("../../openspec/traceability.md")
+	if err != nil {
+		t.Fatalf("read OpenSpec traceability: %v", err)
+	}
+	traceability := string(traceabilityBytes)
+	for _, token := range []string{
+		"`PROVIDER-FAMILY-006`",
+		"#1497",
+		"Voglers",
+		"bigcommerce_storefront_success.json",
+		"bigcommerce_graphql_stock_success.json",
+		"TestShoppingProviderFixturesNormalizeSharedCandidateShape",
+		"TestShoppingProviderFixturesPreserveAvailabilitySignals",
+	} {
+		if !strings.Contains(traceability, token) {
+			t.Fatalf("traceability missing #1497 BigCommerce coverage token: %s", token)
 		}
 	}
 }

@@ -11,6 +11,9 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/media"
@@ -21,13 +24,18 @@ import (
 const inventoryFolderItemAssignmentsSettingsKey = "inventory.folder-item-assignments.v1"
 
 type onboardingSampleSeedResult struct {
-	CreatedItems            int  `json:"created_items"`
-	CreatedInstances        int  `json:"created_instances"`
-	CreatedPhotos           int  `json:"created_photos"`
-	CreatedWishlistEntries  int  `json:"created_wishlist_entries"`
-	TotalItems              int  `json:"total_items"`
-	TotalWishlistEntries    int  `json:"total_wishlist_entries"`
-	AlreadySeededForProfile bool `json:"already_seeded_for_profile"`
+	DatasetKind             string `json:"dataset_kind"`
+	DatasetLabel            string `json:"dataset_label"`
+	SampleDataDisclosure    string `json:"sample_data_disclosure"`
+	CreatedItems            int    `json:"created_items"`
+	CreatedInstances        int    `json:"created_instances"`
+	CreatedPhotos           int    `json:"created_photos"`
+	CreatedWishlistEntries  int    `json:"created_wishlist_entries"`
+	CreatedPurchaseOrders   int    `json:"created_purchase_orders"`
+	TotalPurchaseOrders     int    `json:"total_purchase_orders"`
+	TotalItems              int    `json:"total_items"`
+	TotalWishlistEntries    int    `json:"total_wishlist_entries"`
+	AlreadySeededForProfile bool   `json:"already_seeded_for_profile"`
 }
 
 type onboardingSampleSpec struct {
@@ -50,6 +58,22 @@ type onboardingPriceSnapshot struct {
 	MedianPrice  float64
 	LatestPrice  float64
 	StockCount   int
+}
+
+type onboardingPurchaseSampleLine struct {
+	EntryID        string
+	ArrivalID      string
+	ItemPartNumber string
+	OrderID        string
+	Source         string
+	Seller         string
+	Tracking       string
+	Quantity       int
+	Amount         float64
+	Status         string
+	ExpectedOn     string
+	DeliveredOn    string
+	Notes          string
 }
 
 func generatedShowcasePriceHistory(sequence int, anchorPrice float64) []onboardingPriceSnapshot {
@@ -211,7 +235,10 @@ func showcasePhotoTargetCount(item collection.Item) int {
 
 func generateShowcaseIdenticonPNG(item collection.Item, variant int) ([]byte, error) {
 	seed := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d", item.PartNumber, item.Title, variant)))
-	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	// These generated assets are shown as compact inventory thumbnails. Keeping
+	// the source at that display scale avoids encoding two oversized renditions
+	// for every row while onboarding is waiting for the synchronous response.
+	img := image.NewRGBA(image.Rect(0, 0, 128, 128))
 
 	bg := color.RGBA{
 		R: 16 + seed[1]%28,
@@ -233,11 +260,11 @@ func generateShowcaseIdenticonPNG(item collection.Item, variant int) ([]byte, er
 	}
 
 	draw.Draw(img, img.Bounds(), &image.Uniform{C: bg}, image.Point{}, draw.Src)
-	draw.Draw(img, image.Rect(28, 28, 484, 484), &image.Uniform{C: color.RGBA{R: bg.R + 6, G: bg.G + 8, B: bg.B + 10, A: 255}}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(7, 7, 121, 121), &image.Uniform{C: color.RGBA{R: bg.R + 6, G: bg.G + 8, B: bg.B + 10, A: 255}}, image.Point{}, draw.Src)
 
-	const cell = 72
-	const gap = 8
-	const origin = 76
+	const cell = 18
+	const gap = 2
+	const origin = 19
 	for y := 0; y < 5; y++ {
 		for x := 0; x < 3; x++ {
 			if seed[10+y*3+x]%2 == 0 {
@@ -262,29 +289,143 @@ func generateShowcaseIdenticonPNG(item collection.Item, variant int) ([]byte, er
 	return out.Bytes(), nil
 }
 
-func seedShowcaseItemPhotos(ctx context.Context, mediaSvc *media.Service, item collection.Item) (int, error) {
+func seedShowcaseItemPhotos(ctx context.Context, tx *sql.Tx, mediaSvc *media.Service, item collection.Item, createdAssetDirs *[]string) (int, error) {
 	if mediaSvc == nil {
 		return 0, nil
 	}
-	existing, err := mediaSvc.ListByItem(ctx, item.ID)
+	existingCount, err := mediaSvc.CountByItemTx(ctx, tx, item.ID)
 	if err != nil {
 		return 0, fmt.Errorf("list photos for %s: %w", item.ID, err)
 	}
 
 	target := showcasePhotoTargetCount(item)
 	created := 0
-	for variant := len(existing) + 1; variant <= target; variant++ {
+	for variant := existingCount + 1; variant <= target; variant++ {
 		data, err := generateShowcaseIdenticonPNG(item, variant)
 		if err != nil {
 			return created, fmt.Errorf("generate showcase photo for %s: %w", item.PartNumber, err)
 		}
 		filename := fmt.Sprintf("%s-identicon-%02d.png", item.PartNumber, variant)
-		if _, err := mediaSvc.Upload(ctx, item.ID, filename, bytes.NewReader(data)); err != nil {
+		photo, err := mediaSvc.UploadTx(ctx, tx, item.ID, filename, bytes.NewReader(data))
+		if err != nil {
 			return created, fmt.Errorf("upload showcase photo for %s: %w", item.PartNumber, err)
 		}
+		*createdAssetDirs = append(*createdAssetDirs, filepath.Dir(filepath.Dir(photo.OriginalPath)))
 		created++
 	}
 	return created, nil
+}
+
+func onboardingPurchaseSamples() []onboardingPurchaseSampleLine {
+	return []onboardingPurchaseSampleLine{
+		{
+			EntryID:        "sample-purchase-life-ebay-watch-001",
+			ArrivalID:      "sample-purchase-arrival-ebay-watch-001",
+			ItemPartNumber: "CAB-DEMO-001",
+			OrderID:        "EBAY-SAMPLE-1001",
+			Source:         "ebay",
+			Seller:         "seller-one",
+			Tracking:       "TRACK-SAMPLE-1001",
+			Quantity:       2,
+			Amount:         17.98,
+			Status:         "expected",
+			ExpectedOn:     "2026-02-08",
+			Notes:          "source_url=https://example.test/orders/EBAY-SAMPLE-1001 review_state=pending_reconciliation",
+		},
+		{
+			EntryID:        "sample-purchase-life-ebay-watch-002",
+			ArrivalID:      "sample-purchase-arrival-ebay-watch-002",
+			ItemPartNumber: "CAB-DEMO-003",
+			OrderID:        "EBAY-SAMPLE-1001",
+			Source:         "ebay",
+			Seller:         "seller-one",
+			Tracking:       "TRACK-SAMPLE-1001",
+			Quantity:       1,
+			Amount:         15.25,
+			Status:         "delivered",
+			ExpectedOn:     "2026-02-08",
+			DeliveredOn:    "2026-02-07",
+			Notes:          "source_url=https://example.test/orders/EBAY-SAMPLE-1001 review_state=needs_review received_state=partial",
+		},
+		{
+			EntryID:        "sample-purchase-life-manual-2001",
+			ArrivalID:      "sample-purchase-arrival-manual-2001",
+			ItemPartNumber: "CAB-DEMO-006",
+			OrderID:        "MANUAL-SAMPLE-2001",
+			Source:         "manual",
+			Seller:         "Local-collectors-fair",
+			Tracking:       "PICKUP-SAMPLE-2001",
+			Quantity:       1,
+			Amount:         19.95,
+			Status:         "delivered",
+			ExpectedOn:     "2026-02-02",
+			DeliveredOn:    "2026-02-02",
+			Notes:          "source_url=https://example.test/orders/MANUAL-SAMPLE-2001 review_state=ready received_state=complete",
+		},
+		{
+			EntryID:        "sample-purchase-life-shop-3001",
+			ArrivalID:      "sample-purchase-arrival-shop-3001",
+			ItemPartNumber: "CAB-DEMO-004",
+			OrderID:        "SHOP-SAMPLE-3001",
+			Source:         "storefront",
+			Seller:         "Toy-Shop-AU",
+			Tracking:       "AUSPOST-SAMPLE-3001",
+			Quantity:       1,
+			Amount:         24.99,
+			Status:         "expected",
+			ExpectedOn:     "2026-02-12",
+			Notes:          "source_url=https://example.test/orders/SHOP-SAMPLE-3001 review_state=tracking_in_transit received_state=unreceived",
+		},
+	}
+}
+
+func seedOnboardingPurchaseSamples(ctx context.Context, dbConn *sql.Tx, profileID string, itemByPart map[string]collection.Item) (int, int, error) {
+	samples := onboardingPurchaseSamples()
+	createdOrderKeys := map[string]struct{}{}
+	for _, sample := range samples {
+		item, ok := itemByPart[sample.ItemPartNumber]
+		if !ok {
+			return 0, 0, fmt.Errorf("purchase sample item %s missing", sample.ItemPartNumber)
+		}
+
+		notes := fmt.Sprintf(
+			"seller=%s tracking=%s %s",
+			sample.Seller,
+			sample.Tracking,
+			sample.Notes,
+		)
+		result, err := dbConn.ExecContext(ctx, `
+			INSERT OR IGNORE INTO commerce_lifecycle_entries(
+				id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes
+			) VALUES (?, ?, ?, 'purchase', ?, ?, ?, ?, 'AUD', ?)
+		`, sample.EntryID, profileID, item.ID, sample.Source, sample.OrderID, sample.Quantity, sample.Amount, notes)
+		if err != nil {
+			return 0, 0, fmt.Errorf("insert purchase sample lifecycle %s: %w", sample.EntryID, err)
+		}
+		if rows, _ := result.RowsAffected(); rows > 0 {
+			createdOrderKeys[strings.ToLower(sample.Source)+":"+sample.OrderID] = struct{}{}
+		}
+		if _, err := dbConn.ExecContext(ctx, `
+			INSERT OR IGNORE INTO expected_arrivals(
+				id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, expected_on, delivered_on, notes
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?)
+		`, sample.ArrivalID, profileID, item.ID, sample.EntryID, sample.Source, sample.OrderID, sample.Quantity, sample.Amount, sample.Status, sample.ExpectedOn, sample.DeliveredOn, notes); err != nil {
+			return 0, 0, fmt.Errorf("insert purchase sample arrival %s: %w", sample.ArrivalID, err)
+		}
+	}
+
+	var totalOrders int
+	if err := dbConn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT source, external_ref
+			FROM commerce_lifecycle_entries
+			WHERE profile_id = ? AND state = 'purchase'
+			GROUP BY source, external_ref
+		)
+	`, profileID).Scan(&totalOrders); err != nil {
+		return 0, 0, fmt.Errorf("count purchase sample orders: %w", err)
+	}
+	return len(createdOrderKeys), totalOrders, nil
 }
 
 func seedOnboardingSampleData(
@@ -294,6 +435,50 @@ func seedOnboardingSampleData(
 	wishlistSvc *wishlist.Service,
 	mediaSvc *media.Service,
 	dbConn *sql.DB,
+) (onboardingSampleSeedResult, error) {
+	tx, err := dbConn.BeginTx(ctx, nil)
+	if err != nil {
+		return onboardingSampleSeedResult{}, fmt.Errorf("begin onboarding sample transaction: %w", err)
+	}
+	createdAssetDirs := make([]string, 0)
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		_ = tx.Rollback()
+		for _, assetDir := range createdAssetDirs {
+			_ = os.RemoveAll(assetDir)
+		}
+	}()
+
+	result, err := seedOnboardingSampleDataTx(
+		ctx,
+		profiles.WithTx(tx),
+		collectionRepo.WithTx(tx),
+		wishlistSvc.WithTx(tx),
+		mediaSvc,
+		tx,
+		&createdAssetDirs,
+	)
+	if err != nil {
+		return onboardingSampleSeedResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return onboardingSampleSeedResult{}, fmt.Errorf("commit onboarding sample transaction: %w", err)
+	}
+	committed = true
+	return result, nil
+}
+
+func seedOnboardingSampleDataTx(
+	ctx context.Context,
+	profiles *profile.Repository,
+	collectionRepo *collection.Repository,
+	wishlistSvc *wishlist.Service,
+	mediaSvc *media.Service,
+	dbConn *sql.Tx,
+	createdAssetDirs *[]string,
 ) (onboardingSampleSeedResult, error) {
 	active, err := profiles.GetActiveProfile(ctx)
 	if err != nil {
@@ -518,6 +703,9 @@ func seedOnboardingSampleData(
 	}
 
 	result := onboardingSampleSeedResult{
+		DatasetKind:             "sample_showcase",
+		DatasetLabel:            "Cabinet sample showcase data",
+		SampleDataDisclosure:    "Seeded example records for onboarding and demos; replace or delete before using this profile as a real working collection.",
 		AlreadySeededForProfile: alreadySeeded,
 	}
 
@@ -550,7 +738,7 @@ func seedOnboardingSampleData(
 			folderAssignments[item.ID] = spec.FolderName
 		}
 
-		createdPhotos, photoErr := seedShowcaseItemPhotos(ctx, mediaSvc, item)
+		createdPhotos, photoErr := seedShowcaseItemPhotos(ctx, dbConn, mediaSvc, item, createdAssetDirs)
 		if photoErr != nil {
 			return onboardingSampleSeedResult{}, photoErr
 		}
@@ -617,6 +805,13 @@ func seedOnboardingSampleData(
 		}
 	}
 
+	createdPurchaseEntries, totalPurchaseOrders, err := seedOnboardingPurchaseSamples(ctx, dbConn, active.ID, itemByPart)
+	if err != nil {
+		return onboardingSampleSeedResult{}, err
+	}
+	result.CreatedPurchaseOrders = createdPurchaseEntries
+	result.TotalPurchaseOrders = totalPurchaseOrders
+
 	totalItems, err := collectionRepo.ListItemsByProfile(ctx, active.ID)
 	if err != nil {
 		return onboardingSampleSeedResult{}, fmt.Errorf("reload items: %w", err)
@@ -634,6 +829,9 @@ func seedOnboardingSampleData(
 	}
 	if err := profiles.PutSettings(ctx, active.ID, map[string]string{
 		"onboarding.sample_data_seeded":           "1",
+		"onboarding.sample_data.dataset_kind":     result.DatasetKind,
+		"onboarding.sample_data.dataset_label":    result.DatasetLabel,
+		"onboarding.sample_data.disclosure":       result.SampleDataDisclosure,
 		inventoryFolderItemAssignmentsSettingsKey: string(folderAssignmentsJSON),
 	}); err != nil {
 		return onboardingSampleSeedResult{}, fmt.Errorf("mark onboarding seeded: %w", err)

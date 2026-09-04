@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import useDialogState from '@/hooks/use-dialog-state'
 import { useAuthStore } from '@/stores/auth-store'
+import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,12 +38,12 @@ export function ProfileDropdown() {
             className='relative h-8 w-8 rounded-full'
             data-testid='profile-dropdown-trigger'
           >
-              <Avatar className='h-8 w-8'>
-                <AvatarImage src='/avatars/01.png' alt='@shadcn' />
-                <AvatarFallback>CA</AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
+            <Avatar className='h-8 w-8'>
+              <AvatarImage src='/avatars/01.png' alt='@shadcn' />
+              <AvatarFallback>CA</AvatarFallback>
+            </Avatar>
+          </Button>
+        </DropdownMenuTrigger>
         <DropdownMenuContent className='w-56' align='end' forceMount>
           <DropdownMenuLabel className='font-normal'>
             <div className='flex flex-col gap-1.5'>

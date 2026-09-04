@@ -1,11 +1,16 @@
 ## Purpose
-Define Integrations screen behavior for provider cards, filters, and credential edit dialogs.
+Define Integrations screen behavior for configured integration tables, provider cards, filters, and credential edit dialogs.
 
 ## Requirements
 ### Requirement UI-SCREEN-INTEGRATIONS-001: Integrations screen SHALL support search/filter/sort over provider cards
 Integrations screen SHALL support text filter, connection-type filter, and sort controls.
 
-### Requirement UI-SCREEN-INTEGRATIONS-008: Integrations screen SHALL support integration-type selector and rows/cards view toggles
+#### Scenario: Filter and sort integrations
+- **GIVEN** integrations route is loaded with provider cards
+- **WHEN** user applies text filter, type filter, and sort order
+- **THEN** rendered provider cards MUST reflect active filter/sort state
+
+### Requirement UI-SCREEN-INTEGRATIONS-012: Integrations screen SHALL support integration-type selector and rows/cards view toggles
 Integrations screen SHALL expose integration-type selector (default `All Integrations`) and explicit `Rows`/`Cards` view toggles.
 
 #### Scenario: Select integration type filter
@@ -18,10 +23,120 @@ Integrations screen SHALL expose integration-type selector (default `All Integra
 - **WHEN** user toggles `Rows` and `Cards`
 - **THEN** provider presentation MUST switch deterministically and preserve active filter context
 
-#### Scenario: Filter and sort integrations
-- **GIVEN** integrations route is loaded with provider cards
-- **WHEN** user applies text filter, type filter, and sort order
-- **THEN** rendered provider cards MUST reflect active filter/sort state
+### Requirement UI-SCREEN-INTEGRATIONS-013: Integrations screen SHALL hydrate URL-backed filter state on direct route entry
+Integrations screen SHALL apply supported query parameters on first render so shared or reloaded route URLs are deterministic.
+
+#### Scenario: Direct route query state hydration
+- **GIVEN** an authenticated user opens `/integrations/` with `filter`, `type`, `sort`, and `view` query parameters
+- **WHEN** profile, provider registry, and profile settings bootstrap resolves
+- **THEN** the screen MUST apply the query-backed filter text, integration type, sort order, and rows/cards view before rendering provider results
+- **AND** visible provider results MUST match the query-backed connected/not-connected filter and text filter without requiring a second user action
+
+#### Scenario: Direct route query zero-result state
+- **GIVEN** an authenticated user opens `/integrations/` with query parameters that match no providers
+- **WHEN** profile, provider registry, and profile settings bootstrap resolves
+- **THEN** the screen MUST render a deterministic no-match state in the requested view
+- **AND** pagination and route query state MUST remain stable without opening provider dialogs
+
+#### Scenario: Direct route query zero-result cards view
+- **GIVEN** an authenticated user opens `/integrations/` with `view=cards` and query parameters that match no providers
+- **WHEN** profile, provider registry, and profile settings bootstrap resolves
+- **THEN** the cards surface MUST render explicit no-match feedback instead of a blank list
+- **AND** route query state MUST remain stable without opening provider dialogs
+
+### Requirement UI-SCREEN-INTEGRATIONS-014: Integrations table rows SHALL expose deterministic row interaction surfaces
+Integrations table rows SHALL provide distinct single-click, double-click, and row-action behaviors without ambiguous dialog overlap.
+
+#### Scenario: Table row single-click and double-click surfaces
+- **GIVEN** integrations route is loaded in rows view with provider registry data
+- **WHEN** user single-clicks a non-interactive row area
+- **THEN** a read-only row details dialog MUST open for that provider
+- **AND** the current URL MUST preserve the selected provider context
+- **WHEN** user double-clicks a non-interactive row area for another provider
+- **THEN** an edit row dialog MUST open for that provider without leaving the details dialog open
+- **AND** the current URL MUST preserve the newly selected provider context
+
+#### Scenario: Nested row actions do not trigger row dialogs
+- **GIVEN** integrations route is loaded in rows view with provider registry data
+- **WHEN** user clicks the row action button for a provider
+- **THEN** the provider configuration dialog MUST open
+- **AND** row details/edit dialogs MUST NOT open from the nested action click
+
+### Requirement UI-SCREEN-INTEGRATIONS-015: Add Integration SHALL use icon-only header action and provider selection first
+Integrations screen SHALL expose the page header Add Integration action as an icon-only control with tooltip and accessible label, and SHALL require explicit provider selection before opening provider-specific setup.
+
+#### Scenario: Header Add Integration action is icon-only
+- **GIVEN** integrations route is loaded
+- **WHEN** the page header action area renders
+- **THEN** the Add Integration action MUST render without visible button text
+- **AND** the action MUST preserve an accessible label and tooltip for `Add integration`
+
+#### Scenario: Add Integration opens provider selector before provider setup
+- **GIVEN** integrations route is loaded with a provider registry containing configured and catalog providers
+- **WHEN** user activates the header Add Integration action
+- **THEN** the screen MUST show provider selection/catalog UI first
+- **AND** the selector MUST support searching registry providers by name, domain, category/type, auth mode, capability, workflow, setup guidance, and status
+- **AND** the selector MUST show registry context before selection, including category/type, auth/setup mode, status, domain, and setup guidance
+- **AND** provider-specific setup fields such as Base URL or Items per page MUST NOT render until the user selects a provider
+- **WHEN** the user selects a provider from the selector
+- **THEN** the provider-specific setup dialog MUST open for that selected provider
+- **AND** the flow MUST NOT default straight into `acercmodels.com` or any other first registry provider without selection
+
+#### Scenario: Unconfigured registry providers remain addable
+- **GIVEN** `/api/providers/registry` includes an unconfigured provider and the active profile has that provider disabled
+- **WHEN** the integrations route renders configured-only rows and the user opens Add Integration
+- **THEN** the provider MUST be absent from the configured rows
+- **AND** the provider MUST remain selectable from the Add Integration provider selector using registry `display_name` and `base_domain`
+- **AND** selecting the provider MUST open setup with provider metadata from the registry payload, including integration mode and API family/support profile when present
+
+#### Scenario: Provider selector hands off deterministically to setup
+- **GIVEN** Add Integration lists an unconfigured provider from the real registry
+- **WHEN** the user activates that provider with a pointer, Enter, or Space
+- **THEN** the provider selector MUST close before the selected provider setup dialog opens
+- **AND** exactly one visible dialog MUST remain
+- **AND** focus MUST move into the setup dialog without leaving the document body pointer-locked
+
+#### Scenario: Saving schema-driven setup enables the provider instance
+- **GIVEN** Frontline or Bonza is unconfigured for the active profile
+- **WHEN** the user saves valid schema-driven non-secret values
+- **THEN** Cabinet MUST persist the legacy provider settings required by current consumers
+- **AND** Cabinet MUST create or update one enabled active-profile integration instance for the registry provider ID
+- **AND** the provider MUST appear in configured rows and cards with Edit available
+- **AND** reopening Edit MUST retain the saved non-secret values
+- **AND** Browser Companion registry projection MUST expose the provider module for that enabled instance
+
+#### Scenario: Closing or cancelling Add Integration is non-mutating
+- **GIVEN** Frontline or Bonza is unconfigured for the active profile
+- **WHEN** the user closes the provider catalog or opens setup and cancels
+- **THEN** Cabinet MUST NOT persist provider enablement settings
+- **AND** Cabinet MUST NOT create an integration instance
+
+### Requirement UI-SCREEN-INTEGRATIONS-011: Integrations screen SHALL use a paginated full-height configured integrations table as the primary provider list
+Integrations screen SHALL render the primary configured integrations list as a scan-friendly full-height table with pagination and stable operational columns.
+
+#### Scenario: Default integrations table renders stable scan columns
+- **GIVEN** integrations route is loaded with provider registry data
+- **WHEN** the primary provider list renders
+- **THEN** the default presentation MUST be a table, not cards
+- **AND** the main table MUST include only added/configured integrations, not every catalog provider returned by the registry
+- **AND** the table MUST include stable columns for provider/name, category/type, connection/config status, action availability, health/last-run state, and row actions
+- **AND** row actions MUST keep the provider configuration/details flow reachable
+
+#### Scenario: Integrations table uses the standard full-height page pattern
+- **GIVEN** integrations route is loaded with enough configured integrations to overflow the visible page body
+- **WHEN** the configured integrations table renders
+- **THEN** the page header action area MUST include an `Add Integration` action
+- **AND** extra in-page title/description copy blocks MUST NOT appear above the table controls
+- **AND** the table surface MUST take the available page height
+- **AND** only the table body MUST scroll while header controls, table header, and pagination remain stable and visible
+- **AND** row actions MUST remain reachable without horizontal clipping or overflow
+
+#### Scenario: Integrations table paginates larger provider lists
+- **GIVEN** integrations route has more providers than the table page size
+- **WHEN** user uses pagination controls
+- **THEN** the visible rows MUST advance between pages
+- **AND** pagination status MUST report the visible range and current page
+- **AND** filter/type/sort changes MUST reset pagination to the first matching page
 
 ### Requirement UI-SCREEN-INTEGRATIONS-002: Integrations screen SHALL support connect/edit provider modal workflow
 Integrations screen SHALL open provider modal from card action and allow editing connection values.
@@ -66,6 +181,13 @@ Integrations screen SHALL show explicit loading and actionable error states for 
 - **WHEN** active profile bootstrap fails with `active_profile_*`
 - **THEN** screen MUST expose an in-route recovery path to either select an existing profile or create a new profile and continue bootstrap in place
 
+#### Scenario: Create active profile inline during recovery
+- **GIVEN** integrations route loads without an active profile context and no selectable profiles are returned
+- **WHEN** the user enters a new profile name and submits the recovery create action
+- **THEN** the UI MUST create the profile through the profiles API
+- **AND** the UI MUST activate the created profile before reloading provider registry and profile settings
+- **AND** the route MUST stay on `/integrations/`, clear the bootstrap error, and render the provider list for the created profile context
+
 ### Requirement UI-SCREEN-INTEGRATIONS-006: Integrations screen SHALL use provider-registry endpoint as list source-of-truth
 Integrations screen SHALL derive provider cards exclusively from `GET /api/providers/registry` response.
 
@@ -76,6 +198,29 @@ Integrations screen SHALL derive provider cards exclusively from `GET /api/provi
 
 ### Requirement UI-SCREEN-INTEGRATIONS-007: Provider detail panel SHALL expose health and action controls
 Integrations screen SHALL expose provider health and actionable controls from detail panel.
+
+#### Scenario: Provider dialog sync action is not inert
+- **GIVEN** a provider detail panel is open and provider discovery runs are started from Market Watch query sets
+- **WHEN** the detail panel renders the Sync affordance
+- **THEN** Sync MUST NOT be an enabled inert action
+- **AND** the panel MUST explain that sync runs from Market Watch query sets until an in-dialog sync flow exposes progress and completion state
+
+### Requirement UI-SCREEN-INTEGRATIONS-008: Provider validation SHALL reconcile visible health state
+Integrations screen SHALL keep validation completion feedback and visible provider health metadata consistent.
+
+#### Scenario: Successful validation updates visible provider health metadata
+- **GIVEN** a provider detail panel is open and currently shows stale or unknown health metadata
+- **WHEN** the user triggers `Validate` and the health endpoint returns successfully
+- **THEN** the UI MUST expose an in-progress validating state while the request is active
+- **AND** the completion message MUST include the resulting health status
+- **AND** the provider detail panel MUST update health, last-run, and last-checked metadata from the validation result
+- **AND** the provider card MUST use the same reconciled health state after the result is applied
+
+#### Scenario: eBay validation displays readiness aliases and recovery guidance
+- **GIVEN** the eBay provider detail panel is open
+- **WHEN** `/api/provider/health?provider=ebay` returns ready, missing-credential, invalid-credential, or backoff readiness payloads
+- **THEN** the panel MUST display the returned readiness `state`, message, `last_error` when present, `retry_after_seconds` when present, and `next_action` when present
+- **AND** missing or invalid credential states MUST direct the operator to credential and health recovery instead of implying a Market Watch run succeeded
 
 ### Requirement UI-SCREEN-INTEGRATIONS-009: Integrations UI SHALL display provider API family support mapping
 Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algolia/custom) in cards and detail panel.
@@ -97,12 +242,34 @@ Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algol
   - setup instructions
   - health status and last-run status
   - `Validate` action
-  - `Sync` action
+  - disabled/explained `Sync` affordance when sync is unavailable in the dialog
   - `Save Integration` action
+
+### Requirement UI-SCREEN-INTEGRATIONS-010: Provider edit dialog inputs SHALL have visible and programmatic labels
+Integrations provider configuration dialogs MUST render stable visible labels associated with each editable field instead of relying on placeholder text alone.
+
+#### Scenario: Config fields remain labeled after values are populated
+- **GIVEN** provider detail/edit dialog opens for a configurable provider
+- **WHEN** base URL, marketplace/region, items-per-page, or token fields render
+- **THEN** each field MUST have a visible label
+- **AND** each label MUST be programmatically associated with its input by matching `htmlFor` and input `id`
+- **AND** placeholder text MUST NOT be the only source of field meaning
+
+### Requirement UI-SCREEN-INTEGRATIONS-016: Telegram setup SHALL guide bot validation, private pairing, and connector lifecycle
+The Telegram provider dialog MUST make outbound-only connection setup usable without manual sender/chat identifiers or a public webhook URL.
+
+#### Scenario: Configure and operate Telegram from Integrations
+- **GIVEN** the user opens Telegram setup for the active profile
+- **WHEN** the guided setup renders
+- **THEN** it MUST explain BotFather token creation, write-only token handling, outbound-only long polling, and the absence of a public listener
+- **AND** it MUST provide a real `getMe` connection test, explicit webhook-conflict resolution, short-lived `/start` pairing, status refresh, pause/resume, token replacement, and disconnect controls
+- **AND** it MUST show non-secret bot identity, pairing state, last success/update, and safe error/retry state
+- **AND** it MUST NOT ask the user to manually copy sender ids, chat ids, or webhook URLs
 
 ## Acceptance Criteria
 - Provider cards are sourced from runtime registry, not static seed list.
 - Provider detail panel shows instructions, health, and last-run data.
+- Provider validation feedback and visible health metadata reconcile after successful validation.
 - Token handling is write-only with replace-token flow.
 
 ## Use-Case IDs and E2E Mapping
@@ -114,8 +281,19 @@ Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algol
 | UC-INT-UI-04 | Edit existing provider token | Clear token is never shown and replace-token works | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004: persists settings with write-only replace-token flow` |
 | UC-INT-UI-05 | Registry/bootstrap failure | Error state with retry appears | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: renders deterministic bootstrap error with retry control` |
 | UC-INT-UI-06 | Registry-backed provider list | Cards derive from runtime registry response | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to cards and supports filter/sort/view using registry data` |
-| UC-INT-UI-07 | Provider detail actions visible | Validate/Sync/Save controls appear with health/last-run | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status` |
-| UC-INT-UI-08 | Use integration type selector | Provider list updates for selected type (`All Integrations` default supported) | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-type-selector-filters-list` |
-| UC-INT-UI-09 | Toggle rows/cards view | Provider presentation switches deterministically | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-rows-cards-toggle` |
+| UC-INT-UI-07 | Provider detail actions visible | Validate/Save controls appear with health/last-run; dialog Sync is disabled with Market Watch guidance when unsupported | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status` |
+| UC-INT-UI-08 | Use integration type selector | Provider list updates for selected type (`All Integrations` default supported) | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-012 + UC-INT-UI-08: filters rows by integration type selector` |
+| UC-INT-UI-09 | Toggle rows/cards view | Provider presentation switches deterministically while preserving active filter/type query context | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-012 + UC-INT-UI-09: toggles rows and cards while preserving active filter context` |
 | UC-INT-UI-10 | Provider API family badge display | Cards show API family labels from registry mapping | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-10: cards show provider API family badges from registry mapping` |
 | UC-INT-UI-11 | Provider API support detail display | Detail panel shows API family + support profile metadata | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-11 + INTEGRATION-024: detail panel shows API family + support profile metadata from registry` |
+| UC-INT-UI-12 | Provider edit fields are labeled | Dialog config fields have visible labels associated by `htmlFor`/`id` | `internal/app/ui_template_contract_test.go` `TestIntegrationsProviderConfigInputsHaveLabels` |
+| UC-INT-UI-13 | Validate provider health | Validation shows progress, reconciles health/last-run/last-checked, and reports resulting status | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state` |
+| UC-INT-UI-14 | Primary configured integrations table | Default list renders configured-only full-page table columns with provider identity, type, connection, actions, health/last-run, and row actions | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to configured-only table and supports filter/sort/view using registry data` |
+| UC-INT-UI-15 | Configured integrations table pagination and full-height scroll | Larger configured provider lists page through stable table rows, keep header actions/pagination stable while only the table body scrolls, and reset to page 1 when filters change | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page configured integrations table`; `UI-SCREEN-INTEGRATIONS-011 + #1112: keeps controls stable while only table body scrolls` |
+| UC-INT-UI-16 | Recover missing active profile inline | Active-profile bootstrap error exposes selectable profile recovery or inline profile creation, activates the resulting profile, reloads registry/settings, stays on `/integrations/`, and clears the route error | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context`, `UI-SCREEN-INTEGRATIONS-005 + UC-INT-UI-16: creates a missing active profile inline and reloads integrations` |
+| UC-INT-UI-17 | Hydrate direct route query state | Shared `/integrations/` URL applies `filter`, `type`, `sort`, and `view` on first render with matching provider results | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-17: applies direct route query state on first render` |
+| UC-INT-UI-18 | Use row interaction surfaces | Table row single-click opens details, double-click opens edit, selected context is URL-backed, and nested row actions do not trigger row dialogs | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs` |
+| UC-INT-UI-19 | Hydrate direct route empty filter state | Shared `/integrations/` URL with no matching providers shows deterministic no-match table state, stable zero-result pagination, and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-19: shows deterministic empty state for direct route filters` |
+| UC-INT-UI-20 | Hydrate direct route empty cards state | Shared `/integrations/` URL with no matching providers in cards view shows explicit no-match feedback and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-20: shows deterministic empty state for direct route filters in cards view` |
+| UC-INT-UI-21 | Add Integration provider-selection-first flow | Header action is icon-only/no visible text, opens provider selector first, keeps unconfigured registry providers addable, deterministically hands pointer and keyboard selection into focused setup, persists an enabled integration instance on save, and leaves unconfigured providers untouched on cancel | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-015 + #1435: Add Integration is icon-only and opens provider selection first`; `UI-SCREEN-INTEGRATIONS-015 + #1497: Add Integration shows unconfigured Voglers from registry metadata`; `cypress/e2e/integrations/add-integration-handoff/spec.cy.ts` `#2062: hands pointer and keyboard selections into persistent provider setup without configuring on cancel` |
+| UC-INT-UI-22 | Configure Telegram through outbound polling and private pairing | Token stays write-only; bot identity is validated; webhook conflicts require explicit resolution; private `/start` pairing establishes exact sender/chat authorization; connector status and lifecycle controls are visible without a public listener | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-016/#2085 guides Telegram outbound polling setup`; `ui.web/cypress/e2e/integrations/telegram-local-connector/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-016/#2085 completes Telegram setup and pairing against a running controlled fixture` |

@@ -20,6 +20,7 @@ type RuntimeSetupStatus = {
   default_runtime_port?: number
   default_runtime_port_mode?: 'auto' | 'fixed'
   default_runtime_url?: string
+  default_auth_mode?: 'local' | 'zitadel'
 }
 
 type RuntimeSetupCompletePayload = {
@@ -27,6 +28,7 @@ type RuntimeSetupCompletePayload = {
   instance_name?: string
   profile_key?: string
   config_path?: string
+  auth_mode?: 'local' | 'zitadel'
   data_dir?: string
   media_dir?: string
   runtime_url?: string
@@ -41,8 +43,7 @@ type SetupFormState = {
   portableMode: boolean
   runtimePortMode: 'auto' | 'fixed'
   runtimeFixedPort: number
-  authMode: 'local' | 'clerk'
-  clerkPublishableKey: string
+  authMode: 'local' | 'zitadel'
   featureChat: boolean
   featureProviders: boolean
   featureScanner: boolean
@@ -51,7 +52,9 @@ type SetupFormState = {
 type SetupEntryMode = 'welcome' | 'form' | 'import'
 
 export function SignIn() {
-  const { redirect } = useSearch({ from: '/(auth)/sign-in' })
+  const { redirect, auth_error: authError } = useSearch({
+    from: '/(auth)/sign-in',
+  })
   const [setupLoading, setSetupLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
@@ -78,7 +81,6 @@ export function SignIn() {
     runtimePortMode: 'auto',
     runtimeFixedPort: 17880,
     authMode: 'local',
-    clerkPublishableKey: '',
     featureChat: true,
     featureProviders: true,
     featureScanner: true,
@@ -110,6 +112,10 @@ export function SignIn() {
             ...previous,
             runtimePortMode: payload.default_runtime_port_mode ?? 'auto',
             runtimeFixedPort: payload.default_runtime_port ?? 17880,
+            authMode:
+              payload.default_auth_mode === 'zitadel'
+                ? 'zitadel'
+                : 'local',
           }))
         }
       } catch (error) {
@@ -159,11 +165,12 @@ export function SignIn() {
 
   function authReadinessLabel() {
     if (setupForm.authMode === 'local') {
-      return 'Ready: Local auth'
+      return 'Ready: local-device mode; no password, passkey, cloud account, or encrypted-at-rest lock is verified.'
     }
-    return setupForm.clerkPublishableKey.trim() === ''
-      ? 'Missing Clerk key'
-      : 'Configured'
+    if (setupForm.authMode === 'zitadel') {
+      return 'Ready when this environment has its isolated Cabinet ZITADEL application, exact callback and required role grants.'
+    }
+    return 'Ready: local-device mode; no password, passkey, cloud account, or encrypted-at-rest lock is verified.'
   }
 
   async function goToNextStep() {
@@ -213,15 +220,6 @@ export function SignIn() {
         setSetupError(
           'Fixed port value is required when runtime port mode is fixed.'
         )
-        return
-      }
-    }
-    if (setupStep === 3) {
-      if (
-        setupForm.authMode === 'clerk' &&
-        setupForm.clerkPublishableKey.trim() === ''
-      ) {
-        setSetupError('Clerk publishable key is required.')
         return
       }
     }
@@ -278,14 +276,6 @@ export function SignIn() {
   }
 
   async function completeSetup() {
-    if (
-      setupForm.authMode === 'clerk' &&
-      setupForm.clerkPublishableKey.trim() === ''
-    ) {
-      setSetupError('Clerk publishable key is required.')
-      return
-    }
-
     await submitSetupComplete({
       instance_name: setupForm.instanceName.trim(),
       profile_key: setupForm.profileKey.trim(),
@@ -296,10 +286,6 @@ export function SignIn() {
       runtime_fixed_port:
         setupForm.runtimePortMode === 'fixed' ? setupForm.runtimeFixedPort : 0,
       auth_mode: setupForm.authMode,
-      clerk_publishable_key:
-        setupForm.authMode === 'clerk'
-          ? setupForm.clerkPublishableKey.trim()
-          : '',
       feature_chat: setupForm.featureChat,
       feature_providers: setupForm.featureProviders,
       feature_scanner: setupForm.featureScanner,
@@ -319,7 +305,6 @@ export function SignIn() {
         runtime_port_mode: 'auto',
         runtime_fixed_port: 0,
         auth_mode: 'local',
-        clerk_publishable_key: '',
         feature_chat: true,
         feature_providers: true,
         feature_scanner: true,
@@ -481,6 +466,19 @@ export function SignIn() {
                   {setupCompleteState.runtime_port ?? 0}
                 </span>
               </p>
+              {setupCompleteState.auth_mode === 'local' ? (
+                <div
+                  className='rounded-md border bg-muted/40 p-3 text-sm'
+                  data-testid='setup-complete-local-credentials'
+                >
+                <p className='font-medium'>Local device mode</p>
+                <p className='text-muted-foreground'>
+                    Opens this device's local Cabinet workspace without
+                    password, passkey, cloud account, or encrypted-at-rest lock
+                    verification.
+                  </p>
+                </div>
+              ) : null}
               {setupCompleteFeedback ? (
                 <p
                   className='text-xs text-muted-foreground'
@@ -682,7 +680,7 @@ export function SignIn() {
                     }
                     data-testid='setup-storage-mode'
                   >
-                    <option value='exe_local'>exe_local</option>
+                    <option value='exe_local'>local</option>
                     <option value='custom'>custom</option>
                   </select>
                 </label>
@@ -794,17 +792,15 @@ export function SignIn() {
                       setSetupForm((previous) => ({
                         ...previous,
                         authMode:
-                          event.target.value === 'clerk' ? 'clerk' : 'local',
-                        clerkPublishableKey:
-                          event.target.value === 'clerk'
-                            ? previous.clerkPublishableKey
-                            : '',
+                          event.target.value === 'zitadel'
+                            ? 'zitadel'
+                            : 'local',
                       }))
                     }
                     data-testid='setup-auth-mode'
                   >
                     <option value='local'>local</option>
-                    <option value='clerk'>clerk</option>
+                    <option value='zitadel'>zitadel</option>
                   </select>
                 </label>
                 <p
@@ -813,22 +809,6 @@ export function SignIn() {
                 >
                   {authReadinessLabel()}
                 </p>
-                {setupForm.authMode === 'clerk' ? (
-                  <label className='grid gap-1 text-sm'>
-                    <span>Clerk Publishable Key</span>
-                    <input
-                      className='h-9 rounded-md border bg-background px-3'
-                      value={setupForm.clerkPublishableKey}
-                      onChange={(event) =>
-                        setSetupForm((previous) => ({
-                          ...previous,
-                          clerkPublishableKey: event.target.value,
-                        }))
-                      }
-                      data-testid='setup-clerk-publishable-key'
-                    />
-                  </label>
-                ) : null}
               </div>
             ) : null}
             {setupEntryMode === 'form' && setupStep === 4 ? (
@@ -917,12 +897,6 @@ export function SignIn() {
                 <p>
                   <strong>Auth Mode:</strong> {setupForm.authMode}
                 </p>
-                {setupForm.authMode === 'clerk' ? (
-                  <p>
-                    <strong>Clerk Key:</strong>{' '}
-                    {setupForm.clerkPublishableKey ? 'Configured' : 'Missing'}
-                  </p>
-                ) : null}
                 <p>
                   <strong>Features:</strong>{' '}
                   {[
@@ -986,11 +960,20 @@ export function SignIn() {
         <CardHeader>
           <CardTitle className='text-lg tracking-tight'>Sign in</CardTitle>
           <CardDescription>
-            Enter your email and password below to <br />
-            log into your account
+            Use the identity method configured for this Cabinet environment.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className='space-y-4'>
+          {authError ? (
+            <div
+              className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+              role='alert'
+              data-testid='zitadel-auth-error'
+            >
+              Secure sign-in could not be completed. Please try again or ask
+              the environment administrator to check its identity setup.
+            </div>
+          ) : null}
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>

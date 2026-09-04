@@ -1,10 +1,74 @@
 describe("inventory-management", () => {
   function signIn() {
+    cy.viewport(1280, 900);
     cy.e2eReset();
+    cy.clearLocalStorage("cabinet.viewMode.inventory");
     cy.e2eSetSetupState("present");
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
       cy.useBootstrappedProfile(profile_id, profile_name, { path: "/inventory/" });
     });
+  }
+
+  function setInventoryItemCategory(category: string) {
+    cy.get('[data-testid="inventory-item-category-trigger"]').click();
+    cy.get(`[data-testid="inventory-item-category-option-${category}"]`).click();
+    cy.get('[data-testid="inventory-item-category"]').should("have.value", category);
+  }
+
+  function scrollInventoryTable(position: "left" | "right") {
+    cy.get(
+      '[data-testid="inventory-table-surface"] [data-slot="table-container"]'
+    ).scrollTo(position);
+  }
+
+  function assertRetryRecovery(
+    activate: (retryAction: Cypress.Chainable<JQuery<HTMLButtonElement>>) => void
+  ) {
+    let attempts = 0;
+    cy.intercept("GET", "/api/items", (req) => {
+      attempts += 1;
+      if (attempts === 1) {
+        req.reply({
+          statusCode: 500,
+          body: { error: "failed_to_list_items" },
+        });
+        return;
+      }
+      req.reply({
+        delay: 500,
+        statusCode: 200,
+        body: {
+          items: [
+            {
+              id: "item-retry-1",
+              part_number: "PN-RETRY-1",
+              title: "Recovered Item",
+              status: "todo",
+              category: "feature",
+            },
+          ],
+        },
+      });
+    }).as("itemsRetry");
+
+    signIn();
+    cy.wait("@itemsRetry");
+    cy.get('[data-testid="inventory-load-error"]').should("be.visible");
+    const retryAction = cy
+      .get<HTMLButtonElement>('[data-testid="inventory-retry-action"]')
+      .should("be.visible")
+      .and("be.enabled")
+      .as("retryAction");
+    activate(retryAction);
+    cy.get("@retryAction")
+      .should("be.visible")
+      .and("be.disabled")
+      .and("have.attr", "aria-busy", "true");
+    cy.wait("@itemsRetry");
+    cy.then(() => expect(attempts).to.equal(2));
+    cy.get('[data-testid="inventory-load-error"]').should("not.exist");
+    cy.contains("Recovered Item").should("be.visible");
+    cy.contains("500").should("not.exist");
   }
 
   it("renders inventory workspace, supports view toggle and filtering, and avoids 500", () => {
@@ -46,17 +110,17 @@ describe("inventory-management", () => {
       .click()
       .should("have.attr", "aria-pressed", "true");
     cy.get("table").should("be.visible");
-    cy.contains("th", "Part #").should("be.visible");
-    cy.contains("th", "Title").should("be.visible");
-    cy.contains("th", "Condition").should("be.visible");
-    cy.contains("th", "Category").should("be.visible");
+    cy.contains("th", "Part #").should("exist");
+    cy.contains("th", "Title").should("exist");
+    cy.contains("th", "Condition").should("exist");
+    cy.contains("th", "Category").should("exist");
     cy.contains("th", "Task").should("not.exist");
     cy.contains("th", "Priority").should("not.exist");
     cy.contains("PN-001").should("be.visible");
-    cy.contains("todo").should("be.visible");
-    cy.contains("feature").should("be.visible");
+    cy.contains("todo").should("exist");
+    cy.contains("feature").should("exist");
 
-    cy.get('input[placeholder="Filter by title or part number..."]').type(
+    cy.get('input[placeholder^="Filter by title"]').type(
       "no-matching-task-xyz"
     );
     cy.contains("No results.").should("be.visible");
@@ -77,41 +141,31 @@ describe("inventory-management", () => {
     cy.contains("No results.").should("be.visible");
   });
 
-  it("UI-SCREEN-INVENTORY-ITEMS-002 shows inline error state and recovers on retry", () => {
-    let attempts = 0;
-    cy.intercept("GET", "/api/items", (req) => {
-      attempts += 1;
-      if (attempts === 1) {
-        req.reply({
-          statusCode: 500,
-          body: { error: "failed_to_list_items" },
-        });
-        return;
-      }
-      req.reply({
-        statusCode: 200,
-        body: {
-          items: [
-            {
-              id: "item-retry-1",
-              part_number: "PN-RETRY-1",
-              title: "Recovered Item",
-              status: "todo",
-              category: "feature",
-            },
-          ],
-        },
-      });
-    }).as("itemsRetry");
+  it("UI-SCREEN-INVENTORY-ITEMS-002 keeps pointer Retry stable and single-dispatch", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.click();
+    });
+  });
 
-    signIn();
-    cy.wait("@itemsRetry");
-    cy.get('[data-testid="inventory-load-error"]').should("be.visible");
-    cy.contains("button", "Retry").click();
-    cy.wait("@itemsRetry");
-    cy.get('[data-testid="inventory-load-error"]').should("not.exist");
-    cy.contains("Recovered Item").should("be.visible");
-    cy.contains("500").should("not.exist");
+  it("UI-SCREEN-INVENTORY-ITEMS-002 dispatches one Retry from focused Enter", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.focus().type("{enter}");
+    });
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-002 dispatches one Retry from focused Space", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.focus().type(" ");
+    });
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-002 ignores duplicate rapid Retry activation", () => {
+    assertRetryRecovery((retryAction) => {
+      retryAction.then(($retryAction) => {
+        $retryAction[0].click();
+        $retryAction[0].click();
+      });
+    });
   });
 
   it("UI-SCREEN-INVENTORY-ITEMS-003 remains deterministic with bulk dataset filtering", () => {
@@ -172,7 +226,7 @@ describe("inventory-management", () => {
           .should("be.visible")
           .then(($summary) => {
             const summaryTop = $summary[0].getBoundingClientRect().top;
-            cy.get('input[placeholder="Filter by title or part number..."]')
+            cy.get('input[placeholder^="Filter by title"]')
               .should("be.visible")
               .then(($input) => {
                 const inputTop = $input[0].getBoundingClientRect().top;
@@ -221,6 +275,10 @@ describe("inventory-management", () => {
       req.reply({ statusCode: 200, body: { items } });
     }).as("itemsCreate");
     cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body).to.include({
+        part_number: "PN-CREATE-1",
+        title: "Inline Created Item",
+      });
       const created = {
         id: "item-inline-created",
         part_number: req.body.part_number,
@@ -234,17 +292,25 @@ describe("inventory-management", () => {
 
     signIn();
     cy.wait("@itemsCreate");
+    cy.get('[data-testid="inventory-loading"]').should("not.exist");
 
     cy.get('[data-testid="inventory-create-menu-trigger"]').click();
     cy.get('[data-testid="inventory-create-menu-item"]').click();
     cy.get('[data-testid="inventory-item-title"]').type("Inline Created Item");
+    cy.get('[data-testid="inventory-item-title"]').should(
+      "have.value",
+      "Inline Created Item",
+    );
     cy.get('[data-testid="inventory-item-part-number"]').type("PN-CREATE-1");
     cy.get('[data-testid="inventory-item-create-submit"]').click();
 
     cy.wait("@createToolbarItem");
     cy.wait("@itemsCreate");
     cy.get('[data-testid="inventory-item-create-dialog"]').should("not.exist");
-    cy.contains("Inline Created Item").should("be.visible");
+    cy.get('[data-testid="inventory-item-row-item-inline-created"]')
+      .should("be.visible")
+      .and("contain", "PN-CREATE-1")
+      .and("contain", "Inline Created Item");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
   });
 
@@ -482,7 +548,7 @@ describe("inventory-management", () => {
     cy.get('[data-testid="inventory-item-part-number"]').clear().type("PN-CREATE-1");
     cy.get('[data-testid="inventory-item-title"]').clear().type("Created Inventory Item");
     cy.get('[data-testid="inventory-item-brand"]').clear().type("Tyco");
-    cy.get('[data-testid="inventory-item-category"]').clear().type("Cars");
+    setInventoryItemCategory("Cars");
     cy.get('[data-testid="inventory-item-description"]').clear().type("Freshly saved item");
     cy.get('[data-testid="inventory-item-save"]').click();
 
@@ -491,8 +557,10 @@ describe("inventory-management", () => {
     cy.wait("@createdItemPhotos");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+    scrollInventoryTable("left");
     cy.contains("Created Inventory Item").should("be.visible");
 
+    scrollInventoryTable("right");
     cy.get(
       '[data-testid="inventory-item-row-item-created-1"] [data-testid="inventory-row-photos-action"]'
     ).click();
@@ -510,6 +578,7 @@ describe("inventory-management", () => {
     cy.get('[data-testid="inventory-photos-dialog-close"]').click();
     cy.get('[data-testid="inventory-photos-dialog"]').should("not.exist");
 
+    scrollInventoryTable("right");
     cy.get('[data-testid="inventory-item-row-item-created-1"] [data-testid="task-row-actions-trigger"]').click();
     cy.contains('[role="menuitem"]', "Edit").click();
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("be.visible");
@@ -520,8 +589,32 @@ describe("inventory-management", () => {
     cy.wait("@updateItem");
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    scrollInventoryTable("left");
     cy.contains("Created Inventory Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+
+    scrollInventoryTable("right");
+    cy.get(
+      '[data-testid="inventory-item-row-item-created-1"] [data-testid="task-row-actions-trigger"][data-row-id="item-created-1"]'
+    ).click();
+    cy.get(
+      '[data-testid="task-row-actions-menu"][data-row-id="item-created-1"]'
+    )
+      .filter(":visible")
+      .should("have.length", 1)
+      .within(() => {
+        cy.get('[data-testid="task-row-action-delete"]')
+          .should("be.visible")
+          .click();
+      });
+    cy.get('[data-testid="task-delete-dialog"]')
+      .should("be.visible")
+      .and("contain", "Delete this task: PN-CREATE-1 ?");
+    cy.get('[data-testid="task-delete-cancel"]').click();
+    cy.get('[data-testid="task-delete-dialog"]').should("not.exist");
+    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+
+    scrollInventoryTable("right");
     cy.get(
       '[data-testid="inventory-item-row-item-created-1"] [data-testid="inventory-row-photos-action"]'
     ).click();
@@ -565,19 +658,14 @@ describe("inventory-management", () => {
     let profileSettings: Record<string, string> = {};
     let savedViewID = "";
 
-    cy.intercept("GET", "/api/profiles/active", {
-      statusCode: 200,
-      body: { id: "inventory-profile-1" },
-    }).as("activeProfile");
-
-    cy.intercept("GET", "/api/profiles/inventory-profile-1/settings", (req) => {
+    cy.intercept("GET", /\/api\/profiles\/[^/]+\/settings$/, (req) => {
       req.reply({
         statusCode: 200,
         body: { settings: profileSettings },
       });
     }).as("inventoryProfileSettings");
 
-    cy.intercept("PUT", "/api/profiles/inventory-profile-1/settings", (req) => {
+    cy.intercept("PUT", /\/api\/profiles\/[^/]+\/settings$/, (req) => {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
       profileSettings = body.settings ?? body ?? {};
       req.reply({
@@ -593,20 +681,29 @@ describe("inventory-management", () => {
 
     cy.clearLocalStorage("cabinet.viewMode.inventory");
     signIn();
-    cy.wait("@activeProfile");
     cy.wait("@inventoryProfileSettings");
     cy.wait("@inventorySavedViewsItems");
+    cy.wait(["@saveInventorySettings", "@saveInventorySettings"]);
 
     cy.get('button[aria-label="Switch to rows view"]')
       .click({ force: true })
       .should("have.attr", "aria-pressed", "true");
-    cy.get('input[placeholder="Filter by title or part number..."]').type("Road");
+    cy.get('input[placeholder^="Filter by title"]').type("Road");
 
-    cy.contains("th", "Title").find("button").click();
-    cy.contains('[role="menuitem"]', "Desc").click();
+    cy.contains("th", "Title")
+      .find("button")
+      .click({ force: true });
+    cy.get('[role="menuitem"]')
+      .contains(/^Desc$/)
+      .click({ force: true });
 
     cy.get('[data-testid="inventory-saved-view-save"]').click();
-    cy.get('[data-testid="inventory-saved-view-name"]').type("Road Items");
+    cy.get('[data-testid="inventory-saved-view-name"]')
+      .should("be.visible")
+      .and("be.enabled")
+      .clear()
+      .type("Road Items")
+      .should("have.value", "Road Items");
     cy.get('[data-testid="inventory-saved-view-submit"]').click();
     cy.wait("@saveInventorySettings")
       .then(() => {
@@ -626,7 +723,6 @@ describe("inventory-management", () => {
     cy.contains("Plane Delta").should("be.visible");
 
     cy.reload();
-    cy.wait("@activeProfile");
     cy.wait("@inventoryProfileSettings");
     cy.wait("@inventorySavedViewsItems");
 
@@ -635,7 +731,7 @@ describe("inventory-management", () => {
     });
 
     cy.contains("button", "Rows").should("have.attr", "aria-pressed", "true");
-    cy.get('input[placeholder="Filter by title or part number..."]').should(
+    cy.get('input[placeholder^="Filter by title"]').should(
       "have.value",
       "Road"
     );
@@ -700,6 +796,7 @@ describe("inventory-management", () => {
     cy.contains('[role="option"]', "Trading Card").click();
     cy.contains("Trading Card Item").should("be.visible");
     cy.contains("Slot Car Item").should("not.exist");
+    cy.get("body").type("{esc}");
     cy.contains("button", "Reset").click();
 
     cy.get('[data-testid="inventory-new-action"]').click();
@@ -714,6 +811,204 @@ describe("inventory-management", () => {
       .find("option")
       .should("contain", "Played (PL)")
       .and("not.contain", "10+ - New, in packaging");
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-012 keeps dense row columns readable", () => {
+    cy.viewport(1280, 900);
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-dense-1",
+            part_number: "PN-DENSE-0000000001",
+            title: "Dense Inventory Item With A Representative Long Display Title",
+            status: "10+ - New, in packaging",
+            category: "Slot Cars, Limited Edition",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Factory sealed long card",
+          },
+          {
+            id: "item-dense-2",
+            part_number: "PN-DENSE-0000000002",
+            title: "Second Dense Inventory Item",
+            status: "8 - Like new",
+            category: "Trading Cards",
+            item_type: "Trading Cards",
+            packaging_grade_type: "Sleeved and boxed",
+          },
+        ],
+      },
+    }).as("itemsDenseRows");
+
+    signIn();
+    cy.wait("@itemsDenseRows");
+
+    cy.get('button[aria-label="Switch to rows view"]')
+      .click({ force: true })
+      .should("have.attr", "aria-pressed", "true");
+
+    cy.get(
+      '[data-testid="inventory-table-surface"] [data-slot="table-container"]'
+    ).then(($surface) => {
+      expect($surface[0].scrollWidth).to.be.greaterThan(
+        $surface[0].clientWidth
+      );
+    });
+
+    cy.contains("th", "Part #").should("be.visible");
+    cy.contains("th", "Title").should("be.visible");
+    cy.contains("th", "Condition").should("exist");
+
+    cy.get(
+      '[data-testid="inventory-table-surface"] [data-slot="table-container"]'
+    ).scrollTo("right");
+    cy.contains("th", "Packaging").should("be.visible");
+    cy.contains("th", "Category").should("be.visible");
+    cy.get(
+      '[data-testid="inventory-item-row-item-dense-1"] [data-testid="inventory-row-packaging-grade"]'
+    )
+      .should("be.visible")
+      .and("have.attr", "title", "Factory sealed long card");
+    cy.get(
+      '[data-testid="inventory-item-row-item-dense-1"] [data-testid="inventory-row-photos-action"]'
+    ).should("be.visible");
+
+    cy.contains("th", "Item type").then(($itemType) => {
+      cy.contains("th", "Packaging").then(($packaging) => {
+        cy.contains("th", "Category").then(($category) => {
+          const itemTypeRight = $itemType[0].getBoundingClientRect().right;
+          const packagingLeft = $packaging[0].getBoundingClientRect().left;
+          const packagingRight = $packaging[0].getBoundingClientRect().right;
+          const categoryLeft = $category[0].getBoundingClientRect().left;
+
+          expect(itemTypeRight).to.be.at.most(packagingLeft);
+          expect(packagingRight).to.be.at.most(categoryLeft);
+        });
+      });
+    });
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-table-1",
+            part_number: "PN-TABLE-001",
+            title: "Road Alpha",
+            status: "used",
+            category: "Cars",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Carded",
+          },
+          {
+            id: "item-table-2",
+            part_number: "PN-TABLE-002",
+            title: "Road Zeta",
+            status: "used",
+            category: "Cars",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Loose",
+          },
+          {
+            id: "item-table-3",
+            part_number: "PN-TABLE-003",
+            title: "Road Bravo",
+            status: "active",
+            category: "Cars",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Carded",
+          },
+          {
+            id: "item-table-4",
+            part_number: "PN-TABLE-004",
+            title: "Plane Delta",
+            status: "used",
+            category: "Planes",
+            item_type: "Model Planes",
+            packaging_grade_type: "Boxed",
+          },
+        ],
+      },
+    }).as("itemsTableControls");
+
+    signIn();
+    cy.wait("@itemsTableControls");
+
+    cy.get('button[aria-label="Switch to rows view"]')
+      .click({ force: true })
+      .should("have.attr", "aria-pressed", "true");
+
+    cy.get('[data-testid="inventory-table-search-input"]').type("Road");
+    cy.contains("Road Alpha").should("be.visible");
+    cy.contains("Road Zeta").should("be.visible");
+    cy.contains("Road Bravo").should("be.visible");
+    cy.contains("Plane Delta").should("not.exist");
+
+    cy.get('[data-testid="inventory-table-toolbar"]')
+      .contains("button", "Condition")
+      .click();
+    cy.contains('[role="option"]', "used").click();
+    cy.get("body").type("{esc}");
+    cy.contains("Road Alpha").should("be.visible");
+    cy.contains("Road Zeta").should("be.visible");
+    cy.contains("Road Bravo").should("not.exist");
+
+    cy.get('[data-testid="inventory-table-toolbar"]')
+      .contains("button", "Category")
+      .click();
+    cy.contains('[role="option"]', "Cars").click();
+    cy.get("body").type("{esc}");
+    cy.contains("Road Alpha").should("be.visible");
+    cy.contains("Road Zeta").should("be.visible");
+    cy.contains("Plane Delta").should("not.exist");
+
+    cy.contains("th", "Title").find("button").click();
+    cy.contains('[role="menuitem"]', "Desc").click();
+    cy.get("table tbody tr").first().should("contain", "PN-TABLE-002");
+
+    cy.contains("button", "Reset").click();
+    cy.get('[data-testid="inventory-table-search-input"]').should("have.value", "");
+    cy.contains("Road Bravo").should("be.visible");
+    cy.contains("Plane Delta").should("be.visible");
+
+    cy.get('[data-testid="inventory-item-row-item-table-1"]')
+      .find('button[role="checkbox"][aria-label="Select row"]')
+      .click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-row-item-table-1"]').should(
+      "have.attr",
+      "data-state",
+      "selected"
+    );
+    cy.get('[role="toolbar"][aria-label^="Bulk actions for 1 selected"]')
+      .should("be.visible")
+      .within(() => {
+        cy.contains("selected").should("be.visible");
+        cy.get('button[aria-label="Update status"]').should("be.visible");
+        cy.get('button[aria-label="Update priority"]').should("be.visible");
+        cy.get('button[aria-label="Export tasks"]').should("be.visible");
+        cy.get('button[aria-label="Delete selected tasks"]').should("be.visible");
+      });
+
+    cy.get('[role="toolbar"][aria-label^="Bulk actions for 1 selected"]')
+      .focus()
+      .type("{esc}");
+    cy.get('[role="toolbar"][aria-label^="Bulk actions"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-row-item-table-1"]').should(
+      "not.have.attr",
+      "data-state",
+      "selected"
+    );
+
+    cy.get('button[role="checkbox"][aria-label="Select all"]').click();
+    cy.get('[role="toolbar"][aria-label^="Bulk actions for 4 selected"]').should(
+      "be.visible"
+    );
+    cy.get('button[aria-label="Clear selection"]').click();
+    cy.get('[role="toolbar"][aria-label^="Bulk actions"]').should("not.exist");
   });
 
 });

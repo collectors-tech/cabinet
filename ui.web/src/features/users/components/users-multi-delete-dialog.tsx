@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { type Table } from '@tanstack/react-table'
 import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
-import { sleep } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,14 +13,28 @@ type UserMultiDeleteDialogProps<TData> = {
   open: boolean
   onOpenChange: (open: boolean) => void
   table: Table<TData>
+  onDeleted: () => Promise<void> | void
 }
 
 const CONFIRM_WORD = 'DELETE'
+
+function usersDeleteHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Users delete dialog',
+      category: 'users',
+    },
+  }
+}
 
 export function UsersMultiDeleteDialog<TData>({
   open,
   onOpenChange,
   table,
+  onDeleted,
 }: UserMultiDeleteDialogProps<TData>) {
   const [value, setValue] = useState('')
 
@@ -29,23 +42,48 @@ export function UsersMultiDeleteDialog<TData>({
 
   const handleDelete = () => {
     if (value.trim() !== CONFIRM_WORD) {
-      toast.error(`Please type "${CONFIRM_WORD}" to confirm.`)
+      toast.error(
+        `Please type "${CONFIRM_WORD}" to confirm.`,
+        usersDeleteHistory(
+          'users-delete-confirmation-invalid',
+          'Users delete confirmation blocked',
+          'Users delete confirmation validation feedback was preserved in Inbox history.'
+        ) as never
+      )
       return
     }
 
-    onOpenChange(false)
-
-    toast.promise(sleep(2000), {
-      loading: 'Deleting users...',
-      success: () => {
+    toast.promise(
+      async () => {
+        await Promise.all(
+          selectedRows.map((row) =>
+            fetch(`/api/users/${(row.original as { id: string }).id}`, {
+              method: 'DELETE',
+            }).then((response) => {
+              if (!response.ok) {
+                throw new Error(`users_bulk_delete_failed_${response.status}`)
+              }
+            })
+          )
+        )
+        await onDeleted()
         setValue('')
         table.resetRowSelection()
-        return `Deleted ${selectedRows.length} ${
-          selectedRows.length > 1 ? 'users' : 'user'
-        }`
+        onOpenChange(false)
       },
-      error: 'Error',
-    })
+      {
+        loading: 'Deleting users...',
+        success: `Deleted ${selectedRows.length} ${
+          selectedRows.length > 1 ? 'users' : 'user'
+        }`,
+        error: 'Error',
+        ...usersDeleteHistory(
+          'users-bulk-delete',
+          'Delete selected users',
+          'Users bulk delete feedback was preserved in Inbox history.'
+        ),
+      }
+    )
   }
 
   return (

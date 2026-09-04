@@ -16,10 +16,14 @@ describe('collections-row-side-panel', () => {
     cy.wait('@loadCollectionSettings')
   }
 
-  it('opens a right-side edit panel on double click and navigates visible records', () => {
+  it('UI-SCREEN-COLLECTIONS-026 opens and validates collection row side-panel workflows', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-store-1"]').click()
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'Store 1'
+    )
     cy.get('[data-testid="collections-edit-panel"]').should('not.exist')
     cy.get('[data-testid="collections-edit-dialog"]').should('not.exist')
 
@@ -51,13 +55,90 @@ describe('collections-row-side-panel', () => {
     cy.wait('@saveCollectionSettings')
 
     cy.contains('Store 2 renamed to Store 2 Panel.').should('be.visible')
-    cy.get('[data-testid="collections-row-store-2-panel"]').should(
-      'be.visible'
+    cy.get('[data-testid="collections-row-store-2-panel"]').scrollIntoView()
+    cy.get('[data-testid="collections-row-store-2-panel"]').should('exist')
+    cy.get('[data-testid="collections-row-name-store-2-panel"]').should(
+      'contain.text',
+      'Store 2 Panel'
     )
+    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(
+        settings['collections.workspace.v1'] ?? '{}'
+      ) as {
+        collections?: string[]
+      }
+      expect(persisted.collections).to.include('Store 2 Panel')
+      expect(persisted.collections).not.to.include('Store 2')
+    })
     cy.reload()
     cy.wait('@loadCollectionSettings')
-    cy.get('[data-testid="collections-row-store-2-panel"]').should(
-      'be.visible'
+    cy.get('[data-testid="collections-row-store-2-panel"]').scrollIntoView()
+    cy.get('[data-testid="collections-row-name-store-2-panel"]').should(
+      'contain.text',
+      'Store 2 Panel'
+    )
+  })
+
+  it('renders collection row actions as icon-only accessible controls', () => {
+    signInToCollections()
+
+    cy.get('[data-testid="collections-row-view-store-1"]')
+      .should('have.attr', 'aria-label', 'View Store 1 in inventory')
+      .should('have.attr', 'title', 'View Store 1 in inventory')
+      .invoke('text')
+      .should('eq', '')
+    cy.get('[data-testid="collections-row-edit-store-1"]')
+      .should('have.attr', 'aria-label', 'Edit Store 1')
+      .should('have.attr', 'title', 'Edit Store 1')
+      .invoke('text')
+      .should('eq', '')
+    cy.get('[data-testid="collections-row-delete-store-1"]')
+      .should('have.attr', 'aria-label', 'Delete Store 1')
+      .should('have.attr', 'title', 'Delete Store 1')
+      .invoke('text')
+      .should('eq', '')
+  })
+
+  it('keeps the side panel open and skips persistence on duplicate rename', () => {
+    signInToCollections()
+
+    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'All Items'
+    )
+
+    cy.get('[data-testid="collections-row-edit-store-1"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="collections-edit-panel"]')
+      .should('be.visible')
+      .should('have.attr', 'data-side', 'right')
+    cy.get('[data-testid="collections-edit-input"]')
+      .should('have.value', 'Store 1')
+      .clear()
+      .type('Store 2')
+
+    cy.get('[data-testid="collections-edit-submit"]').click()
+
+    cy.get('[data-testid="collections-edit-panel"]').should('be.visible')
+    cy.get('[data-testid="collections-edit-input"]').should(
+      'have.value',
+      'Store 2'
+    )
+    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+    cy.get('[data-testid="collections-row-name-store-1"]').should(
+      'contain.text',
+      'Store 1'
+    )
+    cy.get('[data-testid="collections-row-name-store-2"]').should(
+      'contain.text',
+      'Store 2'
+    )
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'Store 1'
     )
   })
 })

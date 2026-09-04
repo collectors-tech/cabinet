@@ -61,7 +61,7 @@ function ChartContainer({
         data-chart={chartId}
         data-slot='chart'
         className={cn(
-          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-grid_line]:stroke-border/50 [&_.recharts-tooltip-cursor]:stroke-border [&_.recharts-surface]:outline-none",
+          '[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-grid_line]:stroke-border/50 [&_.recharts-surface]:outline-none [&_.recharts-tooltip-cursor]:stroke-border',
           className
         )}
         {...props}
@@ -139,7 +139,7 @@ function ChartTooltipContent({
                 />
               ) : null}
               <span className='text-muted-foreground'>{labelText}</span>
-              <span className='ml-auto font-mono font-medium tabular-nums text-foreground'>
+              <span className='ml-auto font-mono font-medium text-foreground tabular-nums'>
                 {formatter && typeof item.value === 'number'
                   ? formatter(item.value, key)
                   : item.value}

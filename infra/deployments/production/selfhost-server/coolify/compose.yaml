@@ -1,0 +1,13 @@
+name: cabinet-production
+
+services:
+  cabinet:
+    extends:
+      file: ../../../../services/cabinet/compose.yaml
+      service: cabinet
+    volumes:
+      - cabinet-production-data:/data
+
+volumes:
+  cabinet-production-data:
+    name: cabinet-production-data

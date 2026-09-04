@@ -46,6 +46,23 @@ Each major component family SHALL define acceptance criteria, success criteria, 
 - **THEN** acceptance criteria, success criteria, and automated test mapping SHALL be present
 - **AND** test mapping SHALL include executable Cypress coverage path
 
+### Requirement UI-FOUNDATION-COMPONENTS-006: Record action migration SHALL be traceable by surface
+Cabinet table-like record surfaces SHALL maintain a migration matrix before
+adopting the shared record action menu and CRUD/destructive dialog contract.
+The matrix SHALL identify each surface, supported row operations, dialog/API
+touchpoints, remaining migration gap, and verification target.
+
+#### Scenario: Planning a record action surface migration
+- **GIVEN** a Cabinet surface exposes row-level record actions
+- **WHEN** the surface is selected for migration to the shared row action and
+  dialog contract
+- **THEN** the migration matrix SHALL name the current row operations and the
+  truthful shared-menu operations for that surface
+- **AND** the matrix SHALL identify the dialog/API persistence outcome that
+  needs verification
+- **AND** the traceability matrix SHALL link the surface plan to planned
+  Cypress/API validation targets
+
 ## Acceptance Criteria
 ### Global primitives
 - Button contract covers: variants, sizes, disabled/loading behavior, keyboard activation, focus-visible state.
@@ -74,6 +91,8 @@ Each major component family SHALL define acceptance criteria, success criteria, 
 ### Minimum E2E coverage expectations
 - Dialog/Drawer: open/close/focus restore/escape behaviors.
 - Inventory table row interactions: row click vs checkbox selection vs interactive control guard.
+- Record action migrations: committed surface matrix, capability mapping,
+  dialog/API touchpoints, and planned per-surface validation targets.
 - Form submit flows: submit lock while pending and inline error behavior.
 - Scanner and Discover row actions: correct payload/action routing and retry flows.
 - Settings maintenance flows: guarded destructive/restore actions.

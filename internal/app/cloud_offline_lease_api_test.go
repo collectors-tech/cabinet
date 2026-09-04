@@ -17,7 +17,7 @@ func TestCloudOfflineLeaseIssueAndValidate(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/lease/issue",
-		strings.NewReader(`{"provider":"clerk","token":"`+token+`","duration_seconds":120}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+token+`","duration_seconds":120}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if issue.Code != http.StatusOK {
@@ -49,6 +49,26 @@ func TestCloudOfflineLeaseIssueAndValidate(t *testing.T) {
 	}
 }
 
+func TestCloudOfflineLeaseIssueRejectsUnsupportedProvider(t *testing.T) {
+	a := newTestApp(t)
+	token := "e30.eyJzdWIiOiJ1c2VyX2xlYXNlIiwiZW1haWwiOiJsZWFzZUBleGFtcGxlLmNvbSIsInBsYW4iOiJwcm8ifQ.e30"
+
+	issue := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/auth/cloud/lease/issue",
+		strings.NewReader(`{"provider":"clerk","token":"`+token+`","duration_seconds":120}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if issue.Code != http.StatusBadRequest {
+		t.Fatalf("unsupported provider expected 400, got %d body=%s", issue.Code, issue.Body.String())
+	}
+	if !strings.Contains(issue.Body.String(), `"error":"unsupported_provider"`) {
+		t.Fatalf("expected unsupported_provider error, got %s", issue.Body.String())
+	}
+}
+
 func TestCloudOfflineLeaseExpiredBlocksProtectedFeature(t *testing.T) {
 	a := newTestApp(t)
 	token := "e30.eyJzdWIiOiJ1c2VyX2V4cGlyZWQiLCJlbWFpbCI6ImV4cGlyZWRAZXhhbXBsZS5jb20iLCJwbGFuIjoiZnJlZSJ9.e30"
@@ -58,7 +78,7 @@ func TestCloudOfflineLeaseExpiredBlocksProtectedFeature(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/lease/issue",
-		strings.NewReader(`{"provider":"clerk","token":"`+token+`","duration_seconds":1}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+token+`","duration_seconds":1}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if issue.Code != http.StatusOK {
@@ -98,7 +118,7 @@ func TestCloudOfflineLeaseRenewalFlow(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/lease/issue",
-		strings.NewReader(`{"provider":"clerk","token":"`+token+`","duration_seconds":30}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+token+`","duration_seconds":30}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if issue.Code != http.StatusOK {

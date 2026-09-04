@@ -21,8 +21,7 @@ export function GeneralError({
       return
     }
 
-    const message =
-      error instanceof Error ? error.message : String(error ?? '')
+    const message = error instanceof Error ? error.message : String(error ?? '')
     const isChunkLoadError =
       /dynamically imported module/i.test(message) ||
       /loading chunk/i.test(message) ||

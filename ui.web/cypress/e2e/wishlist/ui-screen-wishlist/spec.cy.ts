@@ -1,5 +1,5 @@
 describe("ui-screen-wishlist", () => {
-  function stubWishlistData() {
+  function stubWishlistData(options?: { includeCardMedia?: boolean }) {
     cy.intercept("GET", "/api/wishlist", {
       statusCode: 200,
       body: {
@@ -9,16 +9,24 @@ describe("ui-screen-wishlist", () => {
             item_id: "item-collector-1",
             priority: "medium",
             below_target_now: false,
+            created_at: "2026-03-05T09:15:00Z",
+            updated_at: "2026-03-29T11:30:00Z",
           },
           {
             id: "wish-2",
             item_id: "item-collector-2",
             priority: "high",
             below_target_now: true,
+            created_at: "2026-03-10T13:45:00Z",
+            updated_at: "2026-03-11T08:00:00Z",
           },
         ],
       },
     }).as("wishlistItems");
+    cy.intercept("GET", "/api/wishlist?deleted=true", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("deletedWishlistItems");
     cy.intercept("GET", "/api/items?status=wishlist", {
       statusCode: 200,
       body: {
@@ -30,6 +38,9 @@ describe("ui-screen-wishlist", () => {
             status: "wishlist",
             category: "Slot Cars",
             priority: "medium",
+            ...(options?.includeCardMedia
+              ? { thumbnail_url: "/media/wishlist/sample-camaro.jpg" }
+              : {}),
           },
           {
             id: "item-collector-2",
@@ -42,6 +53,10 @@ describe("ui-screen-wishlist", () => {
         ],
       },
     }).as("catalogItems");
+    cy.intercept("GET", "/api/items?status=active", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("activeItems");
     cy.intercept("GET", "/api/pricing/stats?item_id=item-collector-1", {
       statusCode: 200,
       body: { min: 35, median: 40, latest: 42.5 },
@@ -97,12 +112,17 @@ describe("ui-screen-wishlist", () => {
   function signInToWishlist(options?: {
     skipStub?: boolean;
     useExistingIntercepts?: boolean;
+    includeCardMedia?: boolean;
   }) {
     if (!options?.skipStub) {
-      stubWishlistData();
+      stubWishlistData({ includeCardMedia: options?.includeCardMedia });
     } else if (!options.useExistingIntercepts) {
       cy.intercept("GET", "/api/wishlist").as("wishlistItems");
+      cy.intercept("GET", "/api/wishlist?deleted=true").as(
+        "deletedWishlistItems"
+      );
       cy.intercept("GET", "/api/items?status=wishlist").as("catalogItems");
+      cy.intercept("GET", "/api/items?status=active").as("activeItems");
     }
     cy.intercept("GET", "/api/profiles/*/settings").as("profileSettings");
     cy.e2eReset();
@@ -122,12 +142,28 @@ describe("ui-screen-wishlist", () => {
   }
 
   function openWishlistRowActions(rowText: string) {
-    cy.contains("tr", rowText)
+    cy.contains("tr", rowText, { timeout: 15000 })
       .find('[data-testid="task-row-actions-trigger"]')
-      .scrollIntoView()
       .should("be.visible")
-      .click({ force: true });
-    cy.get('[role="menu"]').should("be.visible");
+      .then(($trigger) => {
+        const rowId = $trigger.attr("data-row-id");
+        cy.get(
+          `[data-testid="task-row-actions-trigger"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        )
+          .should("be.visible")
+          .and("be.enabled");
+        cy.get(
+          `[data-testid="task-row-actions-trigger"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        ).click();
+        cy.get(
+          `[data-testid="task-row-actions-menu"][data-row-id="${rowId}"]`,
+          { timeout: 15000 }
+        )
+          .filter(":visible")
+          .should("have.length", 1);
+      });
   }
 
   function collectionFilterOptionKey(value: string) {
@@ -153,7 +189,7 @@ describe("ui-screen-wishlist", () => {
   it("UI-SCREEN-WISHLIST-001 filters list and persists row/card view mode", () => {
     signInToWishlist();
 
-    cy.contains("Wishlist").should("be.visible");
+    cy.get('[data-testid="wishlist-shell-header"]').should("be.visible");
     cy.get('[data-testid="wishlist-global-header-actions"]').within(() => {
       cy.get('[data-testid="wishlist-new-action"]')
         .should("be.visible")
@@ -205,6 +241,116 @@ describe("ui-screen-wishlist", () => {
     );
   });
 
+  it("UI-SCREEN-WISHLIST-025/#2176 persists and renders the requested target-price currency after reload", () => {
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.request("POST", "/api/items", {
+        brand: "Unknown",
+        category: "Wishlist",
+        part_number: "WISHLIST-CURRENCY-AUD-2176",
+        title: "Wishlist Currency AUD Proof",
+        status: "wishlist",
+      }).then(({ body: item }) => {
+        cy.request("POST", "/api/wishlist", {
+          item_id: item.id,
+          target_price: 61,
+          currency: "AUD",
+          priority: "medium",
+        }).then(({ body: entry }) => {
+          expect(entry.currency).to.eq("AUD");
+        });
+      });
+
+      cy.useBootstrappedProfile(profile_id, profile_name, {
+        path: "/wishlist/",
+      });
+    });
+
+    cy.contains("tr", "Wishlist Currency AUD Proof", { timeout: 20000 })
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid^="wishlist-cost-input-"]')
+          .scrollIntoView()
+          .should("be.visible")
+          .and("have.value", "61");
+        cy.get('[data-testid^="wishlist-cost-currency-"]')
+          .should("be.visible")
+          .and("have.text", "AUD");
+      });
+
+    cy.reload();
+    cy.contains("tr", "Wishlist Currency AUD Proof", { timeout: 20000 })
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid^="wishlist-cost-input-"]')
+          .scrollIntoView()
+          .should("be.visible")
+          .and("have.value", "61");
+        cy.get('[data-testid^="wishlist-cost-currency-"]')
+          .should("be.visible")
+          .and("have.text", "AUD");
+      });
+  });
+
+  it("UI-SCREEN-WISHLIST-018 renders compact deterministic row thumbnails", () => {
+    signInToWishlist();
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.get('[data-testid="wishlist-thumbnail-item-collector-1"]')
+      .should("be.visible")
+      .and("have.attr", "aria-hidden", "true")
+      .and("have.attr", "data-thumbnail-key", "item-collector-1");
+    cy.get('[data-testid="wishlist-thumbnail-item-collector-2"]')
+      .should("be.visible")
+      .and("have.attr", "aria-hidden", "true")
+      .and("have.attr", "data-thumbnail-key", "item-collector-2");
+
+    cy.get('[data-testid="wishlist-thumbnail-item-collector-1"]')
+      .invoke("attr", "style")
+      .then((firstStyle) => {
+        cy.get('[data-testid="wishlist-thumbnail-item-collector-2"]')
+          .invoke("attr", "style")
+          .should("not.eq", firstStyle);
+      });
+
+    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
+      cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
+      cy.contains("22073").should("not.exist");
+    });
+  });
+
+  it("UI-SCREEN-WISHLIST-024 renders compact card thumbnails and placeholders", () => {
+    cy.viewport(1440, 1000);
+    signInToWishlist({ includeCardMedia: true });
+
+    cy.contains("button", "Cards").click();
+    cy.get('[data-testid="wishlist-card-thumbnail-item-collector-1"]')
+      .should("be.visible")
+      .and("have.attr", "src", "/media/wishlist/sample-camaro.jpg")
+      .and("have.attr", "data-thumbnail-key", "item-collector-1");
+    cy.get('[data-testid="wishlist-card-thumbnail-placeholder-item-collector-2"]')
+      .should("be.visible")
+      .and("contain.text", "No asset")
+      .and("have.attr", "data-thumbnail-key", "item-collector-2");
+
+    cy.get('[data-testid="wishlist-card-thumbnail-item-collector-1"]')
+      .parents(".grid")
+      .first()
+      .then(($grid) => {
+        const columns = getComputedStyle($grid[0]).gridTemplateColumns
+          .split(" ")
+          .filter(Boolean);
+        expect(columns.length).to.eq(4);
+      });
+    cy.contains("AFX Mega-G+ Camaro Wildfire")
+      .parents('[data-testid="inventory-item-row-item-collector-1"]')
+      .first()
+      .then(($card) => {
+        expect($card[0].getBoundingClientRect().height).to.be.lessThan(260);
+      });
+  });
+
   it("UI-SCREEN-WISHLIST-003 supports multi-select with bulk action toolbar", () => {
     signInToWishlist();
 
@@ -216,6 +362,43 @@ describe("ui-screen-wishlist", () => {
     cy.get('button[aria-label="Update priority"]').should("be.visible");
     cy.get('button[aria-label="Export wishlist entries"]').should("be.visible");
     cy.get('button[aria-label="Delete selected wishlist entries"]').should("be.visible");
+  });
+
+  it("UI-SCREEN-WISHLIST-016 renders date added and price update context", () => {
+    signInToWishlist();
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("th", "Date added").should("exist");
+    cy.contains("th", "Updated").should("exist");
+    cy.get('[data-testid="wishlist-date-added-item-collector-1"]').should(
+      "contain.text",
+      "Mar 5, 2026"
+    );
+    cy.get('[data-testid="wishlist-date-updated-item-collector-1"]')
+      .should("contain.text", "Apr 22, 2026")
+      .and("have.attr", "title", "Latest pricing refresh date");
+    cy.get('[data-testid="wishlist-date-added-item-collector-2"]').should(
+      "contain.text",
+      "Mar 10, 2026"
+    );
+    cy.get('[data-testid="wishlist-date-updated-item-collector-2"]').should(
+      "contain.text",
+      "-"
+    );
+
+    cy.contains("button", "Cards").click();
+    cy.get('[data-testid="wishlist-card-date-added-item-collector-1"]').should(
+      "contain.text",
+      "Date added: Mar 5, 2026"
+    );
+    cy.get('[data-testid="wishlist-card-date-updated-item-collector-1"]').should(
+      "contain.text",
+      "Updated: Apr 22, 2026"
+    );
+    cy.get('[data-testid="wishlist-card-date-updated-item-collector-2"]').should(
+      "contain.text",
+      "Updated: -"
+    );
   });
 
   it("UI-SCREEN-WISHLIST-002 exposes direct compact header actions", () => {
@@ -389,6 +572,125 @@ describe("ui-screen-wishlist", () => {
     cy.contains("Backlog").should("not.exist");
   });
 
+  it("UI-SCREEN-WISHLIST-017 edits cost and quantity with stable stepper controls", () => {
+    let wishlistEntries = [
+      {
+        id: "wish-stepper-1",
+        item_id: "item-collector-1",
+        priority: "medium",
+        below_target_now: false,
+        target_price: 0,
+        quantity: 0,
+        needed_quantity: 1,
+      },
+    ];
+    const wishlistItems = [
+      {
+        id: "item-collector-1",
+        title: "AFX Mega-G+ Camaro Wildfire",
+        part_number: "22073",
+        status: "wishlist",
+        category: "Slot Cars",
+        priority: "medium",
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", {
+      statusCode: 200,
+      body: { items: wishlistItems },
+    }).as("catalogItems");
+    cy.intercept("PUT", "/api/wishlist", (req) => {
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === req.body.id
+          ? {
+              ...entry,
+              target_price: req.body.target_price ?? entry.target_price,
+              quantity: req.body.quantity ?? entry.quantity,
+              needed_quantity:
+                req.body.needed_quantity ?? entry.needed_quantity,
+            }
+          : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("updateWishlistEntry");
+
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("exist");
+    cy.contains("th", "Cost").scrollIntoView();
+
+    cy.get('[data-testid="wishlist-cost-stepper-item-collector-1"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .and("have.class", "w-[8.75rem]");
+    cy.get('[data-testid="wishlist-cost-input-item-collector-1"]')
+      .should("have.value", "0")
+      .and("have.attr", "min", "0")
+      .and("have.attr", "step", "0.01")
+      .and("have.class", "[appearance:textfield]");
+    cy.get('[data-testid="wishlist-cost-decrease-item-collector-1"]').click();
+    cy.get('[data-testid="wishlist-cost-input-item-collector-1"]').should(
+      "have.value",
+      "0"
+    );
+    cy.get('[data-testid="wishlist-cost-input-item-collector-1"]').type(
+      "{selectall}15.5{enter}"
+    );
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", { target_price: 15.5 });
+    cy.get('[data-testid="wishlist-cost-input-item-collector-1"]').should(
+      "not.be.disabled"
+    );
+    cy.get('[data-testid="wishlist-cost-increase-item-collector-1"]').click();
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", { target_price: 15.51 });
+
+    cy.contains("th", "Qty").scrollIntoView();
+    cy.get('[data-testid="wishlist-qty-stepper-item-collector-1"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .and("have.class", "w-[7rem]");
+    cy.get('[data-testid="wishlist-qty-input-item-collector-1"]')
+      .should("have.value", "0")
+      .and("have.attr", "min", "0")
+      .and("have.attr", "step", "1")
+      .and("have.class", "[appearance:textfield]");
+    cy.get('[data-testid="wishlist-qty-decrease-item-collector-1"]').click();
+    cy.get('[data-testid="wishlist-qty-input-item-collector-1"]').should(
+      "have.value",
+      "0"
+    );
+    cy.get('[data-testid="wishlist-qty-input-item-collector-1"]')
+      .should("not.be.disabled")
+      .type("{selectall}4{enter}");
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", { quantity: 4 });
+    cy.get('[data-testid="wishlist-qty-input-item-collector-1"]').should(
+      "not.be.disabled"
+    );
+    cy.get('[data-testid="wishlist-qty-decrease-item-collector-1"]').click();
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", { quantity: 3 });
+
+    cy.get('[data-testid="wishlist-qty-decrease-item-collector-1"]').should(
+      "have.attr",
+      "aria-label",
+      "Decrease quantity for AFX Mega-G+ Camaro Wildfire"
+    );
+    cy.get('[data-testid="wishlist-qty-increase-item-collector-1"]').should(
+      "have.attr",
+      "aria-label",
+      "Increase quantity for AFX Mega-G+ Camaro Wildfire"
+    );
+  });
+
   it("UI-SCREEN-WISHLIST-015 renders item pricing trajectory from pricing APIs", () => {
     signInToWishlist();
 
@@ -396,6 +698,9 @@ describe("ui-screen-wishlist", () => {
     cy.wait("@priceTrendCollector1");
     cy.wait("@priceHistoryCollector1");
     cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("left", {
+      ensureScrollable: false,
+    });
 
     cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
       cy.get('[data-testid="wishlist-owned-checkbox-item-collector-1"]').should(
@@ -405,16 +710,26 @@ describe("ui-screen-wishlist", () => {
         "not.exist"
       );
       cy.get('[data-testid="wishlist-purchase-open-item-collector-1"]').should(
-        "be.visible"
+        "exist"
       );
+      cy.get('[data-testid="wishlist-purchase-open-item-collector-1"]')
+        .scrollIntoView()
+        .should("be.visible");
+    });
+
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("right", {
+      ensureScrollable: false,
+    });
+    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
       cy.get('[data-testid="wishlist-price-trend-item-collector-1"]')
+        .scrollIntoView()
         .find('[data-testid="wishlist-price-sparkline-item-collector-1"]')
         .should("be.visible");
-      cy.get('[data-testid="wishlist-market-price-item-collector-1"]').should(
-        "contain.text",
-        "$42.50"
-      );
+      cy.get('[data-testid="wishlist-market-price-item-collector-1"]')
+        .scrollIntoView()
+        .should("contain.text", "$42.50");
       cy.get('[data-testid="wishlist-price-sparkline-item-collector-1"]')
+        .scrollIntoView()
         .should("be.visible")
         .and("have.attr", "aria-label")
         .and("contain", "4 price points");
@@ -425,6 +740,9 @@ describe("ui-screen-wishlist", () => {
         .and("contain.text", "ebay");
     });
 
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("left", {
+      ensureScrollable: false,
+    });
     cy.contains("tr", "F1 Silverline").within(() => {
       cy.get('[data-testid="wishlist-owned-checkbox-item-collector-2"]').should(
         "not.exist"
@@ -433,13 +751,138 @@ describe("ui-screen-wishlist", () => {
         "not.exist"
       );
       cy.get('[data-testid="wishlist-purchase-open-item-collector-2"]').should(
-        "be.visible"
+        "exist"
       );
     });
   });
 
-  it("UI-SCREEN-WISHLIST-006 does not expose Mark owned from the row action menu", () => {
+  it("UI-SCREEN-WISHLIST-020 edits Purchased, Delivered, and Category workflow fields", () => {
     let wishlistEntries = [
+      {
+        id: "wish-workflow-1",
+        item_id: "item-collector-1",
+        priority: "medium",
+        below_target_now: false,
+        owned: false,
+        delivered: false,
+        target_price: 20,
+        quantity: 0,
+        needed_quantity: 1,
+      },
+    ];
+    let wishlistItems = [
+      {
+        id: "item-collector-1",
+        title: "AFX Mega-G+ Camaro Wildfire",
+        part_number: "22073",
+        status: "wishlist",
+        category: "Slot Cars",
+        priority: "medium",
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/wishlist?deleted=true", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("deletedWishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } });
+    }).as("catalogItems");
+    cy.intercept("GET", "/api/items?status=active", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("activeItems");
+    cy.intercept("PUT", "/api/items/item-collector-1", (req) => {
+      expect(req.body.category).to.eq("Race Cars");
+      wishlistItems = wishlistItems.map((item) =>
+        item.id === "item-collector-1"
+          ? { ...item, category: req.body.category }
+          : item
+      );
+      req.reply({ statusCode: 200, body: wishlistItems[0] });
+    }).as("updateWishlistItemCategory");
+    cy.intercept("PUT", "/api/wishlist", (req) => {
+      expect(req.body).to.include({
+        id: "wish-workflow-1",
+        item_id: "item-collector-1",
+        owned: true,
+        delivered: true,
+      });
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === "wish-workflow-1"
+          ? { ...entry, owned: req.body.owned, delivered: req.body.delivered }
+          : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("updateWishlistWorkflow");
+
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("left", {
+      ensureScrollable: false,
+    });
+    cy.contains("th", "Purchased").should("exist");
+    cy.contains("th", "Delivered").should("not.exist");
+    cy.contains("th", "Category").should("exist");
+    cy.contains("th", "Owned").should("not.exist");
+    cy.get('[data-testid="wishlist-category-item-collector-1"]').should(
+      "contain.text",
+      "Slot Cars"
+    );
+    cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]')
+      .should("not.exist");
+
+    openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
+    cy.contains('[role="menuitem"]', "Edit").click({ force: true });
+    cy.contains("Edit Wishlist Entry").should("be.visible");
+    cy.contains("Owned").should("not.exist");
+    cy.contains("Purchased").should("exist");
+    cy.contains("Delivered").should("exist");
+    cy.get('input[name="category"]').clear().type("Race Cars");
+    cy.get('[data-testid="wishlist-edit-owned"]')
+      .scrollIntoView()
+      .should("be.visible");
+    cy.get('[data-testid="wishlist-edit-delivered"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .click();
+    cy.get('[data-testid="wishlist-edit-owned"]').should(
+      "have.attr",
+      "aria-checked",
+      "true"
+    );
+    cy.contains("button", "Save changes").click();
+
+    cy.wait("@updateWishlistItemCategory");
+    cy.wait("@updateWishlistWorkflow");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.get('[data-testid="wishlist-edit-panel"]').should("not.exist");
+    cy.get('[data-testid="wishlist-category-item-collector-1"]').should(
+      "contain.text",
+      "Race Cars"
+    );
+    cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]').should(
+      "not.exist"
+    );
+
+    cy.contains("button", "Cards").click();
+    cy.get('[data-testid="wishlist-card-purchased-item-collector-1"]').should(
+      "contain.text",
+      "Purchased: Yes"
+    );
+    cy.get('[data-testid="wishlist-card-delivered-item-collector-1"]').should(
+      "contain.text",
+      "Delivered: Yes"
+    );
+    cy.contains("Category: Race Cars").should("be.visible");
+  });
+
+  it("UI-SCREEN-WISHLIST-006 does not expose Mark owned from the row action menu", () => {
+    const wishlistEntries = [
       {
         id: "wish-1",
         item_id: "item-collector-1",
@@ -447,7 +890,7 @@ describe("ui-screen-wishlist", () => {
         below_target_now: false,
       },
     ];
-    let wishlistItems = [
+    const wishlistItems = [
       {
         id: "item-collector-1",
         title: "AFX Mega-G+ Camaro Wildfire",
@@ -568,6 +1011,75 @@ describe("ui-screen-wishlist", () => {
     cy.contains("Import Wishlist Entries").should("be.visible");
   });
 
+  it("UI-SCREEN-WISHLIST-019 creates a title-only wishlist entry", () => {
+    let wishlistEntries: Array<Record<string, unknown>> = [];
+    let wishlistItems: Array<Record<string, unknown>> = [];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } });
+    }).as("catalogItems");
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body.title).to.eq("Title Only Wishlist Save");
+      expect(req.body.status).to.eq("wishlist");
+      expect(req.body.priority).to.eq("medium");
+      expect(req.body.part_number).to.match(/^WISH-TITLE-ONLY-WISHLIST-SAVE-/);
+      wishlistItems = [
+        ...wishlistItems,
+        {
+          id: "item-title-only-1",
+          title: req.body.title,
+          part_number: req.body.part_number,
+          status: "wishlist",
+          category: req.body.category || "General",
+          priority: req.body.priority,
+        },
+      ];
+      req.reply({
+        statusCode: 201,
+        body: wishlistItems[wishlistItems.length - 1],
+      });
+    }).as("createWishlistItem");
+    cy.intercept("POST", "/api/wishlist", (req) => {
+      expect(req.body.item_id).to.eq("item-title-only-1");
+      expect(req.body.priority).to.eq("medium");
+      expect(req.body.target_price).to.eq(0);
+      wishlistEntries = [
+        ...wishlistEntries,
+        {
+          id: "wish-title-only-1",
+          item_id: req.body.item_id,
+          priority: req.body.priority,
+          target_price: req.body.target_price,
+          notes: req.body.notes,
+          quantity: req.body.quantity,
+          needed_quantity: req.body.needed_quantity,
+        },
+      ];
+      req.reply({
+        statusCode: 201,
+        body: wishlistEntries[wishlistEntries.length - 1],
+      });
+    }).as("createWishlistEntry");
+
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
+
+    cy.get('[data-testid="wishlist-new-action"]').click();
+    cy.contains("Create Wishlist Entry").should("be.visible");
+    cy.get('input[name="title"]').type("Title Only Wishlist Save");
+    cy.contains("button", "Save changes").click();
+
+    cy.wait("@createWishlistItem");
+    cy.wait("@createWishlistEntry");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("Wishlist save failed").should("not.exist");
+    cy.get('[data-testid="wishlist-create-panel"]').should("not.exist");
+    cy.contains("Title Only Wishlist Save").should("be.visible");
+  });
+
   it("UI-SCREEN-WISHLIST-010 persists wishlist edit and delete actions", () => {
     let wishlistEntries = [
       {
@@ -659,8 +1171,8 @@ describe("ui-screen-wishlist", () => {
           .should("be.visible")
           .click({ force: true });
       });
-    cy.contains("Delete this wishlist entry").should("be.visible");
-    cy.contains("button", "Delete").click();
+    cy.contains("Hide this wishlist entry").should("be.visible");
+    cy.contains("button", "Hide").click();
 
     cy.wait("@deleteWishlistEntry");
     cy.wait("@wishlistItems");

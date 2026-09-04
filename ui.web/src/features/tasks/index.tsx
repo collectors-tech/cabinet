@@ -16,6 +16,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -35,8 +36,18 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { cn } from '@/lib/utils'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
+import {
+  conditionsForItemType,
+  defaultInventoryItemTypeConditionScales,
+  itemTypeOptions,
+  parseItemTypeConditionScales,
+  type InventoryItemTypeConditionScale,
+} from '@/features/inventory/item-type-condition-scales'
+import {
+  defaultInventoryPackagingGrades,
+  parsePackagingGradeOptions,
+} from '@/features/inventory/packaging-grade-options'
 import { TasksDialogs, type TasksDialogType } from './components/tasks-dialogs'
 import { type WishlistEntryDraft } from './components/tasks-mutate-drawer'
 import { TasksTable } from './components/tasks-table'
@@ -52,9 +63,16 @@ type TasksProps = {
 type WishlistItemPayload = {
   id?: string
   title?: string
+  thumbnail_url?: string
   part_number?: string
   category?: string
+  item_type?: string
+  packaging_grade_type?: string
+  condition?: string
   priority?: string
+  status?: string
+  notes?: string
+  description?: string
 }
 
 type WishlistPriceTrend = 'up' | 'steady' | 'down' | 'unknown'
@@ -78,6 +96,34 @@ type WishlistPricingSummary = {
   priceStockCount?: number
 }
 
+async function loadWishlistItemTypeConditionScales(): Promise<
+  InventoryItemTypeConditionScale[]
+> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryItemTypeConditionScales
+  }
+  const payload = (await response.json()) as {
+    item_type_condition_scales?: InventoryItemTypeConditionScale[]
+  }
+  return parseItemTypeConditionScales(
+    JSON.stringify(payload.item_type_condition_scales ?? [])
+  )
+}
+
+async function loadWishlistPackagingGrades(): Promise<string[]> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryPackagingGrades
+  }
+  const payload = (await response.json()) as {
+    packaging_grades?: string[]
+  }
+  return parsePackagingGradeOptions(
+    JSON.stringify(payload.packaging_grades ?? [])
+  )
+}
+
 type WishlistEntryPayload = {
   id?: string
   item_id?: string
@@ -85,20 +131,33 @@ type WishlistEntryPayload = {
   notes?: string
   below_target_now?: boolean
   target_price?: number
+  currency?: string
   highlight_hit?: boolean
   owned?: boolean
+  delivered?: boolean
   price_paid?: number
   purchase_url?: string
   purchase_date?: string
   purchase_condition?: string
   quantity?: number
   needed_quantity?: number
+  deleted?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+type WishlistInstancePayload = {
+  id?: string
+  condition?: string
+  status?: string
+  quantity?: number
 }
 
 type WishlistInlineChanges = {
   targetPrice?: number
   priority?: string
   owned?: boolean
+  delivered?: boolean
   pricePaid?: number
   purchaseUrl?: string
   purchaseDate?: string
@@ -123,6 +182,14 @@ function normalizeTargetPrice(raw: string) {
   return parsed
 }
 
+function normalizeCurrency(raw: string) {
+  const normalized = raw.trim().toUpperCase()
+  if (!/^[A-Z]{3}$/.test(normalized)) {
+    throw new Error('invalid_currency')
+  }
+  return normalized
+}
+
 function normalizeOptionalMoney(raw: string) {
   if (raw.trim() === '') {
     return 0
@@ -143,6 +210,20 @@ function normalizeOptionalWholeNumber(raw: string, fallback: number) {
     throw new Error('invalid_quantity')
   }
   return parsed
+}
+
+function wishlistPartNumberFallback(title: string) {
+  const slug =
+    title
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 24) || 'ITEM'
+  const suffix =
+    globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase() ??
+    Date.now().toString(36).toUpperCase()
+  return `WISH-${slug}-${suffix}`
 }
 
 function firstImageFileFromDataTransfer(
@@ -303,6 +384,7 @@ function buildWishlistCsv(tasksToExport: Task[]) {
       'priority',
       'notes',
       'target_price',
+      'currency',
     ].join(','),
     ...tasksToExport.map((task) =>
       [
@@ -312,6 +394,7 @@ function buildWishlistCsv(tasksToExport: Task[]) {
         escapeCell(task.priority),
         escapeCell(task.notes),
         escapeCell(task.targetPrice ?? ''),
+        escapeCell(task.currency ?? 'USD'),
       ].join(',')
     ),
   ].join('\n')
@@ -344,6 +427,18 @@ function inferWishlistTitleFromPaste(text: string) {
   return text.trim().slice(0, 80)
 }
 
+function wishlistToastHistory(id: string, title: string, summary?: string) {
+  return {
+    history: {
+      id: `${id}-${Date.now()}`,
+      title,
+      summary,
+      source_label: 'Wishlist / Tasks',
+      category: 'wishlist',
+    },
+  } as never
+}
+
 async function captureWishlistScreenshotDataUrl() {
   const testDataUrl = (
     window as unknown as { cabinetWishlistScreenshotTestDataUrl?: string }
@@ -354,7 +449,9 @@ async function captureWishlistScreenshotDataUrl() {
 
   const mediaDevices = navigator.mediaDevices as
     | (MediaDevices & {
-        getDisplayMedia?: (constraints?: MediaStreamConstraints) => Promise<MediaStream>
+        getDisplayMedia?: (
+          constraints?: MediaStreamConstraints
+        ) => Promise<MediaStream>
       })
     | undefined
   if (typeof mediaDevices?.getDisplayMedia !== 'function') {
@@ -407,9 +504,7 @@ async function scanWishlistBarcodeValue() {
 
   const barcodeDetectorConstructor = (
     window as unknown as {
-      BarcodeDetector?: new (options?: {
-        formats?: string[]
-      }) => {
+      BarcodeDetector?: new (options?: { formats?: string[] }) => {
         detect: (
           source: HTMLVideoElement | HTMLCanvasElement
         ) => Promise<Array<{ rawValue?: string }>>
@@ -438,8 +533,7 @@ async function scanWishlistBarcodeValue() {
       formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'],
     })
     const results = await detector.detect(video)
-    const barcode = results.find((result) => result.rawValue?.trim())
-      ?.rawValue
+    const barcode = results.find((result) => result.rawValue?.trim())?.rawValue
     if (!barcode) {
       throw new Error('barcode_not_found')
     }
@@ -556,6 +650,7 @@ export function Tasks({
     isWishlistRoute ? [] : tasks
   )
   const tableDataRef = useRef(tableData)
+  const wishlistInlineUpdateGenerationRef = useRef(0)
   const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [dialogNavigationRows, setDialogNavigationRows] = useState<Task[]>([])
@@ -575,43 +670,119 @@ export function Tasks({
   const [wishlistBarcodeError, setWishlistBarcodeError] = useState('')
   const [wishlistImageDropActive, setWishlistImageDropActive] = useState(false)
   const [wishlistImageDropMessage, setWishlistImageDropMessage] = useState('')
+  const [wishlistItemTypeConditionScales, setWishlistItemTypeConditionScales] =
+    useState<InventoryItemTypeConditionScale[]>(
+      defaultInventoryItemTypeConditionScales
+    )
+  const [wishlistPackagingGrades, setWishlistPackagingGrades] = useState<
+    string[]
+  >(defaultInventoryPackagingGrades)
+  const wishlistItemTypeOptions = useMemo(
+    () => itemTypeOptions(wishlistItemTypeConditionScales),
+    [wishlistItemTypeConditionScales]
+  )
+  const wishlistConditionOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          wishlistItemTypeOptions.flatMap((itemType) =>
+            conditionsForItemType(wishlistItemTypeConditionScales, itemType)
+          )
+        )
+      ),
+    [wishlistItemTypeConditionScales, wishlistItemTypeOptions]
+  )
+
+  useEffect(() => {
+    if (!isWishlistRoute) {
+      return
+    }
+    let cancelled = false
+    void Promise.all([
+      loadWishlistItemTypeConditionScales(),
+      loadWishlistPackagingGrades(),
+    ]).then(([conditionScales, packagingGrades]) => {
+      if (cancelled) {
+        return
+      }
+      setWishlistItemTypeConditionScales(conditionScales)
+      setWishlistPackagingGrades(packagingGrades)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isWishlistRoute])
   const loadWishlistData = useCallback(async () => {
-    const [wishlistResponse, itemsResponse] = await Promise.all([
+    const [
+      wishlistResponse,
+      deletedWishlistResponse,
+      wishlistItemsResponse,
+      activeItemsResponse,
+    ] = await Promise.all([
       fetch('/api/wishlist'),
+      fetch('/api/wishlist?deleted=true'),
       fetch('/api/items?status=wishlist'),
+      fetch('/api/items?status=active'),
     ])
-    if (!wishlistResponse.ok || !itemsResponse.ok) {
+    if (
+      !wishlistResponse.ok ||
+      !deletedWishlistResponse.ok ||
+      !wishlistItemsResponse.ok ||
+      !activeItemsResponse.ok
+    ) {
       throw new Error('wishlist_bootstrap_failed')
     }
     const wishlistPayload = (await wishlistResponse.json()) as {
       items?: WishlistEntryPayload[]
     }
-    const itemsPayload = (await itemsResponse.json()) as {
+    const deletedWishlistPayload = (await deletedWishlistResponse.json()) as {
+      items?: WishlistEntryPayload[]
+    }
+    const wishlistItemsPayload = (await wishlistItemsResponse.json()) as {
       items?: WishlistItemPayload[]
     }
-    const wishlistByItemID = new Map<string, WishlistEntryPayload>()
-    ;(wishlistPayload.items ?? []).forEach((entry) => {
-      const itemID = entry.item_id?.trim()
-      if (!itemID) {
-        return
+    const activeItemsPayload = (await activeItemsResponse.json()) as {
+      items?: WishlistItemPayload[]
+    }
+    const itemByID = new Map<string, WishlistItemPayload>()
+    ;[
+      ...(wishlistItemsPayload.items ?? []),
+      ...(activeItemsPayload.items ?? []),
+    ].forEach((item) => {
+      const itemID = item.id?.trim()
+      if (itemID) {
+        itemByID.set(itemID, item)
       }
-      wishlistByItemID.set(itemID, entry)
     })
+    const wishlistEntries = [
+      ...(wishlistPayload.items ?? []),
+      ...(deletedWishlistPayload.items ?? []),
+    ]
     return Promise.all(
-      (itemsPayload.items ?? []).map(async (item, index) => {
-        const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
-        const wishlistEntry = wishlistByItemID.get(itemID)
+      wishlistEntries.map(async (wishlistEntry, index) => {
+        const itemID =
+          wishlistEntry.item_id?.trim() || `wishlist-item-${index + 1}`
+        const item: WishlistItemPayload = itemByID.get(itemID) ?? {}
         const pricingSummary = await loadWishlistPricingSummary(itemID)
+        const isDeleted = Boolean(wishlistEntry.deleted)
         return {
           id: itemID,
           itemID: itemID,
-          wishlistEntryID: wishlistEntry?.id?.trim(),
+          wishlistEntryID: wishlistEntry.id?.trim(),
           title:
             item.title?.trim() ||
             item.part_number?.trim() ||
             `Wishlist item ${index + 1}`,
+          thumbnailUrl: item.thumbnail_url?.trim(),
           partNumber: item.part_number?.trim(),
-          status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
+          itemType: item.item_type?.trim(),
+          packagingGradeType: item.packaging_grade_type?.trim(),
+          condition: item.condition?.trim(),
+          status: isDeleted
+            ? 'deleted'
+            : wishlistEntry.below_target_now
+              ? 'discovered'
+              : 'wishlist',
           label: item.category?.trim() || 'collection',
           priority:
             wishlistEntry?.priority?.trim() ||
@@ -623,6 +794,7 @@ export function Tasks({
             typeof wishlistEntry?.target_price === 'number'
               ? wishlistEntry.target_price
               : undefined,
+          currency: wishlistEntry?.currency?.trim().toUpperCase() || 'USD',
           marketPrice: pricingSummary.marketPrice,
           priceTrend: pricingSummary.priceTrend,
           priceHistory: pricingSummary.priceHistory,
@@ -630,10 +802,13 @@ export function Tasks({
           priceSampleCount: pricingSummary.priceSampleCount,
           priceFirstDate: pricingSummary.priceFirstDate,
           priceLatestDate: pricingSummary.priceLatestDate,
+          wishlistCreatedAt: wishlistEntry?.created_at?.trim(),
+          wishlistPriceUpdatedAt: pricingSummary.priceLatestDate,
           priceSources: pricingSummary.priceSources,
           priceStockCount: pricingSummary.priceStockCount,
           highlightHit: Boolean(wishlistEntry?.highlight_hit),
           owned: Boolean(wishlistEntry?.owned),
+          delivered: Boolean(wishlistEntry?.delivered),
           pricePaid:
             typeof wishlistEntry?.price_paid === 'number'
               ? wishlistEntry.price_paid
@@ -649,9 +824,37 @@ export function Tasks({
             typeof wishlistEntry?.needed_quantity === 'number'
               ? wishlistEntry.needed_quantity
               : 1,
+          deleted: isDeleted,
         } satisfies Task
       })
     )
+  }, [])
+
+  const loadInventoryData = useCallback(async () => {
+    const response = await fetch('/api/items')
+    if (!response.ok) {
+      throw new Error('inventory_bootstrap_failed')
+    }
+    const payload = (await response.json()) as {
+      items?: WishlistItemPayload[]
+    }
+    return (payload.items ?? []).map((item, index) => {
+      const itemID = item.id?.trim() || `inventory-item-${index + 1}`
+      return {
+        id: item.part_number?.trim() || itemID,
+        itemID,
+        title: item.title?.trim() || item.part_number?.trim() || itemID,
+        thumbnailUrl: item.thumbnail_url?.trim(),
+        partNumber: item.part_number?.trim(),
+        itemType: item.item_type?.trim(),
+        packagingGradeType: item.packaging_grade_type?.trim(),
+        condition: item.condition?.trim(),
+        status: item.status?.trim() || 'owned',
+        label: item.category?.trim() || 'collection',
+        priority: item.priority?.trim() || 'medium',
+        notes: item.notes?.trim() || item.description?.trim(),
+      } satisfies Task
+    })
   }, [])
 
   useEffect(() => {
@@ -660,8 +863,21 @@ export function Tasks({
 
   useEffect(() => {
     if (!isWishlistRoute) {
-      setTableData(tasks)
-      return
+      let cancelled = false
+      void loadInventoryData()
+        .then((mapped) => {
+          if (!cancelled) {
+            setTableData(mapped.length > 0 ? mapped : tasks)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setTableData(tasks)
+          }
+        })
+      return () => {
+        cancelled = true
+      }
     }
 
     let cancelled = false
@@ -681,12 +897,19 @@ export function Tasks({
     return () => {
       cancelled = true
     }
-  }, [isWishlistRoute, loadWishlistData])
+  }, [isWishlistRoute, loadInventoryData, loadWishlistData])
 
-  const refreshWishlistTable = useCallback(async () => {
-    const mapped = await loadWishlistData()
-    setTableData(mapped)
-  }, [loadWishlistData])
+  const refreshWishlistTable = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      const mapped = await loadWishlistData()
+      if (!shouldApply()) {
+        return
+      }
+      tableDataRef.current = mapped
+      setTableData(mapped)
+    },
+    [loadWishlistData]
+  )
 
   const saveWishlistDraft = useCallback(
     async (draft: WishlistEntryDraft, currentRow?: Task) => {
@@ -698,6 +921,9 @@ export function Tasks({
               title: draft.title,
               part_number: draft.partNumber,
               category: draft.category,
+              item_type: draft.itemType,
+              packaging_grade_type: draft.packagingGradeType,
+              condition: draft.condition,
             }),
           })
         : await fetch('/api/items', {
@@ -705,8 +931,13 @@ export function Tasks({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               title: draft.title,
-              part_number: draft.partNumber,
+              part_number:
+                draft.partNumber || wishlistPartNumberFallback(draft.title),
               category: draft.category,
+              item_type: draft.itemType,
+              packaging_grade_type: draft.packagingGradeType,
+              condition: draft.condition,
+              status: 'wishlist',
               priority: normalizeWishlistPriority(draft.priority),
             }),
           })
@@ -721,6 +952,38 @@ export function Tasks({
         throw new Error('wishlist_item_id_missing')
       }
 
+      if (draft.condition.trim() !== '') {
+        const instancesResponse = await fetch(
+          `/api/items/${encodeURIComponent(itemID)}/instances`
+        )
+        if (!instancesResponse.ok) {
+          throw new Error('wishlist_condition_read_failed')
+        }
+        const instancesPayload = (await instancesResponse.json()) as {
+          instances?: WishlistInstancePayload[]
+        }
+        const primaryInstance = (instancesPayload.instances ?? [])[0]
+        const conditionResponse = await fetch(
+          primaryInstance?.id
+            ? `/api/items/${encodeURIComponent(
+                itemID
+              )}/instances/${encodeURIComponent(primaryInstance.id)}`
+            : `/api/items/${encodeURIComponent(itemID)}/instances`,
+          {
+            method: primaryInstance?.id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              condition: draft.condition,
+              status: primaryInstance?.status ?? 'custom',
+              quantity: primaryInstance?.quantity ?? 1,
+            }),
+          }
+        )
+        if (!conditionResponse.ok) {
+          throw new Error('wishlist_condition_save_failed')
+        }
+      }
+
       const wishlistResponse = await fetch('/api/wishlist', {
         method: currentRow?.wishlistEntryID ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -730,7 +993,9 @@ export function Tasks({
           priority: normalizeWishlistPriority(draft.priority),
           notes: draft.notes,
           target_price: normalizeTargetPrice(draft.targetPrice),
+          currency: normalizeCurrency(draft.currency),
           owned: draft.owned,
+          delivered: draft.delivered,
           price_paid: normalizeOptionalMoney(draft.pricePaid),
           purchase_url: draft.purchaseUrl,
           purchase_date: draft.purchaseDate,
@@ -759,29 +1024,65 @@ export function Tasks({
       try {
         await saveWishlistDraft(draft, currentRow)
         await refreshWishlistTable()
+        const message = currentRow
+          ? `${draft.title} updated.`
+          : `${draft.title} added to wishlist.`
         toast.success(
-          currentRow
-            ? `${draft.title} updated.`
-            : `${draft.title} added to wishlist.`
+          message,
+          wishlistToastHistory(
+            'wishlist-save-success',
+            message,
+            currentRow
+              ? 'Wishlist entry update feedback was preserved in Inbox history.'
+              : 'Wishlist entry create feedback was preserved in Inbox history.'
+          )
         )
       } catch (error) {
         if (
           error instanceof Error &&
           error.message === 'invalid_target_price'
         ) {
-          toast.error('Target price must be a positive number.')
+          toast.error(
+            'Target price must be a positive number.',
+            wishlistToastHistory(
+              'wishlist-save-invalid-target-price',
+              'Target price must be a positive number.',
+              'Wishlist save validation feedback was preserved in Inbox history.'
+            )
+          )
         } else if (
           error instanceof Error &&
           error.message === 'invalid_money'
         ) {
-          toast.error('Money fields must be positive numbers.')
+          toast.error(
+            'Money fields must be positive numbers.',
+            wishlistToastHistory(
+              'wishlist-save-invalid-money',
+              'Money fields must be positive numbers.',
+              'Wishlist save validation feedback was preserved in Inbox history.'
+            )
+          )
         } else if (
           error instanceof Error &&
           error.message === 'invalid_quantity'
         ) {
-          toast.error('Quantity fields must be whole numbers.')
+          toast.error(
+            'Quantity fields must be whole numbers.',
+            wishlistToastHistory(
+              'wishlist-save-invalid-quantity',
+              'Quantity fields must be whole numbers.',
+              'Wishlist save validation feedback was preserved in Inbox history.'
+            )
+          )
         } else {
-          toast.error('Wishlist save failed. Try again.')
+          toast.error(
+            'Wishlist save failed. Try again.',
+            wishlistToastHistory(
+              'wishlist-save-failed',
+              'Wishlist save failed. Try again.',
+              'Wishlist save failure feedback was preserved in Inbox history.'
+            )
+          )
         }
         throw error
       } finally {
@@ -795,9 +1096,18 @@ export function Tasks({
     async (task: Task, changes: WishlistInlineChanges) => {
       const wishlistEntryID = task.wishlistEntryID?.trim()
       if (!wishlistEntryID) {
-        toast.error('Wishlist entry is missing update metadata.')
+        toast.error(
+          'Wishlist entry is missing update metadata.',
+          wishlistToastHistory(
+            'wishlist-inline-update-missing-metadata',
+            'Wishlist entry is missing update metadata.',
+            'Wishlist inline update validation feedback was preserved in Inbox history.'
+          )
+        )
         return
       }
+
+      const updateGeneration = ++wishlistInlineUpdateGenerationRef.current
 
       const currentTask =
         tableDataRef.current.find((candidate) => candidate.id === task.id) ??
@@ -806,7 +1116,9 @@ export function Tasks({
         changes.priority ?? currentTask.priority
       )
       let nextTargetPrice = changes.targetPrice ?? currentTask.targetPrice ?? 0
+      let nextCurrency = currentTask.currency ?? 'USD'
       const nextOwned = changes.owned ?? currentTask.owned ?? false
+      const nextDelivered = changes.delivered ?? currentTask.delivered ?? false
       const nextPricePaid = changes.pricePaid ?? currentTask.pricePaid ?? 0
       const nextPurchaseUrl =
         changes.purchaseUrl ?? currentTask.purchaseUrl ?? ''
@@ -832,6 +1144,9 @@ export function Tasks({
             if (typeof latestEntry?.target_price === 'number') {
               nextTargetPrice = latestEntry.target_price
             }
+            if (latestEntry?.currency?.trim()) {
+              nextCurrency = latestEntry.currency.trim().toUpperCase()
+            }
           }
         } catch {
           // Keep the local row value if the latest entry cannot be read.
@@ -844,7 +1159,9 @@ export function Tasks({
               ...candidate,
               priority: nextPriority,
               targetPrice: nextTargetPrice,
+              currency: nextCurrency,
               owned: nextOwned,
+              delivered: nextDelivered,
               pricePaid: nextPricePaid,
               purchaseUrl: nextPurchaseUrl,
               purchaseDate: nextPurchaseDate,
@@ -862,7 +1179,9 @@ export function Tasks({
                 ...candidate,
                 priority: nextPriority,
                 targetPrice: nextTargetPrice,
+                currency: nextCurrency,
                 owned: nextOwned,
+                delivered: nextDelivered,
                 pricePaid: nextPricePaid,
                 purchaseUrl: nextPurchaseUrl,
                 purchaseDate: nextPurchaseDate,
@@ -879,12 +1198,19 @@ export function Tasks({
           id: wishlistEntryID,
           item_id: task.itemID,
           priority: nextPriority,
+          currency: nextCurrency,
         }
         if (changes.targetPrice !== undefined) {
           requestBody.target_price = nextTargetPrice
         }
         if (changes.owned !== undefined) {
           requestBody.owned = nextOwned
+        }
+        if (changes.delivered !== undefined) {
+          requestBody.delivered = nextDelivered
+          if (nextDelivered) {
+            requestBody.owned = true
+          }
         }
         if (changes.pricePaid !== undefined) {
           requestBody.price_paid = nextPricePaid
@@ -913,10 +1239,26 @@ export function Tasks({
         if (!response.ok) {
           throw new Error('wishlist_inline_update_failed')
         }
-        await refreshWishlistTable()
-        toast.success('Wishlist row updated.')
+        await refreshWishlistTable(
+          () => updateGeneration === wishlistInlineUpdateGenerationRef.current
+        )
+        toast.success(
+          'Wishlist row updated.',
+          wishlistToastHistory(
+            'wishlist-inline-update-success',
+            'Wishlist row updated.',
+            'Wishlist inline update feedback was preserved in Inbox history.'
+          )
+        )
       } catch {
-        toast.error('Wishlist row update failed. Try again.')
+        toast.error(
+          'Wishlist row update failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-inline-update-failed',
+            'Wishlist row update failed. Try again.',
+            'Wishlist inline update failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_inline_update_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -929,24 +1271,100 @@ export function Tasks({
     async (task: Task) => {
       const wishlistEntryID = task.wishlistEntryID?.trim()
       if (!wishlistEntryID) {
-        toast.error('Wishlist entry is missing delete metadata.')
+        toast.error(
+          'Wishlist entry is missing delete metadata.',
+          wishlistToastHistory(
+            'wishlist-delete-missing-metadata',
+            'Wishlist entry is missing delete metadata.',
+            'Wishlist delete validation feedback was preserved in Inbox history.'
+          )
+        )
         return
       }
 
       setIsWishlistMutating(true)
       try {
+        const permanentParam = task.deleted ? '&permanent=true' : ''
         const response = await fetch(
-          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}`,
+          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}${permanentParam}`,
           { method: 'DELETE' }
         )
         if (!response.ok) {
           throw new Error('wishlist_delete_failed')
         }
         await refreshWishlistTable()
-        toast.success(`${task.title} removed from wishlist.`)
+        const message = task.deleted
+          ? `${task.title} permanently deleted from wishlist.`
+          : `${task.title} hidden from active wishlist.`
+        toast.success(
+          message,
+          wishlistToastHistory(
+            'wishlist-delete-success',
+            message,
+            'Wishlist delete feedback was preserved in Inbox history.'
+          )
+        )
       } catch {
-        toast.error('Wishlist delete failed. Try again.')
+        toast.error(
+          'Wishlist delete failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-delete-failed',
+            'Wishlist delete failed. Try again.',
+            'Wishlist delete failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_delete_failed')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable]
+  )
+
+  const handleWishlistRestore = useCallback(
+    async (task: Task) => {
+      const wishlistEntryID = task.wishlistEntryID?.trim()
+      if (!wishlistEntryID) {
+        toast.error(
+          'Wishlist entry is missing restore metadata.',
+          wishlistToastHistory(
+            'wishlist-restore-missing-metadata',
+            'Wishlist entry is missing restore metadata.',
+            'Wishlist restore validation feedback was preserved in Inbox history.'
+          )
+        )
+        return
+      }
+
+      setIsWishlistMutating(true)
+      try {
+        const response = await fetch(
+          `/api/wishlist/${encodeURIComponent(wishlistEntryID)}/restore`,
+          { method: 'POST' }
+        )
+        if (!response.ok) {
+          throw new Error('wishlist_restore_failed')
+        }
+        await refreshWishlistTable()
+        const message = `${task.title} restored to active wishlist.`
+        toast.success(
+          message,
+          wishlistToastHistory(
+            'wishlist-restore-success',
+            message,
+            'Wishlist restore feedback was preserved in Inbox history.'
+          )
+        )
+      } catch {
+        toast.error(
+          'Wishlist restore failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-restore-failed',
+            'Wishlist restore failed. Try again.',
+            'Wishlist restore failure feedback was preserved in Inbox history.'
+          )
+        )
+        throw new Error('wishlist_restore_failed')
       } finally {
         setIsWishlistMutating(false)
       }
@@ -962,17 +1380,37 @@ export function Tasks({
           await saveWishlistDraft(entry)
         }
         await refreshWishlistTable()
+        const message = `Imported ${entries.length} wishlist entr${entries.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Imported ${entries.length} wishlist entr${entries.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-import-success',
+            message,
+            'Wishlist import feedback was preserved in Inbox history.'
+          )
         )
       } catch (error) {
         if (
           error instanceof Error &&
           error.message === 'invalid_target_price'
         ) {
-          toast.error('Target price must be a positive number.')
+          toast.error(
+            'Target price must be a positive number.',
+            wishlistToastHistory(
+              'wishlist-import-invalid-target-price',
+              'Target price must be a positive number.',
+              'Wishlist import validation feedback was preserved in Inbox history.'
+            )
+          )
         } else {
-          toast.error('Wishlist import failed. Try again.')
+          toast.error(
+            'Wishlist import failed. Try again.',
+            wishlistToastHistory(
+              'wishlist-import-failed',
+              'Wishlist import failed. Try again.',
+              'Wishlist import failure feedback was preserved in Inbox history.'
+            )
+          )
         }
         throw error
       } finally {
@@ -1000,6 +1438,7 @@ export function Tasks({
               priority: normalizeWishlistPriority(priority),
               notes: task.notes ?? '',
               target_price: task.targetPrice ?? 0,
+              currency: task.currency ?? 'USD',
               highlight_hit: task.highlightHit ?? false,
             }),
           })
@@ -1008,11 +1447,24 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
+        const message = `Updated priority for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Updated priority for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-bulk-priority-success',
+            message,
+            'Wishlist bulk priority feedback was preserved in Inbox history.'
+          )
         )
       } catch {
-        toast.error('Bulk priority update failed. Try again.')
+        toast.error(
+          'Bulk priority update failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-bulk-priority-failed',
+            'Bulk priority update failed. Try again.',
+            'Wishlist bulk priority failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_bulk_priority_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1040,6 +1492,7 @@ export function Tasks({
               priority: normalizeWishlistPriority(task.priority),
               notes: task.notes ?? '',
               target_price: task.targetPrice ?? 0,
+              currency: task.currency ?? 'USD',
               highlight_hit: task.highlightHit ?? false,
               below_target_now: belowTargetNow,
             }),
@@ -1049,11 +1502,24 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
+        const message = `Updated watch status for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Updated watch status for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-bulk-watch-status-success',
+            message,
+            'Wishlist bulk watch-status feedback was preserved in Inbox history.'
+          )
         )
       } catch {
-        toast.error('Bulk watch status update failed. Try again.')
+        toast.error(
+          'Bulk watch status update failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-bulk-watch-status-failed',
+            'Bulk watch status update failed. Try again.',
+            'Wishlist bulk watch-status failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_bulk_status_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1080,11 +1546,24 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
+        const message = `Deleted ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
         toast.success(
-          `Deleted ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+          message,
+          wishlistToastHistory(
+            'wishlist-bulk-delete-success',
+            message,
+            'Wishlist bulk delete feedback was preserved in Inbox history.'
+          )
         )
       } catch {
-        toast.error('Bulk delete failed. Try again.')
+        toast.error(
+          'Bulk delete failed. Try again.',
+          wishlistToastHistory(
+            'wishlist-bulk-delete-failed',
+            'Bulk delete failed. Try again.',
+            'Wishlist bulk delete failure feedback was preserved in Inbox history.'
+          )
+        )
         throw new Error('wishlist_bulk_delete_failed')
       } finally {
         setIsWishlistMutating(false)
@@ -1104,8 +1583,14 @@ export function Tasks({
     anchor.click()
     anchor.remove()
     window.URL.revokeObjectURL(url)
+    const message = `Exported ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
     toast.success(
-      `Exported ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+      message,
+      wishlistToastHistory(
+        'wishlist-export-success',
+        message,
+        'Wishlist export feedback was preserved in Inbox history.'
+      )
     )
   }, [])
 
@@ -1136,9 +1621,17 @@ export function Tasks({
 
   const handleWishlistPasteSave = useCallback(async () => {
     const content = wishlistPasteContent.trim()
-    const title = wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
+    const title =
+      wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
     if (!content || !title) {
-      toast.error('Paste text or a URL before adding to wishlist.')
+      toast.error(
+        'Paste text or a URL before adding to wishlist.',
+        wishlistToastHistory(
+          'wishlist-paste-missing-content',
+          'Paste text or a URL before adding to wishlist.',
+          'Wishlist paste validation feedback was preserved in Inbox history.'
+        )
+      )
       return
     }
 
@@ -1146,10 +1639,15 @@ export function Tasks({
       title,
       partNumber: '',
       category: '',
+      itemType: '',
+      packagingGradeType: '',
+      condition: '',
       priority: 'medium',
       notes: content,
       targetPrice: '',
+      currency: 'USD',
       owned: false,
+      delivered: false,
       pricePaid: '',
       purchaseUrl: extractFirstUrl(content),
       purchaseDate: '',
@@ -1199,10 +1697,15 @@ export function Tasks({
         title,
         partNumber: '',
         category: 'Screenshot',
+        itemType: '',
+        packagingGradeType: '',
+        condition: '',
         priority: 'medium',
         notes: 'Created from screenshot.',
         targetPrice: '',
+        currency: 'USD',
         owned: false,
+        delivered: false,
         pricePaid: '',
         purchaseUrl: '',
         purchaseDate: '',
@@ -1228,13 +1731,26 @@ export function Tasks({
       }
 
       await refreshWishlistTable()
-      toast.success(`${title} added to wishlist with screenshot.`)
+      const message = `${title} added to wishlist with screenshot.`
+      toast.success(
+        message,
+        wishlistToastHistory(
+          'wishlist-screenshot-save-success',
+          message,
+          'Wishlist screenshot feedback was preserved in Inbox history.'
+        )
+      )
       handleWishlistScreenshotOpenChange(false)
     } catch {
-      setWishlistScreenshotError(
-        'Screenshot wishlist save failed. Try again.'
+      setWishlistScreenshotError('Screenshot wishlist save failed. Try again.')
+      toast.error(
+        'Screenshot wishlist save failed. Try again.',
+        wishlistToastHistory(
+          'wishlist-screenshot-save-failed',
+          'Screenshot wishlist save failed. Try again.',
+          'Wishlist screenshot failure feedback was preserved in Inbox history.'
+        )
       )
-      toast.error('Screenshot wishlist save failed. Try again.')
     } finally {
       setIsWishlistMutating(false)
     }
@@ -1256,10 +1772,15 @@ export function Tasks({
           title,
           partNumber: '',
           category: 'Image',
+          itemType: '',
+          packagingGradeType: '',
+          condition: '',
           priority: 'medium',
           notes: `Created from dropped image: ${file.name}`,
           targetPrice: '',
+          currency: 'USD',
           owned: false,
+          delivered: false,
           pricePaid: '',
           purchaseUrl: '',
           purchaseDate: '',
@@ -1283,12 +1804,27 @@ export function Tasks({
 
         await refreshWishlistTable()
         setWishlistImageDropMessage(`${title} added from dropped image.`)
-        toast.success(`${title} added to wishlist from image.`)
+        const message = `${title} added to wishlist from image.`
+        toast.success(
+          message,
+          wishlistToastHistory(
+            'wishlist-image-drop-success',
+            message,
+            'Wishlist image-drop feedback was preserved in Inbox history.'
+          )
+        )
       } catch {
         setWishlistImageDropMessage(
           'Image drop failed. Try dropping the file again.'
         )
-        toast.error('Image drop failed. Try dropping the file again.')
+        toast.error(
+          'Image drop failed. Try dropping the file again.',
+          wishlistToastHistory(
+            'wishlist-image-drop-failed',
+            'Image drop failed. Try dropping the file again.',
+            'Wishlist image-drop failure feedback was preserved in Inbox history.'
+          )
+        )
       } finally {
         setIsWishlistMutating(false)
       }
@@ -1376,10 +1912,15 @@ export function Tasks({
         title,
         partNumber: barcode,
         category: 'Barcode',
+        itemType: '',
+        packagingGradeType: '',
+        condition: '',
         priority: 'medium',
         notes: `Created from barcode ${barcode}.`,
         targetPrice: '',
+        currency: 'USD',
         owned: false,
+        delivered: false,
         pricePaid: '',
         purchaseUrl: '',
         purchaseDate: '',
@@ -1401,11 +1942,26 @@ export function Tasks({
       }
 
       await refreshWishlistTable()
-      toast.success(`${title} added to wishlist with barcode.`)
+      const message = `${title} added to wishlist with barcode.`
+      toast.success(
+        message,
+        wishlistToastHistory(
+          'wishlist-barcode-save-success',
+          message,
+          'Wishlist barcode feedback was preserved in Inbox history.'
+        )
+      )
       handleWishlistBarcodeOpenChange(false)
     } catch {
       setWishlistBarcodeError('Barcode wishlist save failed. Try again.')
-      toast.error('Barcode wishlist save failed. Try again.')
+      toast.error(
+        'Barcode wishlist save failed. Try again.',
+        wishlistToastHistory(
+          'wishlist-barcode-save-failed',
+          'Barcode wishlist save failed. Try again.',
+          'Wishlist barcode failure feedback was preserved in Inbox history.'
+        )
+      )
     } finally {
       setIsWishlistMutating(false)
     }
@@ -1456,7 +2012,7 @@ export function Tasks({
         fixed
         data-testid={isWishlistRoute ? 'wishlist-shell-header' : undefined}
       >
-        <Search />
+        <Search className={isWishlistRoute ? 'max-sm:hidden' : undefined} />
         {isWishlistRoute ? (
           <HeaderTitle
             title={title}
@@ -1778,7 +2334,9 @@ export function Tasks({
         onDrop={handleWishlistImageDrop}
       >
         {isWishlistRoute &&
-        (wishlistImageDropActive || isWishlistMutating || wishlistImageDropMessage) ? (
+        (wishlistImageDropActive ||
+          isWishlistMutating ||
+          wishlistImageDropMessage) ? (
           <div
             className={cn(
               'rounded-lg border border-dashed px-4 py-3 text-sm',
@@ -1803,6 +2361,11 @@ export function Tasks({
           <TasksTable
             data={displayedData}
             routePath={routePath}
+            currentRecordID={
+              isWishlistRoute && dialogOpen === 'update'
+                ? (currentDialogRow?.itemID ?? currentDialogRow?.id)
+                : undefined
+            }
             onEditRow={(task, navigationRows) => {
               setDialogNavigationRows(navigationRows ?? displayedData)
               setCurrentDialogRow(task)
@@ -1813,6 +2376,13 @@ export function Tasks({
               setCurrentDialogRow(task)
               setDialogOpen('delete')
             }}
+            onRestoreRow={
+              isWishlistRoute
+                ? (task) => {
+                    void handleWishlistRestore(task)
+                  }
+                : undefined
+            }
             onWishlistBulkStatusChange={
               isWishlistRoute ? handleWishlistBulkStatusChange : undefined
             }
@@ -1917,6 +2487,9 @@ export function Tasks({
         onWishlistDelete={isWishlistRoute ? handleWishlistDelete : undefined}
         onWishlistImport={isWishlistRoute ? handleWishlistImport : undefined}
         isWishlistMutating={isWishlistMutating}
+        wishlistItemTypeOptions={wishlistItemTypeOptions}
+        wishlistPackagingGradeOptions={wishlistPackagingGrades}
+        wishlistConditionOptions={wishlistConditionOptions}
       />
     </>
   )

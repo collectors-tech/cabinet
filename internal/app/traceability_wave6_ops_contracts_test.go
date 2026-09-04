@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,8 +19,12 @@ func TestWave6ProfilesIsolationStorageAndSecrets(t *testing.T) {
 	if createP1.Code != http.StatusCreated || createP2.Code != http.StatusCreated {
 		t.Fatalf("create profiles failed p1=%d p2=%d", createP1.Code, createP2.Code)
 	}
-	var p1 struct{ ID string `json:"id"` }
-	var p2 struct{ ID string `json:"id"` }
+	var p1 struct {
+		ID string `json:"id"`
+	}
+	var p2 struct {
+		ID string `json:"id"`
+	}
 	_ = json.NewDecoder(createP1.Body).Decode(&p1)
 	_ = json.NewDecoder(createP2.Body).Decode(&p2)
 
@@ -48,6 +53,105 @@ func TestWave6ProfilesIsolationStorageAndSecrets(t *testing.T) {
 	}
 	if strings.Contains(getP2Secret.Body.String(), "token-p1") {
 		t.Fatalf("secret from p1 leaked into p2 response: %s", getP2Secret.Body.String())
+	}
+}
+
+func TestDataExportsAreScopedToActiveProfile(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createP1 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"ExportP1"}`), map[string]string{"Content-Type": "application/json"})
+	createP2 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"ExportP2"}`), map[string]string{"Content-Type": "application/json"})
+	if createP1.Code != http.StatusCreated || createP2.Code != http.StatusCreated {
+		t.Fatalf("create profiles failed p1=%d p2=%d", createP1.Code, createP2.Code)
+	}
+	var p1 struct {
+		ID string `json:"id"`
+	}
+	var p2 struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createP1.Body).Decode(&p1)
+	_ = json.NewDecoder(createP2.Body).Decode(&p2)
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p1.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	createP1Item := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"EXPORT-P1-ONLY","title":"P1 export item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if createP1Item.Code != http.StatusCreated {
+		t.Fatalf("create p1 item status=%d body=%s", createP1Item.Code, createP1Item.Body.String())
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p2.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	createP2Item := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"EXPORT-P2-ONLY","title":"P2 export item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if createP2Item.Code != http.StatusCreated {
+		t.Fatalf("create p2 item status=%d body=%s", createP2Item.Code, createP2Item.Body.String())
+	}
+
+	jsonExport := doRequest(t, a, http.MethodGet, "/api/data/export/json", nil, nil)
+	if jsonExport.Code != http.StatusOK {
+		t.Fatalf("json export status=%d body=%s", jsonExport.Code, jsonExport.Body.String())
+	}
+	if body := jsonExport.Body.String(); !strings.Contains(body, "EXPORT-P2-ONLY") || strings.Contains(body, "EXPORT-P1-ONLY") {
+		t.Fatalf("json export should include only active profile records, got %s", body)
+	}
+
+	csvExport := doRequest(t, a, http.MethodGet, "/api/data/export/csv/items", nil, nil)
+	if csvExport.Code != http.StatusOK {
+		t.Fatalf("csv export status=%d body=%s", csvExport.Code, csvExport.Body.String())
+	}
+	if body := csvExport.Body.String(); !strings.Contains(body, "EXPORT-P2-ONLY") || strings.Contains(body, "EXPORT-P1-ONLY") {
+		t.Fatalf("csv export should include only active profile records, got %s", body)
+	}
+}
+
+func TestDataExportsDoNotLeakProfileSecretsOrLicenses(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"SecretSafeExport"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	secretValue := "sk-1867-export-secret"
+	licenseValue := `{"tier":"pro","signature":"license-1867-secret"}`
+	putSecret := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/secrets", strings.NewReader(`{"key":"openai_api_key","value":"`+secretValue+`"}`), map[string]string{"Content-Type": "application/json"})
+	if putSecret.Code != http.StatusOK {
+		t.Fatalf("put secret status=%d body=%s", putSecret.Code, putSecret.Body.String())
+	}
+	putLicense := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/license", strings.NewReader(`{"license_json":`+strconv.Quote(licenseValue)+`}`), map[string]string{"Content-Type": "application/json"})
+	if putLicense.Code != http.StatusOK {
+		t.Fatalf("put license status=%d body=%s", putLicense.Code, putLicense.Body.String())
+	}
+	createItem := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"SECRET-SAFE-EXPORT","title":"Secret safe export item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if createItem.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", createItem.Code, createItem.Body.String())
+	}
+
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{name: "json snapshot", path: "/api/data/export/json"},
+		{name: "csv items", path: "/api/data/export/csv/items"},
+		{name: "diagnostic logs", path: "/api/logs/export"},
+	} {
+		resp := doRequest(t, a, http.MethodGet, tc.path, nil, nil)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s export status=%d body=%s", tc.name, resp.Code, resp.Body.String())
+		}
+		body := resp.Body.String()
+		for _, leaked := range []string{secretValue, licenseValue, "license-1867-secret"} {
+			if strings.Contains(body, leaked) {
+				t.Fatalf("%s export leaked sensitive material %q: %s", tc.name, leaked, body)
+			}
+		}
 	}
 }
 
@@ -120,7 +224,9 @@ func TestWave6ScannerQuerySetCreateAndFailureRetry(t *testing.T) {
 	if createProfile.Code != http.StatusCreated {
 		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
 	}
-	var profile struct{ ID string `json:"id"` }
+	var profile struct {
+		ID string `json:"id"`
+	}
 	_ = json.NewDecoder(createProfile.Body).Decode(&profile)
 	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
 
@@ -193,16 +299,64 @@ func TestWave6DataImportDryRunAndMaintenanceContracts(t *testing.T) {
 		t.Fatalf("dry-run must not mutate persisted records, got %+v", itemsPayload.Items)
 	}
 
+	apply := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/data/import/json/apply",
+		strings.NewReader(`{"snapshot":{"schema_version":1,"items":[{"brand":"AFX","category":"Slot","part_number":"W6-DATA-001","title":"Conflict"},{"brand":"AFX","category":"Slot","part_number":"W6-DATA-NEW","title":"New Item"}]},"options":{"default_action":"merge"}}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	var applyPayload struct {
+		TotalItems int `json:"total_items"`
+		Created    int `json:"created"`
+		Merged     int `json:"merged"`
+		Skipped    int `json:"skipped"`
+		Failed     int `json:"failed"`
+	}
+	_ = json.NewDecoder(apply.Body).Decode(&applyPayload)
+	if applyPayload.TotalItems != 2 || applyPayload.Created != 1 || applyPayload.Merged != 1 || applyPayload.Skipped != 0 || applyPayload.Failed != 0 {
+		t.Fatalf("unexpected apply summary: %+v body=%s", applyPayload, apply.Body.String())
+	}
+
+	jsonExport := doRequest(t, a, http.MethodGet, "/api/data/export/json", nil, nil)
+	if jsonExport.Code != http.StatusOK {
+		t.Fatalf("json export status=%d body=%s", jsonExport.Code, jsonExport.Body.String())
+	}
+	if got := jsonExport.Header().Get("Content-Disposition"); !strings.Contains(got, "cabinet-data-snapshot.json") {
+		t.Fatalf("json export missing download filename, got %q", got)
+	}
+	if !strings.Contains(jsonExport.Body.String(), "W6-DATA-NEW") {
+		t.Fatalf("json export missing applied item evidence: %s", jsonExport.Body.String())
+	}
+
+	csvExport := doRequest(t, a, http.MethodGet, "/api/data/export/csv/items", nil, nil)
+	if csvExport.Code != http.StatusOK {
+		t.Fatalf("csv export status=%d body=%s", csvExport.Code, csvExport.Body.String())
+	}
+	if got := csvExport.Header().Get("Content-Disposition"); !strings.Contains(got, "cabinet-items.csv") {
+		t.Fatalf("csv export missing download filename, got %q", got)
+	}
+	if !strings.Contains(csvExport.Body.String(), "W6-DATA-NEW") {
+		t.Fatalf("csv export missing applied item evidence: %s", csvExport.Body.String())
+	}
+
 	reindex := doRequest(t, a, http.MethodPost, "/api/data/reindex", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if reindex.Code != http.StatusOK {
 		t.Fatalf("reindex status=%d body=%s", reindex.Code, reindex.Body.String())
+	}
+	if !strings.Contains(reindex.Body.String(), `"operation":"reindex_search"`) || !strings.Contains(reindex.Body.String(), `"rebuilt_search_index":true`) {
+		t.Fatalf("reindex response missing operation metadata: %s", reindex.Body.String())
 	}
 	repair := doRequest(t, a, http.MethodPost, "/api/data/repair", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if repair.Code != http.StatusOK {
 		t.Fatalf("repair status=%d body=%s", repair.Code, repair.Body.String())
 	}
-	if !strings.Contains(repair.Body.String(), `"integrity_check"`) {
-		t.Fatalf("repair response missing integrity_check: %s", repair.Body.String())
+	if !strings.Contains(repair.Body.String(), `"operation":"integrity_check"`) || !strings.Contains(repair.Body.String(), `"integrity_check":"ok"`) {
+		t.Fatalf("repair response missing integrity metadata: %s", repair.Body.String())
 	}
 }
 
@@ -214,7 +368,9 @@ func TestWave6LoggingDebugToggleAndRedactedExport(t *testing.T) {
 	if createProfile.Code != http.StatusCreated {
 		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
 	}
-	var profile struct{ ID string `json:"id"` }
+	var profile struct {
+		ID string `json:"id"`
+	}
 	_ = json.NewDecoder(createProfile.Body).Decode(&profile)
 
 	toggle := doRequest(t, a, http.MethodPost, "/api/logs/debug", strings.NewReader(`{"profile_id":"`+profile.ID+`","enabled":true}`), map[string]string{"Content-Type": "application/json"})

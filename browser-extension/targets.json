@@ -1,0 +1,4 @@
+{
+  "source_manifest": "manifest.json",
+  "browsers": ["chrome", "edge"]
+}

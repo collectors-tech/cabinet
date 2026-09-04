@@ -1,0 +1,32 @@
+{
+  "products": [
+    {
+      "id": 91001,
+      "title": "Tamiya Neo Fighter Buggy DT-03",
+      "handle": "tamiya-neo-fighter-buggy-dt-03",
+      "vendor": "Tamiya",
+      "product_type": "RC Kit",
+      "body_html": "<p>Public Shopify storefront fixture product for Cabinet source matching.</p>",
+      "tags": "RC Cars, Kits, Tamiya",
+      "variants": [
+        {
+          "id": 91001001,
+          "title": "Default Title",
+          "sku": "TAM58587",
+          "price": "169.95",
+          "compare_at_price": "189.95",
+          "available": true,
+          "inventory_quantity": 4
+        }
+      ],
+      "images": [
+        {
+          "src": "https://andrewshobbies.com.au/cdn/shop/products/tamiya-neo-fighter.jpg"
+        }
+      ],
+      "image": {
+        "src": "https://andrewshobbies.com.au/cdn/shop/products/tamiya-neo-fighter.jpg"
+      }
+    }
+  ]
+}

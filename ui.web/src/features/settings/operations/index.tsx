@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ContentSection } from '../components/content-section'
+import { recordNotificationHistory } from '@/lib/toast-history'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -9,12 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { ContentSection } from '../components/content-section'
 import { useProfileSettings } from '../use-profile-settings'
 
 type RuntimeResponse = {
   app_version?: string
+  build_revision?: string
   build_date?: string
   bind_mode?: string
   runtime_host?: string
@@ -60,6 +62,14 @@ type ImportDryRunSummaryResponse = {
   new_items?: number
   conflicts?: number
   conflict_details?: ImportConflictDetail[]
+}
+
+type ImportApplySummaryResponse = {
+  total_items?: number
+  created?: number
+  merged?: number
+  skipped?: number
+  failed?: number
 }
 
 type ImportSnapshotRequest = {
@@ -126,6 +136,19 @@ function parseImportSnapshotRequest(rawInput: string): ImportSnapshotRequest {
   return { snapshot: parsed }
 }
 
+function formatImportApplySummary(
+  prefix: string,
+  summary: ImportApplySummaryResponse
+): string {
+  const totalItems = Number(summary.total_items ?? 0)
+  const created = Number(summary.created ?? 0)
+  const merged = Number(summary.merged ?? 0)
+  const skipped = Number(summary.skipped ?? 0)
+  const failed = Number(summary.failed ?? 0)
+
+  return `${prefix}: ${totalItems} item${totalItems === 1 ? '' : 's'}, ${created} created, ${merged} merged, ${skipped} skipped, ${failed} failed.`
+}
+
 export function SettingsOperations() {
   const { t } = useTranslation('pages')
   const {
@@ -139,18 +162,21 @@ export function SettingsOperations() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeResponse | null>(null)
-  const [recoveryInfo, setRecoveryInfo] = useState<RuntimeRecoveryResponse | null>(null)
+  const [recoveryInfo, setRecoveryInfo] =
+    useState<RuntimeRecoveryResponse | null>(null)
   const [setupImportSourcePath, setSetupImportSourcePath] = useState('')
   const [setupImportPending, setSetupImportPending] = useState(false)
   const [setupImportStatus, setSetupImportStatus] = useState(
     'No runtime setup import has been run yet.'
   )
-  const [setupImportTone, setSetupImportTone] = useState<'default' | 'destructive'>(
-    'default'
-  )
+  const [setupImportTone, setSetupImportTone] = useState<
+    'default' | 'destructive'
+  >('default')
   const [setupImportSummary, setSetupImportSummary] =
     useState<RuntimeSetupImportResponse | null>(null)
-  const [dataStatus, setDataStatus] = useState<string>('No import or export action has run yet.')
+  const [dataStatus, setDataStatus] = useState<string>(
+    'No import or export action has run yet.'
+  )
   const [dataTone, setDataTone] = useState<'default' | 'destructive'>('default')
   const [exportPending, setExportPending] = useState(false)
   const [importDryRunPending, setImportDryRunPending] = useState(false)
@@ -164,39 +190,56 @@ export function SettingsOperations() {
   const [importCsvInput, setImportCsvInput] = useState(
     'brand,category,part_number,title\nAFX,Slot,CSV-001,Example Item'
   )
-  const [importCsvMapping, setImportCsvMapping] = useState<CSVImportMappingState>({
-    brand: '',
-    category: '',
-    part_number: '',
-    title: '',
-  })
-  const [lastExportSummary, setLastExportSummary] = useState<ExportSnapshotResponse | null>(null)
-  const [importSummary, setImportSummary] = useState<ImportDryRunSummaryResponse | null>(null)
-  const [csvStatus, setCsvStatus] = useState<string>('No CSV import or export action has run yet.')
+  const [importCsvMapping, setImportCsvMapping] =
+    useState<CSVImportMappingState>({
+      brand: '',
+      category: '',
+      part_number: '',
+      title: '',
+    })
+  const [lastExportSummary, setLastExportSummary] =
+    useState<ExportSnapshotResponse | null>(null)
+  const [importSummary, setImportSummary] =
+    useState<ImportDryRunSummaryResponse | null>(null)
+  const [csvStatus, setCsvStatus] = useState<string>(
+    'No CSV import or export action has run yet.'
+  )
   const [csvTone, setCsvTone] = useState<'default' | 'destructive'>('default')
-  const [csvSummary, setCsvSummary] = useState<ImportDryRunSummaryResponse | null>(null)
+  const [csvSummary, setCsvSummary] =
+    useState<ImportDryRunSummaryResponse | null>(null)
   const [logsExportPending, setLogsExportPending] = useState(false)
-  const [logsStatus, setLogsStatus] = useState<string>('No diagnostics export has run yet.')
+  const [logsStatus, setLogsStatus] = useState<string>(
+    'No diagnostics export has run yet.'
+  )
   const [logsTone, setLogsTone] = useState<'default' | 'destructive'>('default')
   const [logsPreview, setLogsPreview] = useState<string | null>(null)
   const [importDefaultAction, setImportDefaultAction] =
     useState<ImportApplyAction>('merge')
   const [importCsvDefaultAction, setImportCsvDefaultAction] =
     useState<ImportApplyAction>('merge')
-  const [lastDryRunRequest, setLastDryRunRequest] = useState<ImportSnapshotRequest | null>(null)
-  const [lastCsvDryRunRequest, setLastCsvDryRunRequest] = useState<CSVImportRequest | null>(null)
-  const [queuePendingAction, setQueuePendingAction] = useState<'pause' | 'resume' | null>(null)
-  const [queueStatusOverride, setQueueStatusOverride] = useState<string | null>(null)
-  const [queueTone, setQueueTone] = useState<'default' | 'destructive'>('default')
+  const [lastDryRunRequest, setLastDryRunRequest] =
+    useState<ImportSnapshotRequest | null>(null)
+  const [lastCsvDryRunRequest, setLastCsvDryRunRequest] =
+    useState<CSVImportRequest | null>(null)
+  const [queuePendingAction, setQueuePendingAction] = useState<
+    'pause' | 'resume' | null
+  >(null)
+  const [queueStatusOverride, setQueueStatusOverride] = useState<string | null>(
+    null
+  )
+  const [queueTone, setQueueTone] = useState<'default' | 'destructive'>(
+    'default'
+  )
   const [recoveryPassphraseInput, setRecoveryPassphraseInput] = useState('')
-  const [recoveryPassphrasePending, setRecoveryPassphrasePending] = useState(false)
+  const [recoveryPassphrasePending, setRecoveryPassphrasePending] =
+    useState(false)
   const [recoveryResetPending, setRecoveryResetPending] = useState(false)
   const [authRecoveryStatus, setAuthRecoveryStatus] = useState(
     'No recovery passphrase or reset action has run yet.'
   )
-  const [authRecoveryTone, setAuthRecoveryTone] = useState<'default' | 'destructive'>(
-    'default'
-  )
+  const [authRecoveryTone, setAuthRecoveryTone] = useState<
+    'default' | 'destructive'
+  >('default')
   const [authRecoverySummary, setAuthRecoverySummary] =
     useState<RecoveryResetResponse | null>(null)
 
@@ -212,7 +255,8 @@ export function SettingsOperations() {
         throw new Error('runtime_operations_unavailable')
       }
       const runtimePayload = (await runtimeResp.json()) as RuntimeResponse
-      const recoveryPayload = (await recoveryResp.json()) as RuntimeRecoveryResponse
+      const recoveryPayload =
+        (await recoveryResp.json()) as RuntimeRecoveryResponse
       setRuntimeInfo(runtimePayload)
       setRecoveryInfo(recoveryPayload)
     } catch {
@@ -252,11 +296,15 @@ export function SettingsOperations() {
       const payload = (await response.json()) as ExportSnapshotResponse
       const itemCount = Array.isArray(payload.items) ? payload.items.length : 0
       setLastExportSummary(payload)
-      setDataStatus(`Exported ${itemCount} item snapshot${itemCount === 1 ? '' : 's'}.`)
+      setDataStatus(
+        `Exported ${itemCount} item snapshot${itemCount === 1 ? '' : 's'}.`
+      )
     } catch {
       setLastExportSummary(null)
       setDataTone('destructive')
-      setDataStatus('Export failed. Retry when runtime data services are healthy.')
+      setDataStatus(
+        'Export failed. Retry when runtime data services are healthy.'
+      )
     } finally {
       setExportPending(false)
     }
@@ -287,7 +335,9 @@ export function SettingsOperations() {
     } catch {
       setImportSummary(null)
       setDataTone('destructive')
-      setDataStatus('Import dry-run failed.')
+      setDataStatus(
+        'Import dry-run failed. No records were changed; fix the JSON snapshot and run dry-run again.'
+      )
     } finally {
       setImportDryRunPending(false)
     }
@@ -313,12 +363,15 @@ export function SettingsOperations() {
       if (!response.ok) {
         throw new Error('failed_to_apply_import')
       }
-      setDataStatus('Import applied successfully.')
+      const payload = (await response.json()) as ImportApplySummaryResponse
+      setDataStatus(formatImportApplySummary('Import applied', payload))
       setImportSummary(null)
       setLastDryRunRequest(null)
     } catch {
       setDataTone('destructive')
-      setDataStatus('Import apply failed.')
+      setDataStatus(
+        'Import apply failed. No records were changed; review the dry-run summary and retry when data services are healthy.'
+      )
     } finally {
       setImportApplyPending(false)
     }
@@ -340,7 +393,9 @@ export function SettingsOperations() {
           .map((line) => line.trim())
           .filter((line) => line !== '').length - 1
       )
-      setCsvStatus(`Exported CSV with ${rowCount} item row${rowCount === 1 ? '' : 's'}.`)
+      setCsvStatus(
+        `Exported CSV with ${rowCount} item row${rowCount === 1 ? '' : 's'}.`
+      )
     } catch {
       setCsvTone('destructive')
       setCsvStatus('CSV export failed.')
@@ -361,10 +416,26 @@ export function SettingsOperations() {
       const preview = text.trim()
       setLogsPreview(preview || null)
       setLogsStatus('Exported runtime logs successfully.')
+      recordNotificationHistory({
+        id: 'settings-operations-logs-export-success',
+        level: 'success',
+        title: 'Exported runtime logs successfully.',
+        summary: 'Diagnostics logs status from Settings Operations.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
     } catch {
       setLogsPreview(null)
       setLogsTone('destructive')
       setLogsStatus('Runtime logs export failed.')
+      recordNotificationHistory({
+        id: 'settings-operations-logs-export-failed',
+        level: 'error',
+        title: 'Runtime logs export failed.',
+        summary: 'Diagnostics logs status from Settings Operations.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
     } finally {
       setLogsExportPending(false)
     }
@@ -387,11 +458,29 @@ export function SettingsOperations() {
       const payload = (await response.json()) as RuntimeSetupImportResponse
       setSetupImportSummary(payload)
       setSetupImportStatus('Runtime setup imported successfully.')
+      recordNotificationHistory({
+        id: 'settings-operations-setup-import-success',
+        level: 'success',
+        title: 'Runtime setup imported successfully.',
+        summary:
+          'Runtime setup import status from Settings Operations was preserved in Inbox history.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
       await loadOperations()
     } catch {
       setSetupImportSummary(null)
       setSetupImportTone('destructive')
       setSetupImportStatus('Runtime setup import failed.')
+      recordNotificationHistory({
+        id: 'settings-operations-setup-import-failed',
+        level: 'error',
+        title: 'Runtime setup import failed.',
+        summary:
+          'Runtime setup import failure from Settings Operations was preserved in Inbox history.',
+        source_label: 'Settings Operations',
+        category: 'system',
+      })
     } finally {
       setSetupImportPending(false)
     }
@@ -422,7 +511,9 @@ export function SettingsOperations() {
     } catch {
       setCsvSummary(null)
       setCsvTone('destructive')
-      setCsvStatus('CSV dry-run failed.')
+      setCsvStatus(
+        'CSV dry-run failed. No records were changed; fix the CSV rows or mapping and run dry-run again.'
+      )
     } finally {
       setImportCsvDryRunPending(false)
     }
@@ -448,12 +539,15 @@ export function SettingsOperations() {
       if (!response.ok) {
         throw new Error('failed_to_apply_csv_import')
       }
-      setCsvStatus('CSV import applied successfully.')
+      const payload = (await response.json()) as ImportApplySummaryResponse
+      setCsvStatus(formatImportApplySummary('CSV import applied', payload))
       setCsvSummary(null)
       setLastCsvDryRunRequest(null)
     } catch {
       setCsvTone('destructive')
-      setCsvStatus('CSV import apply failed.')
+      setCsvStatus(
+        'CSV import apply failed. No records were changed; review the CSV dry-run summary and retry when data services are healthy.'
+      )
     } finally {
       setImportCsvApplyPending(false)
     }
@@ -478,7 +572,9 @@ export function SettingsOperations() {
   const runPauseWorkers = useCallback(async () => {
     if (!activeProfileId) {
       setQueueTone('destructive')
-      setQueueStatusOverride('Queue controls are unavailable without an active profile.')
+      setQueueStatusOverride(
+        'Queue controls are unavailable without an active profile.'
+      )
       return
     }
 
@@ -495,7 +591,9 @@ export function SettingsOperations() {
         [queueWorkerScheduleSettingKey]: pausedQueueWorkerSchedule,
         [queueResumeScheduleSettingKey]: resumeSchedule,
       })
-      setQueueStatusOverride(`Workers paused. Resume will restore schedule ${resumeSchedule}.`)
+      setQueueStatusOverride(
+        `Workers paused. Resume will restore schedule ${resumeSchedule}.`
+      )
     } catch {
       setQueueTone('destructive')
       setQueueStatusOverride(
@@ -515,7 +613,9 @@ export function SettingsOperations() {
   const runResumeWorkers = useCallback(async () => {
     if (!activeProfileId) {
       setQueueTone('destructive')
-      setQueueStatusOverride('Queue controls are unavailable without an active profile.')
+      setQueueStatusOverride(
+        'Queue controls are unavailable without an active profile.'
+      )
       return
     }
 
@@ -541,7 +641,9 @@ export function SettingsOperations() {
   const runSetRecoveryPassphrase = useCallback(async () => {
     if (!activeProfileId) {
       setAuthRecoveryTone('destructive')
-      setAuthRecoveryStatus('Recovery access is unavailable without an active profile.')
+      setAuthRecoveryStatus(
+        'Recovery access is unavailable without an active profile.'
+      )
       return
     }
 
@@ -572,7 +674,9 @@ export function SettingsOperations() {
   const runBeginRecoveryReset = useCallback(async () => {
     if (!activeProfileId) {
       setAuthRecoveryTone('destructive')
-      setAuthRecoveryStatus('Recovery access is unavailable without an active profile.')
+      setAuthRecoveryStatus(
+        'Recovery access is unavailable without an active profile.'
+      )
       return
     }
 
@@ -622,7 +726,10 @@ export function SettingsOperations() {
     importCsvApplyPending
   const logsActionsDisabled = loading || Boolean(error) || logsExportPending
   const setupImportActionsDisabled =
-    loading || Boolean(error) || setupImportPending || setupImportSourcePath.trim() === ''
+    loading ||
+    Boolean(error) ||
+    setupImportPending ||
+    setupImportSourcePath.trim() === ''
   const queueActionsDisabled =
     loading ||
     Boolean(error) ||
@@ -652,20 +759,22 @@ export function SettingsOperations() {
           >
             <p className='font-medium'>{error}</p>
             <p className='mt-1 text-xs text-muted-foreground'>
-              Check runtime health and retry without leaving the Operations screen.
+              Check runtime health and retry without leaving the Operations
+              screen.
             </p>
           </div>
         ) : null}
 
         <div
-          className='rounded-md border p-3 space-y-2'
+          className='space-y-2 rounded-md border p-3'
           data-testid='settings-operations-runtime-card'
         >
           <div className='flex items-start justify-between gap-3'>
             <div>
               <p className='font-medium'>Runtime</p>
               <p className='text-muted-foreground'>
-                Live runtime version, bind mode, and update channel for this lane.
+                Live runtime version, bind mode, and update channel for this
+                lane.
               </p>
             </div>
             <Button
@@ -680,28 +789,63 @@ export function SettingsOperations() {
               {loading ? 'Refreshing…' : 'Refresh'}
             </Button>
           </div>
-          <p>Version: {loading ? 'Loading runtime...' : runtimeInfo?.app_version || 'Unavailable'}</p>
-          <p>Build date: {loading ? 'Loading runtime...' : runtimeInfo?.build_date || 'Unavailable'}</p>
+          <p>
+            Version:{' '}
+            {loading
+              ? 'Loading runtime...'
+              : runtimeInfo?.app_version || 'Unavailable'}
+          </p>
+          <p>
+            Build date:{' '}
+            {loading
+              ? 'Loading runtime...'
+              : runtimeInfo?.build_date || 'Unavailable'}
+          </p>
+          <p>
+            Build revision:{' '}
+            <span
+              className='font-mono break-all'
+              data-testid='settings-operations-build-revision'
+            >
+              {loading
+                ? 'Loading runtime...'
+                : runtimeInfo?.build_revision || 'Unavailable'}
+            </span>
+          </p>
           <p>Address: {loading ? 'Loading runtime...' : runtimeAddress}</p>
-          <p>Bind mode: {loading ? 'Loading runtime...' : runtimeInfo?.bind_mode || 'Unavailable'}</p>
-          <p>Update channel: {loading ? 'Loading runtime...' : runtimeInfo?.update_channel || 'Unavailable'}</p>
-          <p>Update signing key: {loading ? 'Loading runtime...' : updateKeyStatus}</p>
+          <p>
+            Bind mode:{' '}
+            {loading
+              ? 'Loading runtime...'
+              : runtimeInfo?.bind_mode || 'Unavailable'}
+          </p>
+          <p>
+            Update channel:{' '}
+            {loading
+              ? 'Loading runtime...'
+              : runtimeInfo?.update_channel || 'Unavailable'}
+          </p>
+          <p>
+            Update signing key:{' '}
+            {loading ? 'Loading runtime...' : updateKeyStatus}
+          </p>
         </div>
 
         <div
-          className='rounded-md border p-3 space-y-2'
+          className='space-y-2 rounded-md border p-3'
           data-testid='settings-operations-recovery-card'
         >
           <p className='font-medium'>Recovery state</p>
           <p className='text-muted-foreground'>
-            Surface whether the last runtime shutdown requires recovery attention.
+            Surface whether the last runtime shutdown requires recovery
+            attention.
           </p>
           <p>
             {loading
               ? 'Loading recovery state...'
               : recoveryInfo?.recovery_required
                 ? 'Recovery required'
-              : 'No recovery required'}
+                : 'No recovery required'}
           </p>
 
           <div className='space-y-2 border-t pt-3'>
@@ -712,7 +856,8 @@ export function SettingsOperations() {
               Runtime setup import
             </label>
             <p className='text-muted-foreground'>
-              Import a runtime setup config from disk to recover a missing or damaged local setup.
+              Import a runtime setup config from disk to recover a missing or
+              damaged local setup.
             </p>
             <Input
               id='settings-operations-setup-import-source'
@@ -734,12 +879,18 @@ export function SettingsOperations() {
                   void runSetupImport()
                 }}
               >
-                {setupImportPending ? 'Importing Setup…' : 'Import Setup Config'}
+                {setupImportPending
+                  ? 'Importing Setup…'
+                  : 'Import Setup Config'}
               </Button>
             </div>
             <p
               data-testid='settings-operations-setup-import-status'
-              className={setupImportTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+              className={
+                setupImportTone === 'destructive'
+                  ? 'text-sm text-destructive'
+                  : 'text-sm text-muted-foreground'
+              }
             >
               {setupImportStatus}
             </p>
@@ -749,10 +900,22 @@ export function SettingsOperations() {
             >
               {setupImportSummary ? (
                 <div className='space-y-1'>
-                  <p>Instance: {setupImportSummary.instance_name || 'Unknown instance'}</p>
-                  <p>Profile: {setupImportSummary.profile_key || 'Unknown profile'}</p>
-                  <p>Config: {setupImportSummary.config_path || 'Unknown config path'}</p>
-                  <p>Runtime URL: {setupImportSummary.runtime_url || 'Unknown runtime URL'}</p>
+                  <p>
+                    Instance:{' '}
+                    {setupImportSummary.instance_name || 'Unknown instance'}
+                  </p>
+                  <p>
+                    Profile:{' '}
+                    {setupImportSummary.profile_key || 'Unknown profile'}
+                  </p>
+                  <p>
+                    Config:{' '}
+                    {setupImportSummary.config_path || 'Unknown config path'}
+                  </p>
+                  <p>
+                    Runtime URL:{' '}
+                    {setupImportSummary.runtime_url || 'Unknown runtime URL'}
+                  </p>
                 </div>
               ) : (
                 <p>No imported setup summary yet.</p>
@@ -762,13 +925,14 @@ export function SettingsOperations() {
         </div>
 
         <div
-          className='rounded-md border p-3 space-y-3'
+          className='space-y-3 rounded-md border p-3'
           data-testid='settings-operations-auth-recovery-card'
         >
           <div className='space-y-1'>
             <p className='font-medium'>Recovery Access</p>
             <p className='text-muted-foreground'>
-              Set a recovery passphrase and begin a recovery reset session for the active profile without leaving Operations.
+              Set a recovery passphrase and begin a recovery reset session for
+              the active profile without leaving Operations.
             </p>
           </div>
 
@@ -801,7 +965,9 @@ export function SettingsOperations() {
                 void runSetRecoveryPassphrase()
               }}
             >
-              {recoveryPassphrasePending ? 'Saving Passphrase…' : 'Save Recovery Passphrase'}
+              {recoveryPassphrasePending
+                ? 'Saving Passphrase…'
+                : 'Save Recovery Passphrase'}
             </Button>
             <Button
               variant='outline'
@@ -812,13 +978,19 @@ export function SettingsOperations() {
                 void runBeginRecoveryReset()
               }}
             >
-              {recoveryResetPending ? 'Starting Recovery Reset…' : 'Begin Recovery Reset'}
+              {recoveryResetPending
+                ? 'Starting Recovery Reset…'
+                : 'Begin Recovery Reset'}
             </Button>
           </div>
 
           <p
             data-testid='settings-operations-auth-recovery-status'
-            className={authRecoveryTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            className={
+              authRecoveryTone === 'destructive'
+                ? 'text-sm text-destructive'
+                : 'text-sm text-muted-foreground'
+            }
           >
             {authRecoveryStatus}
           </p>
@@ -829,7 +1001,10 @@ export function SettingsOperations() {
           >
             {authRecoverySummary ? (
               <div className='space-y-1'>
-                <p>Recovery session: {authRecoverySummary.session_id || 'Unknown session'}</p>
+                <p>
+                  Recovery session:{' '}
+                  {authRecoverySummary.session_id || 'Unknown session'}
+                </p>
                 <p>Profile: {activeProfileId || 'Unknown profile'}</p>
               </div>
             ) : (
@@ -839,14 +1014,15 @@ export function SettingsOperations() {
         </div>
 
         <div
-          className='rounded-md border p-3 space-y-3'
+          className='space-y-3 rounded-md border p-3'
           data-testid='settings-operations-logs-card'
         >
           <div className='flex flex-wrap items-start justify-between gap-3'>
             <div>
               <p className='font-medium'>Diagnostics logs</p>
               <p className='text-muted-foreground'>
-                Export the current redacted runtime log snapshot for recovery and support workflows.
+                Export the current redacted runtime log snapshot for recovery
+                and support workflows.
               </p>
             </div>
             <Button
@@ -864,7 +1040,11 @@ export function SettingsOperations() {
 
           <p
             data-testid='settings-operations-logs-status'
-            className={logsTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            className={
+              logsTone === 'destructive'
+                ? 'text-sm text-destructive'
+                : 'text-sm text-muted-foreground'
+            }
           >
             {logsStatus}
           </p>
@@ -873,19 +1053,21 @@ export function SettingsOperations() {
             className='rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground'
             data-testid='settings-operations-logs-preview'
           >
-            {logsPreview ?? 'No log export preview yet. Export logs to review the current redacted snapshot.'}
+            {logsPreview ??
+              'No log export preview yet. Export logs to review the current redacted snapshot.'}
           </div>
         </div>
 
         <div
-          className='rounded-md border p-3 space-y-3'
+          className='space-y-3 rounded-md border p-3'
           data-testid='settings-operations-data-card'
         >
           <div className='flex flex-wrap items-start justify-between gap-3'>
             <div>
               <p className='font-medium'>Data import and export</p>
               <p className='text-muted-foreground'>
-                Export a JSON snapshot and dry-run a JSON import before applying any workspace changes.
+                Export a JSON snapshot and dry-run a JSON import before applying
+                any workspace changes.
               </p>
             </div>
             <Button
@@ -903,7 +1085,11 @@ export function SettingsOperations() {
 
           <p
             data-testid='settings-operations-data-status'
-            className={dataTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            className={
+              dataTone === 'destructive'
+                ? 'text-sm text-destructive'
+                : 'text-sm text-muted-foreground'
+            }
           >
             {dataStatus}
           </p>
@@ -913,8 +1099,8 @@ export function SettingsOperations() {
               <p>
                 Snapshot schema {lastExportSummary.schema_version ?? 1} with{' '}
                 {lastExportSummary.items?.length ?? 0} item
-                {(lastExportSummary.items?.length ?? 0) === 1 ? '' : 's'} exported at{' '}
-                {lastExportSummary.exported_at || 'unknown time'}.
+                {(lastExportSummary.items?.length ?? 0) === 1 ? '' : 's'}{' '}
+                exported at {lastExportSummary.exported_at || 'unknown time'}.
               </p>
             </div>
           ) : null}
@@ -956,7 +1142,9 @@ export function SettingsOperations() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='merge'>Merge into existing item</SelectItem>
+                    <SelectItem value='merge'>
+                      Merge into existing item
+                    </SelectItem>
                     <SelectItem value='create'>Create new item</SelectItem>
                     <SelectItem value='skip'>Skip conflicting item</SelectItem>
                   </SelectContent>
@@ -967,7 +1155,11 @@ export function SettingsOperations() {
                   variant='outline'
                   size='sm'
                   data-testid='settings-operations-import-json-apply'
-                  disabled={importActionsDisabled || !lastDryRunRequest || !importSummary}
+                  disabled={
+                    importActionsDisabled ||
+                    !lastDryRunRequest ||
+                    !importSummary
+                  }
                   onClick={() => {
                     void runImportJsonApply()
                   }}
@@ -996,14 +1188,17 @@ export function SettingsOperations() {
             {importSummary ? (
               <div className='space-y-2'>
                 <p>
-                  {importSummary.total_items ?? 0} items, {importSummary.new_items ?? 0} new,{' '}
+                  {importSummary.total_items ?? 0} items,{' '}
+                  {importSummary.new_items ?? 0} new,{' '}
                   {importSummary.conflicts ?? 0} conflict
                   {(importSummary.conflicts ?? 0) === 1 ? '' : 's'}.
                 </p>
                 {importSummary.conflict_details?.length ? (
                   <div className='space-y-1'>
                     {importSummary.conflict_details.map((detail) => (
-                      <p key={`${detail.part_number || 'unknown'}-${detail.existing_id || 'missing'}`}>
+                      <p
+                        key={`${detail.part_number || 'unknown'}-${detail.existing_id || 'missing'}`}
+                      >
                         {detail.part_number || 'Unknown part'} already exists as{' '}
                         {detail.existing_id || 'unknown item'}.
                       </p>
@@ -1014,20 +1209,24 @@ export function SettingsOperations() {
                 )}
               </div>
             ) : (
-              <p>No dry-run summary yet. Paste a snapshot and run a dry-run to review conflicts.</p>
+              <p>
+                No dry-run summary yet. Paste a snapshot and run a dry-run to
+                review conflicts.
+              </p>
             )}
           </div>
         </div>
 
         <div
-          className='rounded-md border p-3 space-y-3'
+          className='space-y-3 rounded-md border p-3'
           data-testid='settings-operations-csv-card'
         >
           <div className='flex flex-wrap items-start justify-between gap-3'>
             <div>
               <p className='font-medium'>CSV import and export</p>
               <p className='text-muted-foreground'>
-                Export item rows as CSV and dry-run CSV imports with the default item column mapping.
+                Export item rows as CSV and dry-run CSV imports with the default
+                item column mapping.
               </p>
             </div>
             <Button
@@ -1045,7 +1244,11 @@ export function SettingsOperations() {
 
           <p
             data-testid='settings-operations-csv-status'
-            className={csvTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            className={
+              csvTone === 'destructive'
+                ? 'text-sm text-destructive'
+                : 'text-sm text-muted-foreground'
+            }
           >
             {csvStatus}
           </p>
@@ -1185,7 +1388,9 @@ export function SettingsOperations() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='merge'>Merge into existing item</SelectItem>
+                    <SelectItem value='merge'>
+                      Merge into existing item
+                    </SelectItem>
                     <SelectItem value='create'>Create new item</SelectItem>
                     <SelectItem value='skip'>Skip conflicting item</SelectItem>
                   </SelectContent>
@@ -1196,7 +1401,9 @@ export function SettingsOperations() {
                   variant='outline'
                   size='sm'
                   data-testid='settings-operations-import-csv-apply'
-                  disabled={csvActionsDisabled || !lastCsvDryRunRequest || !csvSummary}
+                  disabled={
+                    csvActionsDisabled || !lastCsvDryRunRequest || !csvSummary
+                  }
                   onClick={() => {
                     void runImportCsvApply()
                   }}
@@ -1212,7 +1419,9 @@ export function SettingsOperations() {
                     void runImportCsvDryRun()
                   }}
                 >
-                  {importCsvDryRunPending ? 'Running CSV Dry-Run…' : 'Run CSV Dry-Run'}
+                  {importCsvDryRunPending
+                    ? 'Running CSV Dry-Run…'
+                    : 'Run CSV Dry-Run'}
                 </Button>
               </div>
             </div>
@@ -1225,14 +1434,17 @@ export function SettingsOperations() {
             {csvSummary ? (
               <div className='space-y-2'>
                 <p>
-                  {csvSummary.total_items ?? 0} items, {csvSummary.new_items ?? 0} new,{' '}
-                  {csvSummary.conflicts ?? 0} conflict
+                  {csvSummary.total_items ?? 0} items,{' '}
+                  {csvSummary.new_items ?? 0} new, {csvSummary.conflicts ?? 0}{' '}
+                  conflict
                   {(csvSummary.conflicts ?? 0) === 1 ? '' : 's'}.
                 </p>
                 {csvSummary.conflict_details?.length ? (
                   <div className='space-y-1'>
                     {csvSummary.conflict_details.map((detail) => (
-                      <p key={`csv-${detail.part_number || 'unknown'}-${detail.existing_id || 'missing'}`}>
+                      <p
+                        key={`csv-${detail.part_number || 'unknown'}-${detail.existing_id || 'missing'}`}
+                      >
                         {detail.part_number || 'Unknown part'} already exists as{' '}
                         {detail.existing_id || 'unknown item'}.
                       </p>
@@ -1243,22 +1455,30 @@ export function SettingsOperations() {
                 )}
               </div>
             ) : (
-              <p>No CSV dry-run summary yet. Paste CSV rows and run a dry-run to review conflicts.</p>
+              <p>
+                No CSV dry-run summary yet. Paste CSV rows and run a dry-run to
+                review conflicts.
+              </p>
             )}
           </div>
         </div>
 
         <div
-          className='rounded-md border p-3 space-y-3'
+          className='space-y-3 rounded-md border p-3'
           data-testid='settings-operations-queue-card'
         >
           <p className='font-medium'>Queue Controls</p>
           <p className='text-muted-foreground'>
-            Pause and resume Market Watch and enrichment workers for active profile context.
+            Pause and resume Market Watch and enrichment workers for active
+            profile context.
           </p>
           <p
             data-testid='settings-operations-queue-status'
-            className={queueTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            className={
+              queueTone === 'destructive'
+                ? 'text-sm text-destructive'
+                : 'text-sm text-muted-foreground'
+            }
           >
             {queueStatus}
           </p>
@@ -1272,7 +1492,9 @@ export function SettingsOperations() {
                 void runPauseWorkers()
               }}
             >
-              {queuePendingAction === 'pause' ? 'Pausing Workers…' : 'Pause Workers'}
+              {queuePendingAction === 'pause'
+                ? 'Pausing Workers…'
+                : 'Pause Workers'}
             </Button>
             <Button
               variant='outline'
@@ -1283,7 +1505,9 @@ export function SettingsOperations() {
                 void runResumeWorkers()
               }}
             >
-              {queuePendingAction === 'resume' ? 'Resuming Workers…' : 'Resume Workers'}
+              {queuePendingAction === 'resume'
+                ? 'Resuming Workers…'
+                : 'Resume Workers'}
             </Button>
           </div>
         </div>

@@ -3,11 +3,29 @@ package profile
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"modernc.org/sqlite"
 )
+
+var ErrProfileNotFound = errors.New("profile not found")
+
+func IsStorageContention(err error) bool {
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) {
+		return false
+	}
+	// Extended SQLite result codes retain the primary result in the low byte.
+	switch sqliteErr.Code() & 0xff {
+	case 5, 6: // SQLITE_BUSY, SQLITE_LOCKED
+		return true
+	default:
+		return false
+	}
+}
 
 type Profile struct {
 	ID        string `json:"id"`
@@ -15,12 +33,22 @@ type Profile struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type queryExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 type Repository struct {
-	db *sql.DB
+	db queryExecutor
 }
 
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) WithTx(tx *sql.Tx) *Repository {
+	return &Repository{db: tx}
 }
 
 func (r *Repository) List(ctx context.Context) ([]Profile, error) {
@@ -50,7 +78,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (Profile, error) {
 	err := r.db.QueryRowContext(ctx, `SELECT id, name, created_at FROM profiles WHERE id = ?`, id).Scan(&p.ID, &p.Name, &p.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return Profile{}, fmt.Errorf("profile not found")
+			return Profile{}, ErrProfileNotFound
 		}
 		return Profile{}, fmt.Errorf("get profile: %w", err)
 	}
@@ -73,6 +101,9 @@ func (r *Repository) Create(ctx context.Context, name string) (Profile, error) {
 
 	if err := r.db.QueryRowContext(ctx, `SELECT created_at FROM profiles WHERE id = ?`, p.ID).Scan(&p.CreatedAt); err != nil {
 		return Profile{}, fmt.Errorf("load profile: %w", err)
+	}
+	if err := r.ensureDefaultAgentAuthorityPolicy(ctx, p.ID); err != nil {
+		return Profile{}, err
 	}
 
 	return p, nil

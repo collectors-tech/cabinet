@@ -1,9 +1,23 @@
 describe('chats/ui-screen-chat-copilot/header-trigger', () => {
   function signInToChats() {
-    cy.visit('/sign-in?redirect=%2Fchats%2F')
-    cy.get('input[name="email"]').clear().type('e2e-chat-trigger@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap({ minimalProfile: true }).then((bootstrap) => {
+      cy.request('PUT', '/api/profiles/active', { profile_id: bootstrap.profile_id })
+        .its('status')
+        .should('eq', 200)
+      cy.visit('/sign-in?redirect=%2Fchats%2F', {
+        onBeforeLoad(win) {
+          win.localStorage.setItem(`cabinet.workspace.${bootstrap.profile_id}`, '1')
+        },
+      })
+      cy.contains('button', 'Open local workspace').click()
+      cy.get('body').then(($body) => {
+        const profileButton = `Use ${bootstrap.profile_name}`
+        if ($body.text().includes(profileButton)) {
+          cy.contains('button', profileButton).click()
+        }
+      })
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
   }
 

@@ -21,7 +21,7 @@ Settings SHALL support direct navigation to canonical section routes, with `/set
 #### Scenario: Render canonical settings sections
 - **GIVEN** settings screen loads
 - **WHEN** sidebar navigation renders
-- **THEN** UI MUST include sections `Profile`, `Account`, `Appearance`, `Notifications`, `Display`, `Storage`, `Operations`, and `Billing` with stable route mapping
+- **THEN** UI MUST include sections `Profile`, `Account`, `Appearance`, `Notifications`, `Display`, `Storage`, `Categories`, `Operations`, and `Billing` with stable route mapping
 
 ### Requirement UI-SCREEN-SETTINGS-003: Settings shell SHALL support deterministic route-level states
 
@@ -66,6 +66,15 @@ Settings shell MUST expose `/settings/billing` in sidebar and resolve deep-link 
 - **THEN** Billing section MUST render
 - **AND** Billing item in settings sidebar MUST be active
 
+### Requirement UI-SCREEN-SETTINGS-008: Settings shell SHALL support keyboard navigation across operational sections
+Settings sidebar links MUST remain keyboard reachable and route deterministically between Notifications, Categories, Operations, and Billing without losing the active-route indication.
+
+#### Scenario: Keyboard activate settings section links
+- **GIVEN** user is signed in and the Settings shell is visible
+- **WHEN** the user tabs to sidebar section links and activates Notifications, Categories, Operations, and Billing with the keyboard
+- **THEN** each activated section MUST route to its canonical URL
+- **AND** the active settings sidebar link MUST expose `aria-current="page"` for the current section
+
 ## Notes
 Detailed interaction specs are split per section:
 - `settings/profile/spec.md`
@@ -74,3 +83,5 @@ Detailed interaction specs are split per section:
 - `settings/notifications/spec.md`
 - `settings/display/spec.md`
 - `settings/storage/spec.md`
+- `settings/categories/spec.md`
+- `settings/billing/spec.md`

@@ -182,6 +182,14 @@ Folder create and folder-properties workflows MUST save the resulting tree state
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-016: Tree SHALL support persisted inventory item assignment through direct drag-drop
 Users MUST be able to drag inventory items onto folder rows and have the assignment survive refresh in the live runtime.
 
+#### Scenario: Drop inventory item onto folder and refresh
+- **GIVEN** an inventory item is visible in the inventory workspace
+- **WHEN** user drags that item onto a valid folder row
+- **THEN** the item MUST become assigned to that folder's scope
+- **AND** selecting that folder MUST show the moved item in the corresponding filtered inventory view
+- **AND** refreshing the workspace MUST preserve the assignment outcome for the same active profile
+- **AND** the persisted assignment setting MUST store the resolved folder scope used by filtering so the saved profile setting and visible folder selection remain consistent after reload
+
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-017: Tree SHALL provide deterministic root-level A/Z sorting
 Users MUST be able to apply a root-level alphabetical sort without disturbing child hierarchy under each root node.
 
@@ -192,12 +200,25 @@ Users MUST be able to apply a root-level alphabetical sort without disturbing ch
 - **AND** the pinned global root context (`All Items`) MUST remain at the top if present
 - **AND** nested child ordering within each root folder MUST remain unchanged unless explicitly sorted by a separate child-level action
 
-#### Scenario: Drop inventory item onto folder and refresh
-- **GIVEN** an inventory item is visible in the inventory workspace
-- **WHEN** user drags that item onto a valid folder row
-- **THEN** the item MUST become assigned to that folder's scope
-- **AND** selecting that folder MUST show the moved item in the corresponding filtered inventory view
-- **AND** refreshing the workspace MUST preserve the assignment outcome for the same active profile
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-018: Browse picker SHALL support searchable folder selection
+The inventory Browse popup MUST provide a compact folder search control above the picker tree so users can find folders in large hierarchies without leaving the selector context.
+
+#### Scenario: Search folder names in the Browse picker
+- **GIVEN** user opens the inventory Browse popup
+- **WHEN** they type a folder query into the picker search control
+- **THEN** matching folder entries MUST remain selectable in the popup tree
+- **AND** non-matching branches MUST be filtered out while preserving matching ancestor/child context
+- **AND** the search input MUST expose an accessible label for assistive technology
+
+#### Scenario: Clear Browse picker search
+- **GIVEN** the inventory Browse popup tree is filtered by a search query
+- **WHEN** user clears the query
+- **THEN** the full folder picker tree MUST be restored
+
+#### Scenario: No Browse picker search matches
+- **GIVEN** user searches the inventory Browse popup tree
+- **WHEN** no folder entry matches the query
+- **THEN** the popup MUST show a clear compact no-match state
 
 ## Implementation recommendation
 Preferred component strategy:

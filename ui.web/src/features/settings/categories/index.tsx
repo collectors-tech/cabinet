@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Tags, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { ContentSection } from '../components/content-section'
-import { ProfileContextBlocked } from '../components/profile-context-blocked'
-import { useProfileSettings } from '../use-profile-settings'
 import {
   defaultInventoryCategoryOptions,
   inventoryCategoryOptionsSettingsKey,
@@ -25,6 +22,17 @@ import {
   serializeItemTypeConditionScales,
   type InventoryItemTypeConditionScale,
 } from '@/features/inventory/item-type-condition-scales'
+import {
+  defaultInventoryPackagingGrades,
+  inventoryPackagingGradesSettingsKey,
+  normalizePackagingGradeName,
+  parsePackagingGradeOptions,
+  serializePackagingGradeOptions,
+} from '@/features/inventory/packaging-grade-options'
+import { recordNotificationHistory } from '@/lib/toast-history'
+import { ContentSection } from '../components/content-section'
+import { ProfileContextBlocked } from '../components/profile-context-blocked'
+import { useProfileSettings } from '../use-profile-settings'
 
 export function SettingsCategories() {
   const {
@@ -42,9 +50,14 @@ export function SettingsCategories() {
   const [itemTypeScales, setItemTypeScales] = useState<
     InventoryItemTypeConditionScale[]
   >(defaultInventoryItemTypeConditionScales)
+  const [packagingGrades, setPackagingGrades] = useState<string[]>(
+    defaultInventoryPackagingGrades
+  )
   const [newCategory, setNewCategory] = useState('')
   const [newItemType, setNewItemType] = useState('')
+  const [newPackagingGrade, setNewPackagingGrade] = useState('')
   const [status, setStatus] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     setCategories(
@@ -54,6 +67,9 @@ export function SettingsCategories() {
       parseItemTypeConditionScales(
         settings[inventoryItemTypeConditionScalesSettingsKey]
       )
+    )
+    setPackagingGrades(
+      parsePackagingGradeOptions(settings[inventoryPackagingGradesSettingsKey])
     )
   }, [settings])
 
@@ -70,6 +86,7 @@ export function SettingsCategories() {
     setCategories((current) => normalizeCategoryOptions([...current, next]))
     setNewCategory('')
     setStatus(null)
+    setSaveError(null)
   }
 
   const removeCategory = (category: string) => {
@@ -77,20 +94,47 @@ export function SettingsCategories() {
       normalizeCategoryOptions(current.filter((value) => value !== category))
     )
     setStatus(null)
+    setSaveError(null)
   }
 
   const saveCategories = async () => {
     setStatus(null)
+    setSaveError(null)
     const nextSettings = {
       ...settings,
-      [inventoryCategoryOptionsSettingsKey]: serializeCategoryOptions(
-        categories
-      ),
+      [inventoryCategoryOptionsSettingsKey]:
+        serializeCategoryOptions(categories),
       [inventoryItemTypeConditionScalesSettingsKey]:
         serializeItemTypeConditionScales(itemTypeScales),
+      [inventoryPackagingGradesSettingsKey]:
+        serializePackagingGradeOptions(packagingGrades),
     }
-    await saveSettings(nextSettings)
-    setStatus('Saved categories and item type condition scales.')
+    try {
+      await saveSettings(nextSettings)
+      const message =
+        'Saved categories, packaging grades, and item type condition scales.'
+      setStatus(message)
+      recordNotificationHistory({
+        id: 'settings-categories-taxonomy-save-success',
+        level: 'success',
+        title: message,
+        summary: 'Taxonomy settings status from Settings Categories.',
+        source_label: 'Settings Categories',
+        category: 'system',
+      })
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to save taxonomy settings.'
+      setSaveError(message)
+      recordNotificationHistory({
+        id: 'settings-categories-taxonomy-save-failed',
+        level: 'error',
+        title: message,
+        summary: 'Taxonomy settings status from Settings Categories.',
+        source_label: 'Settings Categories',
+        category: 'system',
+      })
+    }
   }
 
   const addItemType = () => {
@@ -106,6 +150,7 @@ export function SettingsCategories() {
     )
     setNewItemType('')
     setStatus(null)
+    setSaveError(null)
   }
 
   const updateItemTypeConditions = (itemType: string, value: string) => {
@@ -118,6 +163,7 @@ export function SettingsCategories() {
       )
     )
     setStatus(null)
+    setSaveError(null)
   }
 
   const removeItemType = (itemType: string) => {
@@ -127,6 +173,30 @@ export function SettingsCategories() {
       )
     )
     setStatus(null)
+    setSaveError(null)
+  }
+
+  const addPackagingGrade = () => {
+    const packagingGrade = normalizePackagingGradeName(newPackagingGrade)
+    if (packagingGrade === '') {
+      return
+    }
+    setPackagingGrades((current) =>
+      normalizeDisplayOptions([...current, packagingGrade])
+    )
+    setNewPackagingGrade('')
+    setStatus(null)
+    setSaveError(null)
+  }
+
+  const removePackagingGrade = (packagingGrade: string) => {
+    setPackagingGrades((current) =>
+      normalizeDisplayOptions(
+        current.filter((value) => value !== packagingGrade)
+      )
+    )
+    setStatus(null)
+    setSaveError(null)
   }
 
   return (
@@ -199,6 +269,74 @@ export function SettingsCategories() {
                   aria-label={`Remove ${category}`}
                   disabled={!canSave}
                   onClick={() => removeCategory(category)}
+                >
+                  <Trash2 className='size-3.5' aria-hidden='true' />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className='rounded-lg border bg-card p-4'>
+          <div className='flex items-start gap-3'>
+            <div className='rounded-md border bg-muted p-2'>
+              <Tags className='size-4' aria-hidden='true' />
+            </div>
+            <div>
+              <h4 className='font-medium'>Packaging grades</h4>
+              <p className='text-sm text-muted-foreground'>
+                Packaging grades are reusable grading values for boxed, opened,
+                complete, and loose item states.
+              </p>
+            </div>
+          </div>
+
+          <div className='mt-4 flex gap-2'>
+            <Input
+              data-testid='settings-packaging-grade-new'
+              placeholder='Add packaging grade'
+              value={newPackagingGrade}
+              disabled={!canSave}
+              onChange={(event) => setNewPackagingGrade(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  addPackagingGrade()
+                }
+              }}
+            />
+            <Button
+              type='button'
+              variant='outline'
+              data-testid='settings-packaging-grade-add'
+              disabled={
+                !canSave ||
+                normalizePackagingGradeName(newPackagingGrade) === ''
+              }
+              onClick={addPackagingGrade}
+            >
+              Add
+            </Button>
+          </div>
+
+          <div
+            className='mt-4 flex flex-wrap gap-2'
+            data-testid='settings-packaging-grades-list'
+          >
+            {packagingGrades.map((packagingGrade) => (
+              <Badge
+                key={packagingGrade}
+                variant='outline'
+                className='gap-2 px-3 py-1.5'
+              >
+                {packagingGrade}
+                <button
+                  type='button'
+                  className='rounded-sm text-muted-foreground hover:text-foreground'
+                  data-testid={`settings-packaging-grade-remove-${packagingGrade}`}
+                  aria-label={`Remove ${packagingGrade}`}
+                  disabled={!canSave}
+                  onClick={() => removePackagingGrade(packagingGrade)}
                 >
                   <Trash2 className='size-3.5' aria-hidden='true' />
                 </button>
@@ -292,6 +430,15 @@ export function SettingsCategories() {
           </p>
         ) : null}
 
+        {saveError ? (
+          <p
+            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+            data-testid='settings-categories-error'
+          >
+            {saveError}
+          </p>
+        ) : null}
+
         <div className='flex justify-end'>
           <Button
             type='button'
@@ -299,7 +446,7 @@ export function SettingsCategories() {
             disabled={!canSave}
             onClick={() => void saveCategories()}
           >
-            Save categories
+            Save taxonomy settings
           </Button>
         </div>
       </div>

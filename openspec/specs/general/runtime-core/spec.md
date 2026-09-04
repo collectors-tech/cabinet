@@ -26,7 +26,109 @@ Cabinet SHALL expose runtime and health diagnostics for local supportability.
 - **WHEN** `/healthz` and `/api/runtime` are requested
 - **THEN** Cabinet SHALL return runtime health payloads
   - `GET /healthz` MUST return `200` with body `ok`
-  - `GET /api/runtime` MUST return `200` with `app_version` and `build_date`
+  - `GET /api/runtime` MUST return `200` with `app_version`, full `build_revision`, and `build_date`
+  - release builds with an explicit semantic beta version MUST report that version in `app_version` instead of only a revision-derived value
+  - release builds MUST report the full lowercase 40-character packaged source commit in `build_revision`; only unstamped developer builds MAY report `unknown`
+
+### Requirement RUNTIME-CORE-019: Beta packaging SHALL produce truthful Windows portable artefacts
+Cabinet beta packaging SHALL use one canonical private-beta version source and SHALL produce Windows portable package evidence without claiming unsigned installers.
+
+#### Scenario: Windows portable beta package
+- **GIVEN** the canonical beta version source names a private beta version
+- **WHEN** Cabinet builds release artefacts for Windows beta validation
+- **THEN** the package filename SHALL include the beta version and `windows-amd64-portable`
+- **AND** the runtime binary SHALL embed the same semantic version, commit revision, and build date for `/api/runtime`
+- **AND** packaging SHALL create a SHA-256 checksum file and release notes
+- **AND** packaging MUST reject a dirty or unexpected source commit and emit a machine-readable manifest containing exact source, target, archive checksum/size and every packaged file checksum/size
+- **AND** a cross-platform verifier MUST inspect the ZIP contents and reject missing, unexpected or hash-mismatched files
+- **AND** macOS artefacts SHALL NOT be claimed by the Windows beta package lane until separately signed and validated
+- **AND** OpenSpec release guidance SHALL describe install/start, data location, backup/upgrade, rollback/removal, signing limits, and release approval gates
+- **AND** release validation SHALL preserve non-publishing checklists for clean Windows portable start and existing data-directory upgrade proof before #1868 completion
+
+### Requirement RUNTIME-CORE-020: Packaged beta acceptance SHALL use a stable release checklist
+Cabinet beta release acceptance SHALL be encoded as a stable checklist before packaged-candidate validation or remediation begins.
+
+#### Scenario: Packaged core workflow acceptance pack
+- **GIVEN** a Windows beta package, checksum, release commit, and app version are nominated for #1869 acceptance
+- **WHEN** Cabinet runs or reports packaged core-workflow release acceptance
+- **THEN** the acceptance evidence SHALL identify OS, artefact filename, checksum, commit SHA, app version, full runtime build revision, runtime metadata, and release notes source
+- **AND** recorder initialization MUST reject a missing, malformed, uppercase, or mismatched runtime build revision and MUST require `/api/runtime.build_revision` to equal the Cabinet manifest `source_commit`
+- **AND** the checklist SHALL cover onboarding, inventory, media, wishlist-to-inventory, collections, export, backup, restore, Market Watch, Discovery handoff, failed-provider recovery, invalid import/restore recovery, restart persistence, profile isolation, and version visibility
+- **AND** every failure SHALL create or link a focused issue before rerun
+- **AND** the final packaged journey SHALL use the packaged binary without test-only hooks, dirty worktree state, unapproved release publication, or `develop` to `main` promotion
+- **AND** a resumable evidence recorder SHALL bind all checklist rows to one exact-candidate fingerprint covering the Cabinet manifest/package/checksum, both Browser Companion target packages/checksums, the combined manifest, source commit, versions and candidate-gate identity
+- **AND** the recorder SHALL preserve one result per stable row across same-candidate resume, archive stale-candidate evidence, and reset every row when any bound candidate identity changes
+- **AND** every row SHALL remain one of `not_run`, `blocked`, `pass` or `fail`; pass/fail SHALL require non-secret evidence references and operator notes, and blocked SHALL require an exact unblock condition
+- **AND** human Frontline, Bonza, packaged install, UI and recovery steps MUST NOT auto-pass and SHALL require explicit operator confirmation
+- **AND** deterministic JSON and Markdown evidence SHALL record the candidate, isolated environment, per-row state and overall result while the recorder SHALL redact credentials, bearer and cookie material, private page content, and sensitive local paths
+- **AND** the recorder MUST NOT publish a release, promote a branch, solve provider challenges or operate the browser on the operator's behalf
+
+### Requirement RUNTIME-CORE-021: Beta release gates SHALL remain acyclic
+Cabinet SHALL separate source/live readiness, internal candidate creation, packaged acceptance, final approval and external publication into ordered release gates.
+
+#### Scenario: Advance an exact candidate through release gates
+- **GIVEN** every required provider, media and Browser Companion source-ready prerequisite is merged and evidenced
+- **WHEN** the release programme nominates an exact frozen `develop` commit
+- **THEN** #1868 MAY create private/internal Cabinet and companion candidate artefacts without final #1864 approval
+- **AND** #1869 SHALL test those exact files before #1867 attaches final packaged data-safety evidence
+- **AND** final #1864 approval SHALL occur only after packaged evidence exists
+- **AND** external prerelease publication and `develop` to `main` promotion SHALL remain prohibited until that explicit approval
+- **AND** any accepted release-blocking fix SHALL create a new exact candidate commit and invalidate earlier candidate acceptance
+
+### Requirement RUNTIME-CORE-022: Beta publication MUST reuse one approved exact candidate
+Cabinet SHALL publish an external beta prerelease only through an explicit approval-evidenced workflow that reuses and reverifies the successful internal candidate artefacts.
+
+#### Scenario: Publish an approved immutable prerelease
+- **GIVEN** #1869 and #1867 accepted one exact successful Beta Release Candidate Gate run
+- **AND** a trusted repository owner/member/collaborator posts `APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>` on #1864
+- **WHEN** the manual prerelease workflow receives that exact commit, candidate run ID and approval comment ID
+- **THEN** it MUST verify the comment issue, author association and exact marker
+- **AND** it MUST verify the workflow name, dispatch event, head commit, successful conclusion and unexpired exact candidate artifact
+- **AND** it MUST download and reverify the Cabinet archive/content manifest, Browser Companion packages and combined candidate manifest before publication
+- **AND** it MUST reject an existing immutable version tag and publish one prerelease targeting the accepted commit with separate checksums and release notes
+- **AND** a successful `main` workflow MUST NOT create or update a release automatically
+- **AND** the publication workflow MUST NOT merge `develop` into `main`.
+
+### Requirement RUNTIME-CORE-023: Beta capability disclosure SHALL have one governed source
+Cabinet SHALL maintain one versioned private-beta capability and limitation disclosure that is projected into the authenticated product UI and generated release notes.
+
+#### Scenario: Project governed disclosure into UI and release notes
+- **GIVEN** Cabinet is preparing a private beta candidate
+- **WHEN** the package lane generates release notes and the authenticated Help Center renders beta guidance
+- **THEN** both surfaces SHALL use the same governed disclosure source
+- **AND** the disclosure SHALL distinguish supported, preview, browser-assisted, action-required, unavailable, packaged-unproven, excluded and limited states
+- **AND** the disclosure SHALL cover Windows portable packaging, signing/installer limits, Browser Companion target and update limits, provider readiness for Voglers, Hobbytech, Frontline and Bonza, local/ZITADEL auth modes, preview Assistant/Agent features, Telegram live-channel limits, post-beta exclusions, and data export/recovery ownership
+- **AND** package verification SHALL fail when release notes omit a governed release-note disclosure statement
+- **AND** user-facing disclosure text SHALL avoid internal paths, secret values, fixture claims, stale issue wording and mutable latest-channel claims.
+
+### Requirement RUNTIME-CORE-024: Beta candidate validation SHALL run a fixed core Cypress pack
+Cabinet SHALL bind beta release-candidate validation to one repository-owned, versioned Cypress acceptance pack so candidate evidence cannot silently validate only a login or smoke subset.
+
+#### Scenario: Fixed beta core Cypress pack
+- **GIVEN** a full commit SHA is nominated for the Beta Release Candidate Gate
+- **WHEN** the candidate workflow resolves the Cypress release pack
+- **THEN** it MUST validate `release/beta-core-cypress-pack.json` before running Cypress
+- **AND** manifest version 6 MUST resolve exactly 26 specs, including all four ordered, renderer-bounded Market Watch partitions
+- **AND** the pack MUST include login/profile, inventory, wishlist, collections, media, recovery, provider handoff, central Agent, conversational collection workflows, provider-backed acquisition/setup guidance, Chat-managed integration configuration with governed apply, Dashboard summary routing, Agent attachment continuity, Agent response states, compact/200%-zoom Agent accessibility, server-derived Agent authority, Telegram connector, and Telegram conversation coverage
+- **AND** every spec SHALL run separately with retries disabled and a 300-second execution watchdog so a multi-spec runner hang or retry cannot hide an incomplete candidate lane
+- **AND** each completed spec summary MUST record the exact candidate `build_revision`, zero exit status, completed runner phase, and the configured execution timeout
+- **AND** Telegram source acceptance SHALL use a repository-owned loopback Bot API fixture, synthetic token, and explicit fixture flag; a skipped Telegram case MUST fail the required category
+- **AND** empty, missing, duplicate, extra, or under-scoped overrides MUST fail before Cypress starts
+- **AND** candidate evidence MUST record the exact manifest version, spec count, spec list, commit, and Cypress output
+- **AND** human Frontline, Bonza, real Telegram text/media, packaged Windows acceptance, and final publication steps MUST remain separate and not be auto-passed by the source Cypress pack.
+
+### Requirement RUNTIME-CORE-025: Beta release lanes SHALL reject critical and high production dependency vulnerabilities
+Cabinet SHALL validate the exact `ui.web` lockfile before develop, main, beta candidate, or private package work can advance.
+
+#### Scenario: Fail-closed production dependency validation
+- **GIVEN** `npm ci` installed the exact committed `ui.web/package-lock.json`
+- **WHEN** a governed release lane validates production dependencies
+- **THEN** the dependency tree MUST reject missing, invalid, or undeclared extraneous packages
+- **AND** lock-owned optional bundled packages MAY be accepted only when their lockfile entry is explicitly marked optional
+- **AND** `npm audit --omit=dev` MUST report zero unresolved critical and high findings
+- **AND** missing or invalid audit output MUST fail the lane rather than being treated as clean
+- **AND** the develop, main, exact candidate, and private package workflows MUST invoke the same repository-owned gate
+- **AND** dependency evidence MUST identify the exact lockfile state without publishing a release or promoting `develop` to `main`.
 
 ### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
 After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
@@ -41,8 +143,34 @@ After successful listener bind, Cabinet MUST print a machine-parseable startup l
 ### Requirement RUNTIME-CORE-005: Startup console output SHALL include human banner and structured JSON line
 After successful listener bind, Cabinet MUST emit human-readable startup lines and a structured JSON line while preserving existing key-value machine output.
 
+#### Scenario: Human startup banner lines
+- **GIVEN** runtime starts and listener bind succeeds with resolved address known
+- **WHEN** startup console output is emitted
+- **THEN** output MUST include human-readable lines containing `Cabinet Started`, `URL`, `Instance`, `Profile`, `Data Dir`, `Port`, and `Bind`
+- **AND** when stdout is TTY, banner title MAY include emoji decoration
+- **AND** when stdout is non-TTY, banner title MUST fall back to plain text without emoji requirement
+
+#### Scenario: Structured startup JSON line
+- **GIVEN** runtime starts and listener bind succeeds
+- **WHEN** startup console output is emitted
+- **THEN** output MUST include exactly one line prefixed `CABINET_STARTUP_JSON `
+- **AND** the JSON payload MUST include keys `url`, `requested_addr`, `resolved_addr`, `instance`, `profile`, `data_dir`, `requested_port`, and `resolved_port`
+- **AND** existing key-value startup line `CABINET_STARTUP ...` MUST remain present for backwards compatibility
+
 ### Requirement RUNTIME-CORE-006: Project-local execution SHALL prefer `bin` folder runtime path over ephemeral temp locations
 When running from a project workspace, startup and validation workflows MUST prefer executable path under project-local `bin` (or equivalent configured project runtime path) and MUST NOT default to transient template/temp directories.
+
+#### Scenario: Project run-path resolution
+- **GIVEN** Cabinet project root is available and contains `bin/cabinet(.exe)`
+- **WHEN** run instructions or automation resolves executable path
+- **THEN** runtime MUST launch from project-local `bin` executable by default
+- **AND** logs/checkpoints MUST record resolved executable path used for run
+
+#### Scenario: Equivalent configured runtime path
+- **GIVEN** project defines an explicit runtime executable path different from `bin`
+- **WHEN** run instructions resolve launch target
+- **THEN** runtime MAY use configured project-local equivalent path
+- **AND** transient template/temp-folder executable paths MUST be rejected unless explicitly forced for a test case
 
 ### Requirement RUNTIME-CORE-007: CLI SHALL support browser auto-open suppression for automation runs
 Runtime CLI SHALL provide a flag to suppress browser auto-open on startup (e.g., `--no-open-browser`) for CI/agent/Cypress flows.
@@ -57,32 +185,6 @@ Runtime CLI SHALL provide a flag to suppress browser auto-open on startup (e.g.,
 - **GIVEN** Cabinet is launched without browser-suppression flag
 - **WHEN** startup completes successfully
 - **THEN** default browser-open behavior MUST remain unchanged unless overridden by config
-
-#### Scenario: Project run-path resolution
-- **GIVEN** Cabinet project root is available and contains `bin/cabinet(.exe)`
-- **WHEN** run instructions or automation resolves executable path
-- **THEN** runtime MUST launch from project-local `bin` executable by default
-- **AND** logs/checkpoints MUST record resolved executable path used for run
-
-#### Scenario: Equivalent configured runtime path
-- **GIVEN** project defines an explicit runtime executable path different from `bin`
-- **WHEN** run instructions resolve launch target
-- **THEN** runtime MAY use configured project-local equivalent path
-- **AND** transient template/temp-folder executable paths MUST be rejected unless explicitly forced for a test case
-
-#### Scenario: Human startup banner lines
-- **GIVEN** runtime starts and listener bind succeeds with resolved address known
-- **WHEN** startup console output is emitted
-- **THEN** output MUST include human-readable lines containing `Cabinet Started`, `URL`, `Instance`, `Profile`, `Data Dir`, `Port`, and `Bind`
-- **AND** when stdout is TTY, banner title MAY include emoji decoration
-- **AND** when stdout is non-TTY, banner title MUST fall back to plain text without emoji requirement
-
-#### Scenario: Structured startup JSON line
-- **GIVEN** runtime starts and listener bind succeeds
-- **WHEN** startup console output is emitted
-- **THEN** output MUST include exactly one line prefixed `CABINET_STARTUP_JSON `
-- **AND** the JSON payload MUST include keys `url`, `requested_addr`, `resolved_addr`, `instance`, `profile`, `data_dir`, `requested_port`, and `resolved_port`
-- **AND** existing key-value startup line `CABINET_STARTUP ...` MUST remain present for backwards compatibility
 
 ### Requirement RUNTIME-CORE-008: Runtime CLI SHALL support deterministic startup parameter overrides
 Runtime startup SHALL support explicit CLI overrides for address/port, data path, profile context, auth mode, base URL, parallel guard, and log level.
@@ -175,3 +277,53 @@ If the supplied runtime context is already canceled before run-loop startup begi
 - **WHEN** run-loop startup begins
 - **THEN** runtime MUST return quickly without binding a listener or writing startup lifecycle artifacts
 - **AND** local NFR/startup checks MUST observe the fast-exit behavior rather than an unnecessary shutdown timeout path
+
+### Requirement RUNTIME-CORE-017: E2E reset hooks SHALL tolerate legacy/shared schema drift
+E2E-only reset hooks MUST clear supported runtime data without failing solely because a known reset table is absent from a legacy or shared managed test database.
+
+#### Scenario: Reset with missing known table
+- **GIVEN** an E2E-enabled managed runtime uses a database where a known reset table is absent
+- **WHEN** `/api/test/reset` or the reset hook clears E2E state
+- **THEN** reset MUST skip the absent table and continue clearing present reset tables
+- **AND** reset MUST still fail on real delete/query errors for tables that exist
+
+#### Scenario: Concurrent E2E reset remains bounded and safe
+- **GIVEN** release validation or isolated Cypress specs call `/api/test/reset` concurrently against one managed runtime database
+- **WHEN** the reset hook clears E2E state
+- **THEN** reset MUST serialize destructive reset attempts
+- **AND** reset MUST disable and restore SQLite foreign-key enforcement on the same dedicated connection used for the reset transaction
+- **AND** reset MAY retry recognized storage contention with a small bounded retry budget
+- **AND** reset MUST not retry arbitrary storage failures
+- **AND** reset diagnostics MUST log only allow-listed failure class and operation fields while the HTTP response remains generic
+- **AND** Cypress reset preflight MUST use a bounded probe budget that exceeds the reset operation's maximum SQLite contention retry envelope and MUST report a distinct timeout diagnostic
+- **AND** the Windows runtime startup wait MUST remain bounded while allowing the validated 90-second cold-start envelope before classifying the runtime as unhealthy
+
+### Requirement RUNTIME-CORE-018: Cypress runner SHALL prepare dependencies and persist execution logs
+Cabinet Cypress execution scripts MUST perform required local preparation before invoking Cypress and MUST persist progress/output logs for traceability.
+
+#### Scenario: Cypress execution from clean or temporary worktree
+- **GIVEN** a Cabinet worktree has the Cypress spec and runtime config but does not have prepared `ui.web/node_modules`
+- **WHEN** the Cypress runner starts
+- **THEN** it MUST prepare UI dependencies by reusing a configured/local Cabinet `node_modules` install when available or by running deterministic install from the UI lockfile
+- **AND** it MUST build static UI assets and the project-local `bin/cabinet(.exe)` runtime before starting the validation server unless an explicit build skip is requested
+- **AND** it MUST recycle an existing listener on the target base URL by default so validation runs against the current worktree, unless explicit server reuse is requested
+- **AND** it MUST log each preparation, runtime, and Cypress execution step to a timestamped run log
+- **AND** it MUST write a machine-readable run summary containing the spec, browser, base URL, runtime path, exit code, and ordered step list
+- **AND** it MUST retain existing runtime health, E2E hook, stale-port recycling, and project-local runtime path protections
+
+#### Scenario: Cypress runner fails on stale runtime build identity
+- **GIVEN** the Cypress runner has resolved the current Git `source_commit`
+- **AND** the managed or reused runtime returns `/api/runtime.app_version` and full `/api/runtime.build_revision`
+- **WHEN** the build revision does not exactly equal the full source commit, or the app version is neither its revision-derived version nor a semantic release version
+- **THEN** the runner MUST fail before executing the browser spec with a diagnostic stale-runtime identity mismatch error
+- **AND** the run summary MUST record whether stale runtime app versions were explicitly allowed
+- **AND** the runner MAY proceed only when an explicit stale-runtime baseline override is passed
+
+#### Scenario: Cypress execution hangs after runtime readiness
+- **GIVEN** the managed Cabinet runtime passed health and full source-revision preflight
+- **AND** the launched Cypress process remains alive without completing the requested isolated spec
+- **WHEN** the configured per-spec execution timeout expires
+- **THEN** the runner MUST terminate only the Cypress process tree that it launched and the managed Cabinet runtime that it started
+- **AND** it MUST exit non-zero without continuing the candidate pack or reporting an assertion result
+- **AND** the machine-readable summary MUST distinguish `execution_timeout` from Cypress assertion failure
+- **AND** it MUST record the spec, browser, execution bound, root and child process IDs, a process-tree snapshot with secret-redacted command lines, elapsed time, full runtime revision and port, secret-redacted last Cypress output, and owned-process cleanup result

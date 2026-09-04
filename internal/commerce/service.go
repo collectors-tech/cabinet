@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -59,6 +61,39 @@ type ExpectedArrival struct {
 	UpdatedAt            string  `json:"updated_at"`
 }
 
+type PurchaseOrderLineItem struct {
+	ItemID            string  `json:"item_id"`
+	Title             string  `json:"title"`
+	Quantity          int     `json:"quantity"`
+	Amount            float64 `json:"amount"`
+	Status            string  `json:"status"`
+	LifecycleEntryID  string  `json:"lifecycle_entry_id"`
+	ExpectedArrivalID string  `json:"expected_arrival_id"`
+}
+
+type PurchaseOrder struct {
+	OrderID         string                  `json:"order_id"`
+	Source          string                  `json:"source"`
+	Seller          string                  `json:"seller"`
+	Tracking        string                  `json:"tracking"`
+	Status          string                  `json:"status"`
+	TotalAmount     float64                 `json:"total_amount"`
+	Currency        string                  `json:"currency"`
+	LineItemCount   int                     `json:"line_item_count"`
+	ReceivedCount   int                     `json:"received_count"`
+	UnreceivedCount int                     `json:"unreceived_count"`
+	LineItems       []PurchaseOrderLineItem `json:"line_items"`
+	CreatedAt       string                  `json:"created_at"`
+}
+
+type PurchaseOrderList struct {
+	Page       int             `json:"page"`
+	PageSize   int             `json:"page_size"`
+	Total      int             `json:"total"`
+	TotalPages int             `json:"total_pages"`
+	Orders     []PurchaseOrder `json:"orders"`
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -73,6 +108,17 @@ func normalizeLifecycleState(state string) string {
 
 func normalizeArrivalStatus(status string) string {
 	return strings.ToLower(strings.TrimSpace(status))
+}
+
+func normalizePurchaseOrderStatusFilter(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "", "all":
+		return "all"
+	case "active", "reviews", "shipped", "received":
+		return strings.ToLower(strings.TrimSpace(status))
+	default:
+		return "all"
+	}
 }
 
 func (s *Service) CreateLifecycleForProfile(ctx context.Context, profileID string, in LifecycleEntry) (LifecycleEntry, *ExpectedArrival, error) {
@@ -177,6 +223,205 @@ func (s *Service) ListLifecycleByProfile(ctx context.Context, profileID, itemID 
 		out = append(out, entry)
 	}
 	return out, rows.Err()
+}
+
+func (s *Service) ListPurchaseOrdersByProfile(ctx context.Context, profileID, status, search string, page, pageSize int) (PurchaseOrderList, error) {
+	profileID = strings.TrimSpace(profileID)
+	filter := normalizePurchaseOrderStatusFilter(status)
+	search = strings.ToLower(strings.TrimSpace(search))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT e.id, e.source, e.external_ref, e.quantity, e.amount, e.currency, e.notes, e.created_at,
+			i.id, i.title,
+			COALESCE(a.id, ''), COALESCE(a.status, ''), COALESCE(a.notes, ''), COALESCE(a.created_at, '')
+		FROM commerce_lifecycle_entries e
+		JOIN canonical_items i ON i.id = e.item_id AND i.profile_id = e.profile_id
+		LEFT JOIN expected_arrivals a ON a.lifecycle_entry_id = e.id AND a.profile_id = e.profile_id
+		WHERE e.profile_id = ? AND e.state = 'purchase'
+		ORDER BY e.created_at ASC, e.id ASC
+	`, profileID)
+	if err != nil {
+		return PurchaseOrderList{}, err
+	}
+	defer rows.Close()
+
+	ordersByKey := map[string]*PurchaseOrder{}
+	var orderKeys []string
+	for rows.Next() {
+		var entryID, source, externalRef, currency, notes, createdAt string
+		var itemID, title, arrivalID, arrivalStatus, arrivalNotes, arrivalCreatedAt string
+		var quantity int
+		var amount float64
+		if err := rows.Scan(&entryID, &source, &externalRef, &quantity, &amount, &currency, &notes, &createdAt, &itemID, &title, &arrivalID, &arrivalStatus, &arrivalNotes, &arrivalCreatedAt); err != nil {
+			return PurchaseOrderList{}, err
+		}
+		orderID := strings.TrimSpace(externalRef)
+		if orderID == "" {
+			orderID = entryID
+		}
+		key := strings.ToLower(strings.TrimSpace(source)) + ":" + orderID
+		order := ordersByKey[key]
+		if order == nil {
+			order = &PurchaseOrder{
+				OrderID:   orderID,
+				Source:    strings.TrimSpace(source),
+				Seller:    valueFromPurchaseNotes(notes, "seller"),
+				Tracking:  valueFromPurchaseNotes(notes, "tracking"),
+				Currency:  strings.ToUpper(strings.TrimSpace(currency)),
+				CreatedAt: createdAt,
+			}
+			ordersByKey[key] = order
+			orderKeys = append(orderKeys, key)
+		}
+		if order.Seller == "" {
+			order.Seller = valueFromPurchaseNotes(notes, "seller")
+		}
+		if order.Tracking == "" {
+			order.Tracking = valueFromPurchaseNotes(notes, "tracking")
+		}
+		lineStatus := normalizeArrivalStatus(arrivalStatus)
+		if lineStatus == "" {
+			lineStatus = "expected"
+		}
+		order.LineItems = append(order.LineItems, PurchaseOrderLineItem{
+			ItemID:            itemID,
+			Title:             title,
+			Quantity:          quantity,
+			Amount:            amount,
+			Status:            lineStatus,
+			LifecycleEntryID:  entryID,
+			ExpectedArrivalID: arrivalID,
+		})
+		order.TotalAmount += amount
+		order.LineItemCount++
+		if lineStatus == "delivered" || lineStatus == "reconciled" {
+			order.ReceivedCount++
+		} else {
+			order.UnreceivedCount++
+		}
+		if order.CreatedAt == "" || (arrivalCreatedAt != "" && arrivalCreatedAt < order.CreatedAt) {
+			order.CreatedAt = arrivalCreatedAt
+		}
+		_ = arrivalNotes
+	}
+	if err := rows.Err(); err != nil {
+		return PurchaseOrderList{}, err
+	}
+
+	allOrders := make([]PurchaseOrder, 0, len(orderKeys))
+	for _, key := range orderKeys {
+		order := *ordersByKey[key]
+		if order.Currency == "" {
+			order.Currency = "AUD"
+		}
+		order.TotalAmount = math.Round(order.TotalAmount*100) / 100
+		if order.UnreceivedCount > 0 {
+			order.Status = "active"
+		} else {
+			order.Status = "received"
+		}
+		if !purchaseOrderMatchesStatus(order, filter) || !purchaseOrderMatchesSearch(order, search) {
+			continue
+		}
+		allOrders = append(allOrders, order)
+	}
+	sort.SliceStable(allOrders, func(i, j int) bool {
+		if allOrders[i].Status != allOrders[j].Status {
+			return allOrders[i].Status == "active"
+		}
+		if allOrders[i].CreatedAt == allOrders[j].CreatedAt {
+			return allOrders[i].OrderID < allOrders[j].OrderID
+		}
+		return allOrders[i].CreatedAt < allOrders[j].CreatedAt
+	})
+
+	total := len(allOrders)
+	totalPages := 0
+	if total > 0 {
+		totalPages = int(math.Ceil(float64(total) / float64(pageSize)))
+	}
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	return PurchaseOrderList{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
+		Orders:     allOrders[start:end],
+	}, nil
+}
+
+func valueFromPurchaseNotes(notes, key string) string {
+	key = strings.ToLower(strings.TrimSpace(key))
+	for _, field := range strings.Fields(notes) {
+		name, value, ok := strings.Cut(field, "=")
+		if !ok {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(name)) == key {
+			return strings.Trim(strings.TrimSpace(value), ",;")
+		}
+	}
+	return ""
+}
+
+func purchaseOrderMatchesStatus(order PurchaseOrder, filter string) bool {
+	switch filter {
+	case "all":
+		return true
+	case "active", "shipped":
+		return order.UnreceivedCount > 0
+	case "reviews":
+		return order.ReceivedCount > 0
+	case "received":
+		return order.ReceivedCount > 0 && order.UnreceivedCount == 0
+	default:
+		return true
+	}
+}
+
+func purchaseOrderMatchesSearch(order PurchaseOrder, search string) bool {
+	if search == "" {
+		return true
+	}
+	haystack := strings.ToLower(strings.Join([]string{
+		order.OrderID,
+		order.Source,
+		order.Seller,
+		order.Tracking,
+		order.Status,
+	}, " "))
+	if strings.Contains(haystack, search) {
+		return true
+	}
+	for _, item := range order.LineItems {
+		line := strings.ToLower(strings.Join([]string{
+			item.ItemID,
+			item.Title,
+			item.Status,
+			item.LifecycleEntryID,
+			item.ExpectedArrivalID,
+		}, " "))
+		if strings.Contains(line, search) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) CreateArrivalForProfile(ctx context.Context, profileID string, in ExpectedArrival) (ExpectedArrival, error) {

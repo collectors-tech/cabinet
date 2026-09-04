@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { type Task } from '../data/schema'
 import { TasksImportDialog } from './tasks-import-dialog'
 import {
   TasksMutateDrawer,
   type WishlistEntryDraft,
 } from './tasks-mutate-drawer'
-import { type Task } from '../data/schema'
 
 export type TasksDialogType = 'create' | 'update' | 'delete' | 'import'
 
@@ -24,6 +24,9 @@ type TasksDialogsProps = {
   onWishlistDelete?: (currentRow: Task) => Promise<void>
   onWishlistImport?: (entries: WishlistEntryDraft[]) => Promise<void>
   isWishlistMutating?: boolean
+  wishlistItemTypeOptions?: string[]
+  wishlistPackagingGradeOptions?: string[]
+  wishlistConditionOptions?: string[]
 }
 
 export function TasksDialogs({
@@ -37,6 +40,9 @@ export function TasksDialogs({
   onWishlistDelete,
   onWishlistImport,
   isWishlistMutating = false,
+  wishlistItemTypeOptions = [],
+  wishlistPackagingGradeOptions = [],
+  wishlistConditionOptions = [],
 }: TasksDialogsProps) {
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
   const clearCurrentRowTimerRef = useRef<number | null>(null)
@@ -98,6 +104,9 @@ export function TasksDialogs({
         routePath={routePath}
         onWishlistSubmit={onWishlistSubmit}
         isLoading={isWishlistMutating}
+        wishlistItemTypeOptions={wishlistItemTypeOptions}
+        wishlistPackagingGradeOptions={wishlistPackagingGradeOptions}
+        wishlistConditionOptions={wishlistConditionOptions}
       />
 
       <TasksImportDialog
@@ -117,7 +126,11 @@ export function TasksDialogs({
       {currentRow && (
         <>
           <TasksMutateDrawer
-            key={`task-update-${currentRow.id}`}
+            key={
+              isWishlistRoute
+                ? 'wishlist-update-panel'
+                : `task-update-${currentRow.id}`
+            }
             open={open === 'update'}
             onOpenChange={(isOpen) => {
               if (isOpen) {
@@ -136,6 +149,9 @@ export function TasksDialogs({
             canNavigateNext={canNavigateNext}
             onNavigatePrevious={() => navigateCurrentRow(-1)}
             onNavigateNext={() => navigateCurrentRow(1)}
+            wishlistItemTypeOptions={wishlistItemTypeOptions}
+            wishlistPackagingGradeOptions={wishlistPackagingGradeOptions}
+            wishlistConditionOptions={wishlistConditionOptions}
           />
 
           <ConfirmDialog
@@ -168,17 +184,29 @@ export function TasksDialogs({
             }}
             isLoading={isWishlistMutating}
             className='max-w-md'
+            contentTestId='task-delete-dialog'
+            cancelTestId='task-delete-cancel'
+            confirmTestId='task-delete-confirm'
             title={
-              isWishlistRoute
-                ? `Delete this wishlist entry: ${currentRow.title} ?`
-                : `Delete this task: ${currentRow.id} ?`
+              isWishlistRoute && currentRow.deleted
+                ? `Permanently delete wishlist entry`
+                : isWishlistRoute
+                  ? `Hide this wishlist entry`
+                  : `Delete this task: ${currentRow.id} ?`
             }
             desc={
-              isWishlistRoute ? (
+              isWishlistRoute && currentRow.deleted ? (
                 <>
-                  You are about to delete the wishlist entry for{' '}
-                  <strong>{currentRow.title}</strong>. <br />
-                  This action cannot be undone.
+                  Permanently delete <strong>{currentRow.title}</strong> from
+                  the deleted wishlist view. This removes the wishlist row and
+                  linked wishlist metadata/history. Inventory records already
+                  created from this wishlist item will not be deleted.
+                </>
+              ) : isWishlistRoute ? (
+                <>
+                  Hide <strong>{currentRow.title}</strong> from the active
+                  Wishlist list. You can review and restore it from the Deleted
+                  view.
                 </>
               ) : (
                 <>
@@ -188,7 +216,13 @@ export function TasksDialogs({
                 </>
               )
             }
-            confirmText='Delete'
+            confirmText={
+              isWishlistRoute && currentRow.deleted
+                ? 'Permanently delete'
+                : isWishlistRoute
+                  ? 'Hide'
+                  : 'Delete'
+            }
           />
         </>
       )}

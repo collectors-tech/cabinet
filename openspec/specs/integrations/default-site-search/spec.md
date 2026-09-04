@@ -10,6 +10,13 @@ Cabinet SHALL default discovery/search runs to enabled core providers unless use
 - **WHEN** user runs scanner/discovery search without selecting explicit providers
 - **THEN** runtime MUST execute search against all enabled default providers and return `provider_id` in each candidate row
 
+#### Scenario: Market Watch runs a saved search without explicit provider scope
+- **GIVEN** Market Watch loads a saved query set that does not include `provider_scope`
+- **WHEN** user runs the query from the saved-query list
+- **THEN** UI MUST call the shared scanner run route without switching to a provider-specific route
+- **AND** the run payload MUST preserve the default-provider contract by sending an empty provider scope override
+- **AND** returned candidates MUST keep provider/source attribution visible for post-run inspection
+
 ### Requirement INTEGRATION-017: Default provider scope MUST remain user-configurable per query set
 Cabinet SHALL allow users to override default provider scope and persist that selection per query set.
 
@@ -26,6 +33,7 @@ Cabinet MUST support provider-scoped saved searches for Bonza/Amazon/eBay with p
 - **WHEN** user creates, edits, and deletes a saved search with provider scope and keyword filters
 - **THEN** runtime MUST persist updated saved search payload via scanner query-set APIs
 - **AND** UI MUST reflect deterministic state transitions for create/edit/delete outcomes
+- **AND** OpenAPI MUST document query-set create/update/list fields for `provider_scope`, `items_per_page`, `schedule_cron`, `enabled`, `rate_limit_rps`, and latest-run hydration metadata.
 
 ### Requirement DEFAULT-SITE-SEARCH-005: Saved searches MUST support run-now and scheduled refresh execution
 Cabinet MUST execute saved searches immediately and through scheduled refresh flow with deterministic summaries.
@@ -35,12 +43,27 @@ Cabinet MUST execute saved searches immediately and through scheduled refresh fl
 - **WHEN** user runs `Run Now` or triggers scheduled refresh
 - **THEN** runtime MUST execute matching query sets and return deterministic run summary payloads
 - **AND** UI MUST surface execution status and summary data for user verification
+- **AND** provider-specific run routes for supported saved-search providers MUST persist normalized candidates into the shared scanner/Discoveries candidate store instead of returning transient-only output
+- **AND** Bonza saved-search runs MUST persist normalized `source="bonzaslotcars"` candidates and latest-run snapshot metadata from the provider-specific run route
+- **AND** Frontline saved-search runs MUST persist normalized `source="frontlinehobbies"` candidates and latest-run snapshot metadata from the provider-specific run route
+- **AND** Hobbytech saved-search runs MUST persist normalized `source="hobbytechtoys"` candidates and latest-run snapshot metadata from the provider-specific run route
+- **AND** Doofinder saved-search runs MUST persist normalized provider-domain candidates and latest-run snapshot metadata from the provider-specific run route
+- **AND** BigCommerce saved-search runs MUST persist normalized provider-domain candidates and latest-run snapshot metadata from the provider-specific run route in storefront and token-enabled modes
+- **AND** eBay saved-search runs MUST expose the same provider-specific persistence contract as the Amazon route, including persisted `source="ebay"` candidates and latest-run snapshot hydration from query-set reloads
+- **AND** scheduled refresh MUST persist latest run status, run timestamp, and candidate count so a later query-set list reload can hydrate Market Watch without transient in-memory state
+- **AND** Market Watch MUST refresh its saved-query snapshots after scheduled refresh and render a latest-run history summary from durable query-set metadata
+- **AND** OpenAPI MUST document the latest-run query-set list metadata fields that clients use to hydrate Market Watch after eBay provider runs and scheduled refreshes.
 
-### Requirement DEFAULT-SITE-SEARCH-006: Saved-search output MUST support Discoveries and Wishlist handoff
-Cabinet MUST provide workflow handoff from saved-search output into Discoveries and Wishlist actions.
+### Requirement DEFAULT-SITE-SEARCH-006: Saved-search output MUST support Discoveries, Wishlist, and Inventory handoff
+Cabinet MUST provide workflow handoff from saved-search output into Discoveries, Wishlist, and Inventory actions.
 
 #### Scenario: Handoff from output detail
 - **GIVEN** saved-search output detail is open with candidate results
-- **WHEN** user triggers Discoveries handoff or Wishlist handoff action
+- **WHEN** user triggers Discoveries handoff, Wishlist handoff, or Inventory handoff action
 - **THEN** runtime MUST call discovery/wishlist APIs with deterministic payload contract
 - **AND** UI MUST surface action feedback indicating handoff result
+- **AND** Discoveries actions for ignore, track, create-owned-item, and Wishlist handoff MUST preserve decision payload plus source provider, query-set id, query name, and saved provider scope in the durable discovery action audit record
+- **AND** Wishlist handoff metadata MUST preserve the source provider, query-set id, query name, and saved provider scope in both the Wishlist note and durable discovery action audit payload
+- **AND** Inventory handoff MUST create a Cabinet inventory item from the candidate and preserve source provider, query-set id, query name, provider scope, and listing URL on the created item
+- **AND** a subsequent Wishlist route reload MUST render the handed-off item and preserved saved-search provenance from durable Wishlist/API state
+- **AND** OpenAPI MUST document saved-search candidate output plus discovery action handoff payload fields needed to preserve provider/query provenance for Discoveries, Wishlist, and Inventory handoffs.

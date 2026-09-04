@@ -7,16 +7,20 @@ describe('ui-theme-selection', () => {
   }
 
   function signInToHome() {
-    cy.visit('/sign-in?redirect=%2Fdashboard')
-    cy.get('input[name="email"]').clear().type('e2e-theme@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eBootstrap({ minimalProfile: true }).then((state) => {
+      cy.e2eEnsureSignedOut()
+      cy.stubLocalServerSession(state.profile_id)
+      cy.useBootstrappedProfile(state.profile_id, state.profile_name, {
+        path: '/dashboard',
+      })
+      cy.wait('@localServerSession')
+    })
     cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard')
   }
 
   beforeEach(() => {
-    cy.clearCookies()
-    cy.clearLocalStorage()
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
     signInToHome()
   })
 
@@ -57,15 +61,15 @@ describe('ui-theme-selection', () => {
     cy.location('pathname').should('eq', '/dashboard')
 
     cy.get('button[aria-label="Open theme settings"]').click()
-    cy.get('[aria-label="Select compact"]').click()
-    cy.getCookie('layout_collapsible').its('value').should('eq', 'icon')
-
     cy.get('[aria-label="Select full layout"]').click()
     cy.getCookie('layout_collapsible').its('value').should('eq', 'offcanvas')
+
+    cy.get('[aria-label="Select compact"]').click()
+    cy.getCookie('layout_collapsible').its('value').should('eq', 'icon')
 
     cy.location('pathname').should('eq', '/dashboard')
     cy.visit('/inventory')
     cy.location('pathname').should('match', /^\/inventory\/?$/)
-    cy.getCookie('layout_collapsible').its('value').should('eq', 'offcanvas')
+    cy.getCookie('layout_collapsible').its('value').should('eq', 'icon')
   })
 })

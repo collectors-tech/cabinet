@@ -2,8 +2,8 @@ import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { VariantProps, cva } from 'class-variance-authority'
 import { PanelLeftIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { getShortcutKey } from '@/lib/keyboard-shortcuts'
+import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -153,6 +153,7 @@ function Sidebar({
   side = 'left',
   variant = 'sidebar',
   collapsible = 'offcanvas',
+  mobileSheetMode = 'default',
   className,
   children,
   ...props
@@ -160,8 +161,10 @@ function Sidebar({
   side?: 'left' | 'right'
   variant?: 'sidebar' | 'floating' | 'inset'
   collapsible?: 'offcanvas' | 'icon' | 'none'
+  mobileSheetMode?: 'default' | 'assistant'
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const assistantMobileSheet = mobileSheetMode === 'assistant'
 
   if (collapsible === 'none') {
     return (
@@ -179,13 +182,48 @@ function Sidebar({
   }
 
   if (isMobile) {
+    if (assistantMobileSheet) {
+      return (
+        <div
+          data-sidebar='sidebar'
+          data-slot='sidebar'
+          data-mobile='true'
+          role='dialog'
+          aria-modal='true'
+          aria-label='Assistant workspace'
+          className={cn(
+            'fixed inset-y-0 z-50 flex h-full w-(--sidebar-width) flex-col bg-sidebar p-0 text-sidebar-foreground',
+            side === 'left' ? 'start-0' : 'end-0',
+            className
+          )}
+          style={
+            {
+              '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
+            } as React.CSSProperties
+          }
+          {...props}
+        >
+          <div className='sr-only'>
+            <h2>Assistant workspace</h2>
+            <p>Displays the mobile assistant workspace.</p>
+          </div>
+          <div className='flex h-full w-full flex-col overflow-visible'>
+            {children}
+          </div>
+        </div>
+      )
+    }
+
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
           data-sidebar='sidebar'
           data-slot='sidebar'
           data-mobile='true'
-          className='w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden'
+          className={cn(
+            'w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden',
+            className
+          )}
           style={
             {
               '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
@@ -197,7 +235,11 @@ function Sidebar({
             <SheetTitle>Sidebar</SheetTitle>
             <SheetDescription>Displays the mobile sidebar.</SheetDescription>
           </SheetHeader>
-          <div className='flex h-full w-full flex-col'>{children}</div>
+          <div
+            className='flex h-full w-full flex-col'
+          >
+            {children}
+          </div>
         </SheetContent>
       </Sheet>
     )
@@ -377,7 +419,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<'div'>) {
       data-slot='sidebar-content'
       data-sidebar='content'
       className={cn(
-        'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden',
+        'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-x-hidden group-data-[collapsible=icon]:overflow-y-auto',
         className
       )}
       {...props}
@@ -512,7 +554,7 @@ function SidebarMenuButton({
   tooltip?: string | React.ComponentProps<typeof TooltipContent>
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : 'button'
-  const { isMobile, state } = useSidebar()
+  const { isMobile } = useSidebar()
 
   const button = (
     <Comp
@@ -541,7 +583,7 @@ function SidebarMenuButton({
       <TooltipContent
         side='right'
         align='center'
-        hidden={state !== 'collapsed' || isMobile}
+        hidden={isMobile}
         {...tooltip}
       />
     </Tooltip>

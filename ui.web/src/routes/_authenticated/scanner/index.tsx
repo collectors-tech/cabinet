@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Scanner } from '@/features/scanner'
 
 const scannerSearchSchema = z.object({
-  barcode: z.string().optional().catch(''),
+  barcode: z.union([z.string(), z.number()]).optional().catch(''),
 })
 
 export const Route = createFileRoute('/_authenticated/scanner/')({

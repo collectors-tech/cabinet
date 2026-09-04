@@ -25,3 +25,183 @@ Cabinet SHALL support `expected`, `delivered`, `reconciled`, and `cancelled` exp
 - **GIVEN** an expected arrival exists for the active profile
 - **WHEN** the user updates the arrival status to `reconciled` with a delivered date and optional instance reference
 - **THEN** Cabinet MUST persist the updated reconciliation state and expose it through `GET /api/commerce/arrivals`.
+
+#### Scenario: Track delivered and cancelled purchase arrival states
+- **GIVEN** a purchase lifecycle entry has created an expected arrival for the active profile
+- **WHEN** the user updates the arrival status to `delivered` or `cancelled` with the available delivery, instance, or cancellation notes
+- **THEN** Cabinet MUST persist the selected state, keep the purchase-linked arrival queryable by item and status, and return the recorded delivery or cancellation evidence through `GET /api/commerce/arrivals`.
+
+### Requirement COMMERCE-RECONCILIATION-004: Purchases SHALL preserve source-backed forwarder provenance
+Cabinet SHALL treat forwarder imports as source/provenance evidence for purchase reconciliation rather than as a disconnected primary package workflow.
+
+#### Scenario: Preserve forwarder source evidence for purchase matching
+- **GIVEN** an authenticated user has an active profile and Cabinet imports a Stackry or freight-forwarder record with package, sender, shipment, tracking, import-time, and raw-source evidence
+- **WHEN** Cabinet stores the imported evidence for reconciliation
+- **THEN** Cabinet MUST keep the forwarder source/provenance metadata traceable to purchase and expected-arrival candidates, including source/provider, package or reference id, sender/source text, import timing, raw/source payload reference when available, and the current match-review state.
+
+### Requirement COMMERCE-RECONCILIATION-005: Purchases SHALL expose forwarder match review states
+Cabinet SHALL expose forwarder-backed purchase match state from the Purchases review surface so users can inspect unmatched, suggested, confirmed, and rejected or ignored source matches without losing provenance.
+
+#### Scenario: Review and decide a source-backed purchase match
+- **GIVEN** a profile has a purchase or expected-arrival candidate and forwarder source evidence that is unmatched, suggested, confirmed, or rejected
+- **WHEN** the user reviews the Purchases surface
+- **THEN** Cabinet MUST show the match state, enough source evidence to inspect the suggested match, and controls or follow-through paths to confirm a good match or reject/ignore a bad match while preserving both purchase evidence and forwarder provenance.
+
+### Requirement COMMERCE-RECONCILIATION-006: Purchases SHALL present a first-class unified table and add/import entry point
+Cabinet SHALL expose a first-class authenticated `/purchases` route, label the purchase-management route as Purchases, and present purchases from manual, CSV, email, desktop-app, eBay, Amazon, and other channel sources in one scannable table-oriented workspace.
+
+#### Scenario: Review and start purchase creation/import
+- **GIVEN** the user opens `/purchases`
+- **WHEN** the Purchases workspace renders
+- **THEN** Cabinet MUST show Purchases as the route title, expose a table shell with purchase/source/price/status/tracking/action columns, and provide a `+` add action that opens a creation/import dialog with New, CSV, and Email modes.
+- **AND** primary navigation and command navigation MUST expose the route with the user-facing `Purchases` label.
+- **AND** captured-review and purchase-source-match tooling MUST NOT render as standalone primary page actions or default body sections.
+- **AND** users MUST be able to deliberately open add/import from the standard page header action area, without a duplicate in-body Purchases title or description block above the table.
+
+### Requirement COMMERCE-RECONCILIATION-007: Purchases SHALL support table filtering and row state actions
+Cabinet SHALL let users narrow the Purchases table by purchase text/source/status signals and expose row-level controls for common review state markers before deeper edit/persistence workflows are completed.
+
+#### Scenario: Filter and mark purchase rows
+- **GIVEN** the Purchases table contains captured or imported purchase rows
+- **WHEN** the user searches purchases, applies a review status filter, or marks a visible row as favorite, arrived, or rated
+- **THEN** Cabinet MUST keep the table scannable, show the filtered row count, preserve independent source/status evidence in visible rows, and reflect the selected favorite/arrival/rating state on the affected row without mutating unrelated rows.
+
+### Requirement COMMERCE-RECONCILIATION-008: Purchases SHALL support manual purchase draft creation
+Cabinet SHALL let users create a manual purchase draft from the Purchases `+` dialog before the durable purchase API workflow is completed.
+
+#### Scenario: Create a manual purchase draft
+- **GIVEN** the user opens the Purchases `+` dialog and selects the New mode
+- **WHEN** the user enters a purchase title with optional source, price, and tracking evidence and saves the draft
+- **THEN** Cabinet MUST add a manual-draft row to the Purchases table, preserve the entered source/price/tracking evidence in the visible row, expose the row through table search/filtering, and clearly state that durable API persistence remains pending a follow-up slice.
+
+### Requirement COMMERCE-RECONCILIATION-009: Purchases SHALL preview CSV and email imports before confirmation
+Cabinet SHALL let users paste CSV rows or order/email text from the Purchases `+` dialog, preview parsed purchase draft fields, and require explicit confirmation before imported purchase drafts appear in the table.
+
+#### Scenario: Preview and confirm purchase imports
+- **GIVEN** the user opens the Purchases `+` dialog and selects CSV or Email mode
+- **WHEN** the user enters import text and requests a preview
+- **THEN** Cabinet MUST show parsed draft fields including source/provenance, title, price/currency, purchase date when available, seller/source/channel, and tracking/delivery evidence when available.
+- **AND** Cabinet MUST show actionable empty or parse-failure feedback when no purchase draft can be parsed.
+- **AND** Cabinet MUST NOT add imported purchase drafts to the Purchases table until the user explicitly confirms the preview.
+- **WHEN** the user confirms a CSV or Email preview
+- **THEN** Cabinet MUST add the confirmed import draft rows to the Purchases table with CSV or Email import status and preserve the previewed provenance, price, tracking, and delivery evidence.
+
+### Requirement COMMERCE-RECONCILIATION-010: Purchases SHALL persist add/import drafts through commerce lifecycle records
+Cabinet SHALL persist manual, CSV, and email purchase drafts from the Purchases `+` dialog through the commerce lifecycle API so confirmed purchase rows have durable lifecycle and expected-arrival evidence instead of only local UI state.
+
+#### Scenario: Persist confirmed purchase drafts
+- **GIVEN** the user opens the Purchases `+` dialog and enters a valid manual purchase or confirms a CSV/email preview
+- **WHEN** Cabinet accepts the purchase draft
+- **THEN** Cabinet MUST create the purchase item record needed by the commerce lifecycle API and then create a `purchase` lifecycle entry for that item.
+- **AND** the commerce lifecycle response MUST include an expected-arrival record linked to the lifecycle entry.
+- **AND** the Purchases table MUST show persistence evidence for the added row, including lifecycle and expected-arrival identifiers.
+- **AND** parse failures or API persistence failures MUST remain visible and MUST NOT add unpersisted manual, CSV, or email rows to the table.
+
+### Requirement COMMERCE-RECONCILIATION-011: Purchases SHALL expose purchase metadata and order links in table rows
+Cabinet SHALL keep purchase date, delivery, and original order-link evidence visible in the Purchases table so cross-platform rows remain scannable without opening a separate detail surface.
+
+#### Scenario: Review row metadata and source order links
+- **GIVEN** the Purchases table contains captured, manual, CSV, or email purchase rows
+- **WHEN** the row renders
+- **THEN** Cabinet MUST show purchase date and delivery evidence when available and a pending state when they are not available.
+- **AND** rows with a source order URL MUST expose an external open-order action without replacing the purchase row.
+- **AND** table search MUST include purchase date, delivery, and order-link evidence so users can locate rows by those metadata fields.
+
+### Requirement COMMERCE-RECONCILIATION-012: Purchases page actions SHALL be modal-backed and product-approved
+Purchases SHALL render primary page header actions as clear modal-backed commands and SHALL NOT expose rejected source-match or captured-review workflows as primary page actions.
+
+#### Scenario: Header actions are icon-only but accessible
+- **GIVEN** the user opens `/purchases`
+- **WHEN** the Purchases page header action area renders
+- **THEN** the Add purchase control MUST render without visible button text.
+- **AND** the Add purchase control MUST preserve an accessible label and tooltip describing the command.
+
+#### Scenario: Add purchase opens the purchase creation workflow
+- **GIVEN** the Purchases page has loaded
+- **WHEN** the user activates the Add purchase action
+- **THEN** Cabinet MUST show a modal purchase creation workflow.
+- **AND** the modal MUST expose manual/new, CSV import, and email import modes as one purchase creation workflow.
+
+#### Scenario: Rejected review actions are absent from the primary Purchases page
+- **GIVEN** the Purchases page has loaded
+- **WHEN** the Purchases page header and default page body render
+- **THEN** Cabinet MUST NOT render `Review source matches` or `Review captured purchases` as header actions.
+- **AND** Cabinet MUST NOT render standalone source-match or captured-review stacked sections as primary page body workflows.
+
+### Requirement COMMERCE-RECONCILIATION-013: Purchase orders SHALL be queryable as grouped persisted orders
+Cabinet SHALL expose active-profile purchase lifecycle and expected-arrival records as paginated, order-centred purchase orders with grouped line items.
+
+#### Scenario: List grouped persisted purchase orders
+- **GIVEN** the active profile has persisted `purchase` lifecycle entries and linked expected-arrival records
+- **WHEN** the user requests `GET /api/commerce/purchase-orders` with optional `status`, `search`, `page`, and `page_size` parameters
+- **THEN** Cabinet MUST return only active-profile purchase orders grouped by source order id.
+- **AND** each order MUST include source, seller, tracking, workflow status, total amount, line-item counts, received/unreceived counts, and grouped line items with lifecycle and expected-arrival identifiers.
+- **AND** status filters MUST support `all`, `active`, `reviews`, `shipped`, and `received`.
+- **AND** search MUST match order id, item title, seller/source, tracking, and status.
+- **AND** pagination metadata MUST include page, page size, total count, and total pages.
+
+#### Scenario: Purchases page renders grouped persisted purchase orders
+- **GIVEN** the Purchases page has loaded for an active profile with persisted grouped purchase orders
+- **WHEN** the user searches, changes workflow status filters, or pages through the purchase table
+- **THEN** Cabinet MUST query `GET /api/commerce/purchase-orders` with the selected `status`, `search`, `page`, and `page_size` parameters.
+- **AND** the table MUST render each returned purchase order as an order-centred row with grouped line-item rows visible beneath it.
+- **AND** the table MUST expose pagination controls and an empty state that distinguishes no persisted purchases from no matching filtered purchases.
+
+#### Scenario: Sample data seeds realistic purchase orders
+- **GIVEN** the onboarding sample/demo profile seed runs for an active profile
+- **WHEN** the sample data seed completes
+- **THEN** Cabinet MUST create deterministic purchase lifecycle and expected-arrival records owned by the onboarding sample seed service.
+- **AND** `GET /api/commerce/purchase-orders` MUST expose at least three realistic grouped sample orders spanning manual, storefront, and eBay-like sources.
+- **AND** the seeded orders MUST include at least one multi-line order, one partially received order, one fully received order, one shipped/unreceived order, and one review-needed order so `/purchases` filters and detail panes have stable demo data.
+
+### Requirement COMMERCE-RECONCILIATION-014: Purchases SHALL expose split-pane order and item detail
+Cabinet SHALL present persisted purchase orders in an Inbox-style split pane with a table/list on the left and stable order or item detail on the right.
+
+#### Scenario: Select purchase order and line item detail
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders
+- **WHEN** the user selects an order row from the left purchase list
+- **THEN** the right detail pane MUST show order-level source/provider, source order id, seller/source account, purchase date, total/currency, order status, shipping/tracking summary, received/reconciled summary, all line items, and clear receive/reconcile/review actions.
+- **WHEN** the user selects a grouped line item row
+- **THEN** the right detail pane MUST show item-level title, source listing identity where available, quantity, item price, linked Cabinet item/instance identifier where available, inherited tracking/shipping status, received/reconciled state, review/feedback state placeholder, notes/evidence identifiers, and clear receive/reconcile/review actions.
+- **AND** filtering, searching, or pagination MUST either preserve the selected record when still visible or fall back to the first visible persisted order.
+- **AND** the detail pane MUST show an explicit empty state when no persisted purchase is selected.
+
+### Requirement COMMERCE-RECONCILIATION-015: Purchases detail actions SHALL be modal-backed
+Cabinet SHALL open clear modal-backed action workflows from the Purchase & Feedback Centre order and line-item detail pane instead of rendering inert receive, reconcile, or review controls.
+
+#### Scenario: Queue order and item detail actions
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders
+- **WHEN** the user activates Receive, Reconcile, or Review from an order detail pane
+- **THEN** Cabinet MUST open a modal workflow that names the selected order, explains the action purpose, accepts notes or evidence, supports cancellation, and returns a visible queued outcome after confirmation.
+- **WHEN** the user activates Receive, Reconcile, or Review from a selected line-item detail pane
+- **THEN** Cabinet MUST open a modal workflow that names the selected line item, preserves the parent order context, accepts notes or evidence, supports cancellation, and returns a visible queued outcome after confirmation.
+
+### Requirement COMMERCE-RECONCILIATION-016: Purchases SHALL add line items to existing orders
+Cabinet SHALL let users add a new line item to the currently selected purchase order without forcing creation of a separate order.
+
+#### Scenario: Add a line item to the selected purchase order
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders and an order is selected
+- **WHEN** the user activates the selected order add-item action
+- **THEN** Cabinet MUST open the manual purchase flow in existing-order mode, name the selected order context, and prefill source/order evidence from the selected order.
+- **WHEN** the user saves the new line item
+- **THEN** Cabinet MUST persist the line item through the commerce lifecycle API using the selected order as the purchase order reference, refresh the grouped purchase-order list, keep the selected order context, and expose the added item as a child line row.
+
+### Requirement COMMERCE-RECONCILIATION-017: Purchases SHALL keep grouped order review bounded and collapsible
+Cabinet SHALL render grouped purchase orders in a full-height split-pane table workspace with fixed controls, a sticky visible table header, a scrollable table body, and accessible per-order collapse controls.
+
+#### Scenario: Review grouped orders in a bounded table body
+- **GIVEN** the Purchases page has loaded persisted grouped purchase orders beside the detail pane
+- **WHEN** the user scrolls through the grouped order table
+- **THEN** the Purchases table shell MUST fill the available workspace height without requiring normal desktop page-level scrolling for table browsing.
+- **AND** the table toolbar, review tools, pagination controls, and selected detail pane MUST remain visible outside the row scroll region.
+- **AND** the table header MUST remain visible while only the table body scrolls vertically inside the bounded table area.
+
+#### Scenario: Collapse and expand purchase order groups
+- **GIVEN** the Purchases table has loaded a grouped purchase order with line items
+- **WHEN** the user activates the order group collapse control
+- **THEN** Cabinet MUST hide that order's child line-item rows while preserving a useful order summary with source, total, purchase date, delivery, status, tracking or lifecycle evidence, and action count.
+- **AND** the collapse control MUST expose `aria-expanded=false` and a label that names the order.
+- **WHEN** the user activates the same control again
+- **THEN** Cabinet MUST restore the child line-item rows with the existing indentation and selection behavior.
+- **AND** selecting an order or line item MUST NOT reset the order's collapsed or expanded state.
+- **AND** filtering, searching, review mode changes, and pagination MUST keep collapse state safe for still-visible order ids.

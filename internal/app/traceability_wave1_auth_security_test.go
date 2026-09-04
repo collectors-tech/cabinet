@@ -126,13 +126,13 @@ func TestWave1CloudBootstrapContractAndInvalidTokenHandling(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"`+validToken+`"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"`+validToken+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if valid.Code != http.StatusOK {
 		t.Fatalf("bootstrap valid status=%d body=%s", valid.Code, valid.Body.String())
 	}
-	for _, needle := range []string{`"provider":"clerk"`, `"user_id":"user_wave1"`, `"plan":"pro"`, `"features"`} {
+	for _, needle := range []string{`"provider":"zitadel"`, `"user_id":"user_wave1"`, `"plan":"pro"`, `"features"`} {
 		if !strings.Contains(valid.Body.String(), needle) {
 			t.Fatalf("expected %q in bootstrap body: %s", needle, valid.Body.String())
 		}
@@ -146,7 +146,7 @@ func TestWave1CloudBootstrapContractAndInvalidTokenHandling(t *testing.T) {
 		a,
 		http.MethodPost,
 		"/api/auth/cloud/session/bootstrap",
-		strings.NewReader(`{"provider":"clerk","token":"not-a-jwt"}`),
+		strings.NewReader(`{"provider":"zitadel","token":"not-a-jwt"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if invalid.Code != http.StatusUnauthorized {

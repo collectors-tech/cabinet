@@ -154,15 +154,15 @@ func (m *runtimeLogManager) writeRuntimeEvent(level, event, message string, extr
 
 func (m *runtimeLogManager) writeErrorEvent(event, message string, extra map[string]any) {
 	payload := map[string]any{
-		"ts":        time.Now().UTC().Format(time.RFC3339),
-		"level":     "error",
-		"type":      "error",
-		"event":     event,
-		"message":   message,
-		"pid":       os.Getpid(),
-		"logSetId":  m.logSetID,
-		"errorLog":  m.errorPath,
-		"dataDir":   strings.TrimSpace(m.cfg.DataDir),
+		"ts":       time.Now().UTC().Format(time.RFC3339),
+		"level":    "error",
+		"type":     "error",
+		"event":    event,
+		"message":  message,
+		"pid":      os.Getpid(),
+		"logSetId": m.logSetID,
+		"errorLog": m.errorPath,
+		"dataDir":  strings.TrimSpace(m.cfg.DataDir),
 	}
 	for key, value := range extra {
 		payload[key] = value
@@ -170,7 +170,7 @@ func (m *runtimeLogManager) writeErrorEvent(event, message string, extra map[str
 	m.writeJSONLine(m.errorLog, payload)
 }
 
-func (m *runtimeLogManager) writeAccessEvent(r *http.Request, status int, duration time.Duration) {
+func (m *runtimeLogManager) writeAccessEvent(r *http.Request, status int, duration time.Duration, requestID string) {
 	payload := map[string]any{
 		"ts":         time.Now().UTC().Format(time.RFC3339),
 		"level":      "info",
@@ -181,10 +181,15 @@ func (m *runtimeLogManager) writeAccessEvent(r *http.Request, status int, durati
 		"path":       r.URL.Path,
 		"status":     status,
 		"durationMs": duration.Milliseconds(),
+		"requestId":  requestID,
 		"remoteAddr": strings.TrimSpace(r.RemoteAddr),
 		"logSetId":   m.logSetID,
 		"accessLog":  m.accessPath,
 		"dataDir":    strings.TrimSpace(m.cfg.DataDir),
+	}
+	_, profileKey := readRuntimeSetupIdentity(m.cfg)
+	if profileKey != "" {
+		payload["profile"] = profileKey
 	}
 	m.writeJSONLine(m.accessLog, payload)
 }
@@ -196,16 +201,31 @@ func (m *runtimeLogManager) errorWriter() *runtimeErrorLogWriter {
 func (m *runtimeLogManager) wrapHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if requestID == "" {
+			requestID = fmt.Sprintf("%s-%d", m.logSetID, started.UTC().UnixNano())
+		}
 		recorder := &runtimeStatusRecorder{ResponseWriter: w, status: http.StatusOK}
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				m.writeErrorEvent("panic", fmt.Sprintf("%v", recovered), map[string]any{
-					"method": r.Method,
-					"path":   r.URL.Path,
+					"method":    r.Method,
+					"path":      r.URL.Path,
+					"requestId": requestID,
 				})
 				recorder.WriteHeader(http.StatusInternalServerError)
 			}
-			m.writeAccessEvent(r, recorder.status, time.Since(started))
+			duration := time.Since(started)
+			if recorder.status >= http.StatusBadRequest {
+				m.writeErrorEvent("http_failure", "request completed with non-2xx status", map[string]any{
+					"method":     r.Method,
+					"path":       r.URL.Path,
+					"status":     recorder.status,
+					"durationMs": duration.Milliseconds(),
+					"requestId":  requestID,
+				})
+			}
+			m.writeAccessEvent(r, recorder.status, duration, requestID)
 		}()
 		next.ServeHTTP(recorder, r)
 	})

@@ -29,14 +29,24 @@ type Thread struct {
 }
 
 type Message struct {
-	ID          string         `json:"id"`
-	ProfileID   string         `json:"profile_id"`
-	ThreadID    string         `json:"thread_id"`
-	Role        string         `json:"role"`
-	Content     string         `json:"content"`
-	Attachments string         `json:"attachments_json"`
-	Context     map[string]any `json:"context,omitempty"`
-	CreatedAt   string         `json:"created_at"`
+	ID          string              `json:"id"`
+	ProfileID   string              `json:"profile_id"`
+	ThreadID    string              `json:"thread_id"`
+	Role        string              `json:"role"`
+	Content     string              `json:"content"`
+	Attachments []MessageAttachment `json:"attachments_json"`
+	Context     map[string]any      `json:"context,omitempty"`
+	CreatedAt   string              `json:"created_at"`
+}
+
+type MessageAttachment struct {
+	ID         string `json:"id"`
+	Filename   string `json:"filename"`
+	MimeType   string `json:"mime_type"`
+	SizeBytes  int64  `json:"size_bytes"`
+	Provenance string `json:"provenance"`
+	Source     string `json:"source"`
+	CreatedAt  string `json:"created_at"`
 }
 
 type Attachment struct {
@@ -63,22 +73,49 @@ type InboxItem struct {
 	UpdatedAt string         `json:"updated_at"`
 }
 
+type NotificationHistoryInput struct {
+	ProfileID      string         `json:"profile_id"`
+	LocalHistoryID string         `json:"local_history_id"`
+	Level          string         `json:"level"`
+	Title          string         `json:"title"`
+	Summary        string         `json:"summary"`
+	SourceLabel    string         `json:"source_label"`
+	Category       string         `json:"category"`
+	CreatedAt      string         `json:"created_at"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
+type ProviderWorkflowInboxEventInput struct {
+	ProfileID           string         `json:"profile_id"`
+	ProviderID          string         `json:"provider_id"`
+	ProviderDisplayName string         `json:"provider_display_name"`
+	WorkflowActionID    string         `json:"workflow_action_id"`
+	Severity            string         `json:"severity"`
+	RequiredActionCode  string         `json:"required_action_code"`
+	StatusMessage       string         `json:"status_message"`
+	TargetRoute         string         `json:"target_route"`
+	OccurredAt          string         `json:"occurred_at"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
+}
+
 type PreviewActionInput struct {
-	ProfileID string         `json:"profile_id"`
-	ThreadID  string         `json:"thread_id"`
-	Action    string         `json:"action"`
-	Payload   map[string]any `json:"payload"`
+	ProfileID    string         `json:"profile_id"`
+	ThreadID     string         `json:"thread_id"`
+	CapabilityID string         `json:"capability_id,omitempty"`
+	Action       string         `json:"action,omitempty"`
+	Payload      map[string]any `json:"payload"`
 }
 
 type ActionPreview struct {
-	ID        string         `json:"id"`
-	ProfileID string         `json:"profile_id"`
-	ThreadID  string         `json:"thread_id"`
-	Action    string         `json:"action"`
-	Payload   map[string]any `json:"payload,omitempty"`
-	Status    string         `json:"status"`
-	CreatedAt string         `json:"created_at"`
-	AppliedAt string         `json:"applied_at,omitempty"`
+	ID           string         `json:"id"`
+	ProfileID    string         `json:"profile_id"`
+	ThreadID     string         `json:"thread_id"`
+	CapabilityID string         `json:"capability_id,omitempty"`
+	Action       string         `json:"action"`
+	Payload      map[string]any `json:"payload,omitempty"`
+	Status       string         `json:"status"`
+	CreatedAt    string         `json:"created_at"`
+	AppliedAt    string         `json:"applied_at,omitempty"`
 }
 
 type ApplyActionInput struct {
@@ -89,11 +126,59 @@ type ApplyActionInput struct {
 }
 
 type ApplyActionResult struct {
-	Applied    bool   `json:"applied"`
-	Action     string `json:"action"`
-	ItemID     string `json:"item_id,omitempty"`
-	WishlistID string `json:"wishlist_id,omitempty"`
-	PreviewID  string `json:"preview_id"`
+	Applied        bool   `json:"applied"`
+	Action         string `json:"action"`
+	ItemID         string `json:"item_id,omitempty"`
+	WishlistID     string `json:"wishlist_id,omitempty"`
+	CollectionName string `json:"collection_name,omitempty"`
+	PartNumber     string `json:"part_number,omitempty"`
+	Title          string `json:"title,omitempty"`
+	PreviewID      string `json:"preview_id"`
+}
+
+type WorkflowRun struct {
+	ID                string           `json:"id"`
+	ProfileID         string           `json:"profile_id"`
+	WorkflowID        string           `json:"workflow_id"`
+	CapabilityID      string           `json:"capability_id"`
+	SourceChannel     string           `json:"source_channel"`
+	SourceThreadID    string           `json:"source_thread_id,omitempty"`
+	SourceMessageID   string           `json:"source_message_id,omitempty"`
+	Status            string           `json:"status"`
+	Input             map[string]any   `json:"input,omitempty"`
+	ProviderTrace     map[string]any   `json:"provider_trace,omitempty"`
+	Result            map[string]any   `json:"result,omitempty"`
+	Error             map[string]any   `json:"error,omitempty"`
+	ConfirmationState string           `json:"confirmation_state"`
+	BulkItems         []map[string]any `json:"bulk_items,omitempty"`
+	CreatedAt         string           `json:"created_at"`
+	UpdatedAt         string           `json:"updated_at"`
+	StartedAt         string           `json:"started_at,omitempty"`
+	CompletedAt       string           `json:"completed_at,omitempty"`
+}
+
+type CreateWorkflowRunInput struct {
+	ProfileID         string           `json:"profile_id"`
+	WorkflowID        string           `json:"workflow_id"`
+	CapabilityID      string           `json:"capability_id"`
+	SourceChannel     string           `json:"source_channel"`
+	SourceThreadID    string           `json:"source_thread_id"`
+	SourceMessageID   string           `json:"source_message_id"`
+	Input             map[string]any   `json:"input"`
+	ProviderTrace     map[string]any   `json:"provider_trace"`
+	ConfirmationState string           `json:"confirmation_state"`
+	BulkItems         []map[string]any `json:"bulk_items"`
+}
+
+type UpdateWorkflowRunInput struct {
+	ProfileID         string           `json:"profile_id"`
+	RunID             string           `json:"run_id"`
+	Status            string           `json:"status"`
+	ProviderTrace     map[string]any   `json:"provider_trace"`
+	Result            map[string]any   `json:"result"`
+	Error             map[string]any   `json:"error"`
+	ConfirmationState string           `json:"confirmation_state"`
+	BulkItems         []map[string]any `json:"bulk_items"`
 }
 
 func NewService(db *sql.DB, dataDir string) *Service {
@@ -164,6 +249,14 @@ func (s *Service) GetThread(ctx context.Context, profileID, threadID string) (Th
 }
 
 func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any) (Message, error) {
+	return s.CreateMessageWithAttachments(ctx, profileID, threadID, role, content, messageContext, nil)
+}
+
+func (s *Service) CreateMessageWithAttachments(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any, attachmentIDs []string) (Message, error) {
+	return s.CreateMessageWithAttachmentProvenance(ctx, profileID, threadID, role, content, messageContext, attachmentIDs, "explicit_user_upload", "in_app_chat")
+}
+
+func (s *Service) CreateMessageWithAttachmentProvenance(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any, attachmentIDs []string, provenance, source string) (Message, error) {
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
 	role = strings.TrimSpace(strings.ToLower(role))
@@ -180,16 +273,59 @@ func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, 
 	if _, err := s.GetThread(ctx, profileID, threadID); err != nil {
 		return Message{}, err
 	}
+	attachments, err := s.messageAttachments(ctx, profileID, threadID, attachmentIDs, provenance, source)
+	if err != nil {
+		return Message{}, err
+	}
+	attachmentsJSON, err := json.Marshal(attachments)
+	if err != nil {
+		return Message{}, fmt.Errorf("marshal attachments: %w", err)
+	}
 	id := uuid.NewString()
 	contextJSON := marshalContextJSON(messageContext)
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
-		VALUES (?, ?, ?, ?, ?, '[]', ?)
-	`, id, profileID, threadID, role, content, contextJSON); err != nil {
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, id, profileID, threadID, role, content, string(attachmentsJSON), contextJSON); err != nil {
 		return Message{}, fmt.Errorf("create message: %w", err)
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, threadID)
 	return s.getMessage(ctx, profileID, id)
+}
+
+func (s *Service) messageAttachments(ctx context.Context, profileID, threadID string, attachmentIDs []string, provenance, source string) ([]MessageAttachment, error) {
+	if len(attachmentIDs) == 0 {
+		return []MessageAttachment{}, nil
+	}
+	out := make([]MessageAttachment, 0, len(attachmentIDs))
+	seen := map[string]struct{}{}
+	for _, attachmentID := range attachmentIDs {
+		attachmentID = strings.TrimSpace(attachmentID)
+		if attachmentID == "" {
+			return nil, fmt.Errorf("attachment_id is required")
+		}
+		if _, ok := seen[attachmentID]; ok {
+			return nil, fmt.Errorf("duplicate attachment_id")
+		}
+		seen[attachmentID] = struct{}{}
+		attachment, err := s.getAttachment(ctx, profileID, attachmentID)
+		if err != nil {
+			return nil, err
+		}
+		if attachment.ThreadID != threadID {
+			return nil, fmt.Errorf("attachment does not belong to thread")
+		}
+		out = append(out, MessageAttachment{
+			ID:         attachment.ID,
+			Filename:   attachment.Filename,
+			MimeType:   attachment.MimeType,
+			SizeBytes:  attachment.SizeBytes,
+			Provenance: strings.TrimSpace(provenance),
+			Source:     strings.TrimSpace(source),
+			CreatedAt:  attachment.CreatedAt,
+		})
+	}
+	return out, nil
 }
 
 func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) ([]Message, error) {
@@ -199,7 +335,7 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE profile_id = ? AND thread_id = ?
-		ORDER BY created_at ASC
+		ORDER BY created_at ASC, rowid ASC
 	`, profileID, threadID)
 	if err != nil {
 		return nil, err
@@ -208,10 +344,12 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 	var out []Message
 	for rows.Next() {
 		var m Message
+		var attachmentsJSON string
 		var contextJSON string
-		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &attachmentsJSON, &contextJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
+		m.Attachments = parseMessageAttachmentsJSON(attachmentsJSON)
 		m.Context = parseContextJSON(contextJSON)
 		out = append(out, m)
 	}
@@ -220,20 +358,30 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 
 func (s *Service) getMessage(ctx context.Context, profileID, messageID string) (Message, error) {
 	var m Message
+	var attachmentsJSON string
 	var contextJSON string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE id = ? AND profile_id = ?
-	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt)
+	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &attachmentsJSON, &contextJSON, &m.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Message{}, fmt.Errorf("message not found")
 		}
 		return Message{}, err
 	}
+	m.Attachments = parseMessageAttachmentsJSON(attachmentsJSON)
 	m.Context = parseContextJSON(contextJSON)
 	return m, nil
+}
+
+func parseMessageAttachmentsJSON(raw string) []MessageAttachment {
+	var out []MessageAttachment
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &out); err != nil || out == nil {
+		return []MessageAttachment{}
+	}
+	return out
 }
 
 func marshalContextJSON(messageContext map[string]any) string {
@@ -257,6 +405,194 @@ func parseContextJSON(raw string) map[string]any {
 		return map[string]any{}
 	}
 	return out
+}
+
+func marshalBulkItemsJSON(items []map[string]any) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	raw, err := json.Marshal(items)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+func parseBulkItemsJSON(raw string) []map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []map[string]any{}
+	}
+	var out []map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || out == nil {
+		return []map[string]any{}
+	}
+	return out
+}
+
+func normalizeWorkflowStatus(status string) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case "":
+		return "queued", nil
+	case "queued", "running", "needs_input", "completed", "failed", "cancelled":
+		return strings.TrimSpace(strings.ToLower(status)), nil
+	default:
+		return "", fmt.Errorf("unsupported workflow status: %s", status)
+	}
+}
+
+func normalizeConfirmationState(state string) string {
+	switch strings.TrimSpace(strings.ToLower(state)) {
+	case "required", "pending", "confirmed", "cancelled", "not_required":
+		return strings.TrimSpace(strings.ToLower(state))
+	default:
+		return "not_required"
+	}
+}
+
+func (s *Service) CreateWorkflowRun(ctx context.Context, in CreateWorkflowRunInput) (WorkflowRun, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.WorkflowID = strings.TrimSpace(in.WorkflowID)
+	in.CapabilityID = strings.TrimSpace(in.CapabilityID)
+	in.SourceChannel = strings.TrimSpace(in.SourceChannel)
+	in.SourceThreadID = strings.TrimSpace(in.SourceThreadID)
+	in.SourceMessageID = strings.TrimSpace(in.SourceMessageID)
+	if in.ProfileID == "" || in.WorkflowID == "" || in.CapabilityID == "" {
+		return WorkflowRun{}, fmt.Errorf("profile_id, workflow_id and capability_id are required")
+	}
+	if in.SourceChannel == "" {
+		in.SourceChannel = "in_app_chat"
+	}
+	status, err := normalizeWorkflowStatus("queued")
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO assistant_workflow_runs(
+			id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+			status, input_json, provider_trace_json, confirmation_state, bulk_items_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, in.ProfileID, in.WorkflowID, in.CapabilityID, in.SourceChannel, in.SourceThreadID, in.SourceMessageID,
+		status, marshalContextJSON(in.Input), marshalContextJSON(in.ProviderTrace), normalizeConfirmationState(in.ConfirmationState), marshalBulkItemsJSON(in.BulkItems)); err != nil {
+		return WorkflowRun{}, fmt.Errorf("create workflow run: %w", err)
+	}
+	return s.GetWorkflowRun(ctx, in.ProfileID, id)
+}
+
+func (s *Service) ListWorkflowRuns(ctx context.Context, profileID, threadID string) ([]WorkflowRun, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID = strings.TrimSpace(threadID)
+	if profileID == "" {
+		return nil, fmt.Errorf("profile_id is required")
+	}
+	query := `
+		SELECT id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+		       status, input_json, provider_trace_json, result_json, error_json, confirmation_state, bulk_items_json,
+		       created_at, updated_at, started_at, completed_at
+		FROM assistant_workflow_runs
+		WHERE profile_id = ?`
+	args := []any{profileID}
+	if threadID != "" {
+		query += ` AND source_thread_id = ?`
+		args = append(args, threadID)
+	}
+	query += ` ORDER BY updated_at DESC, created_at DESC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WorkflowRun
+	for rows.Next() {
+		run, err := scanWorkflowRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) GetWorkflowRun(ctx context.Context, profileID, runID string) (WorkflowRun, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+		       status, input_json, provider_trace_json, result_json, error_json, confirmation_state, bulk_items_json,
+		       created_at, updated_at, started_at, completed_at
+		FROM assistant_workflow_runs
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(runID), strings.TrimSpace(profileID))
+	run, err := scanWorkflowRun(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return WorkflowRun{}, fmt.Errorf("workflow run not found")
+		}
+		return WorkflowRun{}, err
+	}
+	return run, nil
+}
+
+func (s *Service) UpdateWorkflowRun(ctx context.Context, in UpdateWorkflowRunInput) (WorkflowRun, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.RunID = strings.TrimSpace(in.RunID)
+	if in.ProfileID == "" || in.RunID == "" {
+		return WorkflowRun{}, fmt.Errorf("profile_id and run_id are required")
+	}
+	status, err := normalizeWorkflowStatus(in.Status)
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	confirmationState := normalizeConfirmationState(in.ConfirmationState)
+	if confirmationState == "not_required" {
+		current, err := s.GetWorkflowRun(ctx, in.ProfileID, in.RunID)
+		if err != nil {
+			return WorkflowRun{}, err
+		}
+		confirmationState = current.ConfirmationState
+	}
+	startedAtExpr := "started_at"
+	if status == "running" {
+		startedAtExpr = "COALESCE(NULLIF(started_at, ''), CURRENT_TIMESTAMP)"
+	}
+	completedAtExpr := "completed_at"
+	if status == "completed" || status == "failed" || status == "cancelled" {
+		completedAtExpr = "COALESCE(NULLIF(completed_at, ''), CURRENT_TIMESTAMP)"
+	}
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf(`
+		UPDATE assistant_workflow_runs
+		SET status = ?, provider_trace_json = ?, result_json = ?, error_json = ?, confirmation_state = ?,
+		    bulk_items_json = ?, updated_at = CURRENT_TIMESTAMP, started_at = %s, completed_at = %s
+		WHERE id = ? AND profile_id = ?
+	`, startedAtExpr, completedAtExpr),
+		status, marshalContextJSON(in.ProviderTrace), marshalContextJSON(in.Result), marshalContextJSON(in.Error),
+		confirmationState, marshalBulkItemsJSON(in.BulkItems), in.RunID, in.ProfileID)
+	if err != nil {
+		return WorkflowRun{}, fmt.Errorf("update workflow run: %w", err)
+	}
+	return s.GetWorkflowRun(ctx, in.ProfileID, in.RunID)
+}
+
+type workflowRunScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanWorkflowRun(scanner workflowRunScanner) (WorkflowRun, error) {
+	var run WorkflowRun
+	var inputJSON, providerTraceJSON, resultJSON, errorJSON, bulkItemsJSON string
+	err := scanner.Scan(
+		&run.ID, &run.ProfileID, &run.WorkflowID, &run.CapabilityID, &run.SourceChannel, &run.SourceThreadID, &run.SourceMessageID,
+		&run.Status, &inputJSON, &providerTraceJSON, &resultJSON, &errorJSON, &run.ConfirmationState, &bulkItemsJSON,
+		&run.CreatedAt, &run.UpdatedAt, &run.StartedAt, &run.CompletedAt,
+	)
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	run.Input = parseContextJSON(inputJSON)
+	run.ProviderTrace = parseContextJSON(providerTraceJSON)
+	run.Result = parseContextJSON(resultJSON)
+	run.Error = parseContextJSON(errorJSON)
+	run.BulkItems = parseBulkItemsJSON(bulkItemsJSON)
+	return run, nil
 }
 
 func (s *Service) CreateInboxItem(ctx context.Context, item InboxItem) (InboxItem, error) {
@@ -290,6 +626,291 @@ func (s *Service) CreateInboxItem(ctx context.Context, item InboxItem) (InboxIte
 		return InboxItem{}, fmt.Errorf("create inbox item: %w", err)
 	}
 	return s.getInboxItem(ctx, item.ProfileID, item.ID)
+}
+
+func (s *Service) CreateNotificationHistoryItem(ctx context.Context, in NotificationHistoryInput) (InboxItem, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.LocalHistoryID = strings.TrimSpace(in.LocalHistoryID)
+	in.Title = strings.TrimSpace(in.Title)
+	if in.ProfileID == "" || in.LocalHistoryID == "" || in.Title == "" {
+		return InboxItem{}, fmt.Errorf("profile_id, local_history_id and title are required")
+	}
+	if existing, ok, err := s.findNotificationHistoryItem(ctx, in.ProfileID, in.LocalHistoryID); err != nil {
+		return InboxItem{}, err
+	} else if ok {
+		return existing, nil
+	}
+	thread, err := s.notificationHistoryThread(ctx, in.ProfileID)
+	if err != nil {
+		return InboxItem{}, err
+	}
+	category := strings.TrimSpace(in.Category)
+	if category == "" {
+		category = "system"
+	}
+	level := strings.TrimSpace(in.Level)
+	if level == "" {
+		level = "info"
+	}
+	sourceLabel := strings.TrimSpace(in.SourceLabel)
+	if sourceLabel == "" {
+		sourceLabel = "Notification History"
+	}
+	metadata := map[string]any{
+		"category":         category,
+		"detail":           strings.TrimSpace(in.Summary),
+		"level":            level,
+		"local_history_id": in.LocalHistoryID,
+		"local_toast":      true,
+		"source_label":     sourceLabel,
+	}
+	if strings.TrimSpace(in.CreatedAt) != "" {
+		metadata["captured_at"] = strings.TrimSpace(in.CreatedAt)
+	}
+	for key, value := range in.Metadata {
+		if _, exists := metadata[key]; !exists {
+			metadata[key] = value
+		}
+	}
+	return s.CreateInboxItem(ctx, InboxItem{
+		ProfileID: in.ProfileID,
+		ThreadID:  thread.ID,
+		Source:    "notification_history",
+		Status:    "read",
+		Title:     in.Title,
+		Summary:   strings.TrimSpace(in.Summary),
+		Metadata:  metadata,
+	})
+}
+
+func (s *Service) CreateProviderWorkflowInboxEvent(ctx context.Context, in ProviderWorkflowInboxEventInput) (InboxItem, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.ProviderID = strings.TrimSpace(in.ProviderID)
+	in.ProviderDisplayName = strings.TrimSpace(in.ProviderDisplayName)
+	in.WorkflowActionID = strings.TrimSpace(in.WorkflowActionID)
+	in.RequiredActionCode = strings.TrimSpace(in.RequiredActionCode)
+	in.StatusMessage = strings.TrimSpace(in.StatusMessage)
+	if in.ProfileID == "" || in.ProviderID == "" || in.WorkflowActionID == "" || in.RequiredActionCode == "" {
+		return InboxItem{}, fmt.Errorf("profile_id, provider_id, workflow_action_id and required_action_code are required")
+	}
+	if in.ProviderDisplayName == "" {
+		in.ProviderDisplayName = in.ProviderID
+	}
+	severity := strings.ToLower(strings.TrimSpace(in.Severity))
+	if severity == "" {
+		severity = "warning"
+	}
+	targetRoute := strings.TrimSpace(in.TargetRoute)
+	if targetRoute == "" {
+		targetRoute = "/integrations"
+	}
+	thread, err := s.providerWorkflowThread(ctx, in.ProfileID)
+	if err != nil {
+		return InboxItem{}, err
+	}
+	metadata := map[string]any{
+		"category":              "integration_workflow",
+		"provider_id":           in.ProviderID,
+		"provider_display_name": in.ProviderDisplayName,
+		"workflow_action_id":    in.WorkflowActionID,
+		"severity":              severity,
+		"required_action_code":  in.RequiredActionCode,
+		"target_route":          targetRoute,
+	}
+	if strings.TrimSpace(in.OccurredAt) != "" {
+		metadata["occurred_at"] = strings.TrimSpace(in.OccurredAt)
+	}
+	for key, value := range in.Metadata {
+		if _, exists := metadata[key]; !exists {
+			metadata[key] = value
+		}
+	}
+	title := in.ProviderDisplayName + " workflow needs attention"
+	if severity == "error" || severity == "failed" {
+		title = in.ProviderDisplayName + " workflow failed"
+	}
+	if existing, ok, err := s.findProviderWorkflowInboxEvent(ctx, in.ProfileID, in.ProviderID, in.WorkflowActionID, in.RequiredActionCode); err != nil {
+		return InboxItem{}, err
+	} else if ok {
+		metadataJSON := marshalContextJSON(metadata)
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE chat_inbox_items
+			SET status = 'unread', title = ?, summary = ?, metadata_json = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND profile_id = ?
+		`, title, in.StatusMessage, metadataJSON, existing.ID, in.ProfileID); err != nil {
+			return InboxItem{}, fmt.Errorf("update provider workflow inbox event: %w", err)
+		}
+		return s.getInboxItem(ctx, in.ProfileID, existing.ID)
+	}
+	return s.CreateInboxItem(ctx, InboxItem{
+		ProfileID: in.ProfileID,
+		ThreadID:  thread.ID,
+		Source:    "provider_workflow",
+		Status:    "unread",
+		Title:     title,
+		Summary:   in.StatusMessage,
+		Metadata:  metadata,
+	})
+}
+
+func (s *Service) ResolveProviderWorkflowInboxEvents(ctx context.Context, profileID, providerID, workflowActionID, resolution string, metadata map[string]any) error {
+	profileID = strings.TrimSpace(profileID)
+	providerID = strings.TrimSpace(providerID)
+	workflowActionID = strings.TrimSpace(workflowActionID)
+	resolution = strings.TrimSpace(resolution)
+	if profileID == "" || providerID == "" || workflowActionID == "" {
+		return fmt.Errorf("profile_id, provider_id and workflow_action_id are required")
+	}
+	if resolution == "" {
+		resolution = "resolved"
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, metadata_json
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		  AND source = 'provider_workflow'
+		  AND json_extract(metadata_json, '$.provider_id') = ?
+		  AND json_extract(metadata_json, '$.workflow_action_id') = ?
+		  AND status != 'read'
+	`, profileID, providerID, workflowActionID)
+	if err != nil {
+		return fmt.Errorf("find provider workflow inbox events to resolve: %w", err)
+	}
+	defer rows.Close()
+
+	type pendingResolution struct {
+		id       string
+		metadata map[string]any
+	}
+	var pending []pendingResolution
+	for rows.Next() {
+		var id, metadataJSON string
+		if err := rows.Scan(&id, &metadataJSON); err != nil {
+			return err
+		}
+		merged := parseContextJSON(metadataJSON)
+		merged["resolved_at"] = time.Now().UTC().Format(time.RFC3339)
+		merged["resolution"] = resolution
+		for key, value := range metadata {
+			if _, exists := merged[key]; !exists {
+				merged[key] = value
+			}
+		}
+		pending = append(pending, pendingResolution{id: id, metadata: merged})
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, item := range pending {
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE chat_inbox_items
+			SET status = 'read', metadata_json = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND profile_id = ?
+		`, marshalContextJSON(item.metadata), item.id, profileID); err != nil {
+			return fmt.Errorf("resolve provider workflow inbox event: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Service) notificationHistoryThread(ctx context.Context, profileID string) (Thread, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
+		FROM chat_threads
+		WHERE profile_id = ? AND json_extract(metadata_json, '$.kind') = 'notification_history'
+		ORDER BY created_at ASC
+		LIMIT 1
+	`, profileID)
+	if err != nil {
+		return Thread{}, fmt.Errorf("find notification history thread: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var t Thread
+		var metadataJSON string
+		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return Thread{}, err
+		}
+		t.Metadata = parseContextJSON(metadataJSON)
+		return t, nil
+	}
+	if err := rows.Err(); err != nil {
+		return Thread{}, err
+	}
+	return s.CreateThread(ctx, profileID, "Notification History", map[string]any{"kind": "notification_history"})
+}
+
+func (s *Service) providerWorkflowThread(ctx context.Context, profileID string) (Thread, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
+		FROM chat_threads
+		WHERE profile_id = ? AND json_extract(metadata_json, '$.kind') = 'provider_workflow_events'
+		ORDER BY created_at ASC
+		LIMIT 1
+	`, profileID)
+	if err != nil {
+		return Thread{}, fmt.Errorf("find provider workflow event thread: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var t Thread
+		var metadataJSON string
+		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return Thread{}, err
+		}
+		t.Metadata = parseContextJSON(metadataJSON)
+		return t, nil
+	}
+	if err := rows.Err(); err != nil {
+		return Thread{}, err
+	}
+	return s.CreateThread(ctx, profileID, "Provider Workflow Events", map[string]any{"kind": "provider_workflow_events"})
+}
+
+func (s *Service) findNotificationHistoryItem(ctx context.Context, profileID, localHistoryID string) (InboxItem, bool, error) {
+	var item InboxItem
+	var metadataJSON string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		  AND source = 'notification_history'
+		  AND json_extract(metadata_json, '$.local_history_id') = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, profileID, localHistoryID).Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return InboxItem{}, false, nil
+		}
+		return InboxItem{}, false, err
+	}
+	item.Metadata = parseContextJSON(metadataJSON)
+	return item, true, nil
+}
+
+func (s *Service) findProviderWorkflowInboxEvent(ctx context.Context, profileID, providerID, workflowActionID, requiredActionCode string) (InboxItem, bool, error) {
+	var item InboxItem
+	var metadataJSON string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		  AND source = 'provider_workflow'
+		  AND json_extract(metadata_json, '$.provider_id') = ?
+		  AND json_extract(metadata_json, '$.workflow_action_id') = ?
+		  AND json_extract(metadata_json, '$.required_action_code') = ?
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT 1
+	`, profileID, providerID, workflowActionID, requiredActionCode).Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return InboxItem{}, false, nil
+		}
+		return InboxItem{}, false, err
+	}
+	item.Metadata = parseContextJSON(metadataJSON)
+	return item, true, nil
 }
 
 func (s *Service) ListInboxItems(ctx context.Context, profileID string) ([]InboxItem, error) {
@@ -434,14 +1055,19 @@ func (s *Service) getAttachment(ctx context.Context, profileID, attachmentID str
 func (s *Service) PreviewAction(ctx context.Context, in PreviewActionInput) (ActionPreview, error) {
 	in.ProfileID = strings.TrimSpace(in.ProfileID)
 	in.ThreadID = strings.TrimSpace(in.ThreadID)
+	in.CapabilityID = strings.TrimSpace(in.CapabilityID)
 	in.Action = strings.TrimSpace(in.Action)
-	if in.ProfileID == "" || in.ThreadID == "" || in.Action == "" {
-		return ActionPreview{}, fmt.Errorf("profile_id, thread_id and action are required")
+	if in.ProfileID == "" || in.ThreadID == "" {
+		return ActionPreview{}, fmt.Errorf("profile_id and thread_id are required")
 	}
 	if _, err := s.GetThread(ctx, in.ProfileID, in.ThreadID); err != nil {
 		return ActionPreview{}, err
 	}
-	if err := validateActionPayload(in.Action, in.Payload); err != nil {
+	capability, err := resolveActionCapability(in.CapabilityID, in.Action)
+	if err != nil {
+		return ActionPreview{}, err
+	}
+	if err := validateActionPayload(capability.Action, in.Payload); err != nil {
 		return ActionPreview{}, err
 	}
 	rawPayload, err := json.Marshal(in.Payload)
@@ -452,10 +1078,17 @@ func (s *Service) PreviewAction(ctx context.Context, in PreviewActionInput) (Act
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO chat_action_previews(id, profile_id, thread_id, action, payload_json, status)
 		VALUES (?, ?, ?, ?, ?, 'previewed')
-	`, id, in.ProfileID, in.ThreadID, in.Action, string(rawPayload)); err != nil {
+	`, id, in.ProfileID, in.ThreadID, capability.Action, string(rawPayload)); err != nil {
 		return ActionPreview{}, fmt.Errorf("create preview: %w", err)
 	}
-	return s.getPreview(ctx, in.ProfileID, id)
+	preview, err := s.getPreview(ctx, in.ProfileID, id)
+	if err != nil {
+		return ActionPreview{}, err
+	}
+	if _, err := s.recordActionPreviewWorkflowRun(ctx, preview, capability.ID, payloadForWorkflow(in.Payload)); err != nil {
+		return ActionPreview{}, err
+	}
+	return preview, nil
 }
 
 func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyActionResult, error) {
@@ -472,20 +1105,28 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	if err != nil {
 		return ApplyActionResult{}, err
 	}
-	result := ApplyActionResult{Applied: true, Action: preview.Action, PreviewID: preview.ID}
-	switch preview.Action {
-	case "create_item_stub", "create_inventory_item":
+	capability, err := resolveActionCapability("", preview.Action)
+	if err != nil {
+		return ApplyActionResult{}, err
+	}
+	result := ApplyActionResult{Applied: true, Action: capability.Action, PreviewID: preview.ID}
+	switch capability.Action {
+	case "create_inventory_item":
 		itemID, err := s.applyCreateItemStub(ctx, in.ProfileID, payload)
 		if err != nil {
 			return ApplyActionResult{}, err
 		}
 		result.ItemID = itemID
-	case "update_inventory_item":
+		result.PartNumber = trimPayloadString(payload, "part_number")
+		result.Title = trimPayloadString(payload, "title")
+	case "update_inventory_item", "update_open_item_title":
 		itemID, err := s.applyUpdateItem(ctx, in.ProfileID, payload)
 		if err != nil {
 			return ApplyActionResult{}, err
 		}
 		result.ItemID = itemID
+		result.PartNumber = trimPayloadString(payload, "part_number")
+		result.Title = trimPayloadString(payload, "title")
 	case "create_wishlist_entry":
 		itemID, wishlistID, err := s.applyCreateWishlistEntry(ctx, in.ProfileID, payload)
 		if err != nil {
@@ -493,8 +1134,17 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 		}
 		result.ItemID = itemID
 		result.WishlistID = wishlistID
+		result.PartNumber = trimPayloadString(payload, "part_number")
+		result.Title = trimPayloadString(payload, "title")
+	case "assign_collection_item":
+		itemID, collectionName, err := s.applyAssignCollectionItem(ctx, in.ProfileID, payload)
+		if err != nil {
+			return ApplyActionResult{}, err
+		}
+		result.ItemID = itemID
+		result.CollectionName = collectionName
 	default:
-		return ApplyActionResult{}, fmt.Errorf("unsupported action: %s", preview.Action)
+		return ApplyActionResult{}, fmt.Errorf("unsupported action: %s", capability.Action)
 	}
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE chat_action_previews
@@ -504,7 +1154,288 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	if err != nil {
 		return ApplyActionResult{}, fmt.Errorf("mark action applied: %w", err)
 	}
+	_, _ = s.updateActionWorkflowRun(ctx, in.ProfileID, in.ThreadID, preview.ID, UpdateWorkflowRunInput{
+		Status:            "completed",
+		Result:            actionResultWorkflowPayload(result),
+		ConfirmationState: "confirmed",
+	})
+	agentResponse, _ := NewAgentResponse(AgentResponseApplied, applyActionMessage(result), "", result.Action, result.Action, "chats.main", "in-app")
+	agentResponse.Preview = &AgentResponsePreview{ID: result.PreviewID, Action: result.Action, Status: "applied"}
+	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", applyActionMessage(result), map[string]any{
+		"action_result": map[string]any{
+			"preview_id":       result.PreviewID,
+			"action":           result.Action,
+			"item_id":          result.ItemID,
+			"wishlist_id":      result.WishlistID,
+			"collection_name":  result.CollectionName,
+			"part_number":      result.PartNumber,
+			"title":            result.Title,
+			"confirmation":     "confirmed",
+			"mutation_applied": result.Applied,
+		},
+		"agent_response": agentResponse,
+	})
 	return result, nil
+}
+
+func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyActionResult, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.ThreadID = strings.TrimSpace(in.ThreadID)
+	in.PreviewID = strings.TrimSpace(in.PreviewID)
+	if in.ProfileID == "" || in.ThreadID == "" || in.PreviewID == "" {
+		return ApplyActionResult{}, fmt.Errorf("profile_id, thread_id and preview_id are required")
+	}
+	preview, payload, err := s.lookupPendingPreview(ctx, in.ProfileID, in.ThreadID, in.PreviewID)
+	if err != nil {
+		return ApplyActionResult{}, err
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE chat_action_previews
+		SET status = 'cancelled'
+		WHERE id = ? AND profile_id = ? AND thread_id = ?
+	`, in.PreviewID, in.ProfileID, in.ThreadID)
+	if err != nil {
+		return ApplyActionResult{}, fmt.Errorf("mark action cancelled: %w", err)
+	}
+	result := ApplyActionResult{
+		Applied:        false,
+		Action:         capabilityForAction(preview.Action).Action,
+		PreviewID:      preview.ID,
+		ItemID:         trimPayloadString(payload, "item_id"),
+		CollectionName: trimPayloadString(payload, "collection_name"),
+		PartNumber:     trimPayloadString(payload, "part_number"),
+		Title:          trimPayloadString(payload, "title"),
+	}
+	if result.Action == "" {
+		result.Action = preview.Action
+	}
+	_, _ = s.updateActionWorkflowRun(ctx, in.ProfileID, in.ThreadID, preview.ID, UpdateWorkflowRunInput{
+		Status:            "cancelled",
+		Result:            actionResultWorkflowPayload(result),
+		ConfirmationState: "cancelled",
+	})
+	agentResponse, _ := NewAgentResponse(AgentResponseCancelled, cancelActionMessage(result), "", result.Action, result.Action, "chats.main", "in-app")
+	agentResponse.Preview = &AgentResponsePreview{ID: result.PreviewID, Action: result.Action, Status: "cancelled"}
+	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", cancelActionMessage(result), map[string]any{
+		"action_result": map[string]any{
+			"preview_id":       result.PreviewID,
+			"action":           result.Action,
+			"item_id":          result.ItemID,
+			"collection_name":  result.CollectionName,
+			"part_number":      result.PartNumber,
+			"title":            result.Title,
+			"confirmation":     "cancelled",
+			"mutation_applied": false,
+		},
+		"agent_response": agentResponse,
+	})
+	return result, nil
+}
+
+func (s *Service) recordActionPreviewWorkflowRun(ctx context.Context, preview ActionPreview, capabilityID string, payload map[string]any) (WorkflowRun, error) {
+	run, err := s.CreateWorkflowRun(ctx, CreateWorkflowRunInput{
+		ProfileID:         preview.ProfileID,
+		WorkflowID:        "chat.action.preview_apply",
+		CapabilityID:      capabilityID,
+		SourceChannel:     "in_app_chat",
+		SourceThreadID:    preview.ThreadID,
+		Input:             payload,
+		ProviderTrace:     map[string]any{"mode": "governed_preview_before_apply", "live_provider": false},
+		ConfirmationState: "pending",
+		BulkItems:         actionPreviewWorkflowSteps(preview, capabilityID, payload, "previewed", ApplyActionResult{}),
+	})
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	return s.UpdateWorkflowRun(ctx, UpdateWorkflowRunInput{
+		ProfileID:         preview.ProfileID,
+		RunID:             run.ID,
+		Status:            "needs_input",
+		ProviderTrace:     map[string]any{"mode": "governed_preview_before_apply", "live_provider": false},
+		Result:            map[string]any{"preview_id": preview.ID, "action": preview.Action, "confirmation_required": true},
+		ConfirmationState: "pending",
+		BulkItems:         actionPreviewWorkflowSteps(preview, capabilityID, payload, "previewed", ApplyActionResult{}),
+	})
+}
+
+func payloadForWorkflow(payload map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range payload {
+		out[key] = value
+	}
+	return out
+}
+
+func actionResultWorkflowPayload(result ApplyActionResult) map[string]any {
+	return map[string]any{
+		"preview_id":       result.PreviewID,
+		"action":           result.Action,
+		"item_id":          result.ItemID,
+		"wishlist_id":      result.WishlistID,
+		"collection_name":  result.CollectionName,
+		"part_number":      result.PartNumber,
+		"title":            result.Title,
+		"mutation_applied": result.Applied,
+	}
+}
+
+func (s *Service) updateActionWorkflowRun(ctx context.Context, profileID, threadID, previewID string, update UpdateWorkflowRunInput) (WorkflowRun, error) {
+	run, err := s.findActionWorkflowRunByPreview(ctx, profileID, threadID, previewID)
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	update.ProfileID = profileID
+	update.RunID = run.ID
+	update.ProviderTrace = map[string]any{"mode": "governed_preview_before_apply", "live_provider": false}
+	if len(update.BulkItems) == 0 {
+		preview, err := s.getPreview(ctx, profileID, previewID)
+		if err == nil {
+			update.BulkItems = actionPreviewWorkflowSteps(preview, run.CapabilityID, run.Input, update.ConfirmationState, actionResultFromWorkflowPayload(update.Result))
+		}
+	}
+	return s.UpdateWorkflowRun(ctx, update)
+}
+
+func actionPreviewWorkflowSteps(preview ActionPreview, capabilityID string, payload map[string]any, confirmationState string, result ApplyActionResult) []map[string]any {
+	if !isGuidedInventoryUpdateWorkflow(capabilityID, payload) {
+		return nil
+	}
+	recipeID := trimPayloadString(payload, "guided_workflow_id")
+	if recipeID == "" {
+		recipeID = "inventory.item.update"
+	}
+	mode := trimPayloadString(payload, "guided_mode")
+	if mode == "" {
+		mode = string(GuidedWorkflowModeWithMe)
+	}
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	steps := []map[string]any{
+		guidedWorkflowStepRecord(recipeID, mode, "open-inventory", string(GuidedCommandNavigateOpenSurface), "inventory.surface", "completed", occurredAt, map[string]any{
+			"route": "/inventory",
+		}),
+		guidedWorkflowStepRecord(recipeID, mode, "focus-editable-field", string(GuidedCommandHighlightTarget), guidedWorkflowTargetID(payload), "completed", occurredAt, map[string]any{
+			"item_id": trimPayloadString(payload, "item_id"),
+			"field":   guidedWorkflowField(payload),
+		}),
+		guidedWorkflowStepRecord(recipeID, mode, "preview-change", string(GuidedCommandPreviewAction), guidedWorkflowTargetID(payload), "needs_input", occurredAt, map[string]any{
+			"preview_id":            preview.ID,
+			"action":                preview.Action,
+			"confirmation_required": true,
+			"new_value":             guidedWorkflowNewValue(payload),
+		}),
+		guidedWorkflowStepRecord(recipeID, mode, "confirm-apply", string(GuidedCommandConfirmApply), "inventory.item.save", "needs_input", occurredAt, map[string]any{
+			"preview_id": preview.ID,
+			"state":      normalizeConfirmationState(confirmationState),
+		}),
+	}
+	if normalizeConfirmationState(confirmationState) == "confirmed" && result.Applied {
+		steps[2]["status"] = "completed"
+		steps[3]["status"] = "completed"
+		steps = append(steps, guidedWorkflowStepRecord(recipeID, mode, "apply-result", "chat.action.result", "inventory.item.save", "completed", occurredAt, map[string]any{
+			"preview_id":       result.PreviewID,
+			"item_id":          result.ItemID,
+			"mutation_applied": result.Applied,
+			"title":            result.Title,
+			"part_number":      result.PartNumber,
+		}))
+	}
+	if normalizeConfirmationState(confirmationState) == "cancelled" {
+		steps[3]["status"] = "cancelled"
+		steps[3]["result"] = map[string]any{"preview_id": preview.ID, "state": "cancelled", "mutation_applied": false}
+	}
+	return steps
+}
+
+func guidedWorkflowStepRecord(recipeID, mode, stepID, commandID, targetID, status, occurredAt string, result map[string]any) map[string]any {
+	return map[string]any{
+		"kind":        "guided_workflow_step",
+		"recipe_id":   recipeID,
+		"mode":        mode,
+		"step_id":     stepID,
+		"command_id":  commandID,
+		"target_id":   targetID,
+		"status":      status,
+		"occurred_at": occurredAt,
+		"result":      result,
+	}
+}
+
+func isGuidedInventoryUpdateWorkflow(capabilityID string, payload map[string]any) bool {
+	if strings.TrimSpace(capabilityID) != "inventory.item.update" && strings.TrimSpace(capabilityID) != "update_open_item_title" {
+		return false
+	}
+	recipeID := trimPayloadString(payload, "guided_workflow_id")
+	return recipeID == "inventory.item.update" || recipeID == "guided.inventory.item.update"
+}
+
+func guidedWorkflowField(payload map[string]any) string {
+	if field := trimPayloadString(payload, "field"); field != "" {
+		return field
+	}
+	if trimPayloadString(payload, "title") != "" {
+		return "title"
+	}
+	if trimPayloadString(payload, "part_number") != "" {
+		return "part_number"
+	}
+	if trimPayloadString(payload, "brand") != "" {
+		return "brand"
+	}
+	if trimPayloadString(payload, "category") != "" {
+		return "category"
+	}
+	return "item"
+}
+
+func guidedWorkflowTargetID(payload map[string]any) string {
+	switch guidedWorkflowField(payload) {
+	case "title":
+		return "inventory.item.title"
+	case "category":
+		return "inventory.item.category"
+	default:
+		return "inventory.item.editor"
+	}
+}
+
+func guidedWorkflowNewValue(payload map[string]any) string {
+	if field := guidedWorkflowField(payload); field != "" {
+		return trimPayloadString(payload, field)
+	}
+	return ""
+}
+
+func actionResultFromWorkflowPayload(payload map[string]any) ApplyActionResult {
+	return ApplyActionResult{
+		Applied:        boolFromPayload(payload, "mutation_applied"),
+		Action:         trimPayloadString(payload, "action"),
+		ItemID:         trimPayloadString(payload, "item_id"),
+		WishlistID:     trimPayloadString(payload, "wishlist_id"),
+		CollectionName: trimPayloadString(payload, "collection_name"),
+		PartNumber:     trimPayloadString(payload, "part_number"),
+		Title:          trimPayloadString(payload, "title"),
+		PreviewID:      trimPayloadString(payload, "preview_id"),
+	}
+}
+
+func boolFromPayload(payload map[string]any, key string) bool {
+	value, _ := payload[key].(bool)
+	return value
+}
+
+func (s *Service) findActionWorkflowRunByPreview(ctx context.Context, profileID, threadID, previewID string) (WorkflowRun, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+			status, input_json, provider_trace_json, result_json, error_json, confirmation_state, bulk_items_json,
+			created_at, updated_at, COALESCE(started_at, ''), COALESCE(completed_at, '')
+		FROM assistant_workflow_runs
+		WHERE profile_id = ?
+		  AND source_thread_id = ?
+		  AND json_extract(result_json, '$.preview_id') = ?
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT 1
+	`, profileID, threadID, previewID)
+	return scanWorkflowRun(row)
 }
 
 func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID, previewID string) (ActionPreview, map[string]any, error) {
@@ -530,7 +1461,12 @@ func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID,
 	if err := json.Unmarshal([]byte(payloadRaw), &payload); err != nil {
 		return ActionPreview{}, nil, fmt.Errorf("decode payload: %w", err)
 	}
+	preview.CapabilityID = capabilityForAction(preview.Action).ID
 	return preview, payload, nil
+}
+
+func (s *Service) GetActionPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {
+	return s.getPreview(ctx, profileID, previewID)
 }
 
 func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {
@@ -555,6 +1491,7 @@ func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (
 			preview.Payload = payload
 		}
 	}
+	preview.CapabilityID = capabilityForAction(preview.Action).ID
 	return preview, nil
 }
 
@@ -565,6 +1502,13 @@ func validateActionPayload(action string, payload map[string]any) error {
 		title, _ := payload["title"].(string)
 		if strings.TrimSpace(partNumber) == "" || strings.TrimSpace(title) == "" {
 			return fmt.Errorf("part_number and title are required")
+		}
+		return nil
+	case "assign_collection_item":
+		itemID, _ := payload["item_id"].(string)
+		collectionName, _ := payload["collection_name"].(string)
+		if strings.TrimSpace(itemID) == "" || strings.TrimSpace(collectionName) == "" {
+			return fmt.Errorf("item_id and collection_name are required")
 		}
 		return nil
 	case "update_inventory_item":
@@ -578,6 +1522,16 @@ func validateActionPayload(action string, payload map[string]any) error {
 		}
 		if strings.TrimSpace(partNumber) == "" && strings.TrimSpace(title) == "" && strings.TrimSpace(brand) == "" && strings.TrimSpace(category) == "" {
 			return fmt.Errorf("at least one mutable field is required")
+		}
+		return nil
+	case "update_open_item_title":
+		itemID, _ := payload["item_id"].(string)
+		title, _ := payload["title"].(string)
+		if strings.TrimSpace(itemID) == "" {
+			return fmt.Errorf("item_id is required")
+		}
+		if strings.TrimSpace(title) == "" {
+			return fmt.Errorf("title is required")
 		}
 		return nil
 	default:
@@ -614,13 +1568,7 @@ func (s *Service) applyUpdateItem(ctx context.Context, profileID string, payload
 	title, _ := payload["title"].(string)
 	brand, _ := payload["brand"].(string)
 	category, _ := payload["category"].(string)
-	if strings.TrimSpace(brand) == "" {
-		brand = "Unknown"
-	}
-	if strings.TrimSpace(category) == "" {
-		category = "General"
-	}
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		UPDATE canonical_items
 		SET part_number = COALESCE(NULLIF(?, ''), part_number),
 		    title = COALESCE(NULLIF(?, ''), title),
@@ -631,6 +1579,13 @@ func (s *Service) applyUpdateItem(ctx context.Context, profileID string, payload
 	`, strings.TrimSpace(partNumber), strings.TrimSpace(title), strings.TrimSpace(brand), strings.TrimSpace(category), strings.TrimSpace(itemID), strings.TrimSpace(profileID))
 	if err != nil {
 		return "", fmt.Errorf("update item: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return "", fmt.Errorf("update item rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return "", fmt.Errorf("update item target not found")
 	}
 	return strings.TrimSpace(itemID), nil
 }
@@ -671,6 +1626,172 @@ func (s *Service) applyCreateWishlistEntry(ctx context.Context, profileID string
 		return "", "", fmt.Errorf("sync wishlist item: %w", err)
 	}
 	return itemID, wishlistID, nil
+}
+
+type workspaceCollectionsState struct {
+	Collections      []string                  `json:"collections"`
+	ActiveCollection string                    `json:"activeCollection"`
+	Items            []workspaceCollectionItem `json:"items"`
+}
+
+type workspaceCollectionItem struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Detail         string `json:"detail"`
+	CollectionName string `json:"collectionName,omitempty"`
+}
+
+func (s *Service) applyAssignCollectionItem(ctx context.Context, profileID string, payload map[string]any) (string, string, error) {
+	itemID, _ := payload["item_id"].(string)
+	collectionName, _ := payload["collection_name"].(string)
+	title, _ := payload["title"].(string)
+	partNumber, _ := payload["part_number"].(string)
+	itemID = strings.TrimSpace(itemID)
+	collectionName = strings.TrimSpace(collectionName)
+	if itemID == "" || collectionName == "" || collectionName == "All Items" {
+		return "", "", fmt.Errorf("item_id and assignable collection_name are required")
+	}
+	var existingItemID string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM canonical_items
+		WHERE id = ? AND profile_id = ?
+	`, itemID, strings.TrimSpace(profileID)).Scan(&existingItemID); err != nil {
+		if err == sql.ErrNoRows {
+			return "", "", fmt.Errorf("collection assignment target not found")
+		}
+		return "", "", fmt.Errorf("load collection assignment target: %w", err)
+	}
+	if strings.TrimSpace(title) == "" {
+		title = itemID
+	}
+	detail := strings.TrimSpace(partNumber)
+	if detail == "" {
+		detail = "Assigned by chat copilot"
+	}
+
+	settingsKey := "collections.workspace.v1"
+	state := workspaceCollectionsState{
+		Collections:      []string{"All Items", collectionName},
+		ActiveCollection: collectionName,
+		Items:            []workspaceCollectionItem{},
+	}
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM profile_settings WHERE profile_id = ? AND key = ?`, strings.TrimSpace(profileID), settingsKey).Scan(&raw)
+	if err != nil && err != sql.ErrNoRows {
+		return "", "", fmt.Errorf("load workspace collections: %w", err)
+	}
+	if strings.TrimSpace(raw) != "" {
+		var existing workspaceCollectionsState
+		if err := json.Unmarshal([]byte(raw), &existing); err == nil {
+			state = existing
+		}
+	}
+	state.Collections = ensureCollectionName(state.Collections, "All Items")
+	state.Collections = ensureCollectionName(state.Collections, collectionName)
+	state.ActiveCollection = collectionName
+	updated := false
+	for i := range state.Items {
+		if state.Items[i].ID == itemID {
+			state.Items[i].CollectionName = collectionName
+			if strings.TrimSpace(state.Items[i].Name) == "" {
+				state.Items[i].Name = strings.TrimSpace(title)
+			}
+			if strings.TrimSpace(state.Items[i].Detail) == "" {
+				state.Items[i].Detail = detail
+			}
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		state.Items = append(state.Items, workspaceCollectionItem{
+			ID:             itemID,
+			Name:           strings.TrimSpace(title),
+			Detail:         detail,
+			CollectionName: collectionName,
+		})
+	}
+	nextRaw, err := json.Marshal(state)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal workspace collections: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO profile_settings(profile_id, key, value, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(profile_id, key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, strings.TrimSpace(profileID), settingsKey, string(nextRaw))
+	if err != nil {
+		return "", "", fmt.Errorf("assign collection item: %w", err)
+	}
+	return itemID, collectionName, nil
+}
+
+func ensureCollectionName(collections []string, name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return collections
+	}
+	for _, existing := range collections {
+		if strings.EqualFold(strings.TrimSpace(existing), name) {
+			return collections
+		}
+	}
+	return append(collections, name)
+}
+
+func trimPayloadString(payload map[string]any, key string) string {
+	value, _ := payload[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func applyActionMessage(result ApplyActionResult) string {
+	fieldSummary := applyActionFieldSummary(result)
+	switch result.Action {
+	case "assign_collection_item":
+		return fmt.Sprintf("Applied assign_collection_item to %s in %s.", result.ItemID, result.CollectionName)
+	case "create_wishlist_entry":
+		if strings.TrimSpace(result.ItemID) != "" {
+			return fmt.Sprintf("Applied create_wishlist_entry to wishlist %s for item %s.", result.WishlistID, result.ItemID)
+		}
+		return fmt.Sprintf("Applied create_wishlist_entry to wishlist %s.", result.WishlistID)
+	default:
+		if strings.TrimSpace(result.ItemID) != "" {
+			if fieldSummary != "" {
+				return fmt.Sprintf("Applied %s to %s with %s.", result.Action, result.ItemID, fieldSummary)
+			}
+			return fmt.Sprintf("Applied %s to %s.", result.Action, result.ItemID)
+		}
+		return fmt.Sprintf("Applied %s.", result.Action)
+	}
+}
+
+func cancelActionMessage(result ApplyActionResult) string {
+	if result.Action == "assign_collection_item" && strings.TrimSpace(result.ItemID) != "" && strings.TrimSpace(result.CollectionName) != "" {
+		return fmt.Sprintf("Canceled assign_collection_item for %s in %s; no mutation applied.", result.ItemID, result.CollectionName)
+	}
+	fieldSummary := applyActionFieldSummary(result)
+	if strings.TrimSpace(result.ItemID) != "" {
+		if fieldSummary != "" {
+			return fmt.Sprintf("Canceled %s for %s with %s; no mutation applied.", result.Action, result.ItemID, fieldSummary)
+		}
+		return fmt.Sprintf("Canceled %s for %s; no mutation applied.", result.Action, result.ItemID)
+	}
+	if fieldSummary != "" {
+		return fmt.Sprintf("Canceled %s with %s; no mutation applied.", result.Action, fieldSummary)
+	}
+	return fmt.Sprintf("Canceled %s; no mutation applied.", result.Action)
+}
+
+func applyActionFieldSummary(result ApplyActionResult) string {
+	parts := []string{}
+	if strings.TrimSpace(result.PartNumber) != "" {
+		parts = append(parts, fmt.Sprintf("part_number=%s", strings.TrimSpace(result.PartNumber)))
+	}
+	if strings.TrimSpace(result.Title) != "" {
+		parts = append(parts, fmt.Sprintf("title=%s", strings.TrimSpace(result.Title)))
+	}
+	return strings.Join(parts, " ")
 }
 
 func (s *Service) CleanupOldPreviews(ctx context.Context, olderThan time.Duration) error {

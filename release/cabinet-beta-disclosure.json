@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "product": "Cabinet",
+  "release_version": "0.1.0-beta.10",
+  "release_channel": "private-beta",
+  "generated_heading": "Cabinet 0.1 private beta capabilities and limitations",
+  "support_pointers": [
+    "Back up from Settings Storage before replacing a portable build or reusing an existing data directory.",
+    "Use Settings Operations for JSON/CSV export, logs, and recovery checks when validating a candidate.",
+    "Treat release notes, package checksums, and the exact source commit as the support identity for a beta candidate."
+  ],
+  "statements": [
+    {
+      "id": "windows-portable-package",
+      "title": "Windows portable package",
+      "status": "supported",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Cabinet 0.1 is distributed as a Windows portable ZIP for private beta validation, not an installer."
+    },
+    {
+      "id": "code-signing-installer-limit",
+      "title": "Signing and installer limit",
+      "status": "limited",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "The beta artefact is unsigned and no signed installer is claimed until signed installer evidence exists."
+    },
+    {
+      "id": "browser-companion-targets",
+      "title": "Browser Companion package targets",
+      "status": "supported",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "The Cabinet Browser Companion beta targets Chrome and Edge with developer-mode unpacked installation from exact package ZIPs."
+    },
+    {
+      "id": "browser-companion-updates",
+      "title": "Browser Companion updates",
+      "status": "limited",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "There are no silent automatic browser-store updates in this beta; replace the exact package when a newer validated candidate is issued."
+    },
+    {
+      "id": "provider-voglers",
+      "title": "Voglers provider readiness",
+      "status": "supported",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Voglers is treated as a direct public storefront provider path for beta candidate Market Watch evidence."
+    },
+    {
+      "id": "provider-hobbytech",
+      "title": "Hobbytech provider readiness",
+      "status": "packaged_unproven",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Hobbytech is packaged-unproven until exact candidate evidence records the packaged provider journey."
+    },
+    {
+      "id": "provider-frontline",
+      "title": "Frontline provider readiness",
+      "status": "browser_assisted",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Frontline is browser-assisted and action-required when protected pages or user-present browser interaction are needed."
+    },
+    {
+      "id": "provider-bonza",
+      "title": "Bonza provider readiness",
+      "status": "browser_assisted",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Bonza is browser-assisted and action-required when protected pages or user-present browser interaction are needed."
+    },
+    {
+      "id": "auth-local-zitadel",
+      "title": "Authentication modes",
+      "status": "supported",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "The candidate supports local account mode and ZITADEL mode where the runtime is configured for that authority."
+    },
+    {
+      "id": "assistant-agent-preview",
+      "title": "Assistant and Agent features",
+      "status": "preview",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Assistant and Agent features are preview and optional; unsafe or setup-dependent actions remain gated by confirmation and profile context."
+    },
+    {
+      "id": "telegram-live-limitation",
+      "title": "Telegram live-channel limitation",
+      "status": "action_required",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Telegram live acceptance is not complete for this candidate until sender, chat, bot token, and webhook proof are recorded."
+    },
+    {
+      "id": "post-beta-exclusions",
+      "title": "Post-beta exclusions",
+      "status": "excluded",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Metadata Studio breadth, public identity and trust/P2P features, broad provider expansion, Telegram live acceptance, and eBay seller workflows are post-beta exclusions unless separate evidence says otherwise."
+    },
+    {
+      "id": "data-ownership-export-recovery",
+      "title": "Data ownership, export and recovery",
+      "status": "supported",
+      "channel": "private-beta",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "User data can use export, backup, and restore from local Cabinet surfaces and is not trapped behind a paid gate."
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 ## Purpose
-Define wishlist item lifecycle behavior.
+Define wishlist item lifecycle behavior for canonical item links, target pricing metadata, owned conversion, and downstream purchase/delivery synchronization.
 
 ## Requirements
 ### Requirement WISHLIST-PRICING-DASHBOARD-001: Wishlist entries SHALL link to canonical items and target pricing
@@ -32,3 +32,46 @@ Cabinet SHALL provide an explicit active-profile scoped conversion action that m
 - **WHEN** the user submits `POST /api/wishlist/convert-owned` with that wishlist entry `id`
 - **THEN** API MUST reject the conversion
 - **AND** the original wishlist entry and canonical item status MUST remain unchanged
+
+### Requirement WISHLIST-ITEMS-003: Wishlist purchase and delivery state SHALL synchronize downstream records
+Cabinet SHALL treat wishlist `owned`/Purchased state as purchase intent evidence and explicit `delivered` state as inventory receipt evidence while preserving category on the canonical item.
+
+#### Scenario: Purchased wishlist entry creates purchase lifecycle evidence
+- **GIVEN** an authenticated user has an active profile with a wishlist entry for a canonical item
+- **WHEN** the user creates or updates the wishlist entry with `owned=true`
+- **THEN** Cabinet MUST persist the wishlist entry as Purchased
+- **AND** Cabinet MUST create or update one `purchase` commerce lifecycle entry with `source=wishlist`, `external_ref` equal to the wishlist entry id, purchase amount, quantity, and notes
+- **AND** Cabinet MUST create or update the linked expected-arrival record for that purchase lifecycle entry
+- **AND** Cabinet MUST create or update one wishlist-linked inventory instance for the canonical item
+- **AND** if an inventory instance for that canonical item already exists, Cabinet MUST link and increment that instance instead of creating a duplicate
+- **AND** repeating the same Purchased save MUST update the existing wishlist-linked inventory instance without double-counting quantity
+- **AND** the canonical item category MUST remain unchanged for downstream Inventory visibility
+
+#### Scenario: Delivered wishlist entry creates inventory receipt evidence
+- **GIVEN** an authenticated user has an active profile with a wishlist entry for a canonical item
+- **WHEN** the user creates or updates the wishlist entry with `delivered=true`
+- **THEN** Cabinet MUST persist the wishlist entry as both Delivered and Purchased
+- **AND** Cabinet MUST mark the linked purchase arrival as `delivered`
+- **AND** Cabinet MUST create or update one inventory instance with purchase condition, quantity, acquisition price, and acquisition date from wishlist purchase details
+- **AND** Cabinet MUST mark the canonical item lifecycle status as `active`
+- **AND** the canonical item category MUST remain unchanged for Inventory visibility
+
+### Requirement WISHLIST-ITEMS-004: Wishlist monetary values SHALL preserve their ISO currency
+
+Cabinet SHALL persist a three-letter ISO currency with each wishlist entry, default historical entries and omitted legacy input to `USD`, and preserve the same currency through Chat-managed preview/apply, API reads, edits, purchase lifecycle, and expected-arrival synchronization.
+
+#### Scenario: Create a currency-specific wishlist entry through Chat
+
+- **GIVEN** Browser Auth Chat prepares a confirmation-gated wishlist entry with target price `61` and currency `AUD`
+- **WHEN** the user confirms the durable Agent preview
+- **THEN** Cabinet MUST persist the wishlist entry with `target_price=61` and `currency=AUD`
+- **AND** the governed Chat apply result MUST report the confirmed currency
+- **AND** subsequent wishlist edits MUST preserve that currency unless the user supplies a valid replacement code
+- **AND** purchase lifecycle and expected-arrival monetary records MUST use the wishlist entry currency
+
+#### Scenario: Migrate historical wishlist entries
+
+- **GIVEN** a Cabinet database predates wishlist currency persistence
+- **WHEN** Cabinet migrates the database
+- **THEN** historical wishlist entries MUST receive `currency=USD` to preserve the prior USD-only display behavior
+- **AND** invalid non-three-letter currency input MUST fail without persistence

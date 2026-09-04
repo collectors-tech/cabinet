@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo, useState } from 'react'
 import {
   type SortingState,
   type VisibilityState,
@@ -13,6 +13,7 @@ import {
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -22,33 +23,31 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { roles } from '../data/data'
 import { type User } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { usersColumns as columns } from './users-columns'
+import { UsersDetailsSheet } from './users-details-sheet'
 
 type DataTableProps = {
   data: User[]
   search: Record<string, unknown>
   navigate: NavigateFn
+  onMutated: () => Promise<void> | void
 }
 
-export function UsersTable({ data, search, navigate }: DataTableProps) {
+export function UsersTable({
+  data,
+  search,
+  navigate,
+  onMutated,
+}: DataTableProps) {
   // Local UI-only states
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedUserID, setSelectedUserID] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
-  const clickTimerRef = useRef<number | null>(null)
 
   // Local state management for table (uncomment to use local-only state, not synced with URL)
   // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
@@ -103,24 +102,18 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
     ensurePageInRange(table.getPageCount())
   }, [table, ensurePageInRange])
 
-  useEffect(() => {
-    return () => {
-      if (clickTimerRef.current !== null) {
-        window.clearTimeout(clickTimerRef.current)
-      }
-    }
-  }, [])
-
   const selectedUser = useMemo(
     () => data.find((user) => user.id === selectedUserID) ?? null,
     [data, selectedUserID]
   )
 
   const isInteractiveTarget = (target: EventTarget | null) => {
-    if (!(target instanceof HTMLElement)) {
+    if (!(target instanceof Element)) {
       return false
     }
-    return Boolean(target.closest('button, a, input, select, textarea, [role="checkbox"]'))
+    return Boolean(
+      target.closest('button, a, input, select, textarea, [role="checkbox"]')
+    )
   }
 
   const setSelectedContext = (id: string) => {
@@ -132,30 +125,26 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
     }
   }
 
+  const openSelectedDetails = () => {
+    if (!selectedUser) {
+      return
+    }
+    setDetailsOpen(true)
+  }
+
   const handleRowClick = (id: string, event: MouseEvent<HTMLElement>) => {
     if (isInteractiveTarget(event.target)) {
       return
     }
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current)
-    }
-    clickTimerRef.current = window.setTimeout(() => {
-      setSelectedContext(id)
-      setDetailsOpen(true)
-    }, 180)
+    setSelectedContext(id)
   }
 
   const handleRowDoubleClick = (id: string, event: MouseEvent<HTMLElement>) => {
     if (isInteractiveTarget(event.target)) {
       return
     }
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current)
-      clickTimerRef.current = null
-    }
     setSelectedContext(id)
-    setDetailsOpen(false)
-    setEditOpen(true)
+    setDetailsOpen(true)
   }
 
   return (
@@ -169,6 +158,19 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
         table={table}
         searchPlaceholder='Filter users...'
         searchKey='username'
+        customFilters={
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='h-8'
+            disabled={!selectedUser}
+            data-testid='users-view-selected-action'
+            onClick={openSelectedDetails}
+          >
+            View user
+          </Button>
+        }
         filters={[
           {
             columnId: 'status',
@@ -220,7 +222,11 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
+                  data-state={
+                    (row.getIsSelected() ||
+                      row.original.id === selectedUserID) &&
+                    'selected'
+                  }
                   className='group/row'
                   onClick={(event) => handleRowClick(row.original.id, event)}
                   onDoubleClick={(event) =>
@@ -258,50 +264,14 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
         </Table>
       </div>
       <DataTablePagination table={table} className='mt-auto' />
-      <DataTableBulkActions table={table} />
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent data-testid='users-row-details-modal'>
-          <DialogHeader>
-            <DialogTitle>User Details</DialogTitle>
-            <DialogDescription>
-              Review selected user record context.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUser ? (
-            <div className='space-y-1 text-sm'>
-              <p>
-                <strong>Username:</strong> {selectedUser.username}
-              </p>
-              <p>
-                <strong>Email:</strong> {selectedUser.email}
-              </p>
-              <p>
-                <strong>Status:</strong> {selectedUser.status}
-              </p>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent data-testid='users-row-edit-modal'>
-          <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-              Opened from row double-click interaction.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUser ? (
-            <div className='space-y-1 text-sm'>
-              <p>
-                <strong>Username:</strong> {selectedUser.username}
-              </p>
-              <p>
-                <strong>Role:</strong> {selectedUser.role}
-              </p>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <DataTableBulkActions table={table} onMutated={onMutated} />
+      <UsersDetailsSheet
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        user={selectedUser}
+        users={data}
+        onMutated={onMutated}
+      />
     </div>
   )
 }

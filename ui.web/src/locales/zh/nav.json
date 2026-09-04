@@ -4,8 +4,10 @@
     "other": "其他"
   },
   "items": {
+    "home": "首页",
     "dashboard": "首页",
     "inventory": "库存",
+    "media": "媒体",
     "wishlist": "心愿单",
     "collections": "合集",
     "discoveries": "发现",

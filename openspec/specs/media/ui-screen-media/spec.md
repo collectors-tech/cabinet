@@ -1,14 +1,14 @@
 ﻿## Purpose
-Define Media workspace behavior for uploaded assets, unlinked filtering, and card-first management workflows.
+Define Media workspace behavior for uploaded assets, unlinked filtering, and shared table-first management workflows.
 
 ## Requirements
-### Requirement UI-SCREEN-MEDIA-001: Media workspace SHALL provide card-first default view for uploaded assets
-Cabinet SHALL provide a dedicated media section with cards as default rendering mode.
+### Requirement UI-SCREEN-MEDIA-001: Media workspace SHALL provide table-first default view for uploaded assets
+Cabinet SHALL provide a dedicated media section with Cabinet's shared table surface as default rendering mode.
 
 #### Scenario: Open media workspace default view
 - **GIVEN** user navigates to `/media` media section
 - **WHEN** workspace loads successfully
-- **THEN** UI MUST render media cards by default and SHALL NOT default to row/table mode
+- **THEN** UI MUST render the shared table management surface by default and keep card mode available as a secondary view
 
 ### Requirement UI-SCREEN-MEDIA-002: Media workspace SHALL provide unlinked-assets filter
 Cabinet SHALL support a first-class view/filter for media not linked to inventory or wishlist targets.
@@ -25,6 +25,15 @@ Media cards SHALL include details required for review and assignment workflows.
 - **GIVEN** media card is visible in Media workspace
 - **WHEN** card renders details panel
 - **THEN** card MUST include thumbnail/preview, upload timestamp, analysis status, confidence indicator (when analyzed), and quick actions (`analyze`, `assign`, `open`, `archive`)
+
+#### Scenario: Use media item quick actions
+- **GIVEN** a Media workspace item exposes row or card quick actions
+- **WHEN** user clicks Analyze for an item that is not already analysis-ready
+- **THEN** Cabinet MUST start or open a visible media analysis workflow for that exact media item and show workflow status instead of leaving the action as a dead control
+- **AND** analysis-ready items MUST present Analyze as unavailable with an accessible disabled state
+- **WHEN** user clicks Assign for an unlinked item
+- **THEN** Cabinet MUST open the assignment flow scoped to that exact media item
+- **AND** already-linked or unavailable items MUST present Assign as unavailable with an accessible disabled state
 
 ### Requirement MEDIA-LINKAGE-001: Media linkage state SHALL be deterministic across inventory and wishlist targets
 Cabinet SHALL classify each media asset into stable linkage states for filtering and assignment logic.
@@ -165,3 +174,210 @@ Cabinet SHALL support high-speed intake on mobile via batch picker and capture-n
 - **GIVEN** user completes a mobile camera capture
 - **WHEN** user chooses `capture next`
 - **THEN** flow MUST return to camera without leaving context and append each accepted photo to same upload queue
+
+### Requirement UI-SCREEN-MEDIA-006: Media workspace shell SHALL be discoverable from authenticated navigation
+Cabinet SHALL expose a dedicated authenticated `/media` workspace from primary navigation with a page title, shared table asset surface, unlinked filter, operational metadata, and visible action controls before backend ingestion and assignment slices are complete.
+
+#### Scenario: Open Media workspace shell from navigation
+- **GIVEN** user is signed in on an authenticated Cabinet route
+- **WHEN** user opens the primary Media navigation item
+- **THEN** Cabinet MUST navigate to `/media`, set document title `Cabinet - Media`, render a shared table media workspace, show all/unlinked filter controls, show deterministic asset metadata, and expose open/analyze/assign/archive plus upload/download controls without mutating media links.
+
+### Requirement UI-SCREEN-MEDIA-007: Media workspace API SHALL expose profile-scoped assets and preview-only assignment/download contracts
+Cabinet SHALL expose a deterministic backend contract for the Media workspace that scopes media assets to the active profile, classifies linkage state, supports the unlinked filter, and previews assignment/download actions without mutating linkage records until confirmed implementation slices exist.
+
+#### Scenario: List profile-scoped Media workspace assets
+- **GIVEN** the active profile has inventory-linked photos and unlinked media evidence
+- **WHEN** UI requests `/api/media/assets`
+- **THEN** runtime MUST return only active-profile assets with stable `linkage_state`, source, upload metadata, thumbnail/download hints, and summary counts for total, unlinked, and linked states.
+
+#### Scenario: Filter unlinked Media workspace assets
+- **GIVEN** the active profile has linked and unlinked media assets
+- **WHEN** UI requests `/api/media/assets?filter=unlinked`
+- **THEN** runtime MUST return only unlinked assets while retaining summary counts for the full active-profile scope.
+
+#### Scenario: Preview assignment and download actions
+- **GIVEN** a media asset exists in the active profile
+- **WHEN** UI requests assignment or download preview contracts
+- **THEN** runtime MUST return deterministic projected linkage, confirmation, blocker/audit, and filename details without creating links, duplicating binaries, or streaming files in the preview request.
+
+### Requirement UI-SCREEN-MEDIA-008: Media workspace UI SHALL render API-backed asset states and download previews
+Cabinet SHALL wire the authenticated Media workspace to the profile-scoped media API instead of static UI fixtures.
+
+#### Scenario: Render API-backed media list
+- **GIVEN** the active profile has linked and unlinked media assets
+- **WHEN** the user opens `/media`
+- **THEN** the UI MUST request `/api/media/assets`, render returned asset cards, summary counts, linkage badges, filenames, thumbnails where available, and keep the unlinked tab backed by `/api/media/assets?filter=unlinked`.
+
+#### Scenario: Handle empty and unavailable media API states
+- **GIVEN** the media API returns no assets or a recoverable error
+- **WHEN** the user opens or retries the Media workspace
+- **THEN** the UI MUST show deterministic empty, error, and retry states without falling back to stale fixture cards.
+
+#### Scenario: Preview selected downloads from the UI
+- **GIVEN** one or more media cards are selected
+- **WHEN** the user previews selected downloads
+- **THEN** the UI MUST call `/api/media/downloads/preview` with the selected asset IDs and current filter, then display returned human-readable filenames without streaming files or mutating media state.
+
+### Requirement UI-SCREEN-MEDIA-009: Media workspace download API SHALL stream selected profile-scoped assets
+Cabinet SHALL provide an authenticated Media workspace download endpoint that returns selected asset bytes from the active profile with human-readable filenames.
+
+#### Scenario: Download selected media payload
+- **GIVEN** the active profile has inventory-linked media and unlinked evidence assets with stored bytes
+- **WHEN** the user requests `/api/media/downloads` with selected asset IDs and the current filter
+- **THEN** the API MUST reject assets outside the active profile or current filter, return a single selected asset with its human-readable filename and content type, and return multiple selected assets as a zip archive preserving each human-readable filename.
+
+### Requirement UI-SCREEN-MEDIA-010: Media workspace assignment API SHALL persist scoped media links
+Cabinet SHALL provide a confirmed assignment endpoint for linking Media workspace assets to inventory or wishlist targets without duplicating source binaries.
+
+#### Scenario: Assign unlinked media to wishlist
+- **GIVEN** the active profile has an unlinked media asset and a wishlist entry
+- **WHEN** the user confirms assignment through `/api/media/assignments`
+- **THEN** the API MUST persist a profile-scoped media link, preserve the original media asset provenance, update the asset linkage state to `linked_wishlist`, and update unlinked/wishlist summary counts on the next `/api/media/assets` response.
+
+#### Scenario: Reject out-of-scope media assignment
+- **GIVEN** a media asset or assignment target belongs to another profile
+- **WHEN** the user confirms assignment through `/api/media/assignments`
+- **THEN** the API MUST reject the request and MUST NOT create a media link.
+
+### Requirement UI-SCREEN-MEDIA-011: Media workspace UI SHALL confirm assignments through the API
+Cabinet SHALL route Media workspace assignment actions through a preview-first confirmation UI backed by the confirmed assignment API.
+
+#### Scenario: Confirm media assignment from card action
+- **GIVEN** the active profile has an unlinked media asset and a valid assignment target
+- **WHEN** the user opens the card assignment action, previews the target, and confirms assignment
+- **THEN** the UI MUST call `/api/media/assignments/preview`, display the projected linkage and audit/provenance summary, call `/api/media/assignments` only after confirmation, refresh `/api/media/assets`, and render the updated linkage state without stale unlinked controls.
+
+#### Scenario: Assignment preview or apply fails
+- **GIVEN** the assignment target is invalid or the assignment endpoint rejects the request
+- **WHEN** the user previews or confirms assignment
+- **THEN** the UI MUST show a deterministic error state and MUST NOT update card linkage state until the refreshed API state confirms the assignment.
+
+### Requirement UI-SCREEN-MEDIA-012: Media cards SHALL use compact responsive density
+Cabinet SHALL render Media workspace asset cards in a compact grid that substantially reduces the desktop card footprint while preserving readable metadata, visible thumbnails, usable quick actions, and responsive mobile behavior.
+
+#### Scenario: Render compact desktop Media cards
+- **GIVEN** the Media workspace has multiple returned assets
+- **WHEN** the user opens `/media` on the primary desktop review viewport
+- **THEN** the card grid MUST render compact cards at approximately one third of the previous visual footprint, keep thumbnails and metadata readable, and keep open/analyze/assign/archive controls usable without clipping.
+
+#### Scenario: Preserve responsive Media card behavior
+- **GIVEN** the Media workspace has multiple returned assets
+- **WHEN** the user opens `/media` at tablet or mobile widths
+- **THEN** the card grid MUST reflow without horizontal overflow, overlapping content, or clipped metadata/action controls.
+
+### Requirement UI-SCREEN-MEDIA-013: Media workspace SHALL provide persisted Cards and Rows view modes
+Cabinet SHALL expose explicit Cards and Rows view controls on the authenticated Media workspace, default to Rows, preserve the existing card behavior as a secondary view, and persist the selected view mode using Cabinet's view-state convention.
+
+#### Scenario: Switch from Cards to Rows view
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user opens `/media`
+- **THEN** the UI MUST default to Rows mode and render the media shared table.
+- **WHEN** the user switches to Cards mode
+- **THEN** the UI MUST render the preserved compact card grid.
+
+#### Scenario: Persist Media view mode
+- **GIVEN** the user has selected Cards or Rows mode on `/media`
+- **WHEN** the workspace reloads
+- **THEN** Cabinet MUST restore the selected Media view mode from `cabinet.viewMode.media` without changing the active media filter or API query.
+
+### Requirement UI-SCREEN-MEDIA-015: Media workspace table SHALL use Cabinet shared table affordances
+Cabinet SHALL render the Media page primary content with the shared table surface used by other Cabinet management pages, including toolbar search/filtering, sortable scan-friendly columns, stable row selection, row actions, and header-scoped primary actions. The Media workspace SHALL reclaim working space by omitting the former top summary-card row above the table workflow.
+
+#### Scenario: Manage media from shared table surface
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user opens `/media`
+- **THEN** the primary content MUST render a `data-table-surface` table with thumbnail/title identity, analysis status, linkage state, upload timestamp, source/context, filename, row selection, and open/analyze/assign/archive actions.
+- **AND** the page header action area MUST expose an accessible `Add new asset` action while the table toolbar remains focused on table search, filtering, and view controls.
+- **AND** the workspace MUST NOT render the former top summary cards for Assets, Unlinked, or Ready for review above the table workflow.
+- **AND** the table toolbar MUST provide search/filtering over media identity, status, linkage, source, and filename fields without switching away from the table.
+
+### Requirement UI-SCREEN-MEDIA-017: Media Cards and Rows views SHALL share table behavior
+Cabinet SHALL keep both Media Cards and Rows view modes on the same shared table state, controls, filtering, selection, pagination, loading, empty, and error contracts. The Media workspace primary table region MUST fill the available page height, keep the page header/table controls/pagination reachable, and make only the table body or card body region the scrolling surface.
+
+#### Scenario: Cards and Rows share filtering and pagination
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user switches between Cards and Rows modes
+- **THEN** both modes MUST remain inside the shared Media table surface with the same toolbar search, filter controls, selected asset state, and pagination controls.
+- **AND** filtering/searching in Cards mode MUST reduce the visible card rows using the same table state that Rows mode uses.
+- **AND** switching back to Rows mode MUST preserve the filtered table result.
+
+#### Scenario: Media table body owns scrolling
+- **GIVEN** the Media workspace renders either Cards or Rows mode
+- **WHEN** the page needs more vertical space than the viewport
+- **THEN** the Media table body or card body region MUST be the scrolling surface
+- **AND** the page header, table toolbar, and pagination controls MUST remain reachable without relying on whole-page table scrolling.
+
+### Requirement UI-SCREEN-MEDIA-018: Media workspace SHALL keep primary actions in the page header
+Cabinet SHALL render `/media` as a compact table-first workspace where primary Media actions live in the shared page header action area while table search, filters, view mode, and column controls remain inside the shared table toolbar.
+
+#### Scenario: Render compact Media workspace without duplicate page chrome
+- **GIVEN** the user opens `/media`
+- **WHEN** the Media workspace loads returned assets
+- **THEN** the workspace MUST render the shared Media table section at the top of the workspace
+- **AND** the workspace MUST NOT render a permanent in-page `Media` heading, page description, asset-count row, table-summary row, or All/Unlinked tab strip above the table.
+
+#### Scenario: Use Media primary actions from the page header
+- **GIVEN** the Media page header is visible
+- **WHEN** the user reviews persistent page actions
+- **THEN** the shared page header action area MUST contain Add media and Download selected controls.
+- **AND** the Add media action MUST open the Add media dialog through the same create path used by page-wide drop.
+- **AND** Download selected MUST remain disabled until one or more assets are selected and MUST use the `/api/media/downloads/preview` contract when activated.
+- **AND** the header action area MUST wrap cleanly on narrow widths without creating a duplicate in-body action row above the table.
+
+#### Scenario: Use Media controls from the table toolbar
+- **GIVEN** the Media table toolbar is visible
+- **WHEN** the user reviews persistent table controls
+- **THEN** the toolbar MUST contain `Filter media...` search, the Linked filter, Cards, Rows, and the table `View` control.
+- **AND** the toolbar MUST NOT duplicate the Add media or Download selected page header actions.
+- **WHEN** the user selects Linked `Unlinked`
+- **THEN** Cabinet MUST keep using the `/api/media/assets?filter=unlinked` contract and update visible table or card results to unlinked media only.
+- **AND** Cards and Rows controls MUST stay adjacent to the table `View` control and share the same search, linkage filter, and pagination state.
+
+### Requirement UI-SCREEN-MEDIA-019: Media rows SHALL separate selection from detail-panel activation
+Cabinet SHALL make Media table rows follow Cabinet's row selection and double-click detail-panel pattern so single-clicking a row only selects/highlights it, double-clicking a row opens the right-side details panel, and checkboxes plus row action buttons remain reserved for their own commands.
+
+#### Scenario: Open and navigate Media details from rows
+- **GIVEN** the Media workspace renders profile-scoped assets in Rows mode
+- **WHEN** user single-clicks a non-interactive row surface
+- **THEN** Cabinet MUST select and highlight that row without opening the right-side details panel or any modal.
+- **WHEN** user double-clicks a non-interactive row surface or presses Enter on the focused row
+- **THEN** Cabinet MUST open a right-side details panel for that exact media asset with thumbnail/preview, filename, source, linkage state, analysis status, uploaded date, notes, and relevant actions.
+- **AND** the active row MUST stay highlighted when selected and while the details panel is open.
+- **WHEN** user activates Previous or Next in the panel
+- **THEN** Cabinet MUST move the details panel and active row highlight through the current filtered and sorted table order.
+- **AND** checkbox selection and row action buttons MUST NOT accidentally open or change the details panel.
+- **AND** row single-click or row double-click MUST NOT open the metadata edit modal.
+
+### Requirement UI-SCREEN-MEDIA-014: Media workspace SHALL support page-wide image drop and add-media metadata dialog
+Cabinet SHALL let authenticated users add unlinked media assets from the Media workspace by dragging supported image files anywhere over the page or by opening an explicit add-media dialog from a `+` action.
+
+#### Scenario: Start add-media flow from page-wide drop
+- **GIVEN** the user is on `/media`
+- **WHEN** the user drags and drops a supported image file anywhere over the Media workspace
+- **THEN** Cabinet MUST open the Add media dialog, preserve the dropped image, show drag/drop feedback, and allow metadata entry before save.
+
+#### Scenario: Save dropped media with metadata
+- **GIVEN** the Add media dialog contains a supported image and metadata fields
+- **WHEN** the user saves the media
+- **THEN** the UI MUST submit the same multipart `/api/media/assets` create path used by the explicit `+` dialog, refresh `/api/media/assets`, and show the newly created unlinked asset without losing metadata on success.
+
+#### Scenario: Reject unsupported media files without losing metadata
+- **GIVEN** the user has entered Add media metadata
+- **WHEN** the user drops or chooses an unsupported file type
+- **THEN** Cabinet MUST block save, show deterministic unsupported-file feedback, and preserve the entered metadata for correction.
+
+#### Scenario: Preserve add-media metadata on save failure
+- **GIVEN** the Add media dialog contains a supported image and metadata
+- **WHEN** `/api/media/assets` rejects the save
+- **THEN** Cabinet MUST keep the dialog open, preserve the selected file and metadata values, and show an actionable error.
+
+### Requirement UI-SCREEN-MEDIA-016: Media assets SHALL expose metadata editing without overriding row detail activation
+Cabinet SHALL let authenticated users edit asset metadata and review thumbnail variants in one place from explicit edit/open actions and non-row asset surfaces, while Rows mode double-click remains reserved for the right-side detail panel.
+
+#### Scenario: Edit media asset metadata from explicit metadata action
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user opens the media metadata editor from an explicit row/card edit action or a card edit surface
+- **THEN** Cabinet MUST open an edit modal for that asset with a thumbnail preview, visible thumbnail variation options, and editable metadata fields for title, filename, source, download filename, and notes.
+- **WHEN** the user saves the modal
+- **THEN** the UI MUST submit the edited metadata through the Media asset update API, refresh `/api/media/assets`, and show the updated asset metadata without requiring a page reload.

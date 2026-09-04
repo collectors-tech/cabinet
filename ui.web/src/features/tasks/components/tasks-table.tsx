@@ -48,6 +48,7 @@ import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { getTasksColumns } from './tasks-columns'
+import { WishlistThumbnail } from './wishlist-thumbnail'
 
 type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 
@@ -62,6 +63,7 @@ type DataTableProps = {
   onBarcodeRow?: (task: Task) => void
   onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
+  onRestoreRow?: (task: Task) => void
   onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
   onWishlistBulkPriorityChange?: (
     tasks: Task[],
@@ -75,6 +77,7 @@ type DataTableProps = {
       targetPrice?: number
       priority?: string
       owned?: boolean
+      delivered?: boolean
       pricePaid?: number
       purchaseUrl?: string
       purchaseDate?: string
@@ -98,6 +101,8 @@ type InventorySavedView = {
   globalFilter: string
   statusFilters: string[]
   categoryFilters: string[]
+  itemTypeFilters: string[]
+  packagingGradeFilters: string[]
   sorting: Array<{ id: string; desc: boolean }>
   viewMode: ViewMode
 }
@@ -173,6 +178,10 @@ function parseInventorySavedViews(
               : '',
           statusFilters: normalizeStringArray(candidate.statusFilters),
           categoryFilters: normalizeStringArray(candidate.categoryFilters),
+          itemTypeFilters: normalizeStringArray(candidate.itemTypeFilters),
+          packagingGradeFilters: normalizeStringArray(
+            candidate.packagingGradeFilters
+          ),
           sorting,
           viewMode: candidate.viewMode === 'cards' ? 'cards' : 'rows',
         },
@@ -191,6 +200,8 @@ function serializeInventorySavedViews(views: InventorySavedView[]) {
       globalFilter: view.globalFilter,
       statusFilters: view.statusFilters,
       categoryFilters: view.categoryFilters,
+      itemTypeFilters: view.itemTypeFilters,
+      packagingGradeFilters: view.packagingGradeFilters,
       sorting: view.sorting,
       viewMode: view.viewMode,
     }))
@@ -205,6 +216,30 @@ function formatWishlistStatus(status: string) {
     return 'Below target'
   }
   return status
+}
+
+function formatWishlistDate(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return '-'
+  }
+  const datePart = trimmed.split('T')[0]?.split(' ')[0] ?? trimmed
+  const parts = datePart.split('-').map((part) => Number(part))
+  if (
+    parts.length === 3 &&
+    Number.isInteger(parts[0]) &&
+    Number.isInteger(parts[1]) &&
+    Number.isInteger(parts[2])
+  ) {
+    const [year, month, day] = parts
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(Date.UTC(year, month - 1, day)))
+  }
+  return trimmed
 }
 
 function formatMoneyDraft(value: number | undefined) {
@@ -237,6 +272,7 @@ export function TasksTable({
   onBarcodeRow,
   onAssignCollectionRow,
   onDeleteRow,
+  onRestoreRow,
   onWishlistBulkStatusChange,
   onWishlistBulkPriorityChange,
   onWishlistBulkDelete,
@@ -273,6 +309,7 @@ export function TasksTable({
         onBarcodeRow,
         onAssignCollectionRow,
         onDeleteRow,
+        onRestoreRow,
         onWishlistInlineUpdate,
         onWishlistPurchaseRow: openPurchaseDialog,
       }),
@@ -283,6 +320,7 @@ export function TasksTable({
       onBarcodeRow,
       onAssignCollectionRow,
       onDeleteRow,
+      onRestoreRow,
       onWishlistInlineUpdate,
       openPurchaseDialog,
     ]
@@ -332,6 +370,7 @@ export function TasksTable({
   const [savedViewError, setSavedViewError] = useState<string | null>(null)
   const [activeSavedViewID, setActiveSavedViewID] = useState('')
   const clickTimerRef = useRef<number | null>(null)
+  const saveViewNameInputRef = useRef<HTMLInputElement>(null)
 
   const routeSearch = route.useSearch()
   const routeNavigate = route.useNavigate()
@@ -365,6 +404,20 @@ export function TasksTable({
         searchKey: 'collection',
         type: 'array' as const,
       },
+      ...(isInventoryRoute
+        ? [
+            {
+              columnId: 'itemType',
+              searchKey: 'itemType',
+              type: 'array' as const,
+            },
+            {
+              columnId: 'packagingGradeType',
+              searchKey: 'packagingGrade',
+              type: 'array' as const,
+            },
+          ]
+        : []),
     ],
   })
   const [wishlistStatusFilters, setWishlistStatusFilters] = useState<string[]>(
@@ -389,12 +442,15 @@ export function TasksTable({
         }
       }
       const rawStatus = (routeSearch as Record<string, unknown>).status
-      return Array.isArray(rawStatus)
+      const routeStatuses = Array.isArray(rawStatus)
         ? rawStatus.filter(
             (value): value is string =>
               typeof value === 'string' && value.trim() !== ''
           )
         : []
+      return routeStatuses.length > 0
+        ? routeStatuses
+        : ['wishlist', 'discovered']
     }
   )
 
@@ -441,10 +497,14 @@ export function TasksTable({
   }, [isWishlistRoute, wishlistStatusFilters])
 
   const filteredData = useMemo(() => {
-    if (!isWishlistRoute || wishlistStatusFilters.length === 0) {
+    if (!isWishlistRoute) {
       return data
     }
-    return data.filter((task) => wishlistStatusFilters.includes(task.status))
+    const activeFilters =
+      wishlistStatusFilters.length > 0
+        ? wishlistStatusFilters
+        : ['wishlist', 'discovered']
+    return data.filter((task) => activeFilters.includes(task.status))
   }, [data, isWishlistRoute, wishlistStatusFilters])
 
   const table = useReactTable({
@@ -466,11 +526,21 @@ export function TasksTable({
       const id = row.original.id.toLowerCase()
       const partNumber = (row.original.partNumber ?? '').toLowerCase()
       const title = String(row.getValue('title')).toLowerCase()
+      const itemType = (row.original.itemType ?? '').toLowerCase()
+      const condition = (row.original.condition ?? '').toLowerCase()
+      const packagingGrade = (
+        row.original.packagingGradeType ?? ''
+      ).toLowerCase()
+      const category = (row.original.label ?? '').toLowerCase()
       const searchValue = String(filterValue).toLowerCase()
       return (
         id.includes(searchValue) ||
         partNumber.includes(searchValue) ||
-        title.includes(searchValue)
+        title.includes(searchValue) ||
+        itemType.includes(searchValue) ||
+        condition.includes(searchValue) ||
+        packagingGrade.includes(searchValue) ||
+        category.includes(searchValue)
       )
     },
     getCoreRowModel: getCoreRowModel(),
@@ -567,6 +637,23 @@ export function TasksTable({
     if (record) {
       onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
     }
+    if (
+      (isInventoryRoute || routePath === '/_authenticated/wishlist/') &&
+      record &&
+      onOpenDetailsRow
+    ) {
+      setSelectedRecordContext(id)
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current)
+      }
+      clickTimerRef.current = window.setTimeout(() => {
+        onOpenDetailsRow(
+          record,
+          table.getRowModel().rows.map((row) => row.original)
+        )
+      }, 180)
+      return
+    }
     if (isInventoryRoute || routePath === '/_authenticated/wishlist/') {
       return
     }
@@ -590,15 +677,15 @@ export function TasksTable({
       window.clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
     }
-    if (record && onOpenDetailsRow) {
-      onOpenDetailsRow(
+    if (record && onEditRow) {
+      onEditRow(
         record,
         table.getRowModel().rows.map((row) => row.original)
       )
       return
     }
-    if (record && onEditRow) {
-      onEditRow(
+    if (record && onOpenDetailsRow) {
+      onOpenDetailsRow(
         record,
         table.getRowModel().rows.map((row) => row.original)
       )
@@ -636,6 +723,8 @@ export function TasksTable({
       globalFilter: (globalFilter ?? '').trim(),
       statusFilters: getArrayColumnFilterValue('status'),
       categoryFilters: getArrayColumnFilterValue('priority'),
+      itemTypeFilters: getArrayColumnFilterValue('itemType'),
+      packagingGradeFilters: getArrayColumnFilterValue('packagingGradeType'),
       sorting: sorting.map((entry) => ({
         id: entry.id,
         desc: Boolean(entry.desc),
@@ -664,6 +753,12 @@ export function TasksTable({
           : []),
         ...(view.categoryFilters.length > 0
           ? [{ id: 'priority', value: view.categoryFilters }]
+          : []),
+        ...(view.itemTypeFilters.length > 0
+          ? [{ id: 'itemType', value: view.itemTypeFilters }]
+          : []),
+        ...(view.packagingGradeFilters.length > 0
+          ? [{ id: 'packagingGradeType', value: view.packagingGradeFilters }]
           : []),
       ])
       setSorting(view.sorting)
@@ -762,6 +857,7 @@ export function TasksTable({
       ? [
           { label: 'Watching', value: 'wishlist' },
           { label: 'Below target', value: 'discovered' },
+          { label: 'Deleted', value: 'deleted' },
         ]
       : statuses
   const categoryFilterOptions = isInventoryRoute
@@ -774,6 +870,24 @@ export function TasksTable({
         )
       ).map((value) => ({ label: value, value }))
     : priorities
+  const itemTypeFilterOptions = isInventoryRoute
+    ? Array.from(
+        new Set(
+          data
+            .map((task) => task.itemType)
+            .filter((value): value is string => Boolean(value?.trim()))
+        )
+      ).map((value) => ({ label: value, value }))
+    : []
+  const packagingGradeFilterOptions = isInventoryRoute
+    ? Array.from(
+        new Set(
+          data
+            .map((task) => task.packagingGradeType)
+            .filter((value): value is string => Boolean(value?.trim()))
+        )
+      ).map((value) => ({ label: value, value }))
+    : []
   const wishlistCollectionFilterOptions =
     routePath === '/_authenticated/wishlist/'
       ? [
@@ -815,6 +929,7 @@ export function TasksTable({
 
     await onWishlistInlineUpdate?.(purchaseTask, {
       owned: true,
+      delivered: purchaseTask.delivered,
       pricePaid: parsedPrice,
       purchaseUrl: purchaseUrl.trim(),
       purchaseDate: purchaseDate || todayISODate(),
@@ -831,6 +946,31 @@ export function TasksTable({
     purchaseTask,
     purchaseUrl,
   ])
+
+  const viewModeControls = (
+    <div className='flex shrink-0 items-center gap-2'>
+      <Button
+        size='sm'
+        variant={viewMode === 'rows' ? 'default' : 'outline'}
+        onClick={() => setViewMode('rows')}
+        onKeyDown={(event) => handleViewModeKeyDown('rows', event)}
+        aria-pressed={viewMode === 'rows'}
+        aria-label='Switch to rows view'
+      >
+        Rows
+      </Button>
+      <Button
+        size='sm'
+        variant={viewMode === 'cards' ? 'default' : 'outline'}
+        onClick={() => setViewMode('cards')}
+        onKeyDown={(event) => handleViewModeKeyDown('cards', event)}
+        aria-pressed={viewMode === 'cards'}
+        aria-label='Switch to cards view'
+      >
+        Cards
+      </Button>
+    </div>
+  )
 
   return (
     <div
@@ -851,8 +991,13 @@ export function TasksTable({
         }
         searchPlaceholder={
           isInventoryRoute
-            ? 'Filter by title or part number...'
+            ? 'Filter by title, part number, type, condition, or packaging...'
             : 'Filter by title or part number...'
+        }
+        searchInputTestId={
+          isInventoryRoute
+            ? 'inventory-table-search-input'
+            : 'wishlist-table-search-input'
         }
         filters={
           isInventoryRoute
@@ -866,6 +1011,18 @@ export function TasksTable({
                   columnId: 'priority',
                   title: 'Category',
                   options: categoryFilterOptions,
+                },
+                {
+                  columnId: 'itemType',
+                  title: 'Item type',
+                  options: itemTypeFilterOptions,
+                  testIdPrefix: 'inventory-table-item-type',
+                },
+                {
+                  columnId: 'packagingGradeType',
+                  title: 'Packaging',
+                  options: packagingGradeFilterOptions,
+                  testIdPrefix: 'inventory-table-packaging',
                 },
               ]
             : [
@@ -898,134 +1055,114 @@ export function TasksTable({
               ]
         }
         customFilters={customFilters}
+        actions={!isInventoryRoute ? viewModeControls : undefined}
       />
 
-      <div className='flex flex-wrap items-center justify-between gap-2'>
-        <div className='flex flex-wrap items-center gap-2'>
-          {isInventoryRoute ? (
-            <>
-              <select
-                className='h-9 min-w-[12rem] rounded-md border bg-background px-2 text-sm'
-                data-testid='inventory-saved-view-select'
-                value={activeSavedViewID}
-                disabled={inventoryProfileSettingsLoading}
-                onChange={(event) => {
-                  const nextID = event.target.value
-                  if (nextID === '') {
-                    setActiveSavedViewID('')
-                    setSavedViewFeedback(null)
-                    setSavedViewError(null)
-                    return
-                  }
-                  const nextView = inventorySavedViews.find(
-                    (view) => view.id === nextID
-                  )
-                  if (!nextView) {
-                    return
-                  }
-                  applyInventorySavedView(nextView)
-                }}
-              >
-                <option value=''>Saved views</option>
-                {inventorySavedViews.map((view) => (
-                  <option key={view.id} value={view.id}>
-                    {view.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                type='button'
-                size='sm'
-                variant='outline'
-                data-testid='inventory-saved-view-save'
-                disabled={
-                  inventoryProfileSettingsLoading ||
-                  inventoryProfileSettingsSaving
-                }
-                onClick={() => {
-                  setSaveViewDialogOpen(true)
+      {isInventoryRoute ? (
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <select
+              className='h-9 min-w-[12rem] rounded-md border bg-background px-2 text-sm'
+              data-testid='inventory-saved-view-select'
+              value={activeSavedViewID}
+              disabled={inventoryProfileSettingsLoading}
+              onChange={(event) => {
+                const nextID = event.target.value
+                if (nextID === '') {
+                  setActiveSavedViewID('')
                   setSavedViewFeedback(null)
                   setSavedViewError(null)
-                  setSaveViewName((previous) =>
-                    previous !== ''
-                      ? previous
-                      : activeSavedViewID !== ''
-                        ? (inventorySavedViews.find(
-                            (view) => view.id === activeSavedViewID
-                          )?.name ?? '')
-                        : ''
-                  )
-                }}
-              >
-                Save View
-              </Button>
-              <Button
-                type='button'
-                size='sm'
-                variant='outline'
-                data-testid='inventory-saved-view-delete'
-                disabled={
-                  activeSavedViewID === '' ||
-                  inventoryProfileSettingsLoading ||
-                  inventoryProfileSettingsSaving
+                  return
                 }
-                onClick={() => void handleDeleteInventoryView()}
+                const nextView = inventorySavedViews.find(
+                  (view) => view.id === nextID
+                )
+                if (!nextView) {
+                  return
+                }
+                applyInventorySavedView(nextView)
+              }}
+            >
+              <option value=''>Saved views</option>
+              {inventorySavedViews.map((view) => (
+                <option key={view.id} value={view.id}>
+                  {view.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              data-testid='inventory-saved-view-save'
+              disabled={
+                inventoryProfileSettingsLoading ||
+                inventoryProfileSettingsSaving
+              }
+              onClick={() => {
+                setSavedViewFeedback(null)
+                setSavedViewError(null)
+                setSaveViewName((previous) =>
+                  previous !== ''
+                    ? previous
+                    : activeSavedViewID !== ''
+                      ? (inventorySavedViews.find(
+                          (view) => view.id === activeSavedViewID
+                        )?.name ?? '')
+                      : ''
+                )
+                setSaveViewDialogOpen(true)
+              }}
+            >
+              Save View
+            </Button>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              data-testid='inventory-saved-view-delete'
+              disabled={
+                activeSavedViewID === '' ||
+                inventoryProfileSettingsLoading ||
+                inventoryProfileSettingsSaving
+              }
+              onClick={() => void handleDeleteInventoryView()}
+            >
+              Delete View
+            </Button>
+            {savedViewFeedback ? (
+              <p
+                className='text-xs text-muted-foreground'
+                data-testid='inventory-saved-view-feedback'
               >
-                Delete View
-              </Button>
-            </>
-          ) : null}
-          {savedViewFeedback ? (
-            <p
-              className='text-xs text-muted-foreground'
-              data-testid='inventory-saved-view-feedback'
-            >
-              {savedViewFeedback}
-            </p>
-          ) : null}
-          {savedViewError ? (
-            <p
-              className='text-xs text-destructive'
-              data-testid='inventory-saved-view-error'
-            >
-              {savedViewError}
-            </p>
-          ) : null}
+                {savedViewFeedback}
+              </p>
+            ) : null}
+            {savedViewError ? (
+              <p
+                className='text-xs text-destructive'
+                data-testid='inventory-saved-view-error'
+              >
+                {savedViewError}
+              </p>
+            ) : null}
+          </div>
+          {viewModeControls}
         </div>
-        <div className='flex items-center gap-2'>
-          <Button
-            size='sm'
-            variant={viewMode === 'rows' ? 'default' : 'outline'}
-            onClick={() => setViewMode('rows')}
-            onKeyDown={(event) => handleViewModeKeyDown('rows', event)}
-            aria-pressed={viewMode === 'rows'}
-            aria-label='Switch to rows view'
-          >
-            Rows
-          </Button>
-          <Button
-            size='sm'
-            variant={viewMode === 'cards' ? 'default' : 'outline'}
-            onClick={() => setViewMode('cards')}
-            onKeyDown={(event) => handleViewModeKeyDown('cards', event)}
-            aria-pressed={viewMode === 'cards'}
-            aria-label='Switch to cards view'
-          >
-            Cards
-          </Button>
-        </div>
-      </div>
+      ) : null}
 
       {viewMode === 'rows' ? (
         <div
           className='min-h-0 flex-1 overflow-auto rounded-md border'
           data-testid={
-            isInventoryRoute ? 'inventory-table-surface' : 'wishlist-table-surface'
+            isInventoryRoute
+              ? 'inventory-table-surface'
+              : 'wishlist-table-surface'
           }
         >
           <Table
             className={cn(
-              'min-w-[42rem]',
+              isInventoryRoute ? 'min-w-[88rem] table-fixed' : 'min-w-[42rem]',
               routePath === '/_authenticated/wishlist/' ? 'min-w-[56rem]' : ''
             )}
           >
@@ -1093,6 +1230,9 @@ export function TasksTable({
                       <TableCell
                         key={cell.id}
                         className={cn(
+                          isInventoryRoute
+                            ? 'max-w-0 overflow-hidden text-ellipsis'
+                            : undefined,
                           cell.column.columnDef.meta?.className,
                           cell.column.columnDef.meta?.tdClassName
                         )}
@@ -1119,7 +1259,7 @@ export function TasksTable({
           </Table>
         </div>
       ) : (
-        <div className='grid min-h-0 flex-1 gap-3 overflow-auto sm:grid-cols-2 xl:grid-cols-3'>
+        <div className='grid min-h-0 flex-1 auto-rows-max gap-3 overflow-auto sm:grid-cols-2 lg:grid-cols-4'>
           {table.getRowModel().rows?.length ? (
             table.getRowModel().rows.map((row) => (
               <div
@@ -1130,7 +1270,8 @@ export function TasksTable({
                   Boolean(row.original.itemID)
                 }
                 className={cn(
-                  'space-y-2 rounded-md border p-4',
+                  'space-y-2 rounded-md border',
+                  routePath === '/_authenticated/wishlist/' ? 'p-3' : 'p-4',
                   currentRecordID === (row.original.itemID ?? row.original.id)
                     ? 'border-primary/60 bg-primary/5'
                     : 'cursor-pointer'
@@ -1150,12 +1291,17 @@ export function TasksTable({
                   handleRowDoubleClick(row.original.id, event)
                 }
               >
+                {routePath === '/_authenticated/wishlist/' ? (
+                  <WishlistThumbnail task={row.original} variant='card' />
+                ) : null}
                 <div className='flex items-start justify-between gap-2'>
-                  <div className='space-y-1'>
-                    <p className='text-xs text-muted-foreground'>
+                  <div className='min-w-0 space-y-1'>
+                    <p className='truncate text-xs text-muted-foreground'>
                       {row.original.id}
                     </p>
-                    <p className='font-medium'>{row.original.title}</p>
+                    <p className='line-clamp-2 text-sm leading-snug font-medium'>
+                      {row.original.title}
+                    </p>
                   </div>
                   <Checkbox
                     checked={row.getIsSelected()}
@@ -1165,7 +1311,7 @@ export function TasksTable({
                     aria-label={`Select ${row.original.title}`}
                   />
                 </div>
-                <div className='flex flex-wrap gap-2 text-xs text-muted-foreground'>
+                <div className='flex flex-wrap gap-1.5 text-xs text-muted-foreground'>
                   <span>
                     Status:{' '}
                     {routePath === '/_authenticated/wishlist/'
@@ -1173,11 +1319,48 @@ export function TasksTable({
                       : row.original.status}
                   </span>
                   <span>Priority: {row.original.priority}</span>
-                  <span>Type: {row.original.label}</span>
+                  <span>Category: {row.original.label}</span>
+                  {routePath === '/_authenticated/wishlist/' ? (
+                    <>
+                      <span
+                        data-testid={`wishlist-card-purchased-${row.original.id}`}
+                      >
+                        Purchased: {row.original.owned ? 'Yes' : 'No'}
+                      </span>
+                      <span
+                        data-testid={`wishlist-card-delivered-${row.original.id}`}
+                      >
+                        Delivered: {row.original.delivered ? 'Yes' : 'No'}
+                      </span>
+                      <span
+                        data-testid={`wishlist-card-date-added-${row.original.id}`}
+                      >
+                        Date added:{' '}
+                        {formatWishlistDate(row.original.wishlistCreatedAt)}
+                      </span>
+                      <span
+                        data-testid={`wishlist-card-date-updated-${row.original.id}`}
+                        title='Latest pricing refresh date'
+                      >
+                        Updated:{' '}
+                        {formatWishlistDate(
+                          row.original.wishlistPriceUpdatedAt
+                        )}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
-                {routePath === '/_authenticated/wishlist/' &&
+                {(routePath === '/_authenticated/wishlist/' ||
+                  routePath === '/_authenticated/inventory/') &&
                 row.original.notes ? (
-                  <p className='text-xs text-muted-foreground'>
+                  <p
+                    className='line-clamp-2 text-xs text-muted-foreground'
+                    data-testid={
+                      routePath === '/_authenticated/inventory/'
+                        ? `inventory-card-notes-${row.original.itemID ?? row.original.id}`
+                        : undefined
+                    }
+                  >
                     Notes: {row.original.notes}
                   </p>
                 ) : null}
@@ -1361,7 +1544,13 @@ export function TasksTable({
         </DialogContent>
       </Dialog>
       <Dialog open={saveViewDialogOpen} onOpenChange={setSaveViewDialogOpen}>
-        <DialogContent data-testid='inventory-saved-view-dialog'>
+        <DialogContent
+          data-testid='inventory-saved-view-dialog'
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            saveViewNameInputRef.current?.focus()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Save Inventory View</DialogTitle>
             <DialogDescription>
@@ -1377,6 +1566,7 @@ export function TasksTable({
               View name
             </label>
             <Input
+              ref={saveViewNameInputRef}
               id='inventory-saved-view-name'
               data-testid='inventory-saved-view-name'
               value={saveViewName}

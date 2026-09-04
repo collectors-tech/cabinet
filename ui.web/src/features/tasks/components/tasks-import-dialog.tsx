@@ -1,6 +1,6 @@
+import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,7 +30,8 @@ const formSchema = z.object({
       message: 'Please upload a file',
     })
     .refine(
-      (files) => ['text/csv', 'application/vnd.ms-excel', ''].includes(files?.[0]?.type),
+      (files) =>
+        ['text/csv', 'application/vnd.ms-excel', ''].includes(files?.[0]?.type),
       'Please upload csv format.'
     ),
 })
@@ -76,7 +77,9 @@ function parseWishlistImportCsv(text: string): WishlistEntryDraft[] {
     .filter(Boolean)
 
   if (lines.length < 2) {
-    throw new Error('Import file must include a header row and at least one entry.')
+    throw new Error(
+      'Import file must include a header row and at least one entry.'
+    )
   }
 
   const headers = parseCsvLine(lines[0]).map((header) =>
@@ -99,10 +102,16 @@ function parseWishlistImportCsv(text: string): WishlistEntryDraft[] {
       title,
       partNumber: cells[columnIndex('part_number')]?.trim() ?? '',
       category: cells[columnIndex('category')]?.trim() ?? '',
+      itemType: cells[columnIndex('item_type')]?.trim() ?? '',
+      packagingGradeType:
+        cells[columnIndex('packaging_grade_type')]?.trim() ?? '',
+      condition: cells[columnIndex('condition')]?.trim() ?? '',
       priority: cells[columnIndex('priority')]?.trim() || 'medium',
       notes: cells[columnIndex('notes')]?.trim() ?? '',
       targetPrice: cells[columnIndex('target_price')]?.trim() ?? '',
+      currency: cells[columnIndex('currency')]?.trim().toUpperCase() || 'USD',
       owned: false,
+      delivered: false,
       pricePaid: '',
       purchaseUrl: '',
       purchaseDate: '',
@@ -163,7 +172,7 @@ export function TasksImportDialog({
           </DialogTitle>
           <DialogDescription>
             {isWishlistRoute
-              ? 'Import wishlist entries from CSV. Supported columns: title, part_number, category, priority, notes, target_price.'
+              ? 'Import wishlist entries from CSV. Supported columns: title, part_number, category, priority, notes, target_price, currency.'
               : 'Import tasks quickly from a CSV file.'}
           </DialogDescription>
         </DialogHeader>

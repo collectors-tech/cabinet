@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,6 +46,94 @@ func TestPhotosFileEndpoint_ServesVariant(t *testing.T) {
 	}
 	if fileResp.Body.Len() == 0 {
 		t.Fatal("expected non-empty image response body")
+	}
+}
+
+func TestPhotoUploadCreatesCanonicalAssetFolderAndManifest(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	if _, err := a.db.Exec(`INSERT INTO canonical_items (id, brand, category, part_number, title) VALUES ('item-canonical','AFX','Slot Car','P-CANON','Canonical Car')`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+
+	body, contentType := buildMultipartPhoto(t, "front:angle.jpg", sampleJPEG(t))
+	resp := doRequest(t, a, http.MethodPost, "/api/items/item-canonical/photos", body, map[string]string{"Content-Type": contentType})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("upload status = %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var created struct {
+		ID            string `json:"id"`
+		OriginalPath  string `json:"original_path"`
+		PreviewPath   string `json:"preview_path"`
+		ThumbnailPath string `json:"thumbnail_path"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode photo: %v", err)
+	}
+
+	assetDir := filepath.Join(a.cfg.DataDir, "media", "assets", created.ID)
+	if created.OriginalPath != filepath.Join(assetDir, "original", "front_angle.jpg") {
+		t.Fatalf("expected canonical original path under asset folder, got %s", created.OriginalPath)
+	}
+	if created.PreviewPath != filepath.Join(assetDir, "renditions", "preview.jpg") {
+		t.Fatalf("expected deterministic preview path, got %s", created.PreviewPath)
+	}
+	if created.ThumbnailPath != filepath.Join(assetDir, "renditions", "thumbnail.jpg") {
+		t.Fatalf("expected deterministic thumbnail path, got %s", created.ThumbnailPath)
+	}
+	var storedOriginal, storedPreview, storedThumbnail string
+	if err := a.db.QueryRow(`SELECT original_path, preview_path, thumbnail_path FROM item_photos WHERE id = ?`, created.ID).Scan(&storedOriginal, &storedPreview, &storedThumbnail); err != nil {
+		t.Fatalf("query stored canonical photo paths: %v", err)
+	}
+	if storedOriginal != filepath.ToSlash(filepath.Join("assets", created.ID, "original", "front_angle.jpg")) ||
+		storedPreview != filepath.ToSlash(filepath.Join("assets", created.ID, "renditions", "preview.jpg")) ||
+		storedThumbnail != filepath.ToSlash(filepath.Join("assets", created.ID, "renditions", "thumbnail.jpg")) {
+		t.Fatalf("expected DB paths to be relative to media root, got original=%q preview=%q thumbnail=%q", storedOriginal, storedPreview, storedThumbnail)
+	}
+	for _, dir := range []string{"original", "renditions", "variations"} {
+		info, err := os.Stat(filepath.Join(assetDir, dir))
+		if err != nil || !info.IsDir() {
+			t.Fatalf("expected asset %s directory, info=%v err=%v", dir, info, err)
+		}
+	}
+
+	rawManifest, err := os.ReadFile(filepath.Join(assetDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest struct {
+		Version  int    `json:"version"`
+		AssetID  string `json:"asset_id"`
+		Original struct {
+			Filename     string `json:"filename"`
+			RelativePath string `json:"relative_path"`
+			ContentHash  string `json:"content_hash"`
+			MIMEType     string `json:"mime_type"`
+			ByteSize     int64  `json:"byte_size"`
+			Immutable    bool   `json:"immutable"`
+		} `json:"original"`
+		Renditions []struct {
+			Name         string `json:"name"`
+			RelativePath string `json:"relative_path"`
+		} `json:"renditions"`
+		Owners []struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"owners"`
+	}
+	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	if manifest.Version != 1 || manifest.AssetID != created.ID || manifest.Original.Filename != "front:angle.jpg" || manifest.Original.RelativePath != "original/front_angle.jpg" || manifest.Original.MIMEType != "image/jpeg" || manifest.Original.ByteSize == 0 || !manifest.Original.Immutable || !strings.HasPrefix(manifest.Original.ContentHash, "sha256:") {
+		t.Fatalf("unexpected manifest original metadata: %+v", manifest)
+	}
+	if len(manifest.Renditions) != 2 || manifest.Renditions[0].Name != "preview" || manifest.Renditions[0].RelativePath != "renditions/preview.jpg" || manifest.Renditions[1].Name != "thumbnail" || manifest.Renditions[1].RelativePath != "renditions/thumbnail.jpg" {
+		t.Fatalf("unexpected manifest renditions: %+v", manifest.Renditions)
+	}
+	if len(manifest.Owners) != 1 || manifest.Owners[0].Type != "inventory_item" || manifest.Owners[0].ID != "item-canonical" {
+		t.Fatalf("unexpected manifest owners: %+v", manifest.Owners)
 	}
 }
 

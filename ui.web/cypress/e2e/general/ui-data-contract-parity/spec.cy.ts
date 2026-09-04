@@ -106,7 +106,7 @@ describe('general/ui-data-contract-parity', () => {
     cy.contains('button', 'Retry').click()
     cy.wait('@dashboardRetry')
     cy.contains(/dashboard(\.unavailable| unavailable)/i).should('not.exist')
-    cy.contains(/dashboard\.metrics\.inventoryItems|Inventory Items/i).should('be.visible')
+    cy.contains(/dashboard\.metrics\.collectionSize|Collection size/i).should('be.visible')
     cy.contains('dashboard_fetch_failed_500').should('not.exist')
   })
 

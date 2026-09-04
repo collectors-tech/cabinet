@@ -11,6 +11,7 @@ Contains settings shell behavior plus per-screen settings specifications.
 - `appearance` -> `openspec/specs/settings/appearance/spec.md`
 - `notifications` -> `openspec/specs/settings/notifications/spec.md`
 - `display` -> `openspec/specs/settings/display/spec.md`
+- `categories` -> `openspec/specs/settings/categories/spec.md`
 - `storage` -> `openspec/specs/settings/storage/spec.md`
 
 ## Requirement ID Namespaces
@@ -21,4 +22,5 @@ Contains settings shell behavior plus per-screen settings specifications.
 - `UI-SCREEN-SETTINGS-APPEARANCE-*`
 - `UI-SCREEN-SETTINGS-NOTIFICATIONS-*`
 - `UI-SCREEN-SETTINGS-DISPLAY-*`
+- `UI-SCREEN-SETTINGS-CATEGORIES-*`
 - `UI-SCREEN-SETTINGS-STORAGE-*`

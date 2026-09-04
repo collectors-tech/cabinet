@@ -9,11 +9,14 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/telegrambotconnector"
 	"github.com/collectors-tech/cabinet/internal/update"
 )
 
@@ -55,11 +58,18 @@ func doRequest(t *testing.T, a *App, method, path string, body io.Reader, header
 	t.Helper()
 
 	req := httptest.NewRequest(method, path, body)
+	if origin, err := url.Parse(strings.TrimSpace(a.cfg.WebAuthnOrigin)); err == nil && origin.Host != "" {
+		req.Host = origin.Host
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 	rr := httptest.NewRecorder()
-	a.srv.Handler.ServeHTTP(rr, req.WithContext(context.Background()))
+	ctx := context.Background()
+	if strings.HasPrefix(path, "/api/telegram/webhook/") || path == "/api/telegram/agent-text" || path == "/api/telegram/agent-text-callbacks" || path == "/api/telegram/catalog-capture-callbacks" {
+		ctx = telegrambotconnector.WithInProcessRequest(ctx)
+	}
+	a.srv.Handler.ServeHTTP(rr, req.WithContext(ctx))
 	return rr
 }
 

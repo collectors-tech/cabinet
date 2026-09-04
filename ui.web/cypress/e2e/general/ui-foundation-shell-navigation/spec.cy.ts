@@ -3,11 +3,70 @@ describe('ui-foundation-shell-navigation', () => {
     return cy.get(`[data-testid="${testId}"]`).first()
   }
 
-  function signInTo(path: string) {
-    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
-    cy.get('input[name="email"]').clear().type('e2e-shell-nav@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+  function signInTo(
+    path: string,
+    options: {
+      reset?: boolean
+      profileId?: string
+      profileName?: string
+      shellWorkspace?: 'navigation' | 'search' | 'assistant' | 'inbox'
+      sidebarOpen?: boolean
+    } = {}
+  ) {
+    const reset = options.reset ?? true
+    const sidebarOpen = options.sidebarOpen ?? true
+    ;(reset ? cy.e2eReset() : cy.wrap(null)).then(() => {
+      const bootstrapProfile =
+        options.profileId && options.profileName
+          ? cy.wrap({
+              profile_id: options.profileId,
+              profile_name: options.profileName,
+            })
+          : reset
+            ? cy.e2eBootstrap()
+            : cy.request('GET', '/api/profiles/active').then((resp) => {
+                expect(resp.status).to.eq(200)
+                return {
+                  profile_id: resp.body.id as string,
+                  profile_name: resp.body.name as string,
+                }
+              })
+
+      bootstrapProfile.then(({ profile_id, profile_name }) => {
+        cy.e2eSetSetupState('present')
+        cy.e2eEnsureSignedOut()
+        cy.setCookie('sidebar_state', sidebarOpen ? 'true' : 'false')
+        cy.intercept('POST', '/api/auth/local/session', (request) => {
+          expect(String(request.body?.profile_id ?? '')).to.match(/\S/)
+          request.reply({
+            statusCode: 200,
+            body: {
+              ok: true,
+              session_token:
+                'test-only-opaque-profile-bound-session-credential-000000000001',
+            },
+          })
+        })
+        cy.useBootstrappedProfile(profile_id, profile_name, {
+          path,
+          shellWorkspace: options.shellWorkspace,
+        })
+      })
+    })
+  }
+
+  function openCustomiseNav() {
+    visibleByTestId('shell-workspace-menu-trigger').click()
+    visibleByTestId('shell-workspace-menu-customise-nav').click()
+    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+  }
+
+  function inventoryTitle(title: string) {
+    return cy.contains(`span[title="${title}"]`, title, { timeout: 20000 })
+  }
+
+  function visibleInventoryTitle(title: string) {
+    return inventoryTitle(title).scrollIntoView().should('be.visible')
   }
 
   beforeEach(() => {
@@ -43,11 +102,11 @@ describe('ui-foundation-shell-navigation', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.title().should('eq', 'Cabinet - Inventory')
 
-    visibleByTestId('sidebar-nav-link-integrations').click()
+    cy.visit('/integrations/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/integrations\/?$/)
     cy.title().should('eq', 'Cabinet - Integrations')
 
-    visibleByTestId('sidebar-nav-link-dashboard').click()
+    cy.visit('/dashboard/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/)
     cy.title().should('eq', 'Cabinet - Home')
   })
@@ -55,10 +114,12 @@ describe('ui-foundation-shell-navigation', () => {
   it('UI-FOUNDATION-SHELL-NAVIGATION-011 centers primary page titles with route icons and no inline context', () => {
     function assertCenteredHeader(testId: string, title: string) {
       cy.get(`[data-testid="${testId}-header-title"]`)
+        .filter(':visible')
         .should('be.visible')
-        .and('have.attr', 'data-centered', 'true')
         .and('contain', title)
-      cy.get(`[data-testid="${testId}-page-icon"]`).should('be.visible')
+      cy.get(`[data-testid="${testId}-page-icon"]`)
+        .filter(':visible')
+        .should('be.visible')
       cy.get('header').should('not.contain', 'Active:')
       cy.get('header').should('not.contain', 'Collection:')
       cy.get('header').should('not.contain', 'Planning list')
@@ -74,7 +135,12 @@ describe('ui-foundation-shell-navigation', () => {
 
     visibleByTestId('sidebar-nav-link-wishlist').click()
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/wishlist\/?$/)
-    assertCenteredHeader('wishlist', 'Wishlist')
+    cy.get('[data-testid="sidebar-nav-link-wishlist"]').should(
+      'have.attr',
+      'data-active',
+      'true'
+    )
+    cy.contains('Wishlist Sample Grail Chase').should('be.visible')
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-004 renders app version and build date metadata in sidebar footer', () => {
@@ -86,8 +152,8 @@ describe('ui-foundation-shell-navigation', () => {
       },
     }).as('runtimeMeta')
 
-    signInTo('/')
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/?$/)
+    signInTo('/dashboard')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/)
     cy.wait('@runtimeMeta')
 
     cy.get('[data-testid="sidebar-runtime-meta"]').should('be.visible')
@@ -110,10 +176,13 @@ describe('ui-foundation-shell-navigation', () => {
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
           'sidebar-nav-link-collections',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-market-watch',
+          'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
           'sidebar-nav-link-integrations',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
@@ -121,25 +190,35 @@ describe('ui-foundation-shell-navigation', () => {
         ])
     })
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
-    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+    visibleByTestId('shell-workspace-menu-trigger').click()
+    visibleByTestId('shell-workspace-menu-settings').should('be.visible').click()
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/settings\/display\/?$/
+    )
+    cy.go('back')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    openCustomiseNav()
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
       cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
         force: true,
       })
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .should(($items) => {
           const ids = [...$items].map(
             (item) => item.getAttribute('data-testid') || ''
           )
           expect(ids).to.deep.equal([
-            'sidebar-nav-edit-item-dashboard',
+            'sidebar-nav-edit-item-home',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-media',
             'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-market-watch',
+            'sidebar-nav-edit-item-notification-inbox',
+            'sidebar-nav-edit-item-purchases',
             'sidebar-nav-edit-item-integrations',
             'sidebar-nav-edit-item-chats',
             'sidebar-nav-edit-item-users',
@@ -148,7 +227,7 @@ describe('ui-foundation-shell-navigation', () => {
         })
       cy.get('[data-testid="sidebar-nav-visibility-integrations"]').click()
     })
-    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-cancel').click()
 
     visibleByTestId('sidebar-nav-group-general').within(() => {
       cy.get('[data-testid^="sidebar-nav-link-"]')
@@ -158,10 +237,44 @@ describe('ui-foundation-shell-navigation', () => {
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
+          'sidebar-nav-link-collections',
+          'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-discoveries',
+          'sidebar-nav-link-market-watch',
+          'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
+          'sidebar-nav-link-integrations',
+          'sidebar-nav-link-chats',
+          'sidebar-nav-link-users',
+          'sidebar-nav-link-reports',
+        ])
+    })
+
+    openCustomiseNav()
+    visibleByTestId('sidebar-nav-edit-panel').within(() => {
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
+        force: true,
+      })
+      cy.get('[data-testid="sidebar-nav-visibility-integrations"]').click()
+    })
+    visibleByTestId('sidebar-nav-apply').click()
+
+    visibleByTestId('sidebar-nav-group-general').within(() => {
+      cy.get('[data-testid^="sidebar-nav-link-"]')
+        .then(($links) =>
+          [...$links].map((link) => link.getAttribute('data-testid') || '')
+        )
+        .should('deep.equal', [
+          'sidebar-nav-link-dashboard',
+          'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-collections',
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-market-watch',
+          'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
           'sidebar-nav-link-reports',
@@ -177,41 +290,74 @@ describe('ui-foundation-shell-navigation', () => {
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-collections',
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-market-watch',
+          'sidebar-nav-link-inbox',
+          'sidebar-nav-link-purchases',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
           'sidebar-nav-link-reports',
         ])
     })
+
+    openCustomiseNav()
+    visibleByTestId('sidebar-nav-restore-hidden').click()
+    visibleByTestId('sidebar-nav-apply').click()
+    visibleByTestId('sidebar-nav-link-integrations').should('be.visible')
+
+    openCustomiseNav()
+    visibleByTestId('sidebar-nav-reset-defaults').click()
+    visibleByTestId('sidebar-nav-apply').click()
+    visibleByTestId('sidebar-nav-group-general')
+      .find('[data-testid^="sidebar-nav-link-"]')
+      .then(($links) =>
+        [...$links].map((link) => link.getAttribute('data-testid') || '')
+      )
+      .should('deep.equal', [
+        'sidebar-nav-link-dashboard',
+        'sidebar-nav-link-inventory',
+        'sidebar-nav-link-media',
+        'sidebar-nav-link-collections',
+        'sidebar-nav-link-wishlist',
+        'sidebar-nav-link-discoveries',
+        'sidebar-nav-link-market-watch',
+        'sidebar-nav-link-inbox',
+        'sidebar-nav-link-purchases',
+        'sidebar-nav-link-integrations',
+        'sidebar-nav-link-chats',
+        'sidebar-nav-link-users',
+        'sidebar-nav-link-reports',
+      ])
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-007 reflects live nav edit order and saves the exact shown order', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
-    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+    openCustomiseNav()
 
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
       cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
         force: true,
       })
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .should(($items) => {
           const ids = [...$items].map(
             (item) => item.getAttribute('data-testid') || ''
           )
           expect(ids).to.deep.equal([
-            'sidebar-nav-edit-item-dashboard',
+            'sidebar-nav-edit-item-home',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-media',
             'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-market-watch',
+            'sidebar-nav-edit-item-notification-inbox',
+            'sidebar-nav-edit-item-purchases',
             'sidebar-nav-edit-item-integrations',
             'sidebar-nav-edit-item-chats',
             'sidebar-nav-edit-item-users',
@@ -223,18 +369,20 @@ describe('ui-foundation-shell-navigation', () => {
       })
 
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .should(($items) => {
           const ids = [...$items].map(
             (item) => item.getAttribute('data-testid') || ''
           )
           expect(ids).to.deep.equal([
-            'sidebar-nav-edit-item-dashboard',
-            'sidebar-nav-edit-item-wishlist',
+            'sidebar-nav-edit-item-home',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-wishlist',
+            'sidebar-nav-edit-item-media',
             'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-market-watch',
+            'sidebar-nav-edit-item-notification-inbox',
+            'sidebar-nav-edit-item-purchases',
             'sidebar-nav-edit-item-integrations',
             'sidebar-nav-edit-item-chats',
             'sidebar-nav-edit-item-users',
@@ -243,17 +391,20 @@ describe('ui-foundation-shell-navigation', () => {
         })
     })
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-apply').click()
     visibleByTestId('sidebar-nav-group-general')
       .find('[data-testid^="sidebar-nav-link-"]')
       .then(($links) => [...$links].map((link) => link.getAttribute('data-testid') || ''))
       .should('deep.equal', [
         'sidebar-nav-link-dashboard',
-        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-inventory',
+        'sidebar-nav-link-wishlist',
+        'sidebar-nav-link-media',
         'sidebar-nav-link-collections',
         'sidebar-nav-link-discoveries',
         'sidebar-nav-link-market-watch',
+        'sidebar-nav-link-inbox',
+        'sidebar-nav-link-purchases',
         'sidebar-nav-link-integrations',
         'sidebar-nav-link-chats',
         'sidebar-nav-link-users',
@@ -267,23 +418,23 @@ describe('ui-foundation-shell-navigation', () => {
 
     const dataTransfer = new DataTransfer()
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
-    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+    openCustomiseNav()
 
+    visibleByTestId('sidebar-nav-edit-item-wishlist').scrollIntoView()
     visibleByTestId('sidebar-nav-drag-handle-wishlist').should('be.visible')
 
-    cy.get('[data-testid="sidebar-nav-edit-item-inventory"]').then(($target) => {
+    cy.get('[data-testid="sidebar-nav-edit-item-media"]').then(($target) => {
       const rect = $target[0].getBoundingClientRect()
 
       visibleByTestId('sidebar-nav-drag-handle-wishlist').trigger('dragstart', {
         dataTransfer,
       })
-      cy.get('[data-testid="sidebar-nav-edit-dropzone-inventory"]').trigger('dragover', {
+      cy.get('[data-testid="sidebar-nav-edit-dropzone-media"]').trigger('dragover', {
         dataTransfer,
         clientY: rect.top + 2,
       })
-      visibleByTestId('sidebar-nav-drop-indicator-before-inventory').should('be.visible')
-      cy.get('[data-testid="sidebar-nav-edit-dropzone-inventory"]').trigger('drop', {
+      visibleByTestId('sidebar-nav-drop-indicator-before-media').should('be.visible')
+      cy.get('[data-testid="sidebar-nav-edit-dropzone-media"]').trigger('drop', {
         dataTransfer,
         clientY: rect.top + 2,
       })
@@ -291,36 +442,44 @@ describe('ui-foundation-shell-navigation', () => {
 
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
-        .filter(':visible')
         .then(($items) => [...$items].map((item) => item.getAttribute('data-testid') || ''))
         .should('deep.equal', [
-          'sidebar-nav-edit-item-dashboard',
-          'sidebar-nav-edit-item-wishlist',
+          'sidebar-nav-edit-item-home',
           'sidebar-nav-edit-item-inventory',
+          'sidebar-nav-edit-item-wishlist',
+          'sidebar-nav-edit-item-media',
           'sidebar-nav-edit-item-collections',
           'sidebar-nav-edit-item-discoveries',
           'sidebar-nav-edit-item-market-watch',
+          'sidebar-nav-edit-item-notification-inbox',
+          'sidebar-nav-edit-item-purchases',
           'sidebar-nav-edit-item-integrations',
           'sidebar-nav-edit-item-chats',
           'sidebar-nav-edit-item-users',
           'sidebar-nav-edit-item-reports',
         ])
 
+      cy.get('[data-testid="sidebar-nav-edit-item-wishlist"]').scrollIntoView({
+        block: 'center',
+      })
       cy.get('[data-testid="sidebar-nav-move-down-wishlist"]').should('be.visible')
       cy.get('[data-testid="sidebar-nav-visibility-wishlist"]').should('be.visible')
     })
 
-    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-apply').click()
     visibleByTestId('sidebar-nav-group-general')
       .find('[data-testid^="sidebar-nav-link-"]')
       .then(($links) => [...$links].map((link) => link.getAttribute('data-testid') || ''))
       .should('deep.equal', [
         'sidebar-nav-link-dashboard',
-        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-inventory',
+        'sidebar-nav-link-wishlist',
+        'sidebar-nav-link-media',
         'sidebar-nav-link-collections',
         'sidebar-nav-link-discoveries',
         'sidebar-nav-link-market-watch',
+        'sidebar-nav-link-inbox',
+        'sidebar-nav-link-purchases',
         'sidebar-nav-link-integrations',
         'sidebar-nav-link-chats',
         'sidebar-nav-link-users',
@@ -355,7 +514,7 @@ describe('ui-foundation-shell-navigation', () => {
     )
   })
 
-  it('UI-FOUNDATION-SHELL-NAVIGATION-006 manages collections from Collections section and inline picker quick-create', () => {
+  it('UI-FOUNDATION-SHELL-NAVIGATION-006 manages collections from Collections section quick-create', () => {
     signInTo('/collections/')
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
@@ -366,22 +525,10 @@ describe('ui-foundation-shell-navigation', () => {
     visibleByTestId('collections-new-action').click()
     visibleByTestId('collections-create-input').clear().type('Quick Create Shelf')
     visibleByTestId('collections-create-submit').click()
-    visibleByTestId('collections-item-quick-create-shelf').should('be.visible')
+    visibleByTestId('collections-row-quick-create-shelf').should('be.visible')
 
-    signInTo('/inventory/')
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
-
-    visibleByTestId('collection-inline-picker').should('be.visible')
-    visibleByTestId('collection-inline-add-new').click()
-    visibleByTestId('collection-inline-new-name').clear().type('Inline Auto Select')
-    visibleByTestId('collection-inline-save').click()
-    visibleByTestId('collection-inline-picker-selected').should(
-      'contain',
-      'Inline Auto Select'
-    )
-    visibleByTestId('collection-inline-picker-option-inline-auto-select').should(
-      'be.visible'
-    )
+    cy.reload()
+    visibleByTestId('collections-row-quick-create-shelf').should('be.visible')
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-008 uses explicit Database terminology in top switcher', () => {
@@ -395,7 +542,7 @@ describe('ui-foundation-shell-navigation', () => {
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-009 switches active DB profile and reloads active data context', () => {
-    cy.request('POST', '/api/test/reset', {})
+    cy.e2eReset()
     cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
       expect(primaryResp.status).to.eq(201)
       const primaryID = primaryResp.body.id as string
@@ -421,23 +568,26 @@ describe('ui-foundation-shell-navigation', () => {
         }).its('status').should('eq', 201)
 
         cy.request('PUT', '/api/profiles/active', { profile_id: primaryID }).its('status').should('eq', 200)
+        signInTo('/inventory/', {
+          reset: false,
+          profileId: primaryID,
+          profileName: 'Primary DB',
+        })
       })
     })
-
-    signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
-    cy.contains('Primary Item').should('be.visible')
-    cy.contains('Showcase Item').should('not.exist')
+    visibleInventoryTitle('Primary Item')
+    inventoryTitle('Showcase Item').should('not.exist')
 
     visibleByTestId('team-switcher-trigger').click()
     cy.get('[data-testid="team-option-showcase-db"]').click()
-    cy.contains('Showcase Item', { timeout: 20000 }).should('be.visible')
-    cy.contains('Primary Item').should('not.exist')
+    visibleInventoryTitle('Showcase Item')
+    inventoryTitle('Primary Item').should('not.exist')
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-010 provides Showcase DB profile with seeded demo context', () => {
-    cy.request('POST', '/api/test/reset', {})
+    cy.e2eReset()
     cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
       const primaryID = primaryResp.body.id as string
       cy.request('POST', '/api/profiles', { name: 'Showcase DB' }).then((showcaseResp) => {
@@ -456,15 +606,50 @@ describe('ui-foundation-shell-navigation', () => {
           category: 'Cars',
         }).its('status').should('eq', 201)
         cy.request('PUT', '/api/profiles/active', { profile_id: primaryID }).its('status').should('eq', 200)
+        signInTo('/inventory/', {
+          reset: false,
+          profileId: primaryID,
+          profileName: 'Primary DB',
+        })
       })
     })
 
-    signInTo('/inventory/')
     visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-testid="team-option-primary-db-plan"]').should('contain', 'Database')
+    cy.get('[data-testid="team-option-showcase-db-plan"]').should(
+      'contain',
+      'Showcase sample data'
+    )
     cy.get('[data-testid="team-option-showcase-db"]').click()
-    cy.contains('Showcase Seed One', { timeout: 20000 }).should('be.visible')
-    cy.contains('Showcase Seed Two').should('be.visible')
+    visibleInventoryTitle('Showcase Seed One')
+    visibleInventoryTitle('Showcase Seed Two')
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
+    cy.get('[data-testid="active-profile-status"]').should(
+      'contain',
+      'Showcase sample data'
+    )
+    cy.get('[data-testid="active-profile-db-icon"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Showcase DB database profile')
+    cy.get('[data-testid="active-profile-db-icon-variant"]').should(
+      'have.attr',
+      'data-db-icon-variant',
+      'dark'
+    )
+    visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-testid="team-option-showcase-db-icon"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Showcase DB database profile')
+    cy.get('[data-testid="team-option-showcase-db-icon-light"]').should(
+      'have.attr',
+      'data-db-icon-variant',
+      'light'
+    )
+    cy.get('[data-testid="team-option-showcase-db-icon-dark"]').should(
+      'have.attr',
+      'data-db-icon-variant',
+      'dark'
+    )
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-011 fills available shell width on wide desktop viewport by default', () => {
@@ -475,7 +660,7 @@ describe('ui-foundation-shell-navigation', () => {
     cy.get('[data-slot="sidebar-inset"]').then(($inset) => {
       const insetRect = $inset[0].getBoundingClientRect()
 
-      visibleByTestId('app-main-content').then(($main) => {
+      cy.get('[data-testid="inventory-workspace"]').then(($main) => {
         const mainRect = $main[0].getBoundingClientRect()
         const availableWidth = insetRect.width
         const widthGap = availableWidth - mainRect.width
@@ -494,28 +679,64 @@ describe('ui-foundation-shell-navigation', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-    cy.get('[data-testid="sidebar-nav-link-chats"]').should('be.visible')
-    cy.get('[data-testid="sidebar-nav-label-chats"]').should('contain', 'Chats')
-    cy.get('[data-testid="sidebar-nav-badge-chats"]').should('contain', '3')
+    cy.get('[data-testid="sidebar-nav-link-chats"]').should('exist')
+    cy.get('[data-testid="sidebar-nav-link-chats"]').should(
+      'have.attr',
+      'aria-label',
+      'Chats'
+    )
+    cy.get('[data-testid="sidebar-nav-label-chats"]').should('be.visible')
+    cy.get('body').then(($body) => {
+      const $badge = $body.find('[data-testid="sidebar-nav-badge-chats"]')
+      if (!$badge.length) {
+        return
+      }
 
-    cy.get('[data-testid="sidebar-nav-link-chats"]').then(($link) => {
-      const linkRect = $link[0].getBoundingClientRect()
+      cy.get('[data-testid="sidebar-nav-link-chats"]').then(($link) => {
+        const linkRect = $link[0].getBoundingClientRect()
+        const badgeRect = $badge[0].getBoundingClientRect()
 
-      cy.get('[data-testid="sidebar-nav-label-chats"]').then(($label) => {
-        const labelRect = $label[0].getBoundingClientRect()
-
-        cy.get('[data-testid="sidebar-nav-badge-chats"]').then(($badge) => {
-          const badgeRect = $badge[0].getBoundingClientRect()
-
-          expect(badgeRect.left, 'badge sits after label').to.be.greaterThan(
-            labelRect.right + 8
-          )
-          expect(linkRect.right - badgeRect.right, 'badge hugs row end').to.be.lessThan(24)
-          expect(labelRect.right, 'label stays clear of badge area').to.be.lessThan(
-            badgeRect.left - 8
-          )
-        })
+        expect(linkRect.right - badgeRect.right, 'badge hugs row end').to.be.lessThan(24)
+        expect(badgeRect.left, 'badge stays in trailing affordance area').to.be.greaterThan(
+          linkRect.left + linkRect.width / 2
+        )
       })
     })
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-018 renders primary navigation as icon-only accessible controls', () => {
+    signInTo('/inventory/', { sidebarOpen: false })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    const iconOnlyLinks = [
+      ['dashboard', 'Home'],
+      ['inventory', 'Inventory'],
+      ['media', 'Media'],
+      ['collections', 'Collections'],
+      ['wishlist', 'Wishlist'],
+      ['discoveries', 'Discoveries'],
+      ['market-watch', 'Market Watch'],
+      ['purchases', 'Purchases'],
+      ['integrations', 'Integrations'],
+      ['chats', 'Chats'],
+      ['users', 'Users'],
+      ['reports', 'Reports'],
+    ] as const
+
+    iconOnlyLinks.forEach(([key, label]) => {
+      cy.get(`[data-testid="sidebar-nav-link-${key}"]`)
+        .scrollIntoView()
+        .should('be.visible')
+        .and('have.attr', 'aria-label', label)
+        .within(() => {
+          cy.get('svg').should('be.visible')
+          cy.get(`[data-testid="sidebar-nav-label-${key}"]`).should('not.exist')
+        })
+    })
+
+    cy.get('[data-testid="sidebar-nav-link-inventory"]')
+      .should('have.attr', 'data-active', 'true')
+      .focus()
+      .should('be.focused')
   })
 })

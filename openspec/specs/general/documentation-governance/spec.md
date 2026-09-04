@@ -56,6 +56,18 @@ Cabinet SHALL maintain a strict per-file migration audit at `openspec/migrations
   - requirement marker count
   - one or more target canonical locations
 
+### Requirement DOCUMENTATION-GOVERNANCE-006: Private-Beta User Documentation MUST Match The Candidate
+Cabinet SHALL keep the packaged README, public privacy and terms routes, published Help Center, and exact-candidate release notes aligned with implemented private-beta behavior without unsupported legal, security, installer, provider, or support claims.
+
+#### Scenario: Review candidate-critical user guidance
+- **GIVEN** a Cabinet 0.1 private-beta candidate is prepared from an exact source commit
+- **WHEN** documentation and release-package contracts run
+- **THEN** README and Help Center guidance MUST describe the unsigned Windows portable ZIP and executable-local default data path
+- **AND** privacy and terms MUST explain local storage, Browser Companion capture, provider processing, optional ZITADEL identity, diagnostics opt-in and redaction, retention, deletion, export, and support boundaries
+- **AND** capability status MUST remain projected from the governed release disclosure instead of a duplicate status list
+- **AND** exact-candidate release notes MUST link user guidance at the candidate source commit
+- **AND** no fixed legal entity, jurisdiction, retention deadline, support service level, security certification, installer, or provider-readiness promise MAY be invented without separate evidence and approval
+
 ## Migration Inventory (Source -> Canonical)
 - `docs/FULL_FEATURE_LIST.md` -> domain capability specs under `openspec/specs/*`
 - `docs/SPEC.md` -> domain capability specs under `openspec/specs/*`

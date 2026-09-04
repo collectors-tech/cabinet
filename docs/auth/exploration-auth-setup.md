@@ -4,13 +4,13 @@
 This guide makes Cabinet exploratory auth deterministic for local development, review, and route-audit work.
 
 ## Default exploratory path: use local auth
-For exploratory testing, prefer **local auth mode** unless the specific task is explicitly about Clerk.
+For exploratory testing, prefer **local auth mode** unless the specific task is explicitly about ZITADEL application login, cloud entitlements, or passkey/domain behavior.
 
 Why:
 - no external auth dependency
 - no publishable-key/domain setup required
 - fastest path to authenticated route coverage
-- avoids Clerk-origin and passkey-domain blockers during routine UI review
+- avoids identity-provider origin and passkey-domain blockers during routine UI review
 
 ## Local auth flow
 ### Startup
@@ -50,7 +50,7 @@ Example exploratory credentials:
 Account-creation expectation:
 - treat the first successful local sign-in as the exploratory local account bootstrap path
 - do **not** block route audits waiting for a separately provisioned sample account
-- these credentials are local-only exploratory credentials, not a Clerk account requirement
+- these credentials are local-only exploratory credentials, not a ZITADEL account requirement
 
 ## Getting authenticated sample data
 After local sign-in, use one of these paths:
@@ -79,59 +79,57 @@ Verification target:
 - targeted Cypress proof: `ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts` (`UI-FOUNDATION-SHELL-NAVIGATION-010 provides Showcase DB profile with seeded demo context`)
 - run with: `pwsh -NoLogo -NoProfile -File .\cypress.ps1 -Spec cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts -Browser chrome -RequireE2EHooks`
 
-## When to use Clerk instead
-Use **Clerk auth mode** only when the task explicitly needs:
-- Clerk route coverage (`/clerk/*`)
-- Clerk token/session bootstrap behavior
-- Clerk billing/plan/permissions verification
-- Clerk-specific auth UX or error handling
+## When to use ZITADEL instead
+Use **ZITADEL auth mode** only when the task explicitly needs:
+- ZITADEL application login or callback coverage (`/api/auth/zitadel/*`)
+- verified server-managed cloud session and effective entitlement behavior
+- billing/plan/permissions verification
+- provider-specific auth UX, role, cookie, or error handling
 
-## Clerk exploratory prerequisites
-Before attempting Clerk exploration, confirm all of the following:
+## ZITADEL exploratory prerequisites
+Before attempting ZITADEL exploration, confirm all of the following:
 
-1. `VITE_CLERK_PUBLISHABLE_KEY` is set.
-2. The runtime/setup flow is configured for `clerk` auth mode.
-3. The browser origin you are using is allowed by Clerk.
+1. `CABINET_AUTH_IDENTITY_MODE=zitadel` is set.
+2. `CABINET_ZITADEL_ISSUER`, `CABINET_ZITADEL_CLIENT_ID`, and `CABINET_ZITADEL_AUDIENCE` are set.
+3. The browser origin you are using matches the configured Cabinet public origin and ZITADEL callback URL.
 4. If passkeys are involved, the active domain/origin matches the configured passkey relying-party expectations.
 
-### Preferred Clerk startup example
-From the repo root:
+### ZITADEL startup example
+From the repo root, set the environment for the current shell, then start Cabinet normally:
 
 ```powershell
-pwsh -NoLogo -NoProfile -File .\scripts\runtime\start-exploration-clerk.ps1 -ClerkPublishableKey 'pk_test_your_key' -Rebuild -Background
+$env:CABINET_AUTH_IDENTITY_MODE = 'zitadel'
+$env:CABINET_ZITADEL_ISSUER = 'https://identity.example.com'
+$env:CABINET_ZITADEL_CLIENT_ID = 'cabinet-client'
+$env:CABINET_ZITADEL_AUDIENCE = 'cabinet-project'
+pwsh -NoLogo -NoProfile -File .\scripts\runtime\start-exploration-local.ps1 -Background
 ```
 
-What this launcher does:
-- exports `VITE_CLERK_PUBLISHABLE_KEY` for the build/runtime process
-- exports `CABINET_AUTH_IDENTITY_MODE=clerk`
-- starts a dedicated Clerk exploration profile on port `17883`
-- gives a deterministic verification target: `GET /api/auth/provider-options`
-
 Expected verification after launch:
-- `http://127.0.0.1:17883/healthz` returns `200 ok`
-- `http://127.0.0.1:17883/api/auth/provider-options` returns `identity_mode = "clerk"`
-- first-run flows should be completed with **Auth Mode = clerk**
+- `http://127.0.0.1:17880/healthz` returns `200 ok`
+- `http://127.0.0.1:17880/api/auth/provider-options` returns `identity_mode = "zitadel"` and `zitadel_configured = true`
+- first-run flows should be completed with **Auth Mode = zitadel**
 
 ## Troubleshooting matrix
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
-| `Missing Clerk key` in setup wizard | Clerk mode selected without publishable key | Switch back to `local` for exploratory work, or provide `VITE_CLERK_PUBLISHABLE_KEY` before continuing |
-| `/clerk` route shows "No Publishable Key Found!" | `VITE_CLERK_PUBLISHABLE_KEY` not loaded | Create/update `.env`, rebuild/restart the app, or use `start-exploration-clerk.ps1`; then confirm `/api/auth/provider-options` reports `identity_mode = "clerk"` |
-| `This is an invalid domain.` during passkey sign-in | Current origin/domain is not passkey-enabled for the auth setup | Prefer local password/provider sign-in for exploration; if validating Clerk/passkeys specifically, align the active domain/origin with the configured relying-party/domain settings |
+| `Auth mode must be local or zitadel.` | Retired or misspelled auth mode was submitted | Switch setup/startup config to `local` for routine exploration or `zitadel` for provider-specific validation |
+| `/api/auth/provider-options` reports `zitadel_configured=false` | Required `CABINET_ZITADEL_*` values are incomplete | Set issuer, client id, and audience, then restart and re-check provider options |
+| `This is an invalid domain.` during passkey sign-in | Current origin/domain is not passkey-enabled for the auth setup | Prefer local password/provider sign-in for exploration; if validating ZITADEL/passkeys specifically, align the active domain/origin with the configured relying-party/domain settings |
 | Passkey guidance says `Passkey sign-in is not available on this domain yet...` | Cabinet normalized a domain/origin mismatch into deterministic fallback guidance | Treat this as an auth-environment setup issue, not a generic UI failure; continue with password/provider sign-in or fix the domain/origin setup |
-| Clerk sign-in page loads but session/bootstrap fails | Incomplete Clerk env, origin, or token/bootstrap configuration | Re-check publishable key, allowed origins, and the exact runtime URL being used |
-| Exploratory route audit is blocked on auth ambiguity | Wrong auth mode chosen for the task | Reset to the default rule: local mode for routine exploration, Clerk only for Clerk-specific work |
+| ZITADEL sign-in redirects but session/bootstrap fails | Incomplete ZITADEL env, callback origin, role, or token/bootstrap configuration | Re-check issuer, client id, audience, callback URL, required roles, and the exact runtime URL being used |
+| Exploratory route audit is blocked on auth ambiguity | Wrong auth mode chosen for the task | Reset to the default rule: local mode for routine exploration, ZITADEL only for provider-specific work |
 
 ## Recommended exploratory decision rule
 - **Routine route audits / UI review:** use **local** auth mode
-- **Cloud/plan/entitlement verification:** use **Clerk**
+- **Cloud/plan/entitlement verification:** use **ZITADEL**
 - **Passkey-specific validation:** confirm domain/origin first; otherwise do not treat passkey domain mismatch as a product-route blocker
 
 ## Evidence to capture in exploratory reports
 Whenever auth affects a route review, record:
-- auth mode used (`local` or `clerk`)
+- auth mode used (`local` or `zitadel`)
 - runtime URL
-- startup path used (`start-exploration-local.ps1`, `start-exploration-clerk.ps1`, direct `bin\cabinet.exe`, or other explicit launcher)
+- startup path used (`start-exploration-local.ps1`, direct `bin\cabinet.exe`, or other explicit launcher)
 - whether setup wizard was completed or bypassed
 - whether the session used first-sign-in local bootstrap or an existing local account
 - active profile/sample-data path used (`starter` vs `Showcase DB`)

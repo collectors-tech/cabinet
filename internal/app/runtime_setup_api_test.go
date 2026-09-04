@@ -52,6 +52,12 @@ func TestRuntimeSetupStatusAndCompleteContract(t *testing.T) {
 	if completePayload["ok"] != true {
 		t.Fatalf("expected ok=true in setup-complete payload")
 	}
+	if _, ok := completePayload["local_login_username"]; ok {
+		t.Fatalf("setup completion must not expose a simulated local username: %+v", completePayload)
+	}
+	if _, ok := completePayload["local_login_password"]; ok {
+		t.Fatalf("setup completion must not expose a simulated local password: %+v", completePayload)
+	}
 	if strings.TrimSpace(asString(completePayload["config_path"])) == "" {
 		t.Fatalf("expected config_path in setup-complete payload")
 	}
@@ -139,11 +145,8 @@ func TestRuntimeSetupSyncCurrentURLUpdatesConfigMetadata(t *testing.T) {
 			ResolvedURL: "http://127.0.0.1:17880",
 		},
 		Auth: runtimeSetupAuthConfig{
-			Mode: "local",
-			Clerk: runtimeSetupClerkAuthConfig{
-				PublishableKey: "",
-				Enabled:        false,
-			},
+			Mode:    "local",
+			Zitadel: runtimeSetupZitadelAuthConfig{},
 		},
 		Bootstrap: runtimeSetupBootstrapConfig{
 			Workspace:       "Local Workspace",
@@ -243,7 +246,7 @@ func TestRuntimeSetupStatusPathUsesDataDirCabinetJSON(t *testing.T) {
 	}
 }
 
-func TestRuntimeSetupCompleteRequiresClerkPublishableKey(t *testing.T) {
+func TestRuntimeSetupCompleteRejectsUnsupportedAuthMode(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -265,13 +268,13 @@ func TestRuntimeSetupCompleteRequiresClerkPublishableKey(t *testing.T) {
 	}
 	resp := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
 	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing clerk key, got %d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("expected 400 for unsupported auth mode, got %d body=%s", resp.Code, resp.Body.String())
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode validation payload: %v", err)
 	}
-	if payload["error_code"] != "SETUP_CLERK_PUBLISHABLE_KEY_REQUIRED" {
+	if payload["error_code"] != "SETUP_AUTH_MODE_INVALID" {
 		t.Fatalf("unexpected error code: %v", payload["error_code"])
 	}
 	if _, err := os.Stat(setupPath); !os.IsNotExist(err) {
@@ -357,6 +360,83 @@ func TestRuntimeSetupImportExistingConfigContract(t *testing.T) {
 	}
 	if invalidPayload["error_code"] != "SETUP_IMPORT_SOURCE_PATH_REQUIRED" {
 		t.Fatalf("unexpected setup-import error code: %v", invalidPayload["error_code"])
+	}
+}
+
+func TestRuntimeSetupImportRejectsUnsupportedAuthSubkey(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	sourcePath := filepath.Join(a.cfg.DataDir, "clerk-shaped-import.json")
+	raw := []byte(`{
+  "version": 1,
+  "instance": {
+    "name": "Clerk Shaped",
+    "profile": "clerk-shaped"
+  },
+  "storage": {
+    "dataDir": "C:/cabinet/data",
+    "mediaDir": "C:/cabinet/data/media",
+    "portableMode": false
+  },
+  "runtime": {
+    "portMode": "auto",
+    "port": null,
+    "resolvedUrl": "http://127.0.0.1:17880"
+  },
+  "auth": {
+    "mode": "zitadel",
+    "clerk": {
+      "enabled": false,
+      "publishableKey": "pk_test_retired"
+    }
+  },
+  "bootstrap": {
+    "workspace": "Local Workspace",
+    "databaseProfile": "Primary DB"
+  },
+  "features": {
+    "chat": true,
+    "providers": true,
+    "scanner": true
+  },
+  "meta": {
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z",
+    "wizardVersion": "1",
+    "currentUrl": "http://127.0.0.1:17880"
+  }
+}`)
+	if err := os.WriteFile(sourcePath, raw, 0o644); err != nil {
+		t.Fatalf("write clerk-shaped import source: %v", err)
+	}
+
+	resp := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/runtime/setup-import",
+		strings.NewReader(fmt.Sprintf(`{"source_path":%q}`, sourcePath)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected setup-import 400 for unsupported auth config subkey, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode unsupported auth config import payload: %v", err)
+	}
+	if payload["error_code"] != "SETUP_IMPORT_FAILED" {
+		t.Fatalf("unexpected setup-import error code: %v", payload["error_code"])
+	}
+	if !strings.Contains(strings.ToLower(asString(payload["message"])), "auth.clerk") {
+		t.Fatalf("expected auth.clerk rejection message, got %v", payload["message"])
+	}
+	if _, err := os.Stat(setupPath); !os.IsNotExist(err) {
+		t.Fatalf("setup file should not be created from Clerk-shaped import")
 	}
 }
 
@@ -543,7 +623,7 @@ func TestRuntimeSetupCompletePersistsFixedPortRuntime(t *testing.T) {
 	}
 }
 
-func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
+func TestRuntimeSetupCompletePersistsZitadelAuthConfiguration(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -551,11 +631,10 @@ func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
 	_ = os.Remove(setupPath)
 
 	completeReq := map[string]any{
-		"instance_name":          "Clerk Persist",
+		"instance_name":          "ZITADEL Persist",
 		"profile_key":            "",
 		"storage_mode":           "exe_local",
-		"auth_mode":              "clerk",
-		"clerk_publishable_key":  "pk_test_wave25",
+		"auth_mode":              "zitadel",
 		"runtime_port_mode":      "auto",
 		"bootstrap_workspace":    "Local Workspace",
 		"bootstrap_database_ref": "Primary DB",
@@ -580,18 +659,14 @@ func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected auth object in setup config")
 	}
-	if strings.TrimSpace(asString(authPayload["mode"])) != "clerk" {
-		t.Fatalf("expected auth.mode=clerk, got %v", authPayload["mode"])
+	if strings.TrimSpace(asString(authPayload["mode"])) != "zitadel" {
+		t.Fatalf("expected auth.mode=zitadel, got %v", authPayload["mode"])
 	}
-	clerkPayload, ok := authPayload["clerk"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected auth.clerk object in setup config")
+	if _, ok := authPayload["clerk"]; ok {
+		t.Fatalf("auth.clerk must not be persisted in setup config: %+v", authPayload["clerk"])
 	}
-	if clerkPayload["enabled"] != true {
-		t.Fatalf("expected auth.clerk.enabled=true, got %v", clerkPayload["enabled"])
-	}
-	if strings.TrimSpace(asString(clerkPayload["publishableKey"])) != "pk_test_wave25" {
-		t.Fatalf("expected auth.clerk.publishableKey=pk_test_wave25, got %v", clerkPayload["publishableKey"])
+	if _, ok := authPayload["zitadel"].(map[string]any); !ok {
+		t.Fatalf("expected auth.zitadel object in setup config")
 	}
 }
 

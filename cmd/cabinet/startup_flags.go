@@ -39,7 +39,7 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 	fs.StringVar(&dataDir, "data-dir", "", "Data directory override.")
 	fs.StringVar(&profile, "profile", "", "Profile key override.")
 	fs.StringVar(&instanceName, "instance-name", "", "Instance/profile alias override.")
-	fs.StringVar(&authMode, "auth-mode", "", "Auth mode override (local|clerk).")
+	fs.StringVar(&authMode, "auth-mode", "", "Auth mode override (local|zitadel).")
 	fs.StringVar(&baseURL, "base-url", "", "Base URL override for runtime callbacks/origin.")
 	fs.BoolVar(&restart, "restart", false, "Restart an already-running Cabinet instance on the requested endpoint.")
 	fs.BoolVar(&allowParallel, "allow-parallel", false, "Allow parallel runtime instances.")
@@ -93,10 +93,11 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 	authMode = strings.ToLower(strings.TrimSpace(authMode))
 	if authMode != "" {
 		switch authMode {
-		case "local", "clerk":
+		case "local", "zitadel":
 			env["CABINET_AUTH_MODE"] = authMode
+			env["CABINET_AUTH_IDENTITY_MODE"] = authMode
 		default:
-			return startupOverrides{}, fmt.Errorf("invalid --auth-mode value %q (expected local or clerk)", authMode)
+			return startupOverrides{}, fmt.Errorf("invalid --auth-mode value %q (expected local or zitadel)", authMode)
 		}
 	}
 

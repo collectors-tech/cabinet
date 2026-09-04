@@ -69,12 +69,16 @@ Selecting a different database profile from switcher MUST change active data con
 - **THEN** runtime MUST switch active profile context and reload data views from selected DB without cross-profile leakage
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-010: App SHALL provide a seeded Showcase DB profile
-Cabinet SHALL support a pre-seeded showcase database profile for demos/testing with sample content.
+Cabinet SHALL support a pre-seeded showcase database profile for demos/testing with sample content and SHALL distinguish it from normal working databases in the shell switcher. The database/profile switcher SHALL render the approved DB icon treatment for Showcase DB and SHALL choose the supplied dark or light icon variant deliberately for the surrounding theme/background context.
 
 #### Scenario: Open showcase profile
 - **GIVEN** showcase profile is provisioned
 - **WHEN** user switches to `Showcase DB`
 - **THEN** inventory, wishlist, media, and account/demo context MUST be populated with sample seed content suitable for end-to-end demos
+- **AND** the switcher MUST label Showcase DB as sample/demo context rather than a generic working database
+- **AND** the active Showcase DB selector tile MUST render the dark DB icon variant when placed on the dark sidebar-primary tile
+- **AND** dropdown Showcase DB options MUST expose both dark and light DB icon variants so light and dark theme contexts can select the contrast-appropriate asset
+- **AND** the DB icon MUST preserve an accessible database-profile label without replacing the visible `Showcase DB` and `Showcase sample data` text
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-007: Navigation edit dialog SHALL reflect live item order during reordering
 When user reorders items in nav edit mode through move buttons or a drag handle, edit dialog list order MUST update immediately to match resulting navigation order.
@@ -120,3 +124,71 @@ Authenticated shell routes SHALL keep `document.title` in the format `Cabinet - 
 - **WHEN** the active route changes
 - **THEN** the browser title MUST update to `Cabinet - <Page Title>` for that route
 - **AND** the title MUST NOT be blank or leak raw route ids/translation keys
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-014: Database switcher SHALL recover from active profile load failure
+The database/profile switcher SHALL make active profile load failures visible and SHALL provide a retry action that restores the active database label when the profile endpoint recovers.
+
+#### Scenario: Retry profile loading from shell switcher
+- **GIVEN** the authenticated shell cannot load the active profile/database context
+- **WHEN** the user opens the database switcher and retries profile loading
+- **THEN** the shell SHALL show the profile load failure before retry
+- **AND** the recovered active database label SHALL replace the failure guidance after retry succeeds
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-015: Database switcher SHALL create and activate profiles
+The database/profile switcher add action SHALL create a new database profile, activate it, and refresh the shell against that profile context.
+
+#### Scenario: Add database profile from switcher
+- **GIVEN** the authenticated shell database switcher is visible
+- **WHEN** the user chooses Add Database and supplies a profile name
+- **THEN** the switcher SHALL call the profile create API with that name
+- **AND** the switcher SHALL activate the created profile through the active profile API
+- **AND** the shell SHALL reload with the created profile label as active database context
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-016: Existing database selection SHALL carry across core app sections
+The shell database/profile switcher SHALL keep an existing selected database profile visible as the active context while the user moves through core authenticated sections.
+
+#### Scenario: Existing database profile selection across sections
+- **GIVEN** the authenticated shell has loaded multiple database profiles
+- **WHEN** the user selects an existing non-active database profile
+- **THEN** the active profile API SHALL report the selected profile
+- **AND** the selected database label SHALL remain visible in Inventory, Wishlist, Collections, Settings, Chats, and Integrations
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-017: Browser and install metadata SHALL use approved Cabinet icon assets
+Cabinet SHALL publish approved Cabinet app icon assets through browser favicon and install metadata without retaining stale template or prior app icon references.
+
+#### Scenario: Browser and install metadata expose current Cabinet branding
+- **GIVEN** the app shell HTML and static image assets are served
+- **WHEN** a browser resolves favicon, touch icon, and web app manifest metadata
+- **THEN** SVG favicons MUST use the approved Cabinet light and dark icon variants
+- **AND** PNG, ICO, touch icon, and web app manifest assets MUST resolve from the approved Cabinet favicon package
+- **AND** app install metadata MUST use `Cabinet` naming and Cabinet theme colors
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-018: Primary navigation links SHALL render as icon-only controls
+Cabinet SHALL render authenticated primary app navigation links as icon-only controls while preserving stable accessible names, tooltips, active-route affordances, and keyboard focus affordances.
+
+#### Scenario: Primary app navigation is icon-only and accessible
+- **GIVEN** the authenticated shell sidebar is visible
+- **WHEN** primary app navigation links render in the Navigation workspace
+- **THEN** each link MUST show its icon without visible text label content
+- **AND** each link MUST expose a stable accessible name matching the destination label
+- **AND** the active route state MUST remain visually detectable through the shell nav active affordance
+- **AND** keyboard focus MUST remain visible on each icon-only navigation control
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-019: Workspace chrome rail SHALL be icon-only and expose Inbox only through the bell
+Cabinet SHALL render the workspace chrome rail as compact icon-only controls with accessible names, tooltips, and one active workspace affordance. The shell workspace tool group SHALL expose Navigation, Search, Chat, and Inbox as icon-only controls without a visible `Workspace` section label. The top workspace chrome SHALL NOT expose a separate visible `Inbox` pill/button; the bell control SHALL be the only top-level Inbox/notifications entry point and SHALL route to the durable Inbox page.
+
+#### Scenario: Workspace chrome rail has no visible action labels
+- **GIVEN** the authenticated shell is visible in expanded desktop layout
+- **WHEN** the workspace chrome rail renders
+- **THEN** Navigation, Search, Chat, and Inbox controls MUST render as icon-only buttons with accessible names and tooltips
+- **AND** no visible `Workspace`, `Nav`, `Search`, `Chat`, `Assistant`, or `Inbox` text label MUST appear in the workspace tool group
+- **AND** exactly one workspace control MUST expose the active visual state
+- **AND** the Search control MUST open the left shell Search workspace without navigating away from the current route
+
+#### Scenario: Bell is the only top-level Inbox affordance
+- **GIVEN** the authenticated shell workspace rail is visible
+- **WHEN** a user needs to open notifications
+- **THEN** the bell control MUST expose an accessible Inbox/notifications label and tooltip
+- **AND** the bell control MUST retain a notification badge affordance
+- **AND** clicking the bell MUST navigate to the durable `/inbox` surface
+- **AND** the rail MUST NOT render a separate `Inbox` workspace button or pill next to the bell

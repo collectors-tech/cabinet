@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { flushSync } from 'react-dom'
 import {
   ArrowDown,
   ArrowUp,
@@ -28,7 +27,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -76,14 +75,6 @@ import {
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
 import {
-  TasksDialogs,
-  type TasksDialogType,
-} from '@/features/tasks/components/tasks-dialogs'
-import { TasksProvider } from '@/features/tasks/components/tasks-provider'
-import { TasksTable } from '@/features/tasks/components/tasks-table'
-import { type Task } from '@/features/tasks/data/schema'
-import { tasks } from '@/features/tasks/data/tasks'
-import {
   defaultInventoryCategoryOptions,
   inventoryCategoryOptionsSettingsKey,
   joinCategoryValue,
@@ -101,6 +92,18 @@ import {
   parseItemTypeConditionScales,
   type InventoryItemTypeConditionScale,
 } from '@/features/inventory/item-type-condition-scales'
+import {
+  defaultInventoryPackagingGrades,
+  parsePackagingGradeOptions,
+} from '@/features/inventory/packaging-grade-options'
+import {
+  TasksDialogs,
+  type TasksDialogType,
+} from '@/features/tasks/components/tasks-dialogs'
+import { TasksProvider } from '@/features/tasks/components/tasks-provider'
+import { TasksTable } from '@/features/tasks/components/tasks-table'
+import { type Task } from '@/features/tasks/data/schema'
+import { tasks } from '@/features/tasks/data/tasks'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -154,6 +157,7 @@ type InventoryItem = {
   condition: string
   category: string
   item_type: string
+  packaging_grade_type: string
   brand: string
   priority: string
   description: string
@@ -162,12 +166,43 @@ type InventoryItem = {
   source_urls: string[]
 }
 
+function agentSelectedRecordKey(profileID: string) {
+  return `cabinet.agent.selected_record.${profileID || 'local'}`
+}
+
+function persistAgentSelectedInventoryItem(
+  profileID: string,
+  item: InventoryItem | null
+) {
+  if (typeof window === 'undefined') return
+  const key = agentSelectedRecordKey(profileID)
+  try {
+    if (!item) {
+      window.localStorage.removeItem(key)
+      window.localStorage.removeItem(agentSelectedRecordKey('local'))
+      return
+    }
+    const payload = JSON.stringify({
+      type: 'inventory_item',
+      id: item.id,
+      label: item.part_number || item.title || item.id,
+      title: item.title,
+      route_id: '/inventory',
+    })
+    window.localStorage.setItem(key, payload)
+    window.localStorage.setItem(agentSelectedRecordKey('local'), payload)
+  } catch {
+    // Keep row focus usable if localStorage is unavailable.
+  }
+}
+
 type InventoryItemDraft = {
   part_number: string
   title: string
   brand: string
   category: string
   item_type: string
+  packaging_grade_type: string
   description: string
   notes: string
   tags: string
@@ -189,6 +224,49 @@ type InventoryCreateIntent = 'manual' | 'text' | 'photo' | 'barcode'
 type PasteCreateHistoryEntry = {
   kind: 'url' | 'text' | 'prompt'
   value: string
+}
+
+type ProviderProductURLDuplicate = {
+  item_id: string
+  title: string
+  source_urls: string[]
+  reasons: string[]
+}
+
+type ProviderProductURLDraft = {
+  provider_product_id?: string
+  title?: string
+  source_url?: string
+  description?: string
+  price?: number
+  currency?: string
+  stock_state?: string
+  stock_count?: number
+  categories?: string[]
+  attributes?: Record<string, string>
+  image_urls?: string[]
+  evidence?: Record<string, unknown>
+}
+
+type ProviderProductURLIngestResponse = {
+  error?: string
+  provider?: string
+  family?: string
+  guidance?: string
+  fallback_state?: string
+  next_action?: string
+  review_capture_persisted?: boolean
+  review_capture?: {
+    item_id?: string
+    title?: string
+    status?: string
+    source_url?: string
+    fallback_state?: string
+    next_action?: string
+  }
+  draft?: ProviderProductURLDraft
+  evidence?: Record<string, unknown>
+  duplicates?: ProviderProductURLDuplicate[]
 }
 
 type FolderNode = {
@@ -214,6 +292,7 @@ type FolderDropTarget =
 type FolderTreeRenderOptions = {
   showActions?: boolean
   showDragHandles?: boolean
+  forceExpandAll?: boolean
 }
 
 function folderDropTargetsEqual(
@@ -252,6 +331,41 @@ function findFolderNodeByID(
     }
   }
   return null
+}
+
+function filterFolderTreeByQuery(
+  nodes: FolderNode[],
+  rawQuery: string
+): FolderNode[] {
+  const query = rawQuery.trim().toLowerCase()
+  if (!query) {
+    return nodes
+  }
+
+  return nodes.flatMap((node) => {
+    const filteredChildren = filterFolderTreeByQuery(node.children ?? [], query)
+    const nodeText = [
+      node.name,
+      node.category,
+      node.secondaryLabel,
+      node.statusBadge,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    const matchesNode = nodeText.includes(query)
+
+    if (!matchesNode && filteredChildren.length === 0) {
+      return []
+    }
+
+    return [
+      {
+        ...node,
+        children: matchesNode ? node.children : filteredChildren,
+      },
+    ]
+  })
 }
 
 const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
@@ -494,6 +608,7 @@ function emptyInventoryItemDraft(): InventoryItemDraft {
     brand: '',
     category: '',
     item_type: '',
+    packaging_grade_type: '',
     description: '',
     notes: '',
     tags: '',
@@ -508,6 +623,7 @@ function inventoryItemToDraft(item: InventoryItem): InventoryItemDraft {
     brand: item.brand,
     category: item.category,
     item_type: item.item_type,
+    packaging_grade_type: item.packaging_grade_type,
     description: item.description,
     notes: item.notes,
     tags: item.tags.join(', '),
@@ -563,6 +679,8 @@ function hasInventoryDraftValue(draft: InventoryItemDraft): boolean {
     draft.title,
     draft.brand,
     draft.category,
+    draft.item_type,
+    draft.packaging_grade_type,
     draft.description,
     draft.notes,
     draft.tags,
@@ -631,6 +749,7 @@ function normalizeInventoryCreatePayload(
     brand: draft.brand.trim(),
     category: draft.category.trim(),
     item_type: draft.item_type.trim(),
+    packaging_grade_type: draft.packaging_grade_type.trim(),
     description: draft.description.trim(),
     notes: draft.notes.trim(),
     tags: draft.tags.trim(),
@@ -653,6 +772,7 @@ function normalizeInventoryCreatePayload(
     item_type:
       trimmed.item_type ||
       inferItemTypeFromCategory(trimmed.category || 'General'),
+    packaging_grade_type: trimmed.packaging_grade_type,
     description: trimmed.description,
     notes: trimmed.notes,
     tags: trimmed.tags,
@@ -905,8 +1025,8 @@ function InventoryItemPriceHistoryChart({
         <div>
           <h4 className='text-sm font-semibold'>Price history</h4>
           <p className='text-xs text-muted-foreground'>
-            {points.length} price {points.length === 1 ? 'point' : 'points'} from{' '}
-            {firstPoint.date} to {lastPoint.date}
+            {points.length} price {points.length === 1 ? 'point' : 'points'}{' '}
+            from {firstPoint.date} to {lastPoint.date}
           </p>
         </div>
         <div className='text-right text-xs text-muted-foreground'>
@@ -1003,6 +1123,108 @@ function buildPasteCreateDescription(
   return sections.join('\n\n')
 }
 
+function formatProviderProductEvidence(
+  payload: ProviderProductURLIngestResponse,
+  source: string
+) {
+  const draft = payload.draft ?? {}
+  const evidence = payload.evidence ?? draft.evidence ?? {}
+  const lines = [
+    `Provider: ${payload.provider ?? String(evidence.provider ?? 'unknown')}`,
+    `Family: ${payload.family ?? String(evidence.family ?? 'unknown')}`,
+    `Provider product ID: ${draft.provider_product_id ?? String(evidence.provider_product_id ?? '')}`,
+    `Extraction: ${String(evidence.extraction_method ?? 'provider_ingest')}`,
+    `Original URL: ${String(evidence.original_url ?? source)}`,
+    `Normalized URL: ${draft.source_url ?? String(evidence.normalized_url ?? source)}`,
+    `Observed at: ${String(evidence.observed_at ?? '')}`,
+    `Source summary: ${String(evidence.source_summary ?? '')}`,
+  ].filter((line) => !line.endsWith(': '))
+  return lines.join('\n')
+}
+
+function buildProviderProductDescription(
+  source: string,
+  payload: ProviderProductURLIngestResponse
+) {
+  const draft = payload.draft ?? {}
+  const sections = [
+    buildPasteCreateDescription(
+      [{ kind: 'url', value: source }],
+      draft.source_url ?? source
+    ),
+  ]
+  if (draft.description) {
+    sections.push(draft.description)
+  }
+  const facts = [
+    draft.price && draft.currency
+      ? `Price: ${draft.currency} ${draft.price.toFixed(2)}`
+      : '',
+    draft.stock_state
+      ? `Stock: ${draft.stock_state}${typeof draft.stock_count === 'number' ? ` (${draft.stock_count})` : ''}`
+      : '',
+    draft.image_urls?.length
+      ? `Image URLs:\n${draft.image_urls.join('\n')}`
+      : '',
+  ].filter(Boolean)
+  if (facts.length > 0) {
+    sections.push(facts.join('\n'))
+  }
+  return sections.filter(Boolean).join('\n\n')
+}
+
+function providerProductDraftToInventoryDraft(
+  source: string,
+  payload: ProviderProductURLIngestResponse
+): InventoryItemDraft {
+  const draft = payload.draft ?? {}
+  const brand = draft.attributes?.Brand ?? draft.attributes?.brand ?? 'Unknown'
+  const category = (draft.categories ?? []).filter(Boolean).join(', ')
+  return {
+    part_number: draft.provider_product_id
+      ? `BONZA-${draft.provider_product_id}`
+      : buildDraftItemPartNumber(),
+    title: draft.title ?? buildQuickCreateDraft(source).title,
+    brand,
+    category: category || 'General',
+    item_type: inferItemTypeFromCategory(category || 'General'),
+    packaging_grade_type: '',
+    description: buildProviderProductDescription(source, payload),
+    notes: formatProviderProductEvidence(payload, source),
+    tags: ['provider-ingest', payload.provider ?? 'bonzaslotcars']
+      .filter(Boolean)
+      .join(', '),
+    source_urls: [draft.source_url ?? source, source]
+      .filter(
+        (value, index, values) => value && values.indexOf(value) === index
+      )
+      .join('\n'),
+  }
+}
+
+function providerProductIngestMessage(error?: string) {
+  switch (error) {
+    case 'supported_provider_unsupported_page':
+      return 'This provider is supported, but the pasted page is not a product page. The pasted URL is still available for manual item creation.'
+    case 'unsupported_provider_url':
+      return 'This URL is not supported for provider ingest yet. The pasted URL is still available for manual item creation.'
+    case 'failed_to_ingest_bonza_product_url':
+      return 'Bonza product data could not be loaded right now. The pasted URL is still available for manual item creation.'
+    default:
+      return 'Provider ingest could not process this URL. The pasted URL is still available for manual item creation.'
+  }
+}
+
+function providerProductFallbackMessage(
+  payload: ProviderProductURLIngestResponse
+) {
+  const guidance = payload.guidance?.trim()
+  if (payload.review_capture_persisted && payload.review_capture?.title) {
+    return `${guidance || providerProductIngestMessage(payload.error)} Captured for review as ${payload.review_capture.title}.`
+  }
+  return guidance || providerProductIngestMessage(payload.error)
+}
+
 function buildQuickCreateDraft(value: string): InventoryItemDraft {
   const source = value.trim()
   try {
@@ -1023,6 +1245,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
         brand: 'Unknown',
         category: 'General',
         item_type: inferItemTypeFromCategory('General'),
+        packaging_grade_type: '',
         description: buildPasteCreateDescription(
           [{ kind: 'url', value: source }],
           source
@@ -1043,6 +1266,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
     brand: 'Unknown',
     category: 'General',
     item_type: inferItemTypeFromCategory('General'),
+    packaging_grade_type: '',
     description: buildPasteCreateDescription([{ kind: 'text', value: source }]),
     notes: '',
     tags: '',
@@ -1064,9 +1288,13 @@ function inventoryItemToTask(item: InventoryItem): Task {
     id: item.part_number || item.id,
     itemID: item.id,
     title: item.title || 'Untitled item',
+    itemType: item.item_type,
+    packagingGradeType: item.packaging_grade_type,
+    condition: item.condition,
     status: item.condition || item.status || 'todo',
     label: item.category || 'feature',
     priority: item.priority || 'medium',
+    notes: item.notes || item.description,
   }
 }
 
@@ -1105,7 +1333,7 @@ function applyInventoryFolderCounts(
       itemCount:
         node.name === 'All Items'
           ? rows.length
-          : countsByFolderName.get(node.name) ?? 0,
+          : (countsByFolderName.get(node.name) ?? 0),
       children: node.children ? walk(node.children) : undefined,
     }))
 
@@ -1589,6 +1817,19 @@ async function loadInventoryItemTypeConditionScales(): Promise<
   )
 }
 
+async function loadInventoryPackagingGrades(): Promise<string[]> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryPackagingGrades
+  }
+  const payload = (await response.json()) as {
+    packaging_grades?: string[]
+  }
+  return parsePackagingGradeOptions(
+    JSON.stringify(payload.packaging_grades ?? [])
+  )
+}
+
 function savePersistedWorkspaceSnapshot(
   profileID: string,
   folderTree: FolderNode[]
@@ -1637,7 +1878,6 @@ async function saveProfileWorkspaceSnapshot(
     },
     body: JSON.stringify({
       settings: {
-        ...(payload.settings ?? {}),
         [inventoryFolderTreeSettingsKey]: nextTreeValue,
       },
     }),
@@ -1668,7 +1908,6 @@ async function saveProfileInventoryItemFolderAssignments(
   ) {
     return
   }
-
   await fetch(`/api/profiles/${encodeURIComponent(profileID)}/settings`, {
     method: 'PUT',
     headers: {
@@ -1676,7 +1915,6 @@ async function saveProfileInventoryItemFolderAssignments(
     },
     body: JSON.stringify({
       settings: {
-        ...(payload.settings ?? {}),
         [inventoryItemFolderAssignmentsSettingsKey]: nextAssignmentsValue,
       },
     }),
@@ -1715,7 +1953,6 @@ async function saveProfileInventoryCategoryOptions(
     },
     body: JSON.stringify({
       settings: {
-        ...(payload.settings ?? {}),
         [inventoryCategoryOptionsSettingsKey]: nextCategoriesValue,
       },
     }),
@@ -1832,6 +2069,8 @@ export function Collection({
   )
   const [inventoryFolderBrowserOpen, setInventoryFolderBrowserOpen] =
     useState(false)
+  const [inventoryFolderBrowserQuery, setInventoryFolderBrowserQuery] =
+    useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => loadInventoryTreeState().expandedNodeIDs
   )
@@ -1844,6 +2083,9 @@ export function Collection({
   const [itemTypeConditionScales, setItemTypeConditionScales] = useState<
     InventoryItemTypeConditionScale[]
   >(defaultInventoryItemTypeConditionScales)
+  const [inventoryPackagingGrades, setInventoryPackagingGrades] = useState<
+    string[]
+  >(defaultInventoryPackagingGrades)
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<
     string | null
@@ -1880,6 +2122,7 @@ export function Collection({
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const createPasteInputRef = useRef<HTMLInputElement | null>(null)
   const createBarcodeInputRef = useRef<HTMLInputElement | null>(null)
+  const createMenuDialogTransitionRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
@@ -1909,6 +2152,7 @@ export function Collection({
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [cameraSuccess, setCameraSuccess] = useState<string | null>(null)
   const [activeProfileID, setActiveProfileID] = useState('')
+  const [activeProfileResolved, setActiveProfileResolved] = useState(false)
   const [workspaceSnapshotReady, setWorkspaceSnapshotReady] = useState(false)
   const [selectedItemID, setSelectedItemID] = useState('')
   const [selectedItemLabel, setSelectedItemLabel] = useState('')
@@ -1970,6 +2214,9 @@ export function Collection({
   const [pasteCreateHistory, setPasteCreateHistory] = useState<
     PasteCreateHistoryEntry[]
   >([])
+  const [pasteCreateDuplicates, setPasteCreateDuplicates] = useState<
+    ProviderProductURLDuplicate[]
+  >([])
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
@@ -1978,7 +2225,11 @@ export function Collection({
   >(null)
   const inventoryPhotoRequestIDRef = useRef(0)
   const inventoryItemDetailRequestIDRef = useRef(0)
+  const inventoryLoadInFlightRef = useRef(false)
   const selectedItemIDRef = useRef('')
+  const pendingItemFolderAssignmentsRef = useRef(
+    new Map<string, Record<string, string>>()
+  )
   const {
     workspaceCollections,
     activeWorkspaceCollection,
@@ -1994,10 +2245,38 @@ export function Collection({
   )
   const activeWorkspaceCollectionRef = useRef(activeWorkspaceCollection)
 
-  const selectInventoryItem = useCallback((item: InventoryItem | null) => {
-    setSelectedItemID(item?.id ?? '')
-    setSelectedItemLabel(item ? item.part_number || item.id : '')
-  }, [])
+  const selectInventoryItem = useCallback(
+    (item: InventoryItem | null) => {
+      setSelectedItemID(item?.id ?? '')
+      setSelectedItemLabel(item ? item.part_number || item.id : '')
+      persistAgentSelectedInventoryItem(activeProfileID, item)
+    },
+    [activeProfileID]
+  )
+
+  const assignInventoryItemToFolder = useCallback(
+    (itemID: string, folderName: string) => {
+      const normalizedItemID = itemID.trim()
+      const normalizedFolderName = folderName.trim()
+      if (normalizedItemID === '' || normalizedFolderName === '') {
+        return
+      }
+
+      if (!workspaceSnapshotReady) {
+        const pendingAssignments =
+          pendingItemFolderAssignmentsRef.current.get(activeProfileID) ?? {}
+        pendingItemFolderAssignmentsRef.current.set(activeProfileID, {
+          ...pendingAssignments,
+          [normalizedItemID]: normalizedFolderName,
+        })
+      }
+      setItemFolderAssignments((current) => ({
+        ...current,
+        [normalizedItemID]: normalizedFolderName,
+      }))
+    },
+    [activeProfileID, workspaceSnapshotReady]
+  )
 
   useEffect(() => {
     selectedItemIDRef.current = selectedItemID
@@ -2048,6 +2327,7 @@ export function Collection({
       setPasteCreateError(null)
       setPasteCreateSuccess(null)
       setPasteCreateHistory([])
+      setPasteCreateDuplicates([])
       selectInventoryItem(null)
       setItemEditorOpen(true)
     },
@@ -2175,30 +2455,27 @@ export function Collection({
       return
     }
 
-    setItemFolderAssignments((current) => ({
-      ...current,
-      [assignCollectionItem.id]: assignCollectionName,
-    }))
+    assignInventoryItemToFolder(assignCollectionItem.id, assignCollectionName)
     selectInventoryItem(assignCollectionItem)
     setAssignCollectionOpen(false)
     setAssignCollectionError(null)
   }, [
     assignCollectionItem,
     assignCollectionName,
+    assignInventoryItemToFolder,
     assignWorkspaceItemToCollection,
     selectInventoryItem,
   ])
 
   const selectInventoryFolder = useCallback(
     (nextFolder: string) => {
-      const safeFolder =
-        selectionExistsInInventoryFolders(
-          workspaceCollections,
-          folderTree,
-          nextFolder
-        )
-          ? nextFolder
-          : 'All Items'
+      const safeFolder = selectionExistsInInventoryFolders(
+        workspaceCollections,
+        folderTree,
+        nextFolder
+      )
+        ? nextFolder
+        : 'All Items'
       setActiveFolder(safeFolder)
       setInventoryFolderBrowserOpen(false)
       if (workspaceCollections.includes(safeFolder)) {
@@ -2236,8 +2513,11 @@ export function Collection({
         selectInventoryItem(null)
         return
       }
+      if (inventoryLoadInFlightRef.current) {
+        return
+      }
+      inventoryLoadInFlightRef.current = true
       setLoading(true)
-      setLoadError(null)
       try {
         const response = await fetch('/api/items')
         if (!response.ok) {
@@ -2252,6 +2532,7 @@ export function Collection({
             condition?: string
             category?: string
             item_type?: string
+            packaging_grade_type?: string
             brand?: string
             priority?: string
             description?: string
@@ -2271,6 +2552,7 @@ export function Collection({
             item_type:
               item.item_type?.trim() ||
               inferItemTypeFromCategory(item.category?.trim() || 'General'),
+            packaging_grade_type: item.packaging_grade_type?.trim() ?? '',
             brand: item.brand?.trim() || 'Unknown',
             priority: item.priority?.trim() || 'medium',
             description: item.description?.trim() ?? '',
@@ -2306,6 +2588,7 @@ export function Collection({
         setInventoryItems(items)
         setTableData(mapped)
         selectInventoryItem(targetItem)
+        setLoadError(null)
       } catch {
         setLoadError(
           'Inventory failed to load. Retry and confirm runtime API availability.'
@@ -2314,6 +2597,7 @@ export function Collection({
         setTableData([])
         selectInventoryItem(null)
       } finally {
+        inventoryLoadInFlightRef.current = false
         setLoading(false)
       }
     },
@@ -2321,8 +2605,11 @@ export function Collection({
   )
 
   useEffect(() => {
+    if (routePath === '/_authenticated/inventory/' && !activeProfileResolved) {
+      return
+    }
     void loadInventoryItems()
-  }, [loadInventoryItems])
+  }, [activeProfileResolved, loadInventoryItems, routePath])
 
   const saveDroppedInventoryImage = useCallback(
     async (file: File) => {
@@ -2371,10 +2658,7 @@ export function Collection({
             activeFolder
           )
           if (assigned) {
-            setItemFolderAssignments((current) => ({
-              ...current,
-              [savedID]: activeFolder,
-            }))
+            assignInventoryItemToFolder(savedID, activeFolder)
           }
         }
 
@@ -2399,7 +2683,12 @@ export function Collection({
         setImageDropBusy(false)
       }
     },
-    [activeFolder, ensureWorkspaceCollectionAndAssignItem, loadInventoryItems]
+    [
+      activeFolder,
+      assignInventoryItemToFolder,
+      ensureWorkspaceCollectionAndAssignItem,
+      loadInventoryItems,
+    ]
   )
 
   const handleInventoryImageDrag = useCallback(
@@ -2846,13 +3135,10 @@ export function Collection({
 
       event.preventDefault()
       event.stopPropagation()
-      setItemFolderAssignments((previous) => ({
-        ...previous,
-        [itemID]: node.name,
-      }))
+      assignInventoryItemToFolder(itemID, node.name)
       setActiveFolder(node.name)
     },
-    []
+    [assignInventoryItemToFolder]
   )
 
   const clearFolderHTMLDrag = useCallback(() => {
@@ -2928,17 +3214,14 @@ export function Collection({
   )
 
   const renderFolderTree = useCallback(
-    (
-      nodes: FolderNode[],
-      level = 1,
-      options: FolderTreeRenderOptions = {}
-    ) => {
+    (nodes: FolderNode[], level = 1, options: FolderTreeRenderOptions = {}) => {
       const showActions = options.showActions ?? true
       const showDragHandles = options.showDragHandles ?? true
-      return (
-      nodes.map((node) => {
+      const forceExpandAll = options.forceExpandAll ?? false
+      return nodes.map((node) => {
         const hasChildren = Boolean(node.children?.length)
-        const expanded = hasChildren && expandedNodeIDs.has(node.id)
+        const expanded =
+          hasChildren && (forceExpandAll || expandedNodeIDs.has(node.id))
         const isActive = activeFolder === node.name
         const isChildDropTarget =
           dragTarget?.kind === 'child' && dragTarget.nodeID === node.id
@@ -3323,7 +3606,6 @@ export function Collection({
           </div>
         )
       })
-      )
     },
     [
       activeFolder,
@@ -3357,6 +3639,11 @@ export function Collection({
         : folderTree,
     [folderTree, isInventoryRoute, itemFolderAssignments, tableData]
   )
+  const inventoryFolderBrowserQueryTrimmed = inventoryFolderBrowserQuery.trim()
+  const inventoryFolderBrowserTree = useMemo(
+    () => filterFolderTreeByQuery(folderTree, inventoryFolderBrowserQuery),
+    [folderTree, inventoryFolderBrowserQuery]
+  )
   const activeFolderIsAvailable =
     activeFolder === 'All Items' ||
     folderTreeContainsName(folderTree, activeFolder)
@@ -3388,7 +3675,9 @@ export function Collection({
   )
   const selectedItemTypeForCondition =
     itemDraft.item_type.trim() ||
-    inferItemTypeFromCategory(itemDraft.category || selectedInventoryItem?.category || '')
+    inferItemTypeFromCategory(
+      itemDraft.category || selectedInventoryItem?.category || ''
+    )
   const inventoryConditionOptions = useMemo(
     () =>
       conditionsForItemType(
@@ -3690,11 +3979,16 @@ export function Collection({
 
   useEffect(() => {
     if (!isInventoryRoute) {
+      pendingItemFolderAssignmentsRef.current.clear()
       setActiveProfileID('')
+      setActiveProfileResolved(false)
       setWorkspaceSnapshotReady(false)
+      setLoading(false)
       return
     }
     let cancelled = false
+    setLoading(true)
+    setActiveProfileResolved(false)
     const loadActiveProfile = async () => {
       try {
         const response = await fetch('/api/profiles/active')
@@ -3708,6 +4002,10 @@ export function Collection({
       } catch {
         if (!cancelled) {
           setActiveProfileID('')
+        }
+      } finally {
+        if (!cancelled) {
+          setActiveProfileResolved(true)
         }
       }
     }
@@ -3726,6 +4024,19 @@ export function Collection({
     let cancelled = false
     setWorkspaceSnapshotReady(false)
 
+    const takePendingAssignments = () => {
+      const unresolvedAssignments =
+        pendingItemFolderAssignmentsRef.current.get('') ?? {}
+      const profileAssignments =
+        pendingItemFolderAssignmentsRef.current.get(activeProfileID) ?? {}
+      pendingItemFolderAssignmentsRef.current.delete('')
+      pendingItemFolderAssignmentsRef.current.delete(activeProfileID)
+      return {
+        ...unresolvedAssignments,
+        ...profileAssignments,
+      }
+    }
+
     const hydrateWorkspaceSnapshot = async () => {
       try {
         const remoteTree = await loadProfileWorkspaceSnapshot(activeProfileID)
@@ -3735,6 +4046,8 @@ export function Collection({
           await loadProfileInventoryCategoryOptions(activeProfileID)
         const remoteItemTypeConditionScales =
           await loadInventoryItemTypeConditionScales()
+        const remoteInventoryPackagingGrades =
+          await loadInventoryPackagingGrades()
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
         const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = remoteTree ?? localTree ?? initialFolderTree
@@ -3751,10 +4064,16 @@ export function Collection({
           return
         }
 
+        const pendingAssignments = takePendingAssignments()
+        const hydratedAssignments = {
+          ...nextAssignments,
+          ...pendingAssignments,
+        }
         setFolderTree(nextTree)
-        setItemFolderAssignments(nextAssignments)
+        setItemFolderAssignments(hydratedAssignments)
         setCategoryOptions(nextCategories)
         setItemTypeConditionScales(remoteItemTypeConditionScales)
+        setInventoryPackagingGrades(remoteInventoryPackagingGrades)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3767,10 +4086,16 @@ export function Collection({
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
         const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = localTree ?? initialFolderTree
+        const pendingAssignments = takePendingAssignments()
+        const hydratedAssignments = {
+          ...localAssignments,
+          ...pendingAssignments,
+        }
         setFolderTree(nextTree)
-        setItemFolderAssignments(localAssignments)
+        setItemFolderAssignments(hydratedAssignments)
         setCategoryOptions(defaultInventoryCategoryOptions)
         setItemTypeConditionScales(defaultInventoryItemTypeConditionScales)
+        setInventoryPackagingGrades(defaultInventoryPackagingGrades)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3814,6 +4139,7 @@ export function Collection({
       brand: itemDraft.brand.trim(),
       category: itemDraft.category.trim(),
       item_type: itemDraft.item_type.trim(),
+      packaging_grade_type: itemDraft.packaging_grade_type.trim(),
       description: itemDraft.description.trim(),
       notes: itemDraft.notes.trim(),
       tags: itemDraft.tags.trim(),
@@ -3874,7 +4200,8 @@ export function Collection({
     try {
       let instancePayload: InventoryInstance | null = null
       const shouldSaveInstance =
-        primaryInstance !== null || hasInventoryInstanceDraftValue(itemInstanceDraft)
+        primaryInstance !== null ||
+        hasInventoryInstanceDraftValue(itemInstanceDraft)
       if (shouldSaveInstance) {
         const priceText = itemInstanceDraft.acquisition_price.trim()
         const quantityText = itemInstanceDraft.quantity.trim()
@@ -3959,10 +4286,7 @@ export function Collection({
         if (!assigned) {
           throw new Error('create_item_collection_assignment')
         }
-        setItemFolderAssignments((current) => ({
-          ...current,
-          [savedID]: targetCreateCollection,
-        }))
+        assignInventoryItemToFolder(savedID, targetCreateCollection)
         setActiveFolder(targetCreateCollection)
       }
       if (wasCreateMode && itemCreatePhotoFile) {
@@ -4045,11 +4369,11 @@ export function Collection({
   }, [
     itemCreateBarcodeInput,
     itemCreateCollectionName,
-    itemCreateIntent,
     itemCreatePhotoFile,
     itemDraft,
     itemInstanceDraft,
     itemEditorMode,
+    assignInventoryItemToFolder,
     ensureWorkspaceCollectionAndAssignItem,
     loadInventoryItemDetails,
     loadInventoryItems,
@@ -4302,6 +4626,7 @@ export function Collection({
       setBarcodeMatches([])
       return
     }
+    const lookupStartedAt = Date.now()
     setBarcodeLookupBusy(true)
     setBarcodeLookupError(null)
     setBarcodeLookupCompleted(false)
@@ -4339,6 +4664,14 @@ export function Collection({
       setBarcodeLookupCompleted(false)
       setBarcodeMatches([])
     } finally {
+      const minimumLoadingDurationMs = 250
+      const remainingLoadingDurationMs =
+        minimumLoadingDurationMs - (Date.now() - lookupStartedAt)
+      if (remainingLoadingDurationMs > 0) {
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, remainingLoadingDurationMs)
+        )
+      }
       setBarcodeLookupBusy(false)
     }
   }, [])
@@ -4397,7 +4730,7 @@ export function Collection({
   }, [lastLookupBarcode])
 
   const processPasteCreateInput = useCallback(
-    (rawValue?: string, historyOverride?: PasteCreateHistoryEntry[]) => {
+    async (rawValue?: string, historyOverride?: PasteCreateHistoryEntry[]) => {
       const source = (rawValue ?? pasteCreateInput).trim()
       if (source === '') {
         setPasteCreateError('Paste a URL or text before processing an item.')
@@ -4408,6 +4741,7 @@ export function Collection({
       setPasteCreateBusy(true)
       setPasteCreateError(null)
       setPasteCreateSuccess(null)
+      setPasteCreateDuplicates([])
       try {
         const baseHistory = historyOverride ?? pasteCreateHistory
         const nextEntry: PasteCreateHistoryEntry =
@@ -4417,7 +4751,32 @@ export function Collection({
         const nextHistory = [...baseHistory, nextEntry]
         const sourceURL =
           nextHistory.find((entry) => entry.kind === 'url')?.value ?? undefined
-        const generatedDraft = buildQuickCreateDraft(source)
+        let generatedDraft = buildQuickCreateDraft(source)
+        let successMessage = 'Paste processed into the item draft.'
+
+        if (nextEntry.kind === 'url') {
+          const response = await fetch('/api/providers/product-url/ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: source, capture_for_review: true }),
+          })
+          const payload = (await response
+            .json()
+            .catch(() => ({}))) as ProviderProductURLIngestResponse
+          if (response.ok && !payload.error && payload.draft) {
+            generatedDraft = providerProductDraftToInventoryDraft(
+              source,
+              payload
+            )
+            setPasteCreateDuplicates(payload.duplicates ?? [])
+            successMessage =
+              (payload.duplicates?.length ?? 0) > 0
+                ? 'Provider data loaded. Review duplicate matches before creating another item.'
+                : 'Provider data loaded into the item draft.'
+          } else {
+            setPasteCreateError(providerProductFallbackMessage(payload))
+          }
+        }
 
         setItemDraft((current) => {
           const shouldHydrateIdentity = nextEntry.kind !== 'prompt'
@@ -4433,15 +4792,27 @@ export function Collection({
             item_type: shouldHydrateIdentity
               ? generatedDraft.item_type
               : current.item_type,
-            description: buildPasteCreateDescription(nextHistory, sourceURL),
-            notes: current.notes,
+            packaging_grade_type: shouldHydrateIdentity
+              ? generatedDraft.packaging_grade_type
+              : current.packaging_grade_type,
+            description: shouldHydrateIdentity
+              ? generatedDraft.description
+              : buildPasteCreateDescription(nextHistory, sourceURL),
+            notes: shouldHydrateIdentity ? generatedDraft.notes : current.notes,
             tags: shouldHydrateIdentity ? generatedDraft.tags : current.tags,
-            source_urls: sourceURL ?? current.source_urls,
+            source_urls: shouldHydrateIdentity
+              ? generatedDraft.source_urls
+              : (sourceURL ?? current.source_urls),
           }
         })
         setPasteCreateHistory(nextHistory)
-        setPasteCreateSuccess('Paste processed into the item draft.')
+        setPasteCreateSuccess(successMessage)
         return true
+      } catch {
+        setPasteCreateError(
+          'Provider ingest failed. The pasted value is still available for manual item creation.'
+        )
+        return false
       } finally {
         setPasteCreateBusy(false)
       }
@@ -4463,7 +4834,7 @@ export function Collection({
       const text = await navigator.clipboard.readText()
       setPasteCreateInput(text)
       if (text.trim() !== '') {
-        processPasteCreateInput(text, [])
+        await processPasteCreateInput(text, [])
       }
     } catch {
       setPasteCreateSuccess(
@@ -4620,10 +4991,22 @@ export function Collection({
                   <Ellipsis className='size-4' aria-hidden />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align='end'>
+              <DropdownMenuContent
+                align='end'
+                onCloseAutoFocus={(event) => {
+                  if (!createMenuDialogTransitionRef.current) {
+                    return
+                  }
+                  event.preventDefault()
+                  createMenuDialogTransitionRef.current = false
+                }}
+              >
                 <DropdownMenuItem
                   data-testid='inventory-create-menu-item'
-                  onClick={startManualCreateItem}
+                  onSelect={() => {
+                    createMenuDialogTransitionRef.current = true
+                    startManualCreateItem()
+                  }}
                 >
                   New Item
                 </DropdownMenuItem>
@@ -4666,7 +5049,7 @@ export function Collection({
         onDragLeave={handleInventoryImageDragLeave}
         onDrop={handleInventoryImageDrop}
       >
-        {(imageDropActive || imageDropBusy || imageDropMessage) ? (
+        {imageDropActive || imageDropBusy || imageDropMessage ? (
           <div
             className={cn(
               'rounded-lg border border-dashed px-4 py-3 text-sm',
@@ -4687,7 +5070,7 @@ export function Collection({
           className='grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]'
           data-testid='inventory-workspace'
         >
-          <Card className='flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0'>
+          <Card className='flex max-h-[calc(100vh-7rem)] min-h-[24rem] min-w-0 flex-col overflow-hidden xl:max-h-none xl:min-h-0'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
@@ -4757,7 +5140,7 @@ export function Collection({
                       onDrop={(event) =>
                         handleFolderHTMLDrop({ kind: 'root' }, event)
                       }
-                      className='rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
+                      className='sticky top-0 z-10 rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
                     >
                       Drop here to move folder to the root level
                     </div>
@@ -4992,7 +5375,7 @@ export function Collection({
           </Card>
 
           <Card
-            className='flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0'
+            className='flex min-h-[24rem] min-w-0 flex-col overflow-hidden xl:min-h-0'
             data-testid='inventory-table-card'
           >
             <CardContent className='flex min-h-0 flex-1 flex-col gap-4 pt-6'>
@@ -5021,7 +5404,7 @@ export function Collection({
                   </strong>
                 </span>
               </p>
-              {loading ? (
+              {loading && !loadError ? (
                 <div
                   className='rounded-md border p-6 text-sm text-muted-foreground'
                   data-testid='inventory-loading'
@@ -5037,10 +5420,20 @@ export function Collection({
                   <p className='font-medium'>Inventory load failed</p>
                   <p className='mt-1 text-muted-foreground'>{loadError}</p>
                   <Button
+                    type='button'
                     className='mt-3'
                     variant='outline'
                     size='sm'
+                    data-testid='inventory-retry-action'
+                    disabled={loading}
+                    aria-busy={loading}
                     onClick={() => void loadInventoryItems()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        void loadInventoryItems()
+                      }
+                    }}
                   >
                     Retry
                   </Button>
@@ -5068,7 +5461,12 @@ export function Collection({
                       <DropdownMenu
                         modal={false}
                         open={inventoryFolderBrowserOpen}
-                        onOpenChange={setInventoryFolderBrowserOpen}
+                        onOpenChange={(open) => {
+                          setInventoryFolderBrowserOpen(open)
+                          if (!open) {
+                            setInventoryFolderBrowserQuery('')
+                          }
+                        }}
                       >
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -5084,8 +5482,19 @@ export function Collection({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align='start'
-                          className='w-[min(32rem,92vw)] p-2'
+                          className='w-[min(32rem,92vw)] space-y-2 p-2'
                         >
+                          <Input
+                            type='search'
+                            value={inventoryFolderBrowserQuery}
+                            aria-label='Search inventory folders'
+                            placeholder='Search folders'
+                            data-testid='inventory-folder-browser-search'
+                            className='h-8'
+                            onChange={(event) =>
+                              setInventoryFolderBrowserQuery(event.target.value)
+                            }
+                          />
                           <div
                             role='tree'
                             aria-label='Inventory folder filter'
@@ -5121,10 +5530,30 @@ export function Collection({
                                   Drop here to move folder to the root level
                                 </div>
                               ) : null}
-                              {renderFolderTree(folderTree, 1, {
-                                showActions: false,
-                                showDragHandles: false,
-                              })}
+                              {inventoryFolderBrowserTree.length > 0 ? (
+                                renderFolderTree(
+                                  inventoryFolderBrowserTree,
+                                  1,
+                                  {
+                                    showActions: false,
+                                    showDragHandles: false,
+                                    forceExpandAll:
+                                      inventoryFolderBrowserQueryTrimmed.length >
+                                      0,
+                                  }
+                                )
+                              ) : (
+                                <div
+                                  className='rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground'
+                                  data-testid='inventory-folder-browser-empty'
+                                >
+                                  No folders match
+                                  {inventoryFolderBrowserQueryTrimmed
+                                    ? ` "${inventoryFolderBrowserQueryTrimmed}"`
+                                    : ''}
+                                  .
+                                </div>
+                              )}
                             </div>
                           </div>
                         </DropdownMenuContent>
@@ -5163,6 +5592,10 @@ export function Collection({
                 onAssignCollectionRow={(task) => {
                   const matchedItem = resolveInventoryItemFromTask(task)
                   openInventoryAssignCollectionForItem(matchedItem)
+                }}
+                onDeleteRow={(task) => {
+                  setTasksDialogRow(task)
+                  setTasksDialogOpen('delete')
                 }}
               />
               {isInventoryRoute ? (
@@ -5254,6 +5687,7 @@ export function Collection({
                         setPasteCreateError(null)
                         setPasteCreateSuccess(null)
                         setPasteCreateHistory([])
+                        setPasteCreateDuplicates([])
                       }
                     }}
                   >
@@ -5310,6 +5744,7 @@ export function Collection({
                                   setPasteCreateInput(event.target.value)
                                   setPasteCreateError(null)
                                   setPasteCreateSuccess(null)
+                                  setPasteCreateDuplicates([])
                                 }}
                               />
                               <Button
@@ -5319,7 +5754,7 @@ export function Collection({
                                 aria-label='Process pasted URL or text'
                                 title='Process pasted URL or text'
                                 disabled={pasteCreateBusy}
-                                onClick={() => processPasteCreateInput()}
+                                onClick={() => void processPasteCreateInput()}
                               >
                                 <CircleArrowUp
                                   className='size-5'
@@ -5344,6 +5779,73 @@ export function Collection({
                               >
                                 {pasteCreateSuccess}
                               </p>
+                            ) : null}
+                            {pasteCreateDuplicates.length > 0 ? (
+                              <div
+                                className='space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100'
+                                data-testid='inventory-create-duplicate-warning'
+                              >
+                                <p className='font-medium'>
+                                  Possible duplicate item
+                                </p>
+                                {pasteCreateDuplicates.map((duplicate) => (
+                                  <div
+                                    key={duplicate.item_id}
+                                    className='flex flex-wrap items-center justify-between gap-2'
+                                    data-testid='inventory-create-duplicate-candidate'
+                                  >
+                                    <span>
+                                      {duplicate.title || duplicate.item_id} (
+                                      {duplicate.reasons.join(', ')})
+                                    </span>
+                                    <Button
+                                      type='button'
+                                      size='sm'
+                                      variant='outline'
+                                      data-testid='inventory-create-open-duplicate'
+                                      onClick={() => {
+                                        const existing =
+                                          inventoryItems.find(
+                                            (item) =>
+                                              item.id === duplicate.item_id
+                                          ) ?? null
+                                        if (existing) {
+                                          openInventoryItemEditor(
+                                            existing,
+                                            'dialog'
+                                          )
+                                        } else {
+                                          selectInventoryItem({
+                                            id: duplicate.item_id,
+                                            part_number: duplicate.item_id,
+                                            title:
+                                              duplicate.title ||
+                                              duplicate.item_id,
+                                            status: 'active',
+                                            condition: '',
+                                            category: '',
+                                            item_type: '',
+                                            packaging_grade_type: '',
+                                            brand: '',
+                                            priority: '',
+                                            description: '',
+                                            notes: '',
+                                            tags: [],
+                                            source_urls:
+                                              duplicate.source_urls ?? [],
+                                          })
+                                        }
+                                      }}
+                                    >
+                                      Open existing
+                                    </Button>
+                                  </div>
+                                ))}
+                                <p className='text-xs'>
+                                  Creating another item from this source still
+                                  requires pressing Save.
+                                </p>
+                              </div>
                             ) : null}
                             {pasteCreateHistory.length > 0 ? (
                               <div
@@ -5630,6 +6132,36 @@ export function Collection({
                             ))}
                           </select>
                         </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-item-packaging-grade'
+                          >
+                            Packaging grade
+                          </label>
+                          <select
+                            id='inventory-item-packaging-grade'
+                            data-testid='inventory-item-packaging-grade'
+                            className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                            value={itemDraft.packaging_grade_type}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                packaging_grade_type: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value=''>Choose packaging grade</option>
+                            {inventoryPackagingGrades.map((packagingGrade) => (
+                              <option
+                                key={packagingGrade}
+                                value={packagingGrade}
+                              >
+                                {packagingGrade}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         {itemEditorMode === 'edit' ? (
                           <>
                             <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
@@ -5776,6 +6308,7 @@ export function Collection({
                     </DialogContent>
                   </Dialog>
                   <Sheet
+                    modal={false}
                     open={itemEditorOpen && itemEditorSurface === 'panel'}
                     onOpenChange={(open) => {
                       setItemEditorOpen(open)
@@ -5786,17 +6319,17 @@ export function Collection({
                   >
                     <SheetContent
                       side='right'
-                      className='w-[min(30rem,92vw)] overflow-y-auto sm:max-w-[30rem]'
+                      className='h-svh w-[min(30rem,92vw)] gap-0 overflow-hidden sm:max-w-[30rem]'
                       data-testid='inventory-item-editor-panel'
                     >
-                      <SheetHeader className='text-start'>
+                      <SheetHeader className='shrink-0 border-b pe-12 text-start'>
                         <SheetTitle>Edit Item</SheetTitle>
                         <SheetDescription data-testid='inventory-item-editor-mode'>
                           Editing selected item: {selectedItemContext}
                         </SheetDescription>
                       </SheetHeader>
                       <div
-                        className='space-y-4 px-4'
+                        className='min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4'
                         data-testid='inventory-item-edit-panel'
                       >
                         <section
@@ -5894,10 +6427,7 @@ export function Collection({
                                     )
                                   }
                                 >
-                                  <RotateCcw
-                                    className='size-4'
-                                    aria-hidden
-                                  />
+                                  <RotateCcw className='size-4' aria-hidden />
                                 </Button>
                                 <Button
                                   type='button'
@@ -6102,6 +6632,36 @@ export function Collection({
                               ))}
                             </select>
                           </div>
+                        </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-panel-item-packaging-grade'
+                          >
+                            Packaging grade
+                          </label>
+                          <select
+                            id='inventory-panel-item-packaging-grade'
+                            data-testid='inventory-item-packaging-grade'
+                            className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                            value={itemDraft.packaging_grade_type}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                packaging_grade_type: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value=''>Choose packaging grade</option>
+                            {inventoryPackagingGrades.map((packagingGrade) => (
+                              <option
+                                key={packagingGrade}
+                                value={packagingGrade}
+                              >
+                                {packagingGrade}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div className='space-y-2'>
                           <label
@@ -6488,7 +7048,7 @@ export function Collection({
                           </div>
                         ) : null}
                       </div>
-                      <SheetFooter className='gap-2 sm:flex-row sm:justify-between'>
+                      <SheetFooter className='shrink-0 gap-2 border-t bg-background sm:flex-row sm:justify-between'>
                         <div className='flex gap-2'>
                           <Button
                             type='button'

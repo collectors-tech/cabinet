@@ -68,7 +68,7 @@ func TestBigCommerceRegistryExposesFamilyAndActiveMode(t *testing.T) {
 	}
 }
 
-func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
+func TestBigCommerceRunStorefrontModePersistsCandidatesAndSnapshot(t *testing.T) {
 	t.Parallel()
 
 	storefrontServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +127,7 @@ func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
 		AuthMode         string           `json:"auth_mode"`
 		DataDepthSource  string           `json:"data_depth_source"`
 		CapabilityLimits []string         `json:"capability_limits"`
+		CandidateCount   int              `json:"candidate_count"`
 		Candidates       []map[string]any `json:"candidates"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
@@ -143,6 +144,216 @@ func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
 	}
 	if len(payload.Candidates) != 1 {
 		t.Fatalf("expected one candidate, got=%d", len(payload.Candidates))
+	}
+	if payload.CandidateCount != 1 {
+		t.Fatalf("expected candidate_count=1, got=%d", payload.CandidateCount)
+	}
+	if got, _ := payload.Candidates[0]["source"].(string); got != "voglers.com.au" {
+		t.Fatalf("expected persisted BigCommerce candidate source=voglers.com.au, got %#v", payload.Candidates[0]["source"])
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	var latest map[string]any
+	for _, item := range querySetPayload.QuerySets {
+		if fmt.Sprintf("%v", item["id"]) == qs.ID {
+			latest = item
+			break
+		}
+	}
+	if latest == nil {
+		t.Fatalf("expected query set %s in reloaded response: %+v", qs.ID, querySetPayload.QuerySets)
+	}
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected persisted last_run_status=succeeded, got %#v", latest["last_run_status"])
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected persisted last_candidate_count=1, got %#v", latest["last_candidate_count"])
+	}
+}
+
+func TestBigCommerceRunPartialProviderResponseFailsWithoutPersistenceOrFalseSuccess(t *testing.T) {
+	t.Parallel()
+
+	partialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"products":[{"id":"partial"`))
+	}))
+	defer partialServer.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BigCommercePartialResponseProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"AFX partial","keywords":["AFX"],"provider_scope":["voglers.com.au"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	run := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/providers/bigcommerce/run",
+		strings.NewReader(fmt.Sprintf(`{"query_set_id":"%s","provider_domain":"voglers.com.au","search_url":"%s/products/search"}`, qs.ID, partialServer.URL)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("partial provider run status=%d body=%s", run.Code, run.Body.String())
+	}
+	if !strings.Contains(run.Body.String(), `"error":"failed_to_run_bigcommerce_storefront_mode"`) {
+		t.Fatalf("partial provider run returned untruthful error body=%s", run.Body.String())
+	}
+
+	var candidateCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM scanner_candidates WHERE query_set_id = ?`, qs.ID).Scan(&candidateCount); err != nil {
+		t.Fatalf("count partial-response candidates: %v", err)
+	}
+	if candidateCount != 0 {
+		t.Fatalf("partial provider response persisted %d candidates", candidateCount)
+	}
+	var runCount int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM scanner_runs WHERE query_set_id = ?`, qs.ID).Scan(&runCount); err != nil {
+		t.Fatalf("count partial-response runs: %v", err)
+	}
+	if runCount != 0 {
+		t.Fatalf("partial provider response persisted %d successful runs", runCount)
+	}
+	var healthStatus, healthMessage string
+	if err := a.db.QueryRow(`SELECT status, message FROM provider_health WHERE provider = 'voglers.com.au'`).Scan(&healthStatus, &healthMessage); err != nil {
+		t.Fatalf("load partial-response provider health: %v", err)
+	}
+	if healthStatus != "failed" || strings.TrimSpace(healthMessage) == "" {
+		t.Fatalf("partial provider response must record failed health, got status=%q message=%q", healthStatus, healthMessage)
+	}
+}
+
+func TestBigCommerceRunStorefrontHTMLModeRecordsLiveProof(t *testing.T) {
+	t.Parallel()
+
+	storefrontServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/search.php" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("search_query"); got != "slot car" {
+			http.Error(w, `{"error":"missing_search_query"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+<article class="card" data-entity-id="20849">
+  <h3 class="card-title">
+    <a href="https://www.voglers.com.au/cardinal-wooden-puzzle-m/?searchid=fixture&amp;search_query=slot+car">
+      Cardinal Wooden Puzzle (M)
+    </a>
+  </h3>
+  <div class="card-text" data-test-info-type="price">
+    <span data-product-price-with-tax class="price">$32.00</span>
+  </div>
+</article>`))
+	}))
+	defer storefrontServer.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BigCommerceHTMLLiveProofProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"Slot car","keywords":["slot car"],"provider_scope":["voglers.com.au"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+
+	run := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/providers/bigcommerce/run",
+		strings.NewReader(fmt.Sprintf(`{"query_set_id":"%s","provider_domain":"voglers.com.au","search_url":"%s/search.php"}`, qs.ID, storefrontServer.URL)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if run.Code != http.StatusOK {
+		t.Fatalf("bigcommerce html storefront run status=%d body=%s", run.Code, run.Body.String())
+	}
+	var payload struct {
+		AuthMode       string           `json:"auth_mode"`
+		CandidateCount int              `json:"candidate_count"`
+		Candidates     []map[string]any `json:"candidates"`
+	}
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode run payload: %v", err)
+	}
+	if payload.AuthMode != "storefront_public" || payload.CandidateCount != 1 || len(payload.Candidates) != 1 {
+		t.Fatalf("expected one storefront_public HTML candidate, got %+v", payload)
+	}
+	if got, _ := payload.Candidates[0]["source"].(string); got != "voglers.com.au" {
+		t.Fatalf("expected source=voglers.com.au, got %+v", payload.Candidates[0])
+	}
+	if got, _ := payload.Candidates[0]["title"].(string); got != "Cardinal Wooden Puzzle (M)" {
+		t.Fatalf("expected HTML title to be normalized, got %+v", payload.Candidates[0])
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var registryPayload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&registryPayload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	voglers := findRegistryProvider(registryPayload.Providers, "au-webshop-voglers-com-au")
+	if voglers == nil {
+		t.Fatalf("Voglers provider missing from registry payload: %+v", registryPayload.Providers)
+	}
+	if got := fmt.Sprintf("%v", voglers["beta_release_status"]); got != "available_live_validated" {
+		t.Fatalf("Voglers beta release status got %q want available_live_validated: %+v", got, voglers)
+	}
+	if got := fmt.Sprintf("%v", voglers["live_evidence_state"]); got != "validated" {
+		t.Fatalf("Voglers live evidence state got %q want validated: %+v", got, voglers)
 	}
 }
 
@@ -233,7 +444,10 @@ func TestBigCommerceRunTokenModeUnlocksRicherDepth(t *testing.T) {
 		AuthMode         string           `json:"auth_mode"`
 		DataDepthSource  string           `json:"data_depth_source"`
 		CapabilityLimits []string         `json:"capability_limits"`
+		CandidateCount   int              `json:"candidate_count"`
 		Candidates       []map[string]any `json:"candidates"`
+		Run              map[string]any   `json:"run"`
+		RunSummary       map[string]any   `json:"run_summary"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode run payload: %v", err)
@@ -249,5 +463,53 @@ func TestBigCommerceRunTokenModeUnlocksRicherDepth(t *testing.T) {
 	}
 	if len(payload.Candidates) != 1 {
 		t.Fatalf("expected one candidate, got=%d", len(payload.Candidates))
+	}
+	if payload.CandidateCount != 1 {
+		t.Fatalf("expected candidate_count=1, got=%d", payload.CandidateCount)
+	}
+	if got, _ := payload.Candidates[0]["source"].(string); got != "voglers.com.au" {
+		t.Fatalf("expected persisted BigCommerce candidate source=voglers.com.au, got %#v", payload.Candidates[0]["source"])
+	}
+	if got, _ := payload.Candidates[0]["title"].(string); got != "AFX Mega G+ Corvette" {
+		t.Fatalf("expected persisted token-mode candidate title, got %#v", payload.Candidates[0]["title"])
+	}
+	if saved, ok := payload.Run["saved"].(float64); !ok || int(saved) != 1 {
+		t.Fatalf("expected persisted token-mode run saved=1, got %+v", payload.Run)
+	}
+	if got, _ := payload.RunSummary["auth_mode"].(string); got != "token_enabled" {
+		t.Fatalf("expected run summary auth_mode=token_enabled, got %#v", payload.RunSummary["auth_mode"])
+	}
+	if got, _ := payload.RunSummary["data_depth_source"].(string); got != "token_enabled" {
+		t.Fatalf("expected run summary data_depth_source=token_enabled, got %#v", payload.RunSummary["data_depth_source"])
+	}
+	if total, ok := payload.RunSummary["candidates_total"].(float64); !ok || int(total) != 1 {
+		t.Fatalf("expected run summary candidates_total=1, got %+v", payload.RunSummary)
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	var latest map[string]any
+	for _, item := range querySetPayload.QuerySets {
+		if fmt.Sprintf("%v", item["id"]) == qs.ID {
+			latest = item
+			break
+		}
+	}
+	if latest == nil {
+		t.Fatalf("expected query set %s in reloaded response: %+v", qs.ID, querySetPayload.QuerySets)
+	}
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected persisted token-mode last_run_status=succeeded, got %#v", latest["last_run_status"])
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected persisted token-mode last_candidate_count=1, got %#v", latest["last_candidate_count"])
 	}
 }

@@ -1,0 +1,36 @@
+{
+  "query": "Scalextric Bathurst",
+  "page": 1,
+  "page_size": 2,
+  "range_start": 0,
+  "range_end": 1,
+  "total_pages": 2,
+  "complete": false,
+  "items": [
+    {
+      "listing_id": "BONZA-501",
+      "variation_id": "RED",
+      "title": "Scalextric Ford Mustang Bathurst Red",
+      "price": 99.95,
+      "currency": "AUD",
+      "url": "https://www.bonzaslotcars.com.au/product/scalextric-mustang-bathurst-red/",
+      "image_url": "https://www.bonzaslotcars.com.au/wp-content/uploads/mustang-red.jpg",
+      "seller": "Bonza Slot Cars",
+      "stock_state": "available",
+      "stock_count": 2,
+      "field_confidence": {"title": 0.99, "price": 0.98, "stock_state": 0.9}
+    },
+    {
+      "listing_id": "BONZA-502",
+      "title": "Scalextric Holden Bathurst Winner",
+      "price": 109.95,
+      "currency": "AUD",
+      "url": "https://www.bonzaslotcars.com.au/product/scalextric-holden-bathurst-winner/",
+      "image_url": "https://www.bonzaslotcars.com.au/wp-content/uploads/holden-winner.jpg",
+      "seller": "Bonza Slot Cars",
+      "stock_state": "low_stock",
+      "stock_count": 1,
+      "field_confidence": {"title": 0.99, "price": 0.98, "stock_state": 0.85}
+    }
+  ]
+}

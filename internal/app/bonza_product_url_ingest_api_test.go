@@ -1,0 +1,460 @@
+package app
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestProviderProductURLIngestRoutesBonzaProductURL(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/wp-json/wc/store/v1/products") {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("search"); got != "bonza mug white" {
+			t.Fatalf("expected slug-derived Store API search, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"id":19603,
+			"name":"BONZA MUG WHITE",
+			"slug":"bonza-mug-white",
+			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
+			"description":"<p>White ceramic Bonza mug.</p>",
+			"prices":{"currency_code":"AUD","price":"995"},
+			"is_in_stock":true,
+			"low_stock_remaining":3,
+			"categories":[{"name":"AFX ACCESSORIES HO"},{"name":"MERCHANDISE"}],
+			"attributes":[{"name":"Brand","terms":["AFX"]},{"name":"Scale","terms":["1:64"]},{"name":"Type","terms":["Tracks"]}],
+			"images":[{"src":"https://bonzaslotcars.com.au/wp-content/uploads/BONZA-MUG.jpg"}]
+		}]`))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusOK {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	var payload struct {
+		Mode     string         `json:"mode"`
+		Provider string         `json:"provider"`
+		Family   string         `json:"family"`
+		Route    map[string]any `json:"route"`
+		Draft    struct {
+			ProviderProductID string            `json:"provider_product_id"`
+			Title             string            `json:"title"`
+			SourceURL         string            `json:"source_url"`
+			Price             float64           `json:"price"`
+			Currency          string            `json:"currency"`
+			StockState        string            `json:"stock_state"`
+			StockCount        int               `json:"stock_count"`
+			Description       string            `json:"description"`
+			Categories        []string          `json:"categories"`
+			Attributes        map[string]string `json:"attributes"`
+			ImageURLs         []string          `json:"image_urls"`
+		} `json:"draft"`
+		Evidence   map[string]any `json:"evidence"`
+		Duplicates []struct {
+			ItemID  string   `json:"item_id"`
+			Reasons []string `json:"reasons"`
+		} `json:"duplicates"`
+	}
+	if err := json.NewDecoder(ingest.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode ingest payload: %v", err)
+	}
+	if payload.Mode != "provider_product_url_ingest" || payload.Provider != "bonzaslotcars" || payload.Family != "woocommerce" {
+		t.Fatalf("unexpected route envelope: %+v", payload)
+	}
+	if payload.Route["slug"] != "bonza-mug-white" || payload.Route["action"] != "ingest_product_url" {
+		t.Fatalf("unexpected route detail: %+v", payload.Route)
+	}
+	if payload.Draft.ProviderProductID != "19603" || payload.Draft.Title != "BONZA MUG WHITE" {
+		t.Fatalf("unexpected Bonza draft identity: %+v", payload.Draft)
+	}
+	if payload.Draft.SourceURL != "https://bonzaslotcars.com.au/product/bonza-mug-white/" {
+		t.Fatalf("unexpected source URL: %s", payload.Draft.SourceURL)
+	}
+	if payload.Draft.Price != 9.95 || payload.Draft.Currency != "AUD" {
+		t.Fatalf("unexpected price/currency: %+v", payload.Draft)
+	}
+	if payload.Draft.StockState != "in_stock" || payload.Draft.StockCount != 3 {
+		t.Fatalf("unexpected stock: %+v", payload.Draft)
+	}
+	if len(payload.Draft.Categories) != 2 || payload.Draft.Attributes["Brand"] != "AFX" || payload.Draft.Attributes["Scale"] != "1:64" || payload.Draft.Attributes["Type"] != "Tracks" {
+		t.Fatalf("unexpected category/attribute mapping: %+v", payload.Draft)
+	}
+	if len(payload.Draft.ImageURLs) != 1 || !strings.Contains(payload.Draft.Description, "White ceramic Bonza mug") {
+		t.Fatalf("unexpected image/description mapping: %+v", payload.Draft)
+	}
+	if payload.Evidence["provider"] != "bonzaslotcars" || payload.Evidence["family"] != "woocommerce" || payload.Evidence["extraction_method"] != "store_api" {
+		t.Fatalf("unexpected evidence: %+v", payload.Evidence)
+	}
+	if len(payload.Duplicates) != 0 {
+		t.Fatalf("expected no duplicate candidates, got %+v", payload.Duplicates)
+	}
+}
+
+func TestProviderProductURLIngestReturnsDuplicateCandidates(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"id":19603,
+			"name":"BONZA MUG WHITE",
+			"slug":"bonza-mug-white",
+			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
+			"prices":{"currency_code":"AUD","price":"995"},
+			"is_in_stock":true,
+			"attributes":[{"name":"Brand","terms":[{"name":"AFX","slug":"afx"}]}]
+		}]`))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+	createExisting := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{
+		"part_number":"BONZA-19603",
+		"title":"Existing Bonza Mug",
+		"brand":"AFX",
+		"category":"MERCHANDISE",
+		"notes":"provider_product_id=19603",
+		"source_urls":["https://bonzaslotcars.com.au/product/bonza-mug-white/"]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createExisting.Code != http.StatusCreated {
+		t.Fatalf("create existing status=%d body=%s", createExisting.Code, createExisting.Body.String())
+	}
+	var existing struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createExisting.Body).Decode(&existing); err != nil {
+		t.Fatalf("decode existing item: %v", err)
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusOK {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	var payload struct {
+		Duplicates []struct {
+			ItemID     string   `json:"item_id"`
+			Title      string   `json:"title"`
+			SourceURLs []string `json:"source_urls"`
+			Reasons    []string `json:"reasons"`
+		} `json:"duplicates"`
+	}
+	if err := json.NewDecoder(ingest.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode ingest payload: %v", err)
+	}
+	if len(payload.Duplicates) != 1 {
+		t.Fatalf("expected one duplicate candidate, got %+v", payload.Duplicates)
+	}
+	duplicate := payload.Duplicates[0]
+	if duplicate.ItemID != existing.ID || duplicate.Title != "Existing Bonza Mug" {
+		t.Fatalf("unexpected duplicate identity: %+v", duplicate)
+	}
+	if !containsString(duplicate.Reasons, "source_url") || !containsString(duplicate.Reasons, "provider_product_id") {
+		t.Fatalf("expected source URL and provider product id reasons, got %+v", duplicate.Reasons)
+	}
+}
+
+func TestProviderProductURLIngestSucuriChallengeRequiresBrowserAction(t *testing.T) {
+	t.Parallel()
+
+	challengeScript := `r=String.fromCharCode(54)+'b'+"8"+"c"+String.fromCharCode(99)+"2"+"4"+"6"+"9"+"d"+"5"+"d"+"1"+"4"+"e"+"f"+"5"+"8"+"e"+"8"+"d"+"5"+"5"+"a"+"9"+"4"+"0"+"6"+"9"+"1"+"7"+"8"+'';document.cookie='s'+'u'+'c'+'u'+'r'+'i'+'_'+'c'+'l'+'o'+'u'+'d'+'p'+'r'+'o'+'x'+'y'+'_'+'u'+'u'+'i'+'d'+'_'+'d'+'7'+'c'+'b'+'c'+'9'+'1'+'8'+'a'+"=" + r + ';path=/;max-age=86400'; location.reload();`
+	challengeBody := "Javascript is required.<script>S='" + base64.StdEncoding.EncodeToString([]byte(challengeScript)) + "';sucuri_cloudproxy_js='';</script>"
+	requests := 0
+	var cookies []string
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		cookies = append(cookies, r.Header.Get("Cookie"))
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(challengeBody))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusConflict {
+		t.Fatalf("ingest status=%d want=%d requests=%d cookies=%q body=%s", ingest.Code, http.StatusConflict, requests, cookies, ingest.Body.String())
+	}
+	if requests != 1 {
+		t.Fatalf("expected one fail-closed request without challenge retry, got %d requests", requests)
+	}
+	if len(cookies) != 1 || cookies[0] != "" {
+		t.Fatalf("expected no exported or synthesised cookies, got %q", cookies)
+	}
+	for _, want := range []string{
+		`"error":"browser_action_required"`,
+		`"fallback_state":"browser_companion_user_present"`,
+		`"next_action":"open_in_browser_and_sync_with_companion"`,
+	} {
+		if !strings.Contains(ingest.Body.String(), want) {
+			t.Fatalf("expected %s in browser-action response, got %s", want, ingest.Body.String())
+		}
+	}
+}
+
+func TestProviderProductURLIngestDoesNotRetryChainedSucuriChallenges(t *testing.T) {
+	t.Parallel()
+
+	firstChallenge := bonzaSucuriChallengeBody(t, "sucuri_cloudproxy_uuid_first", "first-cookie-value")
+	requests := 0
+	var cookies []string
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		cookies = append(cookies, r.Header.Get("Cookie"))
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		_, _ = w.Write([]byte(firstChallenge))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusConflict {
+		t.Fatalf("ingest status=%d want=%d requests=%d cookies=%q body=%s", ingest.Code, http.StatusConflict, requests, cookies, ingest.Body.String())
+	}
+	if requests != 1 {
+		t.Fatalf("expected one fail-closed request, got %d requests", requests)
+	}
+	if len(cookies) != 1 || cookies[0] != "" {
+		t.Fatalf("expected no exported or synthesised cookies, got %q", cookies)
+	}
+	if !strings.Contains(ingest.Body.String(), `"error":"browser_action_required"`) {
+		t.Fatalf("expected browser_action_required, got %s", ingest.Body.String())
+	}
+}
+
+func TestProviderProductURLIngestRejectsKnownProviderNonProductURL(t *testing.T) {
+	t.Parallel()
+
+	a, _ := newBonzaIngestTestApp(t)
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/shop/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusBadRequest {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	if !strings.Contains(ingest.Body.String(), "supported_provider_unsupported_page") {
+		t.Fatalf("expected unsupported-page envelope, got %s", ingest.Body.String())
+	}
+	if !strings.Contains(ingest.Body.String(), `"fallback_state":"manual_url_capture"`) || !strings.Contains(ingest.Body.String(), `"static_extraction_attempted":false`) {
+		t.Fatalf("expected manual URL capture guidance for known non-product page, got %s", ingest.Body.String())
+	}
+}
+
+func TestProviderProductURLIngestPersistsManualReviewCaptureForUnsupportedPage(t *testing.T) {
+	t.Parallel()
+
+	a, _ := newBonzaIngestTestApp(t)
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/shop/","capture_for_review":true}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusBadRequest {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	body := ingest.Body.String()
+	for _, want := range []string{
+		`"fallback_state":"manual_url_capture"`,
+		`"review_capture_persisted":true`,
+		`"source_url":"https://bonzaslotcars.com.au/shop/"`,
+		`"status":"manual_review"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in manual review capture response, got %s", want, body)
+		}
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list items status=%d body=%s", list.Code, list.Body.String())
+	}
+	var listed struct {
+		Items []struct {
+			Title      string   `json:"title"`
+			Status     string   `json:"status"`
+			Notes      string   `json:"notes"`
+			Tags       []string `json:"tags"`
+			SourceURLs []string `json:"source_urls"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode items: %v", err)
+	}
+	if len(listed.Items) != 1 {
+		t.Fatalf("expected one persisted manual review item, got %d: %+v", len(listed.Items), listed.Items)
+	}
+	item := listed.Items[0]
+	if item.Title != "Manual review: bonzaslotcars.com.au/shop" || item.Status != "active" {
+		t.Fatalf("unexpected persisted item title/status: %+v", item)
+	}
+	if !stringSliceContains(item.Tags, "manual-url-capture") || !stringSliceContains(item.Tags, "provider-review") {
+		t.Fatalf("expected manual review tags, got %+v", item.Tags)
+	}
+	if len(item.SourceURLs) != 1 || item.SourceURLs[0] != "https://bonzaslotcars.com.au/shop/" {
+		t.Fatalf("expected source URL to be preserved, got %+v", item.SourceURLs)
+	}
+	if !strings.Contains(item.Notes, "fallback_state=manual_url_capture") || !strings.Contains(item.Notes, "static_extraction_attempted=false") {
+		t.Fatalf("expected fallback evidence in notes, got %q", item.Notes)
+	}
+}
+
+func TestProviderProductURLIngestReturnsBrowserCompanionGuidanceAfterStaticFailure(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/wp-json/wc/store/v1/products") {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`temporarily blocked by storefront challenge`))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusBadRequest {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	body := ingest.Body.String()
+	for _, want := range []string{
+		`"error":"failed_to_ingest_bonza_product_url"`,
+		`"fallback_state":"browser_companion_user_present"`,
+		`"static_extraction_attempted":true`,
+		`"next_action":"open_in_browser_and_sync_with_companion"`,
+		`"guidance":"Static product extraction was attempted first but the storefront did not return usable public product data. Open Bonza yourself in the paired Browser Companion and sync the rendered product; Cabinet does not run a hidden browser or export session data."`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in failure guidance, got %s", want, body)
+		}
+	}
+}
+
+func TestProviderRegistryPublishesBrowserCompanionFallbackStates(t *testing.T) {
+	t.Parallel()
+
+	a, _ := newBonzaIngestTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	var bonza map[string]any
+	for _, provider := range payload.Providers {
+		if fmt.Sprintf("%v", provider["provider_id"]) == "au-webshop-bonzaslotcars-com-au" {
+			bonza = provider
+			break
+		}
+	}
+	if bonza == nil {
+		t.Fatal("expected Bonza provider registry entry")
+	}
+	if got := fmt.Sprintf("%v", bonza["fallback_state"]); got != "browser_companion_user_present" {
+		t.Fatalf("Bonza fallback_state got %q want browser_companion_user_present: %+v", got, bonza)
+	}
+	if got := fmt.Sprintf("%v", bonza["browser_companion_state"]); got != "available_when_paired" {
+		t.Fatalf("Bonza browser_companion_state got %q want available_when_paired: %+v", got, bonza)
+	}
+	if got := fmt.Sprintf("%v", bonza["manual_capture_action"]); got != "provider_product_url_ingest" {
+		t.Fatalf("Bonza manual_capture_action got %q want provider_product_url_ingest: %+v", got, bonza)
+	}
+	capabilities, ok := bonza["capabilities"].(map[string]any)
+	if !ok || capabilities["manual_url_capture"] != true || capabilities["headless_default"] != false {
+		t.Fatalf("expected manual URL capture capability and no default headless crawling, got %+v", capabilities)
+	}
+}
+
+func newBonzaIngestTestApp(t *testing.T) (*App, string) {
+	t.Helper()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"BonzaIngestProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	return a, profile.ID
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func bonzaSucuriChallengeBody(t *testing.T, cookieName, cookieValue string) string {
+	t.Helper()
+
+	nameExpr := sucuriConcatExpression(cookieName)
+	valueExpr := sucuriConcatExpression(cookieValue)
+	challengeScript := "r=" + valueExpr + ";document.cookie=" + nameExpr + "+\"=\"+r+';path=/;max-age=86400'; location.reload();"
+	return "Javascript is required.<script>S='" + base64.StdEncoding.EncodeToString([]byte(challengeScript)) + "';sucuri_cloudproxy_js='';</script>"
+}
+
+func sucuriConcatExpression(value string) string {
+	parts := make([]string, 0, len(value))
+	for _, char := range value {
+		parts = append(parts, fmt.Sprintf("%q", string(char)))
+	}
+	return strings.Join(parts, "+")
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}

@@ -1,0 +1,212 @@
+name: Develop Quality Gate
+
+on:
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  contract:
+    name: Workflow contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Enforce production dependency security
+        run: npm run security:dependencies
+      - name: Build runtime UI static bundle for contract tests
+        run: npm run build
+        working-directory: ui.web
+      - name: Verify deployment infrastructure contracts
+        run: npm run test:infra
+      - name: Validate Docker Compose deployments
+        run: bash scripts/validate-compose-deployments.sh
+      - name: Verify ZITADEL application auth contracts
+        run: npm run test:auth-infra
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Verify develop gate workflow contract
+        run: go test ./tests -run TestDevelopQualityGateWorkflowContract -count=1
+
+  openspec:
+    name: OpenSpec strict validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install OpenSpec CLI
+        run: npm install -g @fission-ai/openspec@latest
+      - name: Validate OpenSpec
+        run: openspec validate --all --strict --no-interactive
+
+  ui-build:
+    name: UI production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build ui.web bundle
+        run: npm run build
+        working-directory: ui.web
+      - name: Verify Browser Companion protocol lifecycle
+        run: node --test browser-extension/tests/*.test.mjs
+      - name: Verify Browser Companion package controls
+        run: npm run test:companion-package
+      - name: Build deterministic Browser Companion validation packages
+        run: |
+          companion_sha="$(git rev-parse HEAD)"
+          companion_epoch="$(git show -s --format=%ct HEAD)"
+          node scripts/package-browser-companion.mjs --source-commit "$companion_sha" --source-date-epoch "$companion_epoch" --output "$RUNNER_TEMP/browser-companion" --keep-staging
+          node scripts/verify-browser-companion-package.mjs --manifest "$RUNNER_TEMP/browser-companion/browser-companion-release-manifest.json" --expected-source-commit "$companion_sha"
+      - name: Load packaged Browser Companion in Chrome and Edge
+        env:
+          CABINET_EXTENSION_CHROME_ROOT: ${{ runner.temp }}/browser-companion/.staging/chrome
+          CABINET_EXTENSION_EDGE_ROOT: ${{ runner.temp }}/browser-companion/.staging/edge
+        run: node scripts/verify-browser-extension-load.mjs
+
+  go-tests:
+    name: Go runtime package tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for Go tests
+        run: npm run build
+        working-directory: ui.web
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Run complete Go repository test suite
+        run: go test ./...
+
+  openapi:
+    name: OpenAPI parity and docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for OpenAPI tests
+        run: npm run build
+        working-directory: ui.web
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Verify complete API/OpenAPI parity suite
+        run: go run ./cmd/openapi-parity-gate
+      - name: Lint OpenAPI
+        run: npx --yes @redocly/cli@latest lint docs/api/openapi.yaml
+      - name: Build API docs
+        run: npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html
+      - name: Upload API docs artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: develop-gate-api-docs
+          path: docs/api/index.html
+
+  cypress-smoke:
+    name: Cypress login/profile/runtime smoke
+    runs-on: ubuntu-latest
+    needs: ui-build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for Cypress
+        run: npm run build
+        working-directory: ui.web
+      - name: Run Cypress smoke gate
+        uses: cypress-io/github-action@v6
+        with:
+          install: false
+          working-directory: ui.web
+          start: npm run serve:go
+          wait-on: "http://127.0.0.1:17880/healthz"
+          wait-on-timeout: 120
+          command: npm run e2e:ci-smoke
+          browser: electron
+        env:
+          CABINET_E2E_MODE: "1"
+          CABINET_OPEN_BROWSER: "0"
+      - name: Upload Cypress artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: develop-gate-cypress-artifacts
+          path: |
+            ui.web/cypress/artifacts
+            ui.web/cypress/screenshots
+            ui.web/cypress/videos
+
+  windows-package:
+    name: Windows portable package verification
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm --prefix ui.web ci
+      - name: Verify Cabinet release package controls
+        run: npm run test:release-package
+      - name: Build and verify exact Windows portable package
+        shell: pwsh
+        run: |
+          $sourceCommit = git rev-parse HEAD
+          ./scripts/package-installers.ps1 -ExpectedCommit $sourceCommit -OutputDirectory "$env:RUNNER_TEMP/cabinet-package"
+          node scripts/verify-cabinet-release-package.mjs --manifest "$env:RUNNER_TEMP/cabinet-package/cabinet-release-manifest.json" --expected-source-commit $sourceCommit

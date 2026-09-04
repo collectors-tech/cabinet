@@ -243,6 +243,10 @@ describe("wishlist-pricing-columns", () => {
         ],
       },
     }).as("priceTrend");
+    cy.intercept("GET", "/api/pricing/history?item_id=item-price-1", {
+      statusCode: 200,
+      body: { history: [] },
+    }).as("priceHistory");
     cy.intercept("PUT", "/api/wishlist", (req) => {
       expect(req.body.id).to.eq("wish-price-1");
       wishlistEntries = wishlistEntries.map((entry) =>
@@ -257,9 +261,10 @@ describe("wishlist-pricing-columns", () => {
     cy.wait("@catalogItems");
     cy.wait("@priceStats");
     cy.wait("@priceTrend");
+    cy.wait("@priceHistory");
 
     cy.get('button[aria-label="Switch to rows view"]').click();
-    expectHeaderVisible("Owned");
+    expectHeaderVisible("Purchased");
     expectHeaderVisible("Price Paid");
     expectHeaderVisible("Qty");
     expectHeaderVisible("Needs");
@@ -318,20 +323,44 @@ describe("wishlist-pricing-columns", () => {
       });
     cy.get('[data-testid="wishlist-price-paid-value-item-price-1"]').should(
       "contain.text",
-      "$18.25"
+      "USD"
+    );
+    cy.get('[data-testid="wishlist-price-paid-value-item-price-1"]').should(
+      "contain.text",
+      "18.25"
     );
 
-    cy.get('[data-testid="wishlist-qty-input-item-price-1"]').type(
-      "{selectall}3{enter}",
-      { force: true }
-    );
+    cy.get('[data-testid="wishlist-qty-increase-item-price-1"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .click({ force: true });
     cy.wait("@updateWishlistEntry")
       .its("request.body")
       .should("include", { id: "wish-price-1", quantity: 3 });
-    cy.get('[data-testid="wishlist-needs-input-item-price-1"]').type(
-      "{selectall}5{enter}",
-      { force: true }
-    );
+    cy.get('[data-testid="wishlist-needs-increase-item-price-1"]')
+      .scrollIntoView()
+      .should("be.visible");
+    cy.get('[data-testid="wishlist-needs-increase-item-price-1"]').click({
+      force: true,
+    });
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", { id: "wish-price-1", needed_quantity: 2 });
+    cy.get('[data-testid="wishlist-needs-increase-item-price-1"]').click({
+      force: true,
+    });
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", { id: "wish-price-1", needed_quantity: 3 });
+    cy.get('[data-testid="wishlist-needs-increase-item-price-1"]').click({
+      force: true,
+    });
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", { id: "wish-price-1", needed_quantity: 4 });
+    cy.get('[data-testid="wishlist-needs-increase-item-price-1"]').click({
+      force: true,
+    });
     cy.wait("@updateWishlistEntry")
       .its("request.body")
       .should("include", { id: "wish-price-1", needed_quantity: 5 });
@@ -347,16 +376,20 @@ describe("wishlist-pricing-columns", () => {
       .should("be.visible");
     cy.get('[data-testid="wishlist-price-paid-value-item-price-1"]').should(
       "contain.text",
-      "$18.25"
+      "USD"
     );
-    cy.get('[data-testid="wishlist-qty-input-item-price-1"]').should(
-      "have.value",
-      "3"
+    cy.get('[data-testid="wishlist-price-paid-value-item-price-1"]').should(
+      "contain.text",
+      "18.25"
     );
-    cy.get('[data-testid="wishlist-needs-input-item-price-1"]').should(
-      "have.value",
-      "5"
-    );
+    cy.get('[data-testid="wishlist-qty-input-item-price-1"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .should("have.value", "3");
+    cy.get('[data-testid="wishlist-needs-input-item-price-1"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .should("have.value", "5");
     cy.get('[data-testid="wishlist-purchase-open-item-price-1"]').click({
       force: true,
     });
@@ -407,6 +440,10 @@ describe("wishlist-pricing-columns", () => {
       statusCode: 200,
       body: { points: [] },
     }).as("priceTrend");
+    cy.intercept("GET", "/api/pricing/history?item_id=item-default-1", {
+      statusCode: 200,
+      body: { history: [] },
+    }).as("priceHistory");
     cy.intercept("PUT", "/api/wishlist", (req) => {
       expect(req.body.id).to.eq("wish-default-1");
       wishlistEntries = wishlistEntries.map((entry) =>
@@ -421,6 +458,7 @@ describe("wishlist-pricing-columns", () => {
     cy.wait("@catalogItems");
     cy.wait("@priceStats");
     cy.wait("@priceTrend");
+    cy.wait("@priceHistory");
 
     cy.get('button[aria-label="Switch to rows view"]').click();
     cy.get('[data-testid="wishlist-purchase-open-item-default-1"]').click({
@@ -451,7 +489,11 @@ describe("wishlist-pricing-columns", () => {
       });
     cy.get('[data-testid="wishlist-price-paid-value-item-default-1"]').should(
       "contain.text",
-      "$25.00"
+      "USD"
+    );
+    cy.get('[data-testid="wishlist-price-paid-value-item-default-1"]').should(
+      "contain.text",
+      "25.00"
     );
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
+import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,7 +13,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetClose,
@@ -23,18 +22,25 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Textarea } from '@/components/ui/textarea'
 import { SelectDropdown } from '@/components/select-dropdown'
 import { priorities } from '../data/data'
 import { type Task } from '../data/schema'
+import { formatMoney } from './tasks-column-formatters'
 
 export type WishlistEntryDraft = {
   title: string
   partNumber: string
   category: string
+  itemType: string
+  packagingGradeType: string
+  condition: string
   priority: string
   notes: string
   targetPrice: string
+  currency: string
   owned: boolean
+  delivered: boolean
   pricePaid: string
   purchaseUrl: string
   purchaseDate: string
@@ -57,6 +63,9 @@ type TaskMutateDrawerProps = {
   canNavigateNext?: boolean
   onNavigatePrevious?: () => void
   onNavigateNext?: () => void
+  wishlistItemTypeOptions?: string[]
+  wishlistPackagingGradeOptions?: string[]
+  wishlistConditionOptions?: string[]
 }
 
 const taskFormSchema = z.object({
@@ -70,15 +79,23 @@ const wishlistFormSchema = z.object({
   title: z.string().trim().min(1, 'Title is required.'),
   partNumber: z.string(),
   category: z.string(),
+  itemType: z.string(),
+  packagingGradeType: z.string(),
+  condition: z.string(),
   priority: z.string().trim().min(1, 'Please choose a priority.'),
   notes: z.string(),
   owned: z.boolean(),
+  delivered: z.boolean(),
   targetPrice: z.string().refine((value) => {
-      if (value.trim() === '') {
-        return true
-      }
-      return !Number.isNaN(Number(value)) && Number(value) >= 0
-    }, 'Target price must be a positive number.'),
+    if (value.trim() === '') {
+      return true
+    }
+    return !Number.isNaN(Number(value)) && Number(value) >= 0
+  }, 'Target price must be a positive number.'),
+  currency: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z]{3}$/, 'Currency must be a three-letter code.'),
   pricePaid: z.string().refine((value) => {
     if (value.trim() === '') {
       return true
@@ -115,13 +132,18 @@ function wishlistDefaults(currentRow?: Task): WishlistForm {
     title: currentRow?.title ?? '',
     partNumber: currentRow?.partNumber ?? '',
     category: currentRow?.label ?? '',
+    itemType: currentRow?.itemType ?? '',
+    packagingGradeType: currentRow?.packagingGradeType ?? '',
+    condition: currentRow?.condition ?? '',
     priority: currentRow?.priority ?? 'medium',
     notes: currentRow?.notes ?? '',
     owned: Boolean(currentRow?.owned),
+    delivered: Boolean(currentRow?.delivered),
     targetPrice:
       typeof currentRow?.targetPrice === 'number' && currentRow.targetPrice > 0
         ? String(currentRow.targetPrice)
         : '',
+    currency: currentRow?.currency ?? 'USD',
     pricePaid: formatMoneyDraft(currentRow?.pricePaid),
     purchaseUrl: currentRow?.purchaseUrl ?? '',
     purchaseDate: currentRow?.purchaseDate ?? '',
@@ -129,16 +151,6 @@ function wishlistDefaults(currentRow?: Task): WishlistForm {
     quantity: formatIntegerDraft(currentRow?.quantity, 0),
     neededQuantity: formatIntegerDraft(currentRow?.neededQuantity, 1),
   }
-}
-
-function formatDisplayMoney(value: number | undefined) {
-  if (typeof value !== 'number' || value <= 0) {
-    return '-'
-  }
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
 }
 
 export function TasksMutateDrawer({
@@ -152,6 +164,9 @@ export function TasksMutateDrawer({
   canNavigateNext = false,
   onNavigatePrevious,
   onNavigateNext,
+  wishlistItemTypeOptions = [],
+  wishlistPackagingGradeOptions = [],
+  wishlistConditionOptions = [],
 }: TaskMutateDrawerProps) {
   const isUpdate = !!currentRow
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
@@ -199,10 +214,15 @@ export function TasksMutateDrawer({
         title: data.title.trim(),
         partNumber: data.partNumber.trim(),
         category: data.category.trim(),
+        itemType: data.itemType.trim(),
+        packagingGradeType: data.packagingGradeType.trim(),
+        condition: data.condition.trim(),
         priority: data.priority.trim(),
         notes: data.notes.trim(),
         targetPrice: data.targetPrice.trim(),
-        owned: data.owned,
+        currency: data.currency.trim().toUpperCase(),
+        owned: data.owned || data.delivered,
+        delivered: data.delivered,
         pricePaid: data.pricePaid.trim(),
         purchaseUrl: data.purchaseUrl.trim(),
         purchaseDate: data.purchaseDate.trim(),
@@ -306,6 +326,77 @@ export function TasksMutateDrawer({
                   </FormItem>
                 )}
               />
+              <div className='grid gap-4 sm:grid-cols-3'>
+                <FormField
+                  control={wishlistForm.control}
+                  name='itemType'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Item Type</FormLabel>
+                      <select
+                        className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                        data-testid='wishlist-item-type'
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      >
+                        <option value=''>Choose item type</option>
+                        {wishlistItemTypeOptions.map((itemType) => (
+                          <option key={itemType} value={itemType}>
+                            {itemType}
+                          </option>
+                        ))}
+                      </select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='condition'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Condition</FormLabel>
+                      <select
+                        className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                        data-testid='wishlist-condition'
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      >
+                        <option value=''>Choose condition</option>
+                        {wishlistConditionOptions.map((condition) => (
+                          <option key={condition} value={condition}>
+                            {condition}
+                          </option>
+                        ))}
+                      </select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='packagingGradeType'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Packaging Grade</FormLabel>
+                      <select
+                        className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                        data-testid='wishlist-packaging-grade'
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      >
+                        <option value=''>Choose packaging grade</option>
+                        {wishlistPackagingGradeOptions.map((packagingGrade) => (
+                          <option key={packagingGrade} value={packagingGrade}>
+                            {packagingGrade}
+                          </option>
+                        ))}
+                      </select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               {currentRow ? (
                 <div className='rounded-md border p-3 text-sm'>
                   <p data-testid='wishlist-edit-item-id'>
@@ -346,7 +437,7 @@ export function TasksMutateDrawer({
                 name='owned'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Owned</FormLabel>
+                    <FormLabel>Purchased</FormLabel>
                     <FormControl>
                       <button
                         type='button'
@@ -357,13 +448,49 @@ export function TasksMutateDrawer({
                         onClick={() => field.onChange(!field.value)}
                       >
                         <span>
-                          {field.value ? 'Owned' : 'Still on wishlist'}
+                          {field.value ? 'Purchased' : 'Still on wishlist'}
                         </span>
                         <span aria-hidden='true'>
                           {field.value ? 'Yes' : 'No'}
                         </span>
                       </button>
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={wishlistForm.control}
+                name='delivered'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delivered</FormLabel>
+                    <FormControl>
+                      <button
+                        type='button'
+                        role='checkbox'
+                        aria-checked={field.value}
+                        data-testid='wishlist-edit-delivered'
+                        className='flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm'
+                        onClick={() => {
+                          const nextDelivered = !field.value
+                          field.onChange(nextDelivered)
+                          if (nextDelivered) {
+                            wishlistForm.setValue('owned', true)
+                          }
+                        }}
+                      >
+                        <span>
+                          {field.value ? 'Delivered' : 'Awaiting delivery'}
+                        </span>
+                        <span aria-hidden='true'>
+                          {field.value ? 'Yes' : 'No'}
+                        </span>
+                      </button>
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>
+                      Delivered items are also saved as Purchased.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -376,7 +503,7 @@ export function TasksMutateDrawer({
                       className='font-medium'
                       data-testid='wishlist-edit-market-price'
                     >
-                      {formatDisplayMoney(currentRow.marketPrice)}
+                      {formatMoney(currentRow.marketPrice)}
                     </p>
                   </div>
                   <div data-testid='wishlist-edit-price-graph'>
@@ -396,25 +523,48 @@ export function TasksMutateDrawer({
                   </div>
                 </div>
               ) : null}
-              <FormField
-                control={wishlistForm.control}
-                name='targetPrice'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Target Price</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type='number'
-                        min='0'
-                        step='0.01'
-                        placeholder='Optional target price'
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className='grid gap-4 sm:grid-cols-[1fr_8rem]'>
+                <FormField
+                  control={wishlistForm.control}
+                  name='targetPrice'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Target Price</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='0'
+                          step='0.01'
+                          placeholder='Optional target price'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='currency'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Currency</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          maxLength={3}
+                          autoCapitalize='characters'
+                          placeholder='USD'
+                          onChange={(event) =>
+                            field.onChange(event.target.value.toUpperCase())
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <div className='grid gap-4 sm:grid-cols-2'>
                 <FormField
                   control={wishlistForm.control}
@@ -553,7 +703,10 @@ export function TasksMutateDrawer({
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
-      <SheetContent className='flex flex-col'>
+      <SheetContent
+        className='flex flex-col'
+        data-testid='inventory-edit-panel'
+      >
         <SheetHeader className='text-start'>
           <SheetTitle>{isUpdate ? 'Update' : 'Create'} Task</SheetTitle>
           <SheetDescription>
@@ -576,7 +729,11 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder='Enter a title' />
+                    <Input
+                      {...field}
+                      data-testid='inventory-edit-title'
+                      placeholder='Enter a title'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -589,6 +746,7 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Status</FormLabel>
                   <SelectDropdown
+                    data-testid='inventory-edit-status'
                     defaultValue={field.value}
                     onValueChange={field.onChange}
                     placeholder='Select dropdown'
@@ -611,7 +769,11 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Label</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder='Enter a label' />
+                    <Input
+                      {...field}
+                      data-testid='inventory-edit-category'
+                      placeholder='Enter a label'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -624,6 +786,7 @@ export function TasksMutateDrawer({
                 <FormItem>
                   <FormLabel>Priority</FormLabel>
                   <SelectDropdown
+                    data-testid='inventory-edit-priority'
                     defaultValue={field.value}
                     onValueChange={field.onChange}
                     placeholder='Select priority'
@@ -640,9 +803,15 @@ export function TasksMutateDrawer({
         </Form>
         <SheetFooter className='gap-2'>
           <SheetClose asChild>
-            <Button variant='outline'>Close</Button>
+            <Button variant='outline' data-testid='inventory-edit-cancel'>
+              Close
+            </Button>
           </SheetClose>
-          <Button form='tasks-form' type='submit'>
+          <Button
+            form='tasks-form'
+            type='submit'
+            data-testid='inventory-edit-save'
+          >
             Save changes
           </Button>
         </SheetFooter>

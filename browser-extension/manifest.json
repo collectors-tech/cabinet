@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Cabinet Browser Companion (Development)",
+  "version": "0.1.0",
+  "version_name": "0.1.0-development",
+  "description": "Passively synchronise supported pages you open with Cabinet on this computer.",
+  "permissions": ["alarms", "sidePanel", "scripting", "storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "http://[::1]/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "background": {
+    "service_worker": "background/service-worker.mjs",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Cabinet Browser Companion",
+    "default_popup": "popup/popup.html"
+  },
+  "side_panel": {
+    "default_path": "popup/popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "minimum_chrome_version": "116"
+}

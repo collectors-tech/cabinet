@@ -8,7 +8,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -23,6 +23,13 @@ type InboxItem = {
   summary: string
   metadata?: {
     assistant?: { provider?: string; model?: string }
+    review_url?: string
+    preview_id?: string
+    confirmation_state?: string
+    telegram_reply?: {
+      review_url?: string
+      confirmation_state?: string
+    }
     item?: {
       id?: string
       title?: string
@@ -83,6 +90,14 @@ function sourceLabel(source?: string) {
 
 function itemLink(item: InboxItem) {
   const metadata = item.metadata
+  const reviewHref =
+    metadata?.review_url ?? metadata?.telegram_reply?.review_url ?? ''
+  if (item.source === 'telegram_catalog_capture' && reviewHref) {
+    return {
+      href: reviewHref,
+      label: 'Review Telegram capture',
+    }
+  }
   const href = metadata?.item?.href ?? metadata?.item_href
   const id = metadata?.item?.id ?? metadata?.item_id
   const title = metadata?.item?.title ?? metadata?.item_title
@@ -284,7 +299,7 @@ export function InboxWorkspacePanel() {
                     data-testid='shell-inbox-open-chats'
                     onClick={openChats}
                   >
-                    Open Chats
+                    Open Cabinet Agent
                   </Button>
                   <Button
                     type='button'
@@ -293,7 +308,7 @@ export function InboxWorkspacePanel() {
                     data-testid='shell-inbox-open-assistant-workspace'
                     onClick={() => setActiveWorkspace('assistant')}
                   >
-                    Open Assistant Workspace
+                    Open contextual Agent
                   </Button>
                 </div>
               </div>

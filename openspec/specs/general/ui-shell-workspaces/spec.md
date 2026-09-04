@@ -1,14 +1,16 @@
 ## Purpose
-Define the authenticated Cabinet shell workspace model so Navigation, Assistant, and Inbox are first-class workspaces instead of ad-hoc panels.
+Define the authenticated Cabinet shell workspace model so Navigation, Search, Assistant, and Inbox are first-class workspaces instead of ad-hoc panels.
 
 ## Requirements
-### Requirement UI-SHELL-WORKSPACES-001: Cabinet SHALL provide left-rail workspace switching for Navigation, Assistant, and Inbox
-Authenticated shell MUST provide a deterministic workspace switcher that exposes Navigation, Assistant, and Inbox as top-level shell workspaces.
+### Requirement UI-SHELL-WORKSPACES-001: Cabinet SHALL provide left-rail workspace switching for Navigation, Search, Assistant, and Inbox
+Authenticated shell MUST provide a deterministic workspace switcher that exposes Navigation, Search, Assistant, and Inbox as top-level shell workspaces.
 
 #### Scenario: Switch shell workspaces
 - **GIVEN** authenticated shell is visible
 - **WHEN** user selects `Navigation`
 - **THEN** left workspace region MUST show primary app navigation
+- **WHEN** user selects `Search`
+- **THEN** left workspace region MUST show a focused search workspace without navigating away from the current route
 - **WHEN** user selects `Assistant`
 - **THEN** left workspace region MUST show assistant thread/composer workspace
 - **WHEN** user selects `Inbox`
@@ -49,3 +51,37 @@ When Inbox has no items, the workspace MUST provide clear actions so users are n
 - **WHEN** the empty state renders
 - **THEN** the workspace MUST show at least one explicit refresh or navigation affordance
 - **AND** users MUST be able to open a related communications surface without guessing
+
+### Requirement UI-SHELL-WORKSPACES-006: Search workspace SHALL present dense navigation search from shell routes
+The Search workspace MUST use Cabinet shell navigation data as its source of truth and render compact command-style route results instead of a card-heavy modal or unrelated search theme.
+
+#### Scenario: Filter and open navigation route from Search workspace
+- **GIVEN** authenticated shell workspace rail is visible
+- **WHEN** user selects `Search`
+- **THEN** the left workspace/sidebar panel MUST show a compact dark Search workspace with an icon-only active Search rail state
+- **AND** the search input MUST be directly below the workspace rail
+- **AND** navigation results MUST be generated from `sidebarData.navGroups`
+- **AND** result rows MUST use dense command result structure with a primary title and muted `Group · /path` metadata
+- **AND** nested routes MUST render as `Parent / Child`
+- **WHEN** user filters and selects a route result
+- **THEN** Cabinet MUST navigate to that route while preserving Search as the active shell workspace
+
+### Requirement UI-SHELL-WORKSPACES-007: Workspace overflow menu SHALL expose Settings and left-panel navigation customisation
+Authenticated shell workspace rail MUST expose an overflow menu with `Customise Nav` and `Settings`. `Settings` MUST navigate to the Settings Display surface. `Customise Nav` MUST open a left workspace/sidebar panel that edits primary nav ordering and visibility as draft changes until the user applies them.
+
+#### Scenario: Open Settings from workspace overflow
+- **GIVEN** authenticated shell workspace rail is visible
+- **WHEN** user opens the overflow menu and selects `Settings`
+- **THEN** Cabinet MUST navigate to `/settings/display`
+- **AND** the overflow menu MUST close after selection
+
+#### Scenario: Customise primary nav in the left panel
+- **GIVEN** authenticated shell workspace rail is visible
+- **WHEN** user opens the overflow menu and selects `Customise Nav`
+- **THEN** the left workspace/sidebar panel MUST show `Customise Nav`
+- **AND** the panel MUST show visible item count, stable nav IDs, hide/show controls, move up/down controls, and drag handles where supported
+- **AND** the panel MUST keep footer actions visible for `Restore hidden items`, `Reset defaults`, `Cancel`, and `Apply`
+- **AND** move/hide draft changes MUST update the editor immediately without changing saved sidebar navigation until `Apply`
+- **AND** `Cancel` MUST discard pending changes
+- **AND** `Apply` MUST persist order and hidden state using shell/nav preference storage
+- **AND** hidden primary nav items MUST remain directly routable when permissions allow

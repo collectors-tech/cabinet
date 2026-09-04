@@ -14,11 +14,30 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
+import './i18n'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
 // Styles
 import './styles/index.css'
-import './i18n'
+
+function queryClientToastHistory({
+  title,
+  summary,
+  category = 'system',
+}: {
+  title: string
+  summary: string
+  category?: 'auth' | 'system'
+}) {
+  return {
+    history: {
+      title,
+      summary,
+      source_label: 'Global query client',
+      category,
+    },
+  } as never
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,7 +63,13 @@ const queryClient = new QueryClient({
 
         if (error instanceof AxiosError) {
           if (error.response?.status === 304) {
-            toast.error('Content not modified!')
+            toast.error(
+              'Content not modified!',
+              queryClientToastHistory({
+                title: 'Mutation content not modified',
+                summary: 'Mutation request returned HTTP 304.',
+              })
+            )
           }
         }
       },
@@ -54,7 +79,14 @@ const queryClient = new QueryClient({
     onError: (error) => {
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
-          toast.error('Session expired!')
+          toast.error(
+            'Session expired!',
+            queryClientToastHistory({
+              title: 'Session expired',
+              summary: 'Query request returned HTTP 401 and reset auth state.',
+              category: 'auth',
+            })
+          )
           useAuthStore.getState().auth.reset()
           const redirect = normalizeAuthRedirectTarget(
             `${router.history.location.href}`
@@ -65,7 +97,13 @@ const queryClient = new QueryClient({
           })
         }
         if (error.response?.status === 500) {
-          toast.error('Internal Server Error!')
+          toast.error(
+            'Internal Server Error!',
+            queryClientToastHistory({
+              title: 'Internal server error',
+              summary: 'Query request returned HTTP 500.',
+            })
+          )
           // Only navigate to error page in production to avoid disrupting HMR in development
           if (import.meta.env.PROD) {
             router.navigate({ to: '/500' })

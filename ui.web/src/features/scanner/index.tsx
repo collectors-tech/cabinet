@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ScanSearch } from 'lucide-react'
+import { Play, Plus, ScanSearch } from 'lucide-react'
+import { getRouteHeaderTitleProps } from '@/lib/route-navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -21,6 +22,10 @@ type QuerySet = {
   condition?: string
   schedule_cron?: string
   enabled?: boolean
+  last_run_status?: 'never' | 'running' | 'succeeded' | 'failed'
+  last_run_at?: string
+  last_run_message?: string
+  last_candidate_count?: number
 }
 
 type Failure = {
@@ -28,12 +33,65 @@ type Failure = {
   query_set_id: string
   provider: string
   message: string
+  retry_guidance?: string
+  next_action?: string
+}
+
+const marketWatchHeader = getRouteHeaderTitleProps('/scanner')
+
+type ProviderHealth = {
+  provider?: string
+  status?: string
+  state?: string
+  category?: string
+  label?: string
+  guidance?: string
+  message?: string
+  last_error?: string | null
+  retry_after_seconds?: number | null
+  next_action?: string | null
+  updated_at?: string | null
+}
+
+type MarketWatchProviderOption = {
+  value: string
+  label: string
+  category?: string
+  state?: string
+}
+
+type ProviderRegistryEntry = {
+  provider_id?: string
+  display_name?: string
+  provider_category?: string
+  provider_type?: string
+  market_watch_scope?: string
+  state?: string
+  capabilities?: Record<string, boolean>
+  workflow_refs?: string[]
+}
+
+type RunHistoryRecord = {
+  id: string
+  query_set_id: string
+  provider: string
+  trigger_type: string
+  started_at: string
+  finished_at: string
+  status: 'never' | 'running' | 'succeeded' | 'failed'
+  result_count: number
+  new_result_count: number
+  error_category?: string
+  error_message?: string
+  retry_guidance?: string
+  next_action?: string
 }
 
 type ActionFeedback = {
   summary: string
   actions: string[]
   diagnosticCode?: string
+  diagnostics?: string[]
 }
 
 type Candidate = {
@@ -42,12 +100,50 @@ type Candidate = {
   listing_id: string
   title: string
   source?: string
+  provider?: string
+  price?: number | string
+  shipping?: number | string
+  total_price?: number | string
+  currency?: string
+  observed_currency?: string
+  url?: string
+  source_url?: string
+  matched_watch?: string
+  watch_name?: string
+  match_target?: string
+  match_reason?: string
+  first_seen?: string
+  first_seen_at?: string
+  last_seen?: string
+  last_seen_at?: string
+  stock_state?: string
+  stock_count?: number
+  stock_status?: string
+  status?: string
+  decision_status?: string
+  result_status?: string
+  wishlist_match?: boolean
+  handoff_state?: string
+  handoff_status?: string
+  decision_history?: Array<{
+    id: string
+    from_status: string
+    to_status: string
+    reason?: string
+    created_at: string
+  }>
 }
 
 type RunSummary = {
   page_count: number
   observed_page_size: number
   candidates_total: number
+}
+
+type ProviderRunSnapshot = {
+  saved?: number
+  observed_page_size?: number
+  page_count?: number
 }
 
 type RunMeta = {
@@ -62,46 +158,298 @@ type QuickScanQueueItem = {
   status: 'Queued' | 'Linked'
   linkedToInventory: boolean
   confidencePct: number
+  itemType: string
+  conditionEstimate: string
+  gradingStatus: string
   suggestions: string[]
   selectedSuggestion: string
   overrideUsed: boolean
 }
 
-const MARKET_WATCH_PROVIDER_OPTIONS = [
-  'ebay',
-  'amazon',
-  'bonzaslotcars',
-  'frontlinehobbies',
-  'hobbytechtoys',
-  'andrewshobbies',
-  'voglers',
-  'acercmodels',
-  'mrtoys',
+type RecognitionCandidateInput = {
+  id: string
+  title: string
+  confidence: number
+  source: string
+  provenance: string
+  item_type?: string
+  condition_estimate?: string
+  grading_status?: string
+  media_id?: string
+  media_url?: string
+  target?: 'inventory' | 'wishlist'
+  override_id?: string
+  override_by?: string
+  override_note?: string
+}
+
+type RecognitionReview = {
+  top_candidate: RecognitionCandidateInput
+  alternates: RecognitionCandidateInput[]
+  selected_candidate: RecognitionCandidateInput
+  confidence_label: string
+  requires_manual_review: boolean
+  confirm_before_create: boolean
+  target: 'inventory' | 'wishlist'
+  media_evidence?: Record<string, string>
+  provenance?: string[]
+  manual_override_applied: boolean
+}
+
+type ScannerReviewApplyResult = {
+  confirmation_state: 'required' | 'confirmed'
+  target: 'inventory' | 'wishlist'
+  review: RecognitionReview
+  item?: {
+    id: string
+    title: string
+    part_number?: string
+    status?: string
+  }
+  wishlist_entry?: {
+    id: string
+    item_id: string
+    owned: boolean
+  }
+}
+
+const FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS: MarketWatchProviderOption[] = [
+  { value: 'ebay', label: 'eBay', category: 'marketplace' },
+  { value: 'amazon', label: 'Amazon', category: 'marketplace' },
+  {
+    value: 'bonzaslotcars',
+    label: 'bonzaslotcars.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'frontlinehobbies',
+    label: 'frontlinehobbies.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'hobbytechtoys',
+    label: 'hobbytechtoys.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'andrewshobbies',
+    label: 'andrewshobbies.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'voglers',
+    label: 'voglers.com.au',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'acercmodels',
+    label: 'acercmodels.com',
+    category: 'storefront/source matcher',
+  },
+  {
+    value: 'mrtoys',
+    label: 'mrtoys.com.au',
+    category: 'storefront/source matcher',
+  },
 ]
 
+const normalizeProviderOptionValue = (value: string) =>
+  value.trim().toLowerCase()
+
+const marketWatchProviderOptionsFromRegistry = (
+  providers: ProviderRegistryEntry[] | undefined
+) => {
+  const seen = new Set<string>()
+  const options: MarketWatchProviderOption[] = []
+  for (const provider of providers ?? []) {
+    const workflowRefs = provider.workflow_refs ?? []
+    const capabilities = provider.capabilities ?? {}
+    const hasMarketWatchWorkflow = workflowRefs.includes('market_watch.run')
+    const hasMarketWatchCapability =
+      capabilities.search ||
+      capabilities.pricing ||
+      capabilities.stock_observation
+    const value = normalizeProviderOptionValue(
+      provider.market_watch_scope ?? ''
+    )
+    if (!value || !hasMarketWatchWorkflow || !hasMarketWatchCapability) {
+      continue
+    }
+    if (seen.has(value)) {
+      continue
+    }
+    seen.add(value)
+    options.push({
+      value,
+      label: provider.display_name?.trim() || value,
+      category: provider.provider_category,
+      state: provider.state,
+    })
+  }
+  return options.length > 0 ? options : FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS
+}
+
 type ProviderMode = 'single' | 'multi'
+type MarketWatchStatusFilter =
+  | 'all'
+  | 'never'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+type MarketWatchScheduleFilter = 'all' | 'scheduled' | 'manual'
+type MarketWatchResultStatusFilter =
+  | 'all'
+  | 'new'
+  | 'watching'
+  | 'dismissed'
+  | 'purchased'
+  | 'added_to_wishlist'
+  | 'added_to_inventory'
+  | 'expired'
+  | 'duplicate'
+  | 'failed_to_refresh'
 
 type CreateQueryValidation = {
   name?: string
   keywords?: string
 }
 
-function parseErrorCode(payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object' && 'error' in payload) {
-    const value = (payload as { error?: unknown }).error
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim()
+const MARKET_WATCH_CADENCE_OPTIONS = [
+  { label: 'Manual only', value: 'manual', cron: '' },
+  { label: 'Every hour', value: 'hourly', cron: '0 * * * *' },
+  { label: 'Every 6 hours', value: 'every_6_hours', cron: '0 */6 * * *' },
+  { label: 'Daily', value: 'daily', cron: '0 9 * * *' },
+  { label: 'Weekly', value: 'weekly', cron: '0 9 * * 1' },
+  { label: 'Custom', value: 'custom', cron: '' },
+] as const
+
+const MARKET_WATCH_RESULT_STATUS_OPTIONS: Array<{
+  value: MarketWatchResultStatusFilter
+  label: string
+}> = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'new', label: 'New' },
+  { value: 'watching', label: 'Watching' },
+  { value: 'dismissed', label: 'Dismissed' },
+  { value: 'purchased', label: 'Purchased' },
+  { value: 'added_to_wishlist', label: 'Added to wishlist' },
+  { value: 'added_to_inventory', label: 'Added to inventory' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'duplicate', label: 'Duplicate' },
+  { value: 'failed_to_refresh', label: 'Failed to refresh' },
+]
+
+type MarketWatchCadenceValue =
+  (typeof MARKET_WATCH_CADENCE_OPTIONS)[number]['value']
+
+function cadenceValueForCron(scheduleCron?: string): MarketWatchCadenceValue {
+  const normalized = scheduleCron?.trim() ?? ''
+  if (!normalized) {
+    return 'manual'
+  }
+  return (
+    MARKET_WATCH_CADENCE_OPTIONS.find(
+      (option) => option.cron === normalized && option.value !== 'manual'
+    )?.value ?? 'custom'
+  )
+}
+
+function cadenceLabelForCron(scheduleCron?: string): string {
+  const cadence = cadenceValueForCron(scheduleCron)
+  return (
+    MARKET_WATCH_CADENCE_OPTIONS.find((option) => option.value === cadence)
+      ?.label ?? 'Custom'
+  )
+}
+
+function parseActionErrorPayload(
+  payload: unknown,
+  fallback: string
+): { code: string; diagnostics: string[] } {
+  const diagnostics: string[] = []
+  if (payload && typeof payload === 'object') {
+    const values = payload as {
+      error?: unknown
+      error_code?: unknown
+      next_action?: unknown
+      provider?: unknown
+      query_set_id?: unknown
+      setting?: unknown
+      message?: unknown
+      retry_after_seconds?: unknown
+    }
+    for (const [label, value] of [
+      ['provider', values.provider],
+      ['query_set_id', values.query_set_id],
+      ['setting', values.setting],
+      ['message', values.message],
+      ['next_action', values.next_action],
+    ]) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        diagnostics.push(`${label}: ${value.trim()}`)
+      }
+    }
+    if (
+      typeof values.retry_after_seconds === 'number' &&
+      Number.isFinite(values.retry_after_seconds) &&
+      values.retry_after_seconds > 0
+    ) {
+      diagnostics.push(`retry_after_seconds: ${values.retry_after_seconds}`)
+    }
+    for (const value of [values.error_code, values.error]) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return { code: value.trim(), diagnostics }
+      }
     }
   }
-  return fallback
+  return { code: fallback, diagnostics }
 }
 
 function mapScannerActionError(
   operation: 'run' | 'retry',
   status: number,
-  errorCode: string
+  errorCode: string,
+  diagnostics: string[] = []
 ): ActionFeedback {
+  if (
+    operation === 'run' &&
+    (status === 429 || errorCode === 'PROVIDER_SEARCH_FAILED')
+  ) {
+    return {
+      summary: 'Provider search failed.',
+      actions: [
+        'Check provider health and retry guidance before running this query again.',
+        'Review credentials only if provider health reports an auth problem.',
+      ],
+      diagnosticCode: errorCode,
+      diagnostics,
+    }
+  }
   if (operation === 'run' && status === 400) {
+    if (errorCode === 'invalid_ebay_items_per_page') {
+      return {
+        summary: 'Run failed due to query validation.',
+        actions: [
+          'Check query keywords and exclusions.',
+          'Update the eBay setup page size before retrying.',
+          'Provider credentials are not the recovery step for this setup validation error.',
+        ],
+        diagnosticCode: errorCode,
+        diagnostics,
+      }
+    }
+    if (errorCode === 'invalid_query_set_id') {
+      return {
+        summary: 'Run failed due to query validation.',
+        actions: [
+          'Select an existing eBay saved query before retrying.',
+          'Refresh Market Watch if the query was deleted or changed elsewhere.',
+          'Provider credentials are not the recovery step for this saved-query validation error.',
+        ],
+        diagnosticCode: errorCode,
+        diagnostics,
+      }
+    }
     return {
       summary: 'Run failed due to query validation.',
       actions: [
@@ -109,23 +457,29 @@ function mapScannerActionError(
         'Review provider health and credentials before retrying.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   if (operation === 'retry' && status === 400) {
     return {
       summary: 'Retry request was rejected due to invalid scanner state.',
       actions: [
-        'Confirm the failed query set still exists.',
-        'Re-run the query set directly after fixing provider inputs.',
+        'Confirm the failed saved watch still exists.',
+        'Re-run the saved watch directly after fixing provider inputs.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   if (status === 401 || status === 403) {
     return {
       summary: 'Market Watch action was denied.',
-      actions: ['Sign in again and confirm profile access permissions.'],
+      actions: [
+        'Review provider health and credentials before retrying.',
+        'Sign in again if the provider is ready and the request is still denied.',
+      ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   if (status >= 500) {
@@ -136,15 +490,17 @@ function mapScannerActionError(
         'Check diagnostics for provider/runtime health.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   return {
     summary: operation === 'run' ? 'Run failed.' : 'Retry failed.',
     actions: [
       'Verify provider health and credentials.',
-      'Validate query set configuration, then retry.',
+      'Validate saved watch configuration, then retry.',
     ],
     diagnosticCode: errorCode,
+    diagnostics,
   }
 }
 
@@ -160,7 +516,12 @@ export function Scanner() {
   const [runMetaByQuerySet, setRunMetaByQuerySet] = useState<
     Record<string, RunMeta>
   >({})
-  const [providerHealth, setProviderHealth] = useState('unknown')
+  const [providerHealth, setProviderHealth] = useState<ProviderHealth>({
+    provider: 'ebay',
+    status: 'unknown',
+    state: 'disabled',
+  })
+  const [runHistory, setRunHistory] = useState<RunHistoryRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionStatus, setActionStatus] = useState<string | null>(null)
@@ -170,6 +531,8 @@ export function Scanner() {
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
   const [newScheduleCron, setNewScheduleCron] = useState('0 */6 * * *')
+  const [newCadence, setNewCadence] =
+    useState<MarketWatchCadenceValue>('every_6_hours')
   const [createValidation, setCreateValidation] =
     useState<CreateQueryValidation>({})
   const [providerMode, setProviderMode] = useState<ProviderMode>('single')
@@ -178,25 +541,55 @@ export function Scanner() {
     'ebay',
     'amazon',
   ])
+  const [marketWatchProviderOptions, setMarketWatchProviderOptions] = useState<
+    MarketWatchProviderOption[]
+  >(FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS)
   const [providerValidation, setProviderValidation] = useState<string | null>(
     null
   )
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+  const [tableProviderFilter, setTableProviderFilter] = useState('all')
+  const [tableStatusFilter, setTableStatusFilter] =
+    useState<MarketWatchStatusFilter>('all')
+  const [tableScheduleFilter, setTableScheduleFilter] =
+    useState<MarketWatchScheduleFilter>('all')
+  const [tableAttentionOnly, setTableAttentionOnly] = useState(false)
+  const [tableResultsOnly, setTableResultsOnly] = useState(false)
   const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<
     string | null
   >(null)
+  const [resultStatusFilter, setResultStatusFilter] =
+    useState<MarketWatchResultStatusFilter>('all')
+  const [resultProviderFilter, setResultProviderFilter] = useState('all')
+  const [resultMatchFilter, setResultMatchFilter] = useState('all')
+  const [resultWishlistMatchesOnly, setResultWishlistMatchesOnly] =
+    useState(false)
   const [editingQuerySetID, setEditingQuerySetID] = useState<string | null>(
     null
   )
   const [editingName, setEditingName] = useState('')
   const [editingKeywords, setEditingKeywords] = useState('')
   const [editingScheduleCron, setEditingScheduleCron] = useState('')
+  const [editingCadence, setEditingCadence] =
+    useState<MarketWatchCadenceValue>('manual')
+  const [editingEnabled, setEditingEnabled] = useState(true)
   const [handoffStatus, setHandoffStatus] = useState<string | null>(null)
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
+  const [manualEntryTitle, setManualEntryTitle] = useState('')
   const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
+  const [showCapturePanel, setShowCapturePanel] = useState(false)
   const [pendingApplyScanID, setPendingApplyScanID] = useState<string | null>(
     null
   )
+  const [quickApplyTargetByScanID, setQuickApplyTargetByScanID] = useState<
+    Record<string, 'inventory' | 'wishlist'>
+  >({})
+  const [quickReviewByScanID, setQuickReviewByScanID] = useState<
+    Record<string, RecognitionReview>
+  >({})
+  const [quickApplyResultByScanID, setQuickApplyResultByScanID] = useState<
+    Record<string, ScannerReviewApplyResult>
+  >({})
   const [quickCategoryView, setQuickCategoryView] = useState<'cards' | 'table'>(
     'cards'
   )
@@ -206,11 +599,14 @@ export function Scanner() {
     setLoading(true)
     setError(null)
     try {
-      const [querySetsRes, failuresRes, healthRes] = await Promise.all([
-        fetch('/api/scanner/query-sets'),
-        fetch('/api/scanner/failures'),
-        fetch('/api/provider/health?provider=ebay'),
-      ])
+      const [querySetsRes, failuresRes, healthRes, runsRes, registryRes] =
+        await Promise.all([
+          fetch('/api/scanner/query-sets'),
+          fetch('/api/scanner/failures'),
+          fetch('/api/provider/health?provider=ebay'),
+          fetch('/api/scanner/runs?limit=25'),
+          fetch('/api/providers/registry'),
+        ])
       if (!querySetsRes.ok) {
         throw new Error(`query_sets_${querySetsRes.status}`)
       }
@@ -227,14 +623,73 @@ export function Scanner() {
       const failuresPayload = (await failuresRes.json()) as {
         failures?: Failure[]
       }
-      const healthPayload = (await healthRes.json()) as { status?: string }
+      const healthPayload = (await healthRes.json()) as ProviderHealth
+      const runsPayload = runsRes.ok
+        ? ((await runsRes.json()) as {
+            runs?: RunHistoryRecord[]
+          })
+        : { runs: [] }
+      const registryPayload = registryRes.ok
+        ? ((await registryRes.json()) as {
+            providers?: ProviderRegistryEntry[]
+          })
+        : { providers: undefined }
+      const registryProviderOptions = marketWatchProviderOptionsFromRegistry(
+        registryPayload.providers
+      )
 
       setQuerySets(querySetPayload.query_sets ?? [])
+      setMarketWatchProviderOptions(registryProviderOptions)
+      setSingleProvider((current) => {
+        const currentValue = normalizeProviderOptionValue(current)
+        return registryProviderOptions.some(
+          (option) => option.value === currentValue
+        )
+          ? currentValue
+          : registryProviderOptions[0]?.value || 'ebay'
+      })
+      setMultiProviders((current) => {
+        const registryValues = new Set(
+          registryProviderOptions.map((option) => option.value)
+        )
+        const next = current
+          .map(normalizeProviderOptionValue)
+          .filter((provider) => registryValues.has(provider))
+        return next.length > 0
+          ? Array.from(new Set(next))
+          : registryProviderOptions
+              .slice(0, 2)
+              .map((provider) => provider.value)
+              .filter(Boolean)
+      })
       setFailures(failuresPayload.failures ?? [])
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
-      setRunMetaByQuerySet({})
-      setProviderHealth(healthPayload.status ?? 'unknown')
+      setRunMetaByQuerySet(
+        Object.fromEntries(
+          (querySetPayload.query_sets ?? []).map((querySet) => [
+            querySet.id,
+            {
+              status: querySet.last_run_status ?? 'never',
+              ranAtISO: querySet.last_run_at,
+            },
+          ])
+        )
+      )
+      setProviderHealth({
+        provider: healthPayload.provider ?? 'ebay',
+        status: healthPayload.status ?? 'unknown',
+        state: healthPayload.state ?? 'disabled',
+        category: healthPayload.category,
+        label: healthPayload.label,
+        guidance: healthPayload.guidance,
+        message: healthPayload.message ?? '',
+        last_error: healthPayload.last_error ?? null,
+        retry_after_seconds: healthPayload.retry_after_seconds ?? null,
+        next_action: healthPayload.next_action ?? null,
+        updated_at: healthPayload.updated_at ?? null,
+      })
+      setRunHistory(runsPayload.runs ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'scanner_load_failed')
       setQuerySets([])
@@ -242,7 +697,13 @@ export function Scanner() {
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
       setRunMetaByQuerySet({})
-      setProviderHealth('unknown')
+      setProviderHealth({
+        provider: 'ebay',
+        status: 'unknown',
+        state: 'disabled',
+      })
+      setMarketWatchProviderOptions(FALLBACK_MARKET_WATCH_PROVIDER_OPTIONS)
+      setRunHistory([])
     } finally {
       setLoading(false)
     }
@@ -268,8 +729,8 @@ export function Scanner() {
     setActionFeedback({
       summary: 'Barcode lookup is ready for Market Watch.',
       actions: [
-        'Review provider scope before creating the query set.',
-        'Create the query set or edit the barcode keyword first.',
+        'Review provider scope before creating the saved watch.',
+        'Create the saved watch or edit the barcode keyword first.',
       ],
     })
   }, [])
@@ -295,19 +756,19 @@ export function Scanner() {
       .filter(Boolean)
     const nextValidation: CreateQueryValidation = {}
     if (!newName.trim()) {
-      nextValidation.name = 'Query set name is required.'
+      nextValidation.name = 'Saved watch name is required.'
     }
     if (keywords.length === 0) {
       nextValidation.keywords =
-        'Enter at least one keyword before creating a query set.'
+        'Enter at least one keyword before creating a saved watch.'
     }
     if (nextValidation.name || nextValidation.keywords) {
       setCreateValidation(nextValidation)
       setActionStatus('create_query_set_validation_failed')
       setActionFeedback({
-        summary: 'Create Query Set requires the highlighted fields.',
+        summary: 'Create Saved Watch requires the highlighted fields.',
         actions: [
-          nextValidation.name ?? 'Provide a query set name.',
+          nextValidation.name ?? 'Provide a saved watch name.',
           nextValidation.keywords ?? 'Provide at least one keyword.',
         ],
       })
@@ -355,6 +816,7 @@ export function Scanner() {
     setNewName('')
     setNewKeywords('')
     setNewScheduleCron('0 */6 * * *')
+    setNewCadence('every_6_hours')
   }
 
   const startEditQuerySet = (querySet: QuerySet) => {
@@ -362,6 +824,8 @@ export function Scanner() {
     setEditingName(querySet.name)
     setEditingKeywords((querySet.keywords ?? []).join(', '))
     setEditingScheduleCron(querySet.schedule_cron ?? '')
+    setEditingCadence(cadenceValueForCron(querySet.schedule_cron))
+    setEditingEnabled(querySet.enabled !== false)
   }
 
   const cancelEditQuerySet = () => {
@@ -369,6 +833,8 @@ export function Scanner() {
     setEditingName('')
     setEditingKeywords('')
     setEditingScheduleCron('')
+    setEditingCadence('manual')
+    setEditingEnabled(true)
   }
 
   const saveQuerySet = async (querySet: QuerySet) => {
@@ -383,6 +849,7 @@ export function Scanner() {
         .map((value) => value.trim())
         .filter(Boolean),
       schedule_cron: editingScheduleCron.trim(),
+      enabled: editingEnabled,
     }
     const response = await fetch(
       `/api/scanner/query-sets/${encodeURIComponent(querySet.id)}`,
@@ -410,6 +877,38 @@ export function Scanner() {
     setActionStatus(`query_set_updated_${updated.id}`)
     setActionFeedback(null)
     cancelEditQuerySet()
+  }
+
+  const setQuerySetEnabled = async (querySet: QuerySet, enabled: boolean) => {
+    const payload: QuerySet = {
+      ...querySet,
+      enabled,
+    }
+    const response = await fetch(
+      `/api/scanner/query-sets/${encodeURIComponent(querySet.id)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    )
+    if (!response.ok) {
+      setActionStatus('update_query_set_failed')
+      setActionFeedback(
+        mapScannerActionError(
+          'run',
+          response.status,
+          `update_query_set_${response.status}`
+        )
+      )
+      return
+    }
+    const updated = (await response.json()) as QuerySet
+    setQuerySets((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    )
+    setActionStatus(`query_set_${enabled ? 'resumed' : 'paused'}_${updated.id}`)
+    setActionFeedback(null)
   }
 
   const deleteQuerySet = async (querySetID: string) => {
@@ -442,9 +941,10 @@ export function Scanner() {
     if (querySets.length === 0) {
       setActionStatus('scheduled_run_blocked_empty')
       setActionFeedback({
-        summary: 'Run Scheduled Refresh needs at least one runnable query set.',
+        summary:
+          'Run Scheduled Watches needs at least one runnable saved watch.',
         actions: [
-          'Create a query set first.',
+          'Create a saved watch first.',
           'Add keywords so the first scheduled run has valid criteria.',
         ],
       })
@@ -456,13 +956,21 @@ export function Scanner() {
     if (!response.ok) {
       const fallbackCode = `scheduled_run_failed_${response.status}`
       let code = fallbackCode
+      let diagnostics: string[] = []
       try {
-        code = parseErrorCode(await response.json(), fallbackCode)
+        const parsed = parseActionErrorPayload(
+          await response.json(),
+          fallbackCode
+        )
+        code = parsed.code
+        diagnostics = parsed.diagnostics
       } catch {
         code = fallbackCode
       }
       setActionStatus('scheduled_run_failed')
-      setActionFeedback(mapScannerActionError('run', response.status, code))
+      setActionFeedback(
+        mapScannerActionError('run', response.status, code, diagnostics)
+      )
       return
     }
     const payload = (await response.json()) as {
@@ -480,6 +988,7 @@ export function Scanner() {
         `Failures: ${payload.failures ?? 0}`,
       ],
     })
+    await loadScanner()
   }
 
   const handoffToDiscoveries = async (querySet: QuerySet) => {
@@ -520,7 +1029,103 @@ export function Scanner() {
       setHandoffStatus(`wishlist_handoff_failed_${response.status}`)
       return
     }
-    setHandoffStatus('wishlist_handoff_ok')
+    setHandoffStatus(`wishlist_handoff_ok_${firstCandidate.id}`)
+  }
+
+  const handoffFirstCandidateToInventory = async (querySetID: string) => {
+    const candidates = candidatesByQuerySet[querySetID] ?? []
+    const firstCandidate = candidates.find(
+      (candidate) => (candidate.id ?? '').trim() !== ''
+    )
+    if (!firstCandidate || !firstCandidate.id) {
+      setHandoffStatus('inventory_handoff_no_candidate')
+      return
+    }
+    const response = await fetch('/api/discovery/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_id: firstCandidate.id,
+        type: 'create_item',
+        payload: {
+          source: 'market_watch',
+          query_set_id: querySetID,
+        },
+      }),
+    })
+    if (!response.ok) {
+      setHandoffStatus(`inventory_handoff_failed_${response.status}`)
+      return
+    }
+    setHandoffStatus(`inventory_handoff_ok_${firstCandidate.id}`)
+  }
+
+  const handoffFirstCandidateToPurchase = async (querySetID: string) => {
+    const candidates = candidatesByQuerySet[querySetID] ?? []
+    const firstCandidate = candidates.find(
+      (candidate) => (candidate.id ?? '').trim() !== ''
+    )
+    if (!firstCandidate || !firstCandidate.id) {
+      setHandoffStatus('purchase_handoff_no_candidate')
+      return
+    }
+    const response = await fetch('/api/discovery/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_id: firstCandidate.id,
+        type: 'mark_purchased',
+        payload: {
+          source: 'market_watch',
+          query_set_id: querySetID,
+          quantity: 1,
+        },
+      }),
+    })
+    if (!response.ok) {
+      setHandoffStatus(`purchase_handoff_failed_${response.status}`)
+      return
+    }
+    setHandoffStatus(`purchase_handoff_ok_${firstCandidate.id}`)
+  }
+
+  const updateFirstCandidateLifecycleStatus = async (
+    querySetID: string,
+    status: MarketWatchResultStatusFilter
+  ) => {
+    if (status === 'all') {
+      return
+    }
+    const candidates = candidatesByQuerySet[querySetID] ?? []
+    const firstCandidate = candidates.find(
+      (candidate) => (candidate.id ?? '').trim() !== ''
+    )
+    if (!firstCandidate?.id) {
+      setHandoffStatus(`candidate_lifecycle_${status}_no_candidate`)
+      return
+    }
+    const response = await fetch(
+      `/api/scanner/candidates/${encodeURIComponent(firstCandidate.id)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      }
+    )
+    if (!response.ok) {
+      setHandoffStatus(
+        `candidate_lifecycle_${status}_failed_${response.status}`
+      )
+      return
+    }
+    const updated = (await response.json()) as Candidate
+    setCandidatesByQuerySet((current) => ({
+      ...current,
+      [querySetID]: (current[querySetID] ?? []).map((candidate) =>
+        candidate.id === updated.id ? updated : candidate
+      ),
+    }))
+    setHandoffStatus(`candidate_lifecycle_${status}_ok_${updated.id}`)
   }
 
   const runNow = async (querySet: QuerySet) => {
@@ -533,28 +1138,47 @@ export function Scanner() {
           .map((value) => value.trim().toLowerCase())
           .filter(Boolean)
       : []
-    const isBonzaOnly =
-      providerScope.length === 1 &&
-      (providerScope[0] === 'bonzaslotcars' || providerScope[0] === 'bonza')
-    if (isBonzaOnly) {
-      const bonzaResponse = await fetch('/api/providers/bonza/run', {
+    const providerRunRoute =
+      providerScope.length === 1
+        ? providerScope[0] === 'ebay'
+          ? { provider: 'ebay', url: '/api/providers/ebay/run' }
+          : providerScope[0] === 'bonzaslotcars' || providerScope[0] === 'bonza'
+            ? { provider: 'bonza', url: '/api/providers/bonza/run' }
+            : providerScope[0] === 'hobbytechtoys' ||
+                providerScope[0] === 'hobbytech'
+              ? { provider: 'hobbytech', url: '/api/providers/hobbytech/run' }
+              : null
+        : null
+    if (providerRunRoute) {
+      const providerResponse = await fetch(providerRunRoute.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query_set_id: querySet.id,
         }),
       })
-      if (!bonzaResponse.ok) {
-        const fallbackCode = `bonza_run_failed_${bonzaResponse.status}`
+      if (!providerResponse.ok) {
+        const fallbackCode = `${providerRunRoute.provider}_run_failed_${providerResponse.status}`
         let code = fallbackCode
+        let diagnostics: string[] = []
         try {
-          code = parseErrorCode(await bonzaResponse.json(), fallbackCode)
+          const parsed = parseActionErrorPayload(
+            await providerResponse.json(),
+            fallbackCode
+          )
+          code = parsed.code
+          diagnostics = parsed.diagnostics
         } catch {
           code = fallbackCode
         }
         setActionStatus('run_failed')
         setActionFeedback(
-          mapScannerActionError('run', bonzaResponse.status, code)
+          mapScannerActionError(
+            'run',
+            providerResponse.status,
+            code,
+            diagnostics
+          )
         )
         setRunMetaByQuerySet((current) => ({
           ...current,
@@ -562,22 +1186,47 @@ export function Scanner() {
         }))
         return
       }
-      const payload = (await bonzaResponse.json()) as {
+      const payload = (await providerResponse.json()) as {
         candidates?: Candidate[]
         run_summary?: RunSummary
+        run?: ProviderRunSnapshot
+        drift_recovered?: boolean
+        warning?: string
       }
+      const candidates = payload.candidates ?? []
       setCandidatesByQuerySet((current) => ({
         ...current,
-        [querySet.id]: payload.candidates ?? [],
+        [querySet.id]: candidates,
       }))
       if (payload.run_summary) {
         setRunSummaryByQuerySet((current) => ({
           ...current,
           [querySet.id]: payload.run_summary as RunSummary,
         }))
+      } else if (payload.run) {
+        setRunSummaryByQuerySet((current) => ({
+          ...current,
+          [querySet.id]: {
+            page_count: payload.run?.page_count ?? 0,
+            observed_page_size: payload.run?.observed_page_size ?? 0,
+            candidates_total: payload.run?.saved ?? candidates.length,
+          },
+        }))
       }
-      setActionStatus(`bonza_run_started_${querySet.id}`)
-      setActionFeedback(null)
+      setActionStatus(`${providerRunRoute.provider}_run_started_${querySet.id}`)
+      const providerWarning =
+        payload.drift_recovered && payload.warning?.trim()
+          ? payload.warning.trim()
+          : ''
+      setActionFeedback(
+        providerWarning
+          ? {
+              summary: providerWarning,
+              actions: ['Review recovered provider results before handoff.'],
+              diagnosticCode: `${providerRunRoute.provider}_drift_recovered`,
+            }
+          : null
+      )
       setRunMetaByQuerySet((current) => ({
         ...current,
         [querySet.id]: {
@@ -598,13 +1247,21 @@ export function Scanner() {
     if (!response.ok) {
       const fallbackCode = `run_failed_${response.status}`
       let code = fallbackCode
+      let diagnostics: string[] = []
       try {
-        code = parseErrorCode(await response.json(), fallbackCode)
+        const parsed = parseActionErrorPayload(
+          await response.json(),
+          fallbackCode
+        )
+        code = parsed.code
+        diagnostics = parsed.diagnostics
       } catch {
         code = fallbackCode
       }
       setActionStatus('run_failed')
-      setActionFeedback(mapScannerActionError('run', response.status, code))
+      setActionFeedback(
+        mapScannerActionError('run', response.status, code, diagnostics)
+      )
       setRunMetaByQuerySet((current) => ({
         ...current,
         [querySet.id]: { status: 'failed' },
@@ -651,13 +1308,21 @@ export function Scanner() {
     if (!response.ok) {
       const fallbackCode = `retry_failed_${response.status}`
       let code = fallbackCode
+      let diagnostics: string[] = []
       try {
-        code = parseErrorCode(await response.json(), fallbackCode)
+        const parsed = parseActionErrorPayload(
+          await response.json(),
+          fallbackCode
+        )
+        code = parsed.code
+        diagnostics = parsed.diagnostics
       } catch {
         code = fallbackCode
       }
       setActionStatus('retry_failed')
-      setActionFeedback(mapScannerActionError('retry', response.status, code))
+      setActionFeedback(
+        mapScannerActionError('retry', response.status, code, diagnostics)
+      )
       setRunMetaByQuerySet((current) => ({
         ...current,
         [querySetID]: { status: 'failed' },
@@ -665,7 +1330,13 @@ export function Scanner() {
       return
     }
     setActionStatus(`retry_requested_${querySetID}`)
-    setActionFeedback(null)
+    setActionFeedback({
+      summary: 'Retry requested.',
+      actions: [
+        'Refreshing Market Watch failure state.',
+        'Review provider health if the query remains failed.',
+      ],
+    })
     setRunMetaByQuerySet((current) => ({
       ...current,
       [querySetID]: { status: 'running' },
@@ -680,6 +1351,39 @@ export function Scanner() {
 
   const formatRunStatus = (querySetID: string) =>
     runMetaByQuerySet[querySetID]?.status ?? 'never'
+
+  const formatTableStatus = (querySet: QuerySet) => {
+    const status = formatRunStatus(querySet.id)
+    if (status === 'failed' && querySet.last_run_message) {
+      return `${status}: ${querySet.last_run_message}`
+    }
+    return status
+  }
+
+  const formatScheduleMode = (querySet: QuerySet) => {
+    if (querySet.enabled === false) {
+      return 'Manual / paused'
+    }
+    if (querySet.schedule_cron?.trim()) {
+      return `Scheduled: ${querySet.schedule_cron.trim()}`
+    }
+    return 'Manual'
+  }
+
+  const formatResultCount = (querySetID: string) => {
+    const summary = runSummaryByQuerySet[querySetID]
+    if (summary) {
+      return String(summary.candidates_total)
+    }
+    const count = candidatesByQuerySet[querySetID]?.length ?? 0
+    if (count > 0) {
+      return String(count)
+    }
+    const persistedCount =
+      querySets.find((querySet) => querySet.id === querySetID)
+        ?.last_candidate_count ?? 0
+    return String(persistedCount)
+  }
 
   const formatRunTime = (querySetID: string) => {
     const ranAtISO = runMetaByQuerySet[querySetID]?.ranAtISO
@@ -702,8 +1406,383 @@ export function Scanner() {
     if (count > 0) {
       return `Candidates: ${count}`
     }
+    const persistedCount =
+      querySets.find((querySet) => querySet.id === querySetID)
+        ?.last_candidate_count ?? 0
+    if (persistedCount > 0) {
+      return `Candidates: ${persistedCount}`
+    }
     return 'No output'
   }
+
+  const providerHealthStatus = providerHealth.status ?? 'unknown'
+  const providerHealthState = providerHealth.state ?? 'disabled'
+  const providerHealthSummary =
+    providerHealth.label?.trim() ||
+    (providerHealthStatus === 'unknown'
+      ? 'Not checked yet'
+      : providerHealthStatus === 'ok'
+        ? 'Connected / healthy'
+        : `${providerHealthStatus.replace(/_/g, ' ')} (${providerHealthStatus})`)
+  const providerHealthGuidance =
+    providerHealth.guidance?.trim() ||
+    providerHealth.message?.trim() ||
+    providerHealth.last_error?.trim() ||
+    (providerHealthStatus === 'unknown'
+      ? 'Run or validate a provider search to collect health evidence.'
+      : 'Review provider credentials, setup health, and retry guidance before running watches.')
+
+  const formatRunHistoryTime = (value?: string) => {
+    if (!value) {
+      return 'Not recorded'
+    }
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      return 'Not recorded'
+    }
+    return parsed.toLocaleString()
+  }
+
+  const formatCandidatePrice = (candidate: Candidate) => {
+    if (candidate.price === undefined || candidate.price === null) {
+      return 'Not provided'
+    }
+    const price =
+      typeof candidate.price === 'number'
+        ? candidate.price.toFixed(2)
+        : candidate.price.trim()
+    if (!price) {
+      return 'Not provided'
+    }
+    const currency =
+      candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency ? `${price} ${currency}` : price
+  }
+
+  const formatCandidateTotalPrice = (candidate: Candidate) => {
+    if (candidate.total_price === undefined || candidate.total_price === null) {
+      const price = Number(candidate.price)
+      const shipping = Number(candidate.shipping)
+      if (!Number.isFinite(price) || !Number.isFinite(shipping)) {
+        return 'Not provided'
+      }
+      const currency =
+        candidate.currency?.trim() || candidate.observed_currency?.trim()
+      const total = (price + shipping).toFixed(2)
+      return currency ? `${total} ${currency}` : total
+    }
+    const total =
+      typeof candidate.total_price === 'number'
+        ? candidate.total_price.toFixed(2)
+        : candidate.total_price.trim()
+    if (!total) {
+      return 'Not provided'
+    }
+    const currency =
+      candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency ? `${total} ${currency}` : total
+  }
+
+  const formatCandidateSource = (candidate: Candidate) =>
+    candidate.url?.trim() ||
+    candidate.source_url?.trim() ||
+    candidate.listing_id?.trim() ||
+    'Not provided'
+
+  const formatCandidateShipping = (candidate: Candidate) => {
+    if (candidate.shipping === undefined || candidate.shipping === null) {
+      return 'Not provided'
+    }
+    const shipping =
+      typeof candidate.shipping === 'number'
+        ? candidate.shipping.toFixed(2)
+        : candidate.shipping.trim()
+    if (!shipping) {
+      return 'Not provided'
+    }
+    const currency =
+      candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency ? `${shipping} ${currency}` : shipping
+  }
+
+  const formatCandidateStock = (candidate: Candidate) => {
+    const stockState =
+      candidate.stock_state?.trim() ||
+      candidate.stock_status?.trim() ||
+      candidate.status?.trim()
+    if (!stockState) {
+      return 'Not provided'
+    }
+    return typeof candidate.stock_count === 'number'
+      ? `${stockState} (${candidate.stock_count})`
+      : stockState
+  }
+
+  const formatCandidateHandoff = (candidate: Candidate) =>
+    candidate.handoff_state?.trim() ||
+    candidate.handoff_status?.trim() ||
+    'Not handed off'
+
+  const normalizeResultStatus = (candidate: Candidate) =>
+    (
+      candidate.result_status?.trim() ||
+      candidate.decision_status?.trim() ||
+      candidate.handoff_state?.trim() ||
+      candidate.handoff_status?.trim() ||
+      candidate.status?.trim() ||
+      'new'
+    )
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_')
+
+  const formatResultStatus = (candidate: Candidate) =>
+    normalizeResultStatus(candidate)
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+
+  const formatCandidateDecisionHistory = (candidate: Candidate) => {
+    const history = candidate.decision_history ?? []
+    if (history.length === 0) {
+      return 'No decisions recorded'
+    }
+    return history
+      .map((record) => {
+        const fromStatus = record.from_status || 'unset'
+        const toStatus = record.to_status || 'unknown'
+        const timestamp = formatCandidateSeenAt(record.created_at)
+        return `${fromStatus} to ${toStatus} at ${timestamp}`
+      })
+      .join(' | ')
+  }
+
+  const candidateProvider = (candidate: Candidate) =>
+    candidate.provider?.trim() || candidate.source?.trim() || 'unknown'
+
+  const candidateMatchTarget = (candidate: Candidate) =>
+    candidate.match_target?.trim() || 'Unclassified'
+
+  const formatCandidateWatch = (candidate: Candidate) =>
+    candidate.matched_watch?.trim() ||
+    candidate.watch_name?.trim() ||
+    querySets.find((querySet) => querySet.id === candidate.query_set_id)
+      ?.name ||
+    candidate.query_set_id ||
+    'Not provided'
+
+  const formatCandidateMatchReason = (candidate: Candidate) =>
+    candidate.match_reason?.trim() ||
+    `Matched ${candidateMatchTarget(candidate).toLowerCase()} criteria`
+
+  const formatCandidateSeenAt = (value?: string) => {
+    if (!value?.trim()) {
+      return 'Not provided'
+    }
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      return value
+    }
+    return parsed.toLocaleString()
+  }
+
+  const querySetHasResults = (querySetID: string) =>
+    Number(formatResultCount(querySetID)) > 0
+
+  const resetTableFilters = () => {
+    setTableProviderFilter('all')
+    setTableStatusFilter('all')
+    setTableScheduleFilter('all')
+    setTableAttentionOnly(false)
+    setTableResultsOnly(false)
+  }
+
+  const resetResultFilters = () => {
+    setResultStatusFilter('all')
+    setResultProviderFilter('all')
+    setResultMatchFilter('all')
+    setResultWishlistMatchesOnly(false)
+  }
+
+  const openOutputDetails = async (querySet: QuerySet) => {
+    const querySetID = querySet.id
+    setSelectedOutputQuerySetID(querySetID)
+    if ((candidatesByQuerySet[querySetID] ?? []).length > 0) {
+      return
+    }
+    if ((querySet.last_candidate_count ?? 0) <= 0) {
+      return
+    }
+    const response = await fetch(
+      `/api/scanner/candidates?query_set_id=${encodeURIComponent(querySetID)}`
+    )
+    if (!response.ok) {
+      setHandoffStatus(`candidate_reload_failed_${response.status}`)
+      return
+    }
+    const payload = (await response.json()) as {
+      candidates?: Candidate[]
+    }
+    setCandidatesByQuerySet((current) => ({
+      ...current,
+      [querySetID]: payload.candidates ?? [],
+    }))
+  }
+
+  const filteredQuerySets = querySets.filter((querySet) => {
+    const providerScope =
+      querySet.provider_scope && querySet.provider_scope.length > 0
+        ? querySet.provider_scope
+        : ['ebay']
+    const status = formatRunStatus(querySet.id)
+    const isScheduled =
+      querySet.enabled !== false && Boolean(querySet.schedule_cron?.trim())
+    const hasFailure = status === 'failed' || Boolean(querySet.last_run_message)
+
+    if (
+      tableProviderFilter !== 'all' &&
+      !providerScope.includes(tableProviderFilter)
+    ) {
+      return false
+    }
+    if (tableStatusFilter !== 'all' && status !== tableStatusFilter) {
+      return false
+    }
+    if (tableScheduleFilter === 'scheduled' && !isScheduled) {
+      return false
+    }
+    if (tableScheduleFilter === 'manual' && isScheduled) {
+      return false
+    }
+    if (tableAttentionOnly && !hasFailure) {
+      return false
+    }
+    if (tableResultsOnly && !querySetHasResults(querySet.id)) {
+      return false
+    }
+    return true
+  })
+
+  const hasActiveTableFilters =
+    tableProviderFilter !== 'all' ||
+    tableStatusFilter !== 'all' ||
+    tableScheduleFilter !== 'all' ||
+    tableAttentionOnly ||
+    tableResultsOnly
+  const hasProviderAttention =
+    !loading &&
+    !error &&
+    providerHealthStatus !== 'ok' &&
+    providerHealthState !== 'ready'
+
+  const latestRunHistory = filteredQuerySets.map((querySet) => ({
+    id: querySet.id,
+    name: querySet.name,
+    status: formatRunStatus(querySet.id),
+    ranAt: formatRunTime(querySet.id),
+    output: formatOutputSummary(querySet.id),
+  }))
+  const marketWatchSummaryCards = [
+    {
+      label: 'Active watches',
+      value: String(
+        querySets.filter((querySet) => querySet.enabled !== false).length
+      ),
+      detail: `${querySets.length} saved total`,
+    },
+    {
+      label: 'New discoveries',
+      value: String(
+        Object.values(candidatesByQuerySet)
+          .flat()
+          .filter((candidate) => normalizeResultStatus(candidate) === 'new')
+          .length
+      ),
+      detail: 'Unreviewed provider results',
+    },
+    {
+      label: 'Wishlist matches',
+      value: String(
+        Object.values(candidatesByQuerySet)
+          .flat()
+          .filter((candidate) => candidate.wishlist_match === true).length
+      ),
+      detail: 'Matched to wanted items',
+    },
+    {
+      label: 'Provider issues',
+      value: String(
+        querySets.filter(
+          (querySet) =>
+            formatRunStatus(querySet.id) === 'failed' ||
+            Boolean(querySet.last_run_message)
+        ).length + (hasProviderAttention ? 1 : 0)
+      ),
+      detail: hasProviderAttention
+        ? providerHealthSummary
+        : 'No provider attention needed',
+    },
+    {
+      label: 'Last run',
+      value: latestRunHistory[0]?.ranAt ?? 'Never',
+      detail: latestRunHistory[0]?.name ?? 'No saved watch has run',
+    },
+    {
+      label: 'Next run',
+      value: querySets.some(
+        (querySet) =>
+          querySet.enabled !== false && Boolean(querySet.schedule_cron?.trim())
+      )
+        ? 'Scheduled'
+        : 'Manual',
+      detail:
+        querySets.find(
+          (querySet) =>
+            querySet.enabled !== false &&
+            Boolean(querySet.schedule_cron?.trim())
+        )?.name ?? 'Create a cadence to automate searches',
+    },
+  ]
+
+  const selectedOutputCandidates = selectedOutputQuerySetID
+    ? (candidatesByQuerySet[selectedOutputQuerySetID] ?? [])
+    : []
+  const resultProviderOptions = Array.from(
+    new Set(selectedOutputCandidates.map(candidateProvider))
+  ).filter(Boolean)
+  const resultMatchOptions = Array.from(
+    new Set(selectedOutputCandidates.map(candidateMatchTarget))
+  ).filter(Boolean)
+  const filteredOutputCandidates = selectedOutputCandidates.filter(
+    (candidate) => {
+      if (
+        resultStatusFilter !== 'all' &&
+        normalizeResultStatus(candidate) !== resultStatusFilter
+      ) {
+        return false
+      }
+      if (
+        resultProviderFilter !== 'all' &&
+        candidateProvider(candidate) !== resultProviderFilter
+      ) {
+        return false
+      }
+      if (
+        resultMatchFilter !== 'all' &&
+        candidateMatchTarget(candidate) !== resultMatchFilter
+      ) {
+        return false
+      }
+      if (resultWishlistMatchesOnly && candidate.wishlist_match !== true) {
+        return false
+      }
+      return true
+    }
+  )
+  const hasActiveResultFilters =
+    resultStatusFilter !== 'all' ||
+    resultProviderFilter !== 'all' ||
+    resultMatchFilter !== 'all' ||
+    resultWishlistMatchesOnly
 
   const launchQuickScan = () => {
     const isMobileViewport =
@@ -725,13 +1804,9 @@ export function Scanner() {
     quickScanFileInputRef.current?.click()
   }
 
-  const queueQuickScanFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) {
-      return
-    }
+  const queueQuickScanEntry = (rawName: string, confidenceSeed: number) => {
     const normalized =
-      file.name
+      rawName
         .replace(/\.[^.]+$/, '')
         .trim()
         .toLowerCase() || 'scan'
@@ -740,24 +1815,44 @@ export function Scanner() {
       `${normalized} (alt: foil variant)`,
       `${normalized} (alt: promo variant)`,
     ]
-    const confidencePct = Math.max(
-      52,
-      Math.min(96, 96 - (file.name.length % 32))
-    )
+    const confidencePct = Math.max(52, Math.min(96, 96 - (confidenceSeed % 32)))
     const entry: QuickScanQueueItem = {
-      id: `${Date.now()}-${file.name}`,
-      fileName: file.name,
+      id: `${Date.now()}-${rawName}`,
+      fileName: rawName,
       queuedAtISO: new Date().toISOString(),
       status: 'Queued',
       linkedToInventory: false,
       confidencePct,
+      itemType: 'Trading Card',
+      conditionEstimate: 'Near Mint (NM)',
+      gradingStatus: 'ungraded',
       suggestions,
       selectedSuggestion: suggestions[0],
       overrideUsed: false,
     }
     setQuickScanQueue((current) => [entry, ...current].slice(0, 12))
+    return entry
+  }
+
+  const queueQuickScanFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+    queueQuickScanEntry(file.name, file.name.length)
     setQuickScanStatus(`Quick Scan queued: ${file.name}`)
     event.target.value = ''
+  }
+
+  const queueManualEntry = () => {
+    const title = manualEntryTitle.trim()
+    if (!title) {
+      setQuickScanStatus('Manual entry needs a card title before queueing.')
+      return
+    }
+    queueQuickScanEntry(title, title.length)
+    setManualEntryTitle('')
+    setQuickScanStatus(`Manual entry queued for review: ${title}`)
   }
 
   const selectQuickScanAlternative = (itemID: string) => {
@@ -781,15 +1876,111 @@ export function Scanner() {
     )
   }
 
-  const reviewQuickScanApply = (itemID: string) => {
+  const markQuickScanLinked = (itemID: string) => {
+    setQuickScanQueue((current) =>
+      current.map((item) =>
+        item.id === itemID
+          ? { ...item, linkedToInventory: true, status: 'Linked' }
+          : item
+      )
+    )
+    setQuickScanStatus('Scan marked linked after explicit review.')
+  }
+
+  const quickScanCandidatesForApply = (
+    item: QuickScanQueueItem,
+    target: 'inventory' | 'wishlist'
+  ): RecognitionCandidateInput[] =>
+    item.suggestions.map((suggestion, index) => ({
+      id: `${item.fileName}-${index + 1}`.replace(/\s+/g, '-'),
+      title: suggestion,
+      confidence: Math.max(0.1, (item.confidencePct - index * 12) / 100),
+      source: index === 0 ? 'quick-scan-upload' : 'quick-scan-alternate',
+      provenance: index === 0 ? 'ui-upload-preview' : 'ui-manual-review',
+      item_type: item.itemType,
+      condition_estimate: item.conditionEstimate,
+      grading_status: item.gradingStatus,
+      media_id: `quick-scan:${item.id}`,
+      media_url: `cabinet://quick-scan/${encodeURIComponent(item.fileName)}`,
+      target,
+      ...(suggestion === item.selectedSuggestion && item.overrideUsed
+        ? {
+            override_id: `${item.fileName}-${index + 1}`.replace(/\s+/g, '-'),
+            override_by: 'scanner-reviewer',
+            override_note: 'Selected alternate before confirmed apply',
+          }
+        : {}),
+    }))
+
+  const reviewQuickScanApply = async (itemID: string) => {
+    const item = quickScanQueue.find((scan) => scan.id === itemID)
+    if (!item) {
+      return
+    }
+    const target = quickApplyTargetByScanID[itemID] ?? 'inventory'
     setPendingApplyScanID(itemID)
+    setQuickScanStatus('Reviewing scanner apply preview before any write.')
+    const response = await fetch('/api/scanner/recognition-review/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target,
+        confirmed: false,
+        candidates: quickScanCandidatesForApply(item, target),
+      }),
+    })
+    const payload = (await response.json()) as
+      | ScannerReviewApplyResult
+      | { review?: RecognitionReview; error?: string }
+    if (response.status !== 409 || !('review' in payload) || !payload.review) {
+      setQuickScanStatus(
+        `Review preview failed: ${
+          'error' in payload && payload.error ? payload.error : response.status
+        }`
+      )
+      return
+    }
+    setQuickReviewByScanID((current) => ({
+      ...current,
+      [itemID]: payload.review as RecognitionReview,
+    }))
     setQuickScanStatus(
-      'Reviewing apply mutation. Confirm to link scan to inventory.'
+      'Confirmation required. Review confidence, provenance, and selected target before applying.'
     )
   }
 
-  const confirmQuickScanApply = () => {
+  const confirmQuickScanApply = async () => {
     if (!pendingApplyScanID) {
+      return
+    }
+    const item = quickScanQueue.find((scan) => scan.id === pendingApplyScanID)
+    if (!item) {
+      return
+    }
+    const target = quickApplyTargetByScanID[pendingApplyScanID] ?? 'inventory'
+    const response = await fetch('/api/scanner/recognition-review/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target,
+        confirmed: true,
+        candidates: quickScanCandidatesForApply(item, target),
+      }),
+    })
+    if (!response.ok) {
+      setQuickScanStatus(`Confirmed scanner apply failed: ${response.status}`)
+      return
+    }
+    const result = (await response.json()) as ScannerReviewApplyResult
+    const reloadResponse = await fetch(
+      `/api/items?status=${encodeURIComponent(
+        target === 'wishlist' ? 'wishlist' : 'owned'
+      )}`
+    )
+    if (!reloadResponse.ok) {
+      setQuickScanStatus(
+        `Confirmed scanner apply saved, but ${target} reload failed: ${reloadResponse.status}`
+      )
       return
     }
     setQuickScanQueue((current) =>
@@ -799,8 +1990,13 @@ export function Scanner() {
           : item
       )
     )
+    setQuickApplyResultByScanID((current) => ({
+      ...current,
+      [pendingApplyScanID]: result,
+    }))
+    const targetLabel = target === 'inventory' ? 'Inventory' : 'Wishlist'
     setQuickScanStatus(
-      'Inventory mutation applied after explicit confirmation.'
+      `${targetLabel} mutation applied after explicit confirmation.`
     )
     setPendingApplyScanID(null)
   }
@@ -823,14 +2019,38 @@ export function Scanner() {
       <Header fixed>
         <Search />
         <HeaderTitle
-          title='Market Watch'
-          description='Provider scans, listing candidates, and discovery queues.'
-          icon={ScanSearch}
+          title={marketWatchHeader?.title ?? 'Market Watch'}
+          description={
+            marketWatchHeader?.description ??
+            'Saved integration searches, provider health, and discovery inboxes.'
+          }
+          icon={marketWatchHeader?.icon ?? ScanSearch}
           testId='market-watch-header-title'
           iconTestId='market-watch-page-icon'
         />
         <div
-          className='ms-auto flex items-center space-x-4'
+          className='ms-auto flex items-center gap-2'
+          data-header-title-avoid='true'
+          data-testid='market-watch-global-header-actions'
+        >
+          <Button
+            onClick={() => void createQuerySet()}
+            data-testid='scanner-create-query'
+          >
+            <Plus className='h-4 w-4' aria-hidden='true' />
+            Create Saved Watch
+          </Button>
+          <Button
+            variant='outline'
+            onClick={() => void runScheduledRefresh()}
+            data-testid='scanner-run-scheduled-refresh'
+          >
+            <Play className='h-4 w-4' aria-hidden='true' />
+            Run Scheduled Watches
+          </Button>
+        </div>
+        <div
+          className='flex items-center space-x-4'
           data-header-title-avoid='true'
         >
           <LanguageSwitch />
@@ -841,19 +2061,61 @@ export function Scanner() {
       </Header>
 
       <Main className='space-y-4'>
-        <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Market Watch</h1>
-          <p className='text-muted-foreground'>
-            Manage provider query sets, run market watch searches, and recover
-            from provider failures.
-          </p>
-        </div>
+        <section
+          className='grid gap-2 sm:grid-cols-2 lg:grid-cols-6'
+          data-testid='market-watch-dashboard-summary'
+        >
+          {marketWatchSummaryCards.map((card) => (
+            <div
+              key={card.label}
+              className='rounded-md border p-3 text-sm'
+              data-testid={`market-watch-summary-${card.label
+                .toLowerCase()
+                .replace(/\s+/g, '-')}`}
+            >
+              <p className='text-xs font-medium text-muted-foreground'>
+                {card.label}
+              </p>
+              <p className='mt-1 truncate text-lg font-semibold'>
+                {card.value}
+              </p>
+              <p className='mt-1 truncate text-xs text-muted-foreground'>
+                {card.detail}
+              </p>
+            </div>
+          ))}
+        </section>
 
         <div
           className='rounded-md border p-3 text-sm'
           data-testid='scanner-provider-health'
         >
-          Provider health (eBay): <strong>{providerHealth}</strong>
+          <div className='flex flex-wrap items-start justify-between gap-3'>
+            <div>
+              <p className='font-medium'>
+                Provider health (eBay): <strong>{providerHealthSummary}</strong>
+              </p>
+              <p
+                className='mt-1 text-xs text-muted-foreground'
+                data-testid='market-watch-provider-health-guidance'
+              >
+                {providerHealthGuidance}
+              </p>
+            </div>
+            <div className='text-xs text-muted-foreground'>
+              <span className='capitalize'>State: {providerHealthState}</span>
+              {providerHealth.category ? (
+                <span className='ms-2'>
+                  Category: {providerHealth.category.replace(/_/g, ' ')}
+                </span>
+              ) : null}
+              {providerHealth.retry_after_seconds ? (
+                <span className='ms-2'>
+                  Retry after {providerHealth.retry_after_seconds}s
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         <section className='grid gap-2 md:grid-cols-3'>
@@ -867,7 +2129,7 @@ export function Scanner() {
                   name: undefined,
                 }))
               }}
-              placeholder='Query set name'
+              placeholder='Saved watch name'
               aria-invalid={createValidation.name ? 'true' : 'false'}
               data-testid='scanner-new-query-name'
             />
@@ -890,7 +2152,7 @@ export function Scanner() {
                   keywords: undefined,
                 }))
               }}
-              placeholder='Keywords (comma-separated)'
+              placeholder='Search terms (comma-separated)'
               aria-invalid={createValidation.keywords ? 'true' : 'false'}
               data-testid='scanner-new-query-keywords'
             />
@@ -903,12 +2165,35 @@ export function Scanner() {
               </p>
             ) : null}
           </div>
-          <Input
-            value={newScheduleCron}
-            onChange={(event) => setNewScheduleCron(event.target.value)}
-            placeholder='Schedule cron (e.g. 0 */6 * * *)'
-            data-testid='scanner-new-query-schedule'
-          />
+          <select
+            className='h-9 rounded-md border bg-background px-3 text-sm'
+            value={newCadence}
+            onChange={(event) => {
+              const cadence = event.target.value as MarketWatchCadenceValue
+              setNewCadence(cadence)
+              const option = MARKET_WATCH_CADENCE_OPTIONS.find(
+                (item) => item.value === cadence
+              )
+              if (cadence !== 'custom') {
+                setNewScheduleCron(option?.cron ?? '')
+              }
+            }}
+            data-testid='scanner-new-watch-cadence'
+          >
+            {MARKET_WATCH_CADENCE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {newCadence === 'custom' ? (
+            <Input
+              value={newScheduleCron}
+              onChange={(event) => setNewScheduleCron(event.target.value)}
+              placeholder='Advanced schedule cron'
+              data-testid='scanner-new-query-schedule'
+            />
+          ) : null}
           <select
             className='h-9 rounded-md border bg-background px-3 text-sm'
             value={providerMode}
@@ -931,72 +2216,54 @@ export function Scanner() {
               }}
               data-testid='market-watch-provider-single'
             >
-              {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider}
+              {marketWatchProviderOptions.map((provider) => (
+                <option key={provider.value} value={provider.value}>
+                  {provider.label}
+                  {provider.state === 'disabled' ? ' (disabled)' : ''}
                 </option>
               ))}
             </select>
           ) : (
             <div className='flex flex-wrap gap-2 md:col-span-2'>
-              {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
+              {marketWatchProviderOptions.map((provider) => (
                 <label
-                  key={provider}
+                  key={provider.value}
                   className='inline-flex items-center gap-2 text-sm'
                 >
                   <input
                     type='checkbox'
-                    checked={multiProviders.includes(provider)}
+                    checked={multiProviders.includes(provider.value)}
                     onChange={(event) => {
                       setProviderValidation(null)
                       setMultiProviders((current) => {
                         if (event.target.checked) {
-                          return current.includes(provider)
+                          return current.includes(provider.value)
                             ? current
-                            : [...current, provider]
+                            : [...current, provider.value]
                         }
-                        return current.filter((value) => value !== provider)
+                        return current.filter(
+                          (value) => value !== provider.value
+                        )
                       })
                     }}
-                    data-testid={`market-watch-provider-checkbox-${provider}`}
+                    data-testid={`market-watch-provider-checkbox-${provider.value}`}
                   />
-                  <span>{provider}</span>
+                  <span>{provider.label}</span>
                 </label>
               ))}
             </div>
           )}
-          <Button
-            onClick={() => void createQuerySet()}
-            data-testid='scanner-create-query'
-          >
-            Create Query Set
-          </Button>
-          <Button
-            variant='outline'
-            onClick={() => void runScheduledRefresh()}
-            data-testid='scanner-run-scheduled-refresh'
-          >
-            Run Scheduled Refresh
-          </Button>
         </section>
         <section className='flex flex-wrap items-center gap-2'>
           <Button
             type='button'
             size='sm'
-            data-testid='card-scanner-quick-scan'
-            onClick={launchQuickScan}
+            variant='outline'
+            data-testid='market-watch-capture-reveal'
+            onClick={() => setShowCapturePanel((current) => !current)}
           >
-            Quick Scan
+            Add listing manually
           </Button>
-          <input
-            ref={quickScanFileInputRef}
-            type='file'
-            accept='image/*'
-            capture='environment'
-            className='hidden'
-            data-testid='card-scanner-quick-file-input'
-            onChange={queueQuickScanFile}
-          />
           <Button
             type='button'
             size='sm'
@@ -1015,199 +2282,508 @@ export function Scanner() {
           >
             Table
           </Button>
-          {quickScanStatus ? (
-            <span
-              className='text-xs text-muted-foreground'
-              data-testid='card-scanner-quick-scan-status'
-            >
-              {quickScanStatus}
-            </span>
-          ) : (
-            <span className='text-xs text-muted-foreground'>
-              Quick Scan supports one-tap mobile capture and desktop upload
-              fallback.
-            </span>
-          )}
         </section>
-        <section
-          className='rounded-md border p-2 text-xs'
-          data-testid='card-scanner-queue'
-        >
-          {quickScanQueue.length === 0 ? (
-            <p className='text-muted-foreground'>No quick-scan items queued.</p>
-          ) : (
-            <ul className='space-y-1'>
-              {quickScanQueue.map((item) => (
-                <li
-                  key={item.id}
-                  className='flex flex-wrap items-center justify-between gap-2'
-                >
-                  <span>{item.fileName}</span>
-                  <span className='text-muted-foreground'>{item.status}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section
-          className='rounded-md border p-3'
-          data-testid='card-scanner-quick-category'
-        >
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <p className='text-sm font-medium'>Recent Unlinked Scans</p>
-            <div className='flex items-center gap-2'>
+        {showCapturePanel ? (
+          <section
+            className='rounded-md border p-3'
+            data-testid='market-watch-capture-panel'
+          >
+            <div className='flex flex-wrap items-center gap-2'>
               <Button
                 type='button'
                 size='sm'
-                variant={quickCategoryView === 'cards' ? 'default' : 'outline'}
-                data-testid='card-scanner-quick-category-view-cards'
-                onClick={() => setQuickCategoryView('cards')}
+                data-testid='card-scanner-quick-scan'
+                onClick={launchQuickScan}
               >
-                Cards
+                Quick Scan
               </Button>
+              <input
+                ref={quickScanFileInputRef}
+                type='file'
+                accept='image/*'
+                capture='environment'
+                className='hidden'
+                data-testid='card-scanner-quick-file-input'
+                onChange={queueQuickScanFile}
+              />
+              <Input
+                className='h-9 w-56 text-sm'
+                placeholder='Manual card title'
+                value={manualEntryTitle}
+                data-testid='card-scanner-manual-entry-title'
+                onChange={(event) => setManualEntryTitle(event.target.value)}
+              />
               <Button
                 type='button'
                 size='sm'
-                variant={quickCategoryView === 'table' ? 'default' : 'outline'}
-                data-testid='card-scanner-quick-category-view-table'
-                onClick={() => setQuickCategoryView('table')}
+                variant='outline'
+                data-testid='card-scanner-manual-entry-queue'
+                onClick={queueManualEntry}
               >
-                Table
+                Queue Manual Entry
+              </Button>
+              {quickScanStatus ? (
+                <span
+                  className='text-xs text-muted-foreground'
+                  data-testid='card-scanner-quick-scan-status'
+                >
+                  {quickScanStatus}
+                </span>
+              ) : (
+                <span className='text-xs text-muted-foreground'>
+                  Quick Scan supports one-tap mobile capture and desktop upload
+                  fallback.
+                </span>
+              )}
+            </div>
+          </section>
+        ) : null}
+        {querySets.length > 0 ? (
+          <section
+            className='rounded-md border p-3 text-sm'
+            data-testid='market-watch-table-filters'
+          >
+            <div className='grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto_auto_auto]'>
+              <label className='grid gap-1 text-xs font-medium'>
+                Provider
+                <select
+                  className='h-9 rounded-md border bg-background px-3 text-sm font-normal'
+                  value={tableProviderFilter}
+                  data-testid='market-watch-filter-provider'
+                  onChange={(event) =>
+                    setTableProviderFilter(event.target.value)
+                  }
+                >
+                  <option value='all'>All providers</option>
+                  {marketWatchProviderOptions.map((provider) => (
+                    <option key={provider.value} value={provider.value}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className='grid gap-1 text-xs font-medium'>
+                Status
+                <select
+                  className='h-9 rounded-md border bg-background px-3 text-sm font-normal'
+                  value={tableStatusFilter}
+                  data-testid='market-watch-filter-status'
+                  onChange={(event) =>
+                    setTableStatusFilter(
+                      event.target.value as MarketWatchStatusFilter
+                    )
+                  }
+                >
+                  <option value='all'>All statuses</option>
+                  <option value='never'>Never run</option>
+                  <option value='running'>Running</option>
+                  <option value='succeeded'>Succeeded</option>
+                  <option value='failed'>Failed</option>
+                </select>
+              </label>
+              <label className='grid gap-1 text-xs font-medium'>
+                Schedule
+                <select
+                  className='h-9 rounded-md border bg-background px-3 text-sm font-normal'
+                  value={tableScheduleFilter}
+                  data-testid='market-watch-filter-schedule'
+                  onChange={(event) =>
+                    setTableScheduleFilter(
+                      event.target.value as MarketWatchScheduleFilter
+                    )
+                  }
+                >
+                  <option value='all'>All schedules</option>
+                  <option value='scheduled'>Scheduled</option>
+                  <option value='manual'>Manual or paused</option>
+                </select>
+              </label>
+              <label className='flex items-center gap-2 text-xs font-medium md:self-end md:pb-2'>
+                <input
+                  type='checkbox'
+                  checked={tableAttentionOnly}
+                  data-testid='market-watch-filter-attention'
+                  onChange={(event) =>
+                    setTableAttentionOnly(event.target.checked)
+                  }
+                />
+                Needs attention
+              </label>
+              <label className='flex items-center gap-2 text-xs font-medium md:self-end md:pb-2'>
+                <input
+                  type='checkbox'
+                  checked={tableResultsOnly}
+                  data-testid='market-watch-filter-results'
+                  onChange={(event) =>
+                    setTableResultsOnly(event.target.checked)
+                  }
+                />
+                Has results
+              </label>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                className='md:self-end'
+                data-testid='market-watch-filter-reset'
+                onClick={resetTableFilters}
+              >
+                Reset
               </Button>
             </div>
-          </div>
-          {recentUnlinkedQuickScans.length === 0 ? (
-            <p className='mt-2 text-xs text-muted-foreground'>
-              No recent unlinked scans. Add quick-scan items to review here.
-            </p>
-          ) : null}
-          {recentUnlinkedQuickScans.length > 0 &&
-          quickCategoryView === 'cards' ? (
-            <ul
-              className='mt-3 space-y-2'
-              data-testid='card-scanner-unlinked-cards-list'
+            <p
+              className='mt-2 text-xs text-muted-foreground'
+              data-testid='market-watch-filter-summary'
             >
-              {recentUnlinkedQuickScans.map((item) => (
+              Showing {filteredQuerySets.length} of {querySets.length} Market
+              Watch saved watches
+            </p>
+          </section>
+        ) : null}
+        {latestRunHistory.length > 0 ? (
+          <section
+            className='rounded-md border p-3 text-sm'
+            data-testid='market-watch-run-history'
+          >
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='font-medium'>Latest run history</p>
+              <p className='text-xs text-muted-foreground'>
+                Hydrated from saved watch metadata
+              </p>
+            </div>
+            <ul className='mt-2 divide-y text-xs'>
+              {latestRunHistory.map((row) => (
                 <li
-                  key={item.id}
-                  className='rounded-md border p-2'
-                  data-testid={`card-scanner-unlinked-item-${item.id}`}
+                  key={row.id}
+                  className='grid gap-1 py-2 md:grid-cols-[1.2fr_0.8fr_1fr_1fr]'
+                  data-testid={`market-watch-run-history-${row.id}`}
                 >
-                  <div className='flex flex-wrap items-center justify-between gap-2'>
-                    <div>
-                      <p className='text-xs font-medium'>{item.fileName}</p>
-                      <p
-                        className='text-[11px] text-muted-foreground'
-                        data-testid={`card-scanner-confidence-${item.id}`}
-                      >
-                        Confidence: {item.confidencePct}%
-                      </p>
-                      <p
-                        className='text-[11px] text-muted-foreground'
-                        data-testid={`card-scanner-suggestion-${item.id}`}
-                      >
-                        Suggestion: {item.selectedSuggestion}
-                      </p>
-                      <p className='text-[11px] text-muted-foreground'>
-                        Queued: {new Date(item.queuedAtISO).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`card-scanner-override-${item.id}`}
-                        onClick={() => selectQuickScanAlternative(item.id)}
-                      >
-                        Use Alternative
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`card-scanner-review-apply-${item.id}`}
-                        onClick={() => reviewQuickScanApply(item.id)}
-                      >
-                        Review Apply
-                      </Button>
-                    </div>
-                  </div>
-                  {item.overrideUsed ? (
-                    <p
-                      className='mt-2 text-[11px] text-amber-500'
-                      data-testid={`card-scanner-override-flag-${item.id}`}
-                    >
-                      Manual override active
-                    </p>
-                  ) : null}
-                  {pendingApplyScanID === item.id ? (
-                    <div
-                      className='mt-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-[11px]'
-                      data-testid={`card-scanner-apply-confirmation-${item.id}`}
-                    >
-                      <p className='mb-2'>
-                        Confirm apply to link this scan to inventory using
-                        selected suggestion.
-                      </p>
-                      <div className='flex flex-wrap gap-2'>
-                        <Button
-                          type='button'
-                          size='sm'
-                          data-testid={`card-scanner-confirm-apply-${item.id}`}
-                          onClick={confirmQuickScanApply}
-                        >
-                          Confirm Apply
-                        </Button>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          data-testid={`card-scanner-cancel-apply-${item.id}`}
-                          onClick={cancelQuickScanApply}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
+                  <span className='font-medium'>{row.name}</span>
+                  <span className='capitalize'>{row.status}</span>
+                  <span className='text-muted-foreground'>{row.ranAt}</span>
+                  <span className='text-muted-foreground'>{row.output}</span>
                 </li>
               ))}
             </ul>
-          ) : null}
-          {recentUnlinkedQuickScans.length > 0 &&
-          quickCategoryView === 'table' ? (
-            <div className='mt-3 overflow-x-auto'>
-              <table
-                className='w-full text-xs'
-                data-testid='card-scanner-unlinked-table'
-              >
-                <thead className='text-left'>
+          </section>
+        ) : null}
+        {runHistory.length > 0 ? (
+          <section
+            className='rounded-md border p-3 text-sm'
+            data-testid='market-watch-persisted-run-history'
+          >
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='font-medium'>Persisted run history</p>
+              <p className='text-xs text-muted-foreground'>
+                Latest saved provider runs
+              </p>
+            </div>
+            <div className='mt-2 overflow-x-auto'>
+              <table className='w-full text-xs'>
+                <thead className='bg-muted/30 text-left'>
                   <tr>
-                    <th className='px-2 py-1'>File</th>
-                    <th className='px-2 py-1'>Confidence</th>
-                    <th className='px-2 py-1'>Suggestion</th>
-                    <th className='px-2 py-1'>Queued At</th>
-                    <th className='px-2 py-1'>Status</th>
+                    <th className='px-2 py-1 font-medium'>Provider</th>
+                    <th className='px-2 py-1 font-medium'>Trigger</th>
+                    <th className='px-2 py-1 font-medium'>Status</th>
+                    <th className='px-2 py-1 font-medium'>Finished</th>
+                    <th className='px-2 py-1 font-medium'>Results</th>
+                    <th className='px-2 py-1 font-medium'>Guidance</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentUnlinkedQuickScans.map((item) => (
-                    <tr key={item.id} className='border-t'>
-                      <td className='px-2 py-1'>{item.fileName}</td>
-                      <td className='px-2 py-1'>{item.confidencePct}%</td>
-                      <td className='px-2 py-1'>{item.selectedSuggestion}</td>
+                  {runHistory.map((run) => (
+                    <tr
+                      key={run.id}
+                      className='border-t'
+                      data-testid={`market-watch-persisted-run-${run.id}`}
+                    >
+                      <td className='px-2 py-1'>{run.provider}</td>
+                      <td className='px-2 py-1'>{run.trigger_type}</td>
+                      <td className='px-2 py-1 capitalize'>{run.status}</td>
                       <td className='px-2 py-1'>
-                        {new Date(item.queuedAtISO).toLocaleString()}
+                        {formatRunHistoryTime(run.finished_at)}
                       </td>
-                      <td className='px-2 py-1'>{item.status}</td>
+                      <td className='px-2 py-1'>
+                        {run.result_count} total / {run.new_result_count} new
+                      </td>
+                      <td className='px-2 py-1'>
+                        {run.error_message ||
+                          run.retry_guidance ||
+                          'No recovery needed'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : null}
-        </section>
+          </section>
+        ) : null}
+        {showCapturePanel ? (
+          <>
+            <section
+              className='rounded-md border p-2 text-xs'
+              data-testid='card-scanner-queue'
+            >
+              {quickScanQueue.length === 0 ? (
+                <p className='text-muted-foreground'>
+                  No quick-scan items queued.
+                </p>
+              ) : (
+                <ul className='space-y-1'>
+                  {quickScanQueue.map((item) => (
+                    <li
+                      key={item.id}
+                      className='flex flex-wrap items-center justify-between gap-2'
+                    >
+                      <span>{item.fileName}</span>
+                      <span className='text-muted-foreground'>
+                        {item.status}
+                      </span>
+                      {quickApplyResultByScanID[item.id]?.item ? (
+                        <span
+                          className='basis-full text-[11px] text-muted-foreground'
+                          data-testid={`card-scanner-apply-result-${item.id}`}
+                        >
+                          Created {quickApplyResultByScanID[item.id].target}{' '}
+                          item: {quickApplyResultByScanID[item.id].item?.title}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+            <section
+              className='rounded-md border p-3'
+              data-testid='card-scanner-quick-category'
+            >
+              <div className='flex flex-wrap items-center justify-between gap-2'>
+                <p className='text-sm font-medium'>Recent Unlinked Scans</p>
+                <div className='flex items-center gap-2'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={
+                      quickCategoryView === 'cards' ? 'default' : 'outline'
+                    }
+                    data-testid='card-scanner-quick-category-view-cards'
+                    onClick={() => setQuickCategoryView('cards')}
+                  >
+                    Cards
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={
+                      quickCategoryView === 'table' ? 'default' : 'outline'
+                    }
+                    data-testid='card-scanner-quick-category-view-table'
+                    onClick={() => setQuickCategoryView('table')}
+                  >
+                    Table
+                  </Button>
+                </div>
+              </div>
+              {recentUnlinkedQuickScans.length === 0 ? (
+                <p className='mt-2 text-xs text-muted-foreground'>
+                  No recent unlinked scans. Add quick-scan items to review here.
+                </p>
+              ) : null}
+              {recentUnlinkedQuickScans.length > 0 &&
+              quickCategoryView === 'cards' ? (
+                <ul
+                  className='mt-3 space-y-2'
+                  data-testid='card-scanner-unlinked-cards-list'
+                >
+                  {recentUnlinkedQuickScans.map((item) => (
+                    <li
+                      key={item.id}
+                      className='rounded-md border p-2'
+                      data-testid={`card-scanner-unlinked-item-${item.id}`}
+                    >
+                      <div className='flex flex-wrap items-center justify-between gap-2'>
+                        <div>
+                          <p className='text-xs font-medium'>{item.fileName}</p>
+                          <p
+                            className='text-[11px] text-muted-foreground'
+                            data-testid={`card-scanner-confidence-${item.id}`}
+                          >
+                            Confidence: {item.confidencePct}%
+                          </p>
+                          <p
+                            className='text-[11px] text-muted-foreground'
+                            data-testid={`card-scanner-grading-${item.id}`}
+                          >
+                            Grading: {item.itemType} / {item.conditionEstimate}{' '}
+                            / {item.gradingStatus}
+                          </p>
+                          <p
+                            className='text-[11px] text-muted-foreground'
+                            data-testid={`card-scanner-suggestion-${item.id}`}
+                          >
+                            Suggestion: {item.selectedSuggestion}
+                          </p>
+                          {quickReviewByScanID[item.id] ? (
+                            <p
+                              className='text-[11px] text-muted-foreground'
+                              data-testid={`card-scanner-review-summary-${item.id}`}
+                            >
+                              Review:{' '}
+                              {quickReviewByScanID[item.id].confidence_label}{' '}
+                              confidence, target{' '}
+                              {quickReviewByScanID[item.id].target},{' '}
+                              {quickReviewByScanID[item.id]
+                                .confirm_before_create
+                                ? 'confirm-before-create required'
+                                : 'confirmation not required'}
+                            </p>
+                          ) : null}
+                          {quickApplyResultByScanID[item.id]?.item ? (
+                            <p
+                              className='text-[11px] text-muted-foreground'
+                              data-testid={`card-scanner-apply-result-${item.id}`}
+                            >
+                              Created {quickApplyResultByScanID[item.id].target}{' '}
+                              item:{' '}
+                              {quickApplyResultByScanID[item.id].item?.title}
+                            </p>
+                          ) : null}
+                          <p className='text-[11px] text-muted-foreground'>
+                            Queued:{' '}
+                            {new Date(item.queuedAtISO).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className='flex flex-wrap items-center gap-2'>
+                          <select
+                            className='h-8 rounded-md border bg-background px-2 text-xs'
+                            value={
+                              quickApplyTargetByScanID[item.id] ?? 'inventory'
+                            }
+                            data-testid={`card-scanner-apply-target-${item.id}`}
+                            onChange={(event) =>
+                              setQuickApplyTargetByScanID((current) => ({
+                                ...current,
+                                [item.id]: event.target.value as
+                                  | 'inventory'
+                                  | 'wishlist',
+                              }))
+                            }
+                          >
+                            <option value='inventory'>Inventory</option>
+                            <option value='wishlist'>Wishlist</option>
+                          </select>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`card-scanner-mark-linked-${item.fileName}`}
+                            onClick={() => markQuickScanLinked(item.id)}
+                          >
+                            Mark Linked
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`card-scanner-override-${item.id}`}
+                            onClick={() => selectQuickScanAlternative(item.id)}
+                          >
+                            Use Alternative
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`card-scanner-review-apply-${item.id}`}
+                            onClick={() => void reviewQuickScanApply(item.id)}
+                          >
+                            Review Apply
+                          </Button>
+                        </div>
+                      </div>
+                      {item.overrideUsed ? (
+                        <p
+                          className='mt-2 text-[11px] text-amber-500'
+                          data-testid={`card-scanner-override-flag-${item.id}`}
+                        >
+                          Manual override active
+                        </p>
+                      ) : null}
+                      {pendingApplyScanID === item.id ? (
+                        <div
+                          className='mt-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-[11px]'
+                          data-testid={`card-scanner-apply-confirmation-${item.id}`}
+                        >
+                          <p className='mb-2'>
+                            Confirm apply to link this scan to inventory using
+                            selected suggestion.
+                          </p>
+                          <div className='flex flex-wrap gap-2'>
+                            <Button
+                              type='button'
+                              size='sm'
+                              data-testid={`card-scanner-confirm-apply-${item.id}`}
+                              onClick={() => void confirmQuickScanApply()}
+                            >
+                              Confirm Apply
+                            </Button>
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='outline'
+                              data-testid={`card-scanner-cancel-apply-${item.id}`}
+                              onClick={cancelQuickScanApply}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {recentUnlinkedQuickScans.length > 0 &&
+              quickCategoryView === 'table' ? (
+                <div className='mt-3 overflow-x-auto'>
+                  <table
+                    className='w-full text-xs'
+                    data-testid='card-scanner-unlinked-table'
+                  >
+                    <thead className='text-left'>
+                      <tr>
+                        <th className='px-2 py-1'>File</th>
+                        <th className='px-2 py-1'>Confidence</th>
+                        <th className='px-2 py-1'>Grading</th>
+                        <th className='px-2 py-1'>Suggestion</th>
+                        <th className='px-2 py-1'>Queued At</th>
+                        <th className='px-2 py-1'>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentUnlinkedQuickScans.map((item) => (
+                        <tr key={item.id} className='border-t'>
+                          <td className='px-2 py-1'>{item.fileName}</td>
+                          <td className='px-2 py-1'>{item.confidencePct}%</td>
+                          <td className='px-2 py-1'>
+                            {item.conditionEstimate} / {item.gradingStatus}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {item.selectedSuggestion}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {new Date(item.queuedAtISO).toLocaleString()}
+                          </td>
+                          <td className='px-2 py-1'>{item.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </section>
+          </>
+        ) : null}
         {providerValidation ? (
           <p
             className='text-sm text-destructive'
@@ -1218,8 +2794,12 @@ export function Scanner() {
         ) : null}
 
         {loading ? (
-          <div className='rounded-md border p-4 text-sm text-muted-foreground'>
-            Loading Market Watch workspace...
+          <div
+            className='rounded-md border p-4 text-sm text-muted-foreground'
+            data-testid='scanner-loading-state'
+          >
+            Loading Market Watch workspace data, provider health, and failure
+            history...
           </div>
         ) : null}
 
@@ -1234,10 +2814,32 @@ export function Scanner() {
               className='mt-3'
               variant='outline'
               size='sm'
+              data-testid='scanner-error-retry'
               onClick={() => void loadScanner()}
             >
               Retry
             </Button>
+          </div>
+        ) : null}
+
+        {hasProviderAttention ? (
+          <div
+            className='rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100'
+            data-testid='market-watch-provider-attention-state'
+          >
+            <p className='font-medium'>Provider needs attention.</p>
+            <p className='mt-1'>
+              eBay provider health is <strong>{providerHealthSummary}</strong>.
+            </p>
+            <ul className='mt-2 list-disc ps-4'>
+              <li>{providerHealthGuidance}</li>
+              {providerHealth.next_action ? (
+                <li>Next action: {providerHealth.next_action}</li>
+              ) : null}
+              <li>
+                Retry failed Market Watch runs after provider health recovers.
+              </li>
+            </ul>
           </div>
         ) : null}
 
@@ -1246,8 +2848,8 @@ export function Scanner() {
             className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
             data-testid='scanner-empty-state'
           >
-            No query sets found. Create your first query set to start Market
-            Watch runs.
+            No saved watches found. Create your first saved integration search
+            to start Market Watch runs.
           </div>
         ) : null}
 
@@ -1279,18 +2881,46 @@ export function Scanner() {
               >
                 <summary>Diagnostics</summary>
                 <p className='mt-1'>{actionFeedback.diagnosticCode}</p>
+                {actionFeedback.diagnostics?.length ? (
+                  <ul className='mt-1 list-disc ps-4'>
+                    {actionFeedback.diagnostics.map((diagnostic) => (
+                      <li key={diagnostic}>{diagnostic}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </details>
             ) : null}
           </div>
         ) : null}
 
-        {querySets.length > 0 && viewMode === 'cards' ? (
+        {querySets.length > 0 && filteredQuerySets.length === 0 ? (
+          <section
+            className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
+            data-testid='market-watch-filter-empty'
+          >
+            No Market Watch queries match the current filters.
+            {hasActiveTableFilters ? (
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                className='ms-3'
+                data-testid='market-watch-filter-empty-reset'
+                onClick={resetTableFilters}
+              >
+                Reset filters
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
+
+        {filteredQuerySets.length > 0 && viewMode === 'cards' ? (
           <section
             className='rounded-md border'
             data-testid='scanner-query-list'
           >
             <div className='divide-y'>
-              {querySets.map((querySet) => (
+              {filteredQuerySets.map((querySet) => (
                 <div
                   key={querySet.id}
                   className='flex flex-wrap items-center justify-between gap-2 p-3'
@@ -1312,13 +2942,48 @@ export function Scanner() {
                           }
                           data-testid={`scanner-edit-keywords-${querySet.id}`}
                         />
-                        <Input
-                          value={editingScheduleCron}
-                          onChange={(event) =>
-                            setEditingScheduleCron(event.target.value)
-                          }
-                          data-testid={`scanner-edit-schedule-${querySet.id}`}
-                        />
+                        <label className='inline-flex items-center gap-2 text-xs text-muted-foreground'>
+                          <input
+                            type='checkbox'
+                            checked={editingEnabled}
+                            onChange={(event) =>
+                              setEditingEnabled(event.target.checked)
+                            }
+                            data-testid={`scanner-edit-enabled-${querySet.id}`}
+                          />
+                          Enabled
+                        </label>
+                        <select
+                          className='h-9 rounded-md border bg-background px-3 text-sm'
+                          value={editingCadence}
+                          onChange={(event) => {
+                            const cadence = event.target
+                              .value as MarketWatchCadenceValue
+                            setEditingCadence(cadence)
+                            const option = MARKET_WATCH_CADENCE_OPTIONS.find(
+                              (item) => item.value === cadence
+                            )
+                            if (cadence !== 'custom') {
+                              setEditingScheduleCron(option?.cron ?? '')
+                            }
+                          }}
+                          data-testid={`scanner-edit-cadence-${querySet.id}`}
+                        >
+                          {MARKET_WATCH_CADENCE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        {editingCadence === 'custom' ? (
+                          <Input
+                            value={editingScheduleCron}
+                            onChange={(event) =>
+                              setEditingScheduleCron(event.target.value)
+                            }
+                            data-testid={`scanner-edit-schedule-${querySet.id}`}
+                          />
+                        ) : null}
                       </div>
                     ) : (
                       <>
@@ -1338,7 +3003,10 @@ export function Scanner() {
                       className='text-xs text-muted-foreground'
                       data-testid={`scanner-query-schedule-${querySet.id}`}
                     >
-                      Schedule: {querySet.schedule_cron || 'none'}
+                      Schedule:{' '}
+                      {querySet.enabled === false
+                        ? `Paused - ${cadenceLabelForCron(querySet.schedule_cron)}${querySet.schedule_cron ? ` (${querySet.schedule_cron})` : ''}`
+                        : querySet.schedule_cron || 'none'}
                     </p>
                   </div>
                   <div className='flex flex-wrap gap-2'>
@@ -1401,7 +3069,7 @@ export function Scanner() {
           </section>
         ) : null}
 
-        {querySets.length > 0 && viewMode === 'table' ? (
+        {filteredQuerySets.length > 0 && viewMode === 'table' ? (
           <section
             className='rounded-md border'
             data-testid='market-watch-query-table'
@@ -1410,44 +3078,109 @@ export function Scanner() {
               <table className='w-full text-sm'>
                 <thead className='bg-muted/30 text-left'>
                   <tr>
-                    <th className='px-3 py-2 font-medium'>Query Name</th>
+                    <th className='px-3 py-2 font-medium'>Saved Watch</th>
+                    <th className='px-3 py-2 font-medium'>Terms</th>
                     <th className='px-3 py-2 font-medium'>Provider Scope</th>
-                    <th className='px-3 py-2 font-medium'>Last Run Status</th>
+                    <th className='px-3 py-2 font-medium'>Schedule</th>
+                    <th className='px-3 py-2 font-medium'>Latest Status</th>
                     <th className='px-3 py-2 font-medium'>Last Run Time</th>
-                    <th className='px-3 py-2 font-medium'>
-                      Latest Output Summary
-                    </th>
+                    <th className='px-3 py-2 font-medium'>Result Count</th>
                     <th className='px-3 py-2 font-medium'>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {querySets.map((querySet) => (
-                    <tr key={querySet.id} className='border-t'>
+                  {filteredQuerySets.map((querySet) => (
+                    <tr
+                      key={querySet.id}
+                      role='button'
+                      tabIndex={0}
+                      aria-label={`Open Market Watch output details for ${querySet.name}`}
+                      className='cursor-pointer border-t align-top hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                      data-testid={`market-watch-query-row-${querySet.id}`}
+                      onDoubleClick={() => void openOutputDetails(querySet)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.target !== event.currentTarget ||
+                          event.key !== 'Enter'
+                        ) {
+                          return
+                        }
+                        event.preventDefault()
+                        void openOutputDetails(querySet)
+                      }}
+                    >
                       <td className='px-3 py-2'>{querySet.name}</td>
+                      <td className='px-3 py-2'>
+                        {querySet.keywords?.join(', ') || 'no keywords'}
+                      </td>
                       <td className='px-3 py-2'>
                         {(querySet.provider_scope ?? []).join(', ') || 'ebay'}
                       </td>
+                      <td className='px-3 py-2'>
+                        {formatScheduleMode(querySet)}
+                      </td>
                       <td className='px-3 py-2 capitalize'>
-                        {formatRunStatus(querySet.id)}
+                        {formatTableStatus(querySet)}
                       </td>
                       <td className='px-3 py-2'>
                         {formatRunTime(querySet.id)}
                       </td>
                       <td className='px-3 py-2'>
-                        {formatOutputSummary(querySet.id)}
+                        {formatResultCount(querySet.id)}
                       </td>
                       <td className='px-3 py-2'>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          data-testid={`market-watch-open-output-${querySet.id}`}
-                          onClick={() =>
-                            setSelectedOutputQuerySetID(querySet.id)
-                          }
-                        >
-                          Inspect Output
-                        </Button>
+                        <div className='flex flex-wrap gap-2'>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-run-now-${querySet.id}`}
+                            onClick={() => void runNow(querySet)}
+                          >
+                            Run Now
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-toggle-enabled-${querySet.id}`}
+                            onClick={() =>
+                              void setQuerySetEnabled(
+                                querySet,
+                                querySet.enabled === false
+                              )
+                            }
+                          >
+                            {querySet.enabled === false ? 'Resume' : 'Pause'}
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-edit-${querySet.id}`}
+                            onClick={() => startEditQuerySet(querySet)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-open-output-${querySet.id}`}
+                            onClick={() => void openOutputDetails(querySet)}
+                          >
+                            Inspect Output
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid={`market-watch-delete-${querySet.id}`}
+                            onClick={() => void deleteQuerySet(querySet.id)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1483,12 +3216,27 @@ export function Scanner() {
                 <p className='text-xs text-muted-foreground'>
                   Last run status: {formatRunStatus(selectedOutputQuerySetID)}
                 </p>
+                {querySets.find(
+                  (querySet) => querySet.id === selectedOutputQuerySetID
+                )?.last_run_message ? (
+                  <p className='text-xs text-muted-foreground'>
+                    Latest failure:{' '}
+                    {
+                      querySets.find(
+                        (querySet) => querySet.id === selectedOutputQuerySetID
+                      )?.last_run_message
+                    }
+                  </p>
+                ) : null}
               </div>
               <Button
                 type='button'
                 size='sm'
                 variant='ghost'
-                onClick={() => setSelectedOutputQuerySetID(null)}
+                onClick={() => {
+                  setSelectedOutputQuerySetID(null)
+                  resetResultFilters()
+                }}
               >
                 Close
               </Button>
@@ -1516,25 +3264,238 @@ export function Scanner() {
               </div>
             ) : null}
             <div className='mt-3'>
-              <p className='text-xs font-medium'>Latest output items</p>
-              {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).length ===
-              0 ? (
-                <p className='text-xs text-muted-foreground'>
+              <div
+                className='flex flex-wrap items-end gap-2'
+                data-testid='market-watch-results-inbox-filters'
+              >
+                <div>
+                  <label
+                    className='text-xs font-medium'
+                    htmlFor='market-watch-result-status-filter'
+                  >
+                    Result status
+                  </label>
+                  <select
+                    id='market-watch-result-status-filter'
+                    className='mt-1 h-8 rounded-md border bg-background px-2 text-xs'
+                    value={resultStatusFilter}
+                    onChange={(event) =>
+                      setResultStatusFilter(
+                        event.target.value as MarketWatchResultStatusFilter
+                      )
+                    }
+                    data-testid='market-watch-result-status-filter'
+                  >
+                    {MARKET_WATCH_RESULT_STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    className='text-xs font-medium'
+                    htmlFor='market-watch-result-provider-filter'
+                  >
+                    Provider
+                  </label>
+                  <select
+                    id='market-watch-result-provider-filter'
+                    className='mt-1 h-8 rounded-md border bg-background px-2 text-xs'
+                    value={resultProviderFilter}
+                    onChange={(event) =>
+                      setResultProviderFilter(event.target.value)
+                    }
+                    data-testid='market-watch-result-provider-filter'
+                  >
+                    <option value='all'>All providers</option>
+                    {resultProviderOptions.map((provider) => (
+                      <option key={provider} value={provider}>
+                        {provider}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    className='text-xs font-medium'
+                    htmlFor='market-watch-result-match-filter'
+                  >
+                    Match
+                  </label>
+                  <select
+                    id='market-watch-result-match-filter'
+                    className='mt-1 h-8 rounded-md border bg-background px-2 text-xs'
+                    value={resultMatchFilter}
+                    onChange={(event) =>
+                      setResultMatchFilter(event.target.value)
+                    }
+                    data-testid='market-watch-result-match-filter'
+                  >
+                    <option value='all'>All matches</option>
+                    {resultMatchOptions.map((target) => (
+                      <option key={target} value={target}>
+                        {target}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className='flex h-8 items-center gap-2 text-xs font-medium'>
+                  <input
+                    type='checkbox'
+                    checked={resultWishlistMatchesOnly}
+                    onChange={(event) =>
+                      setResultWishlistMatchesOnly(event.target.checked)
+                    }
+                    data-testid='market-watch-result-wishlist-filter'
+                  />
+                  Wishlist matches
+                </label>
+                {hasActiveResultFilters ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    data-testid='market-watch-result-filter-reset'
+                    onClick={resetResultFilters}
+                  >
+                    Reset
+                  </Button>
+                ) : null}
+              </div>
+              <p
+                className='mt-2 text-xs text-muted-foreground'
+                data-testid='market-watch-results-inbox-summary'
+              >
+                Showing {filteredOutputCandidates.length} of{' '}
+                {selectedOutputCandidates.length} result inbox items.
+              </p>
+              <p className='mt-3 text-xs font-medium'>Latest output items</p>
+              {selectedOutputCandidates.length === 0 ? (
+                <p
+                  className='text-xs text-muted-foreground'
+                  data-testid='market-watch-output-no-results'
+                >
                   No output available yet.
+                  <span className='ms-1'>
+                    Run this query or adjust provider scope to collect visible
+                    results.
+                  </span>
                 </p>
+              ) : filteredOutputCandidates.length === 0 ? (
+                <div
+                  className='mt-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground'
+                  data-testid='market-watch-result-filter-empty'
+                >
+                  No results match the current inbox filters.
+                </div>
               ) : (
-                <ul className='mt-1 space-y-1 text-xs text-muted-foreground'>
-                  {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).map(
-                    (candidate) => (
-                      <li key={candidate.id || candidate.listing_id}>
-                        {candidate.title} ({candidate.source ?? 'unknown'})
-                      </li>
-                    )
-                  )}
-                </ul>
+                <div className='mt-2 overflow-x-auto'>
+                  <table
+                    className='w-full table-fixed text-xs [&_td]:break-all [&_th]:break-words'
+                    data-testid='market-watch-output-results-table'
+                  >
+                    <thead className='bg-muted/30 text-left'>
+                      <tr>
+                        <th className='px-2 py-1 font-medium'>Provider</th>
+                        <th className='px-2 py-1 font-medium'>Result</th>
+                        <th className='px-2 py-1 font-medium'>Matched Watch</th>
+                        <th className='px-2 py-1 font-medium'>Match</th>
+                        <th className='px-2 py-1 font-medium'>Price</th>
+                        <th className='px-2 py-1 font-medium'>Shipping</th>
+                        <th className='px-2 py-1 font-medium'>Total</th>
+                        <th className='px-2 py-1 font-medium'>Source</th>
+                        <th className='px-2 py-1 font-medium'>First Seen</th>
+                        <th className='px-2 py-1 font-medium'>Last Seen</th>
+                        <th className='px-2 py-1 font-medium'>Stock</th>
+                        <th className='px-2 py-1 font-medium'>Status</th>
+                        <th className='px-2 py-1 font-medium'>
+                          Decision History
+                        </th>
+                        <th className='px-2 py-1 font-medium'>Handoff</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredOutputCandidates.map((candidate) => (
+                        <tr
+                          key={candidate.id || candidate.listing_id}
+                          className='border-t'
+                        >
+                          <td className='px-2 py-1'>
+                            {candidateProvider(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            <span>{candidate.title}</span>
+                            <span className='block text-muted-foreground'>
+                              {formatCandidateMatchReason(candidate)}
+                            </span>
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateWatch(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {candidateMatchTarget(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidatePrice(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateShipping(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateTotalPrice(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateSource(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateSeenAt(
+                              candidate.first_seen ?? candidate.first_seen_at
+                            )}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateSeenAt(
+                              candidate.last_seen ?? candidate.last_seen_at
+                            )}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateStock(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatResultStatus(candidate)}
+                          </td>
+                          <td
+                            className='px-2 py-1'
+                            data-testid={`market-watch-result-decision-history-${candidate.id || candidate.listing_id}`}
+                          >
+                            {formatCandidateDecisionHistory(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateHandoff(candidate)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
             <div className='mt-3 flex flex-wrap gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-dismiss-first-result-${selectedOutputQuerySetID}`}
+                onClick={() =>
+                  void updateFirstCandidateLifecycleStatus(
+                    selectedOutputQuerySetID,
+                    'dismissed'
+                  )
+                }
+              >
+                Dismiss First Result
+              </Button>
               <Button
                 type='button'
                 size='sm'
@@ -1545,6 +3506,30 @@ export function Scanner() {
                 }
               >
                 Add First Result to Wishlist
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-handoff-inventory-${selectedOutputQuerySetID}`}
+                onClick={() =>
+                  void handoffFirstCandidateToInventory(
+                    selectedOutputQuerySetID
+                  )
+                }
+              >
+                Add First Result to Inventory
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-handoff-purchase-${selectedOutputQuerySetID}`}
+                onClick={() =>
+                  void handoffFirstCandidateToPurchase(selectedOutputQuerySetID)
+                }
+              >
+                Mark First Result Purchased
               </Button>
               <Button
                 type='button'
@@ -1616,6 +3601,16 @@ export function Scanner() {
                     <p className='text-xs text-muted-foreground'>
                       {failure.message}
                     </p>
+                    {failure.retry_guidance ? (
+                      <p className='mt-1 text-xs text-muted-foreground'>
+                        Retry guidance: {failure.retry_guidance}
+                      </p>
+                    ) : null}
+                    {failure.next_action ? (
+                      <p className='text-xs text-muted-foreground'>
+                        Next action: {failure.next_action}
+                      </p>
+                    ) : null}
                   </div>
                   <Button
                     size='sm'

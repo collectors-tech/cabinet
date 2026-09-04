@@ -134,7 +134,7 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-row-all-items"]').should('be.visible')
   })
 
-  it('UI-SCREEN-COLLECTIONS-016 renders selected collection items in a lower table', () => {
+  it('UI-SCREEN-COLLECTIONS-016 retires the lower members table and keeps the main table useful', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-workspace"]').should('be.visible')
@@ -144,23 +144,16 @@ describe('ui-screen-collections', () => {
       .and('have.attr', 'data-table-surface', 'true')
       .find('table')
       .should('exist')
-    cy.get('[data-testid="collections-members-table-toolbar"]').should('be.visible')
-    cy.get('[data-testid="collections-members-table"]')
-      .should('be.visible')
-      .and('have.attr', 'data-table-surface', 'true')
-      .find('table')
-      .should('exist')
-    cy.get('[data-testid="collections-members-table-pagination"]').should('be.visible')
+    cy.get('[data-testid="collections-members-panel"]').should('not.exist')
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
+    cy.contains('Collection members').should('not.exist')
     cy.get('[data-testid="collections-active-context"]').should('contain.text', 'All Items')
     cy.get('[data-testid="collections-selected-name"]').should('not.exist')
     cy.get('[data-testid="collections-assignment-panel"]').should('not.exist')
-    cy.get('[data-testid="collections-member-row-inventory-item-kobe-rookie"]').should(
+    cy.get('[data-testid="collections-row-count-all-items"]').should('have.text', '5')
+    cy.get('[data-testid="collections-row-watch-list"]').should(
       'contain.text',
-      '1996 Topps Kobe Bryant rookie'
-    )
-    cy.get('[data-testid="collections-member-row-inventory-item-charizard-base"]').should(
-      'contain.text',
-      'Base Set Charizard'
+      'Watch List'
     )
 
     cy.get('[data-testid="collections-row-store-1"]').click()
@@ -170,23 +163,12 @@ describe('ui-screen-collections', () => {
       'selected'
     )
     cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Store 1')
-    cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
-      'contain.text',
-      'Shadowless Pikachu'
-    )
 
     cy.get('[data-testid="collections-row-overflow"]').click()
     cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Overflow')
-    cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
-      'not.exist'
-    )
-    cy.get('[data-testid="collections-members-empty-row"]').should(
-      'contain.text',
-      'No items are currently assigned to Overflow.'
-    )
   })
 
-  it('UI-SCREEN-COLLECTIONS-021 truncates long member table values instead of overflowing columns', () => {
+  it('UI-SCREEN-COLLECTIONS-021 keeps long collection values inside the single table', () => {
     const longMemberName =
       'URL-BONZASLOTCARS-2026-MATCHBOX-HOT-WHEELS-TOMICA-AFX-AURORA-LONG-LONG-LONG'
 
@@ -203,7 +185,7 @@ describe('ui-screen-collections', () => {
         category: 'Slot Cars',
         brand: 'Bonza Slot Cars',
         description:
-          'This deliberately long record verifies the members table clips text safely.',
+          'This deliberately long record verifies the single table clips text safely.',
       },
       ...defaultCollectionInventoryItems,
     ])
@@ -214,60 +196,40 @@ describe('ui-screen-collections', () => {
     cy.wait('@loadCollectionSettings')
     cy.wait('@collectionsInventoryItems')
 
-    cy.get('[data-testid="collections-members-table"]').then(($surface) => {
+    cy.get('[data-testid="collections-shared-table"]').then(($surface) => {
       const surface = $surface[0]
-      expect(surface.scrollWidth, 'members table horizontal overflow').to.be.at.most(
+      expect(surface.scrollWidth, 'collections table horizontal overflow').to.be.at.most(
         surface.clientWidth + 1
       )
     })
-    cy.get('[data-testid="collections-member-row-inventory-item-long-member-overflow"]')
-      .scrollIntoView()
-      .should('be.visible')
-      .within(() => {
-        cy.get('td').each(($cell) => {
-          expect($cell[0].scrollWidth, 'cell text overflow').to.be.at.most(
-            $cell[0].clientWidth + 1
-          )
-        })
-        cy.get('td')
-          .first()
-          .find('[data-testid^="collections-member-name-"]')
-          .should('have.css', 'text-overflow', 'ellipsis')
+    cy.get('[data-testid="collections-row-all-items"]').within(() => {
+      cy.get('td').each(($cell) => {
+        expect($cell[0].scrollWidth, 'cell text overflow').to.be.at.most(
+          $cell[0].clientWidth + 1
+        )
       })
+    })
   })
 
-  it('UI-SCREEN-COLLECTIONS-020 stretches both tables to the available viewport height', () => {
+  it('UI-SCREEN-COLLECTIONS-020 stretches the main table to the available viewport height', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-workspace"]').should('be.visible')
     cy.get('[data-testid="collections-section"]').should('be.visible')
-    cy.get('[data-testid="collections-members-panel"]').should('be.visible')
     cy.get('[data-testid="collections-shared-table"]').should('be.visible')
-    cy.get('[data-testid="collections-members-table"]').should('be.visible')
+    cy.get('[data-testid="collections-members-panel"]').should('not.exist')
 
     cy.get('[data-testid="collections-section"]').then(($collectionsCard) => {
-      cy.get('[data-testid="collections-members-panel"]').then(($membersCard) => {
-        expect(
-          $collectionsCard[0].getBoundingClientRect().height,
-          'collections table card height'
-        ).to.be.greaterThan(300)
-        expect(
-          $membersCard[0].getBoundingClientRect().height,
-          'collection members card height'
-        ).to.be.greaterThan(300)
-      })
+      expect(
+        $collectionsCard[0].getBoundingClientRect().height,
+        'collections table card height'
+      ).to.be.greaterThan(360)
     })
     cy.get('[data-testid="collections-shared-table"]').then(($surface) => {
       expect(
         $surface[0].getBoundingClientRect().height,
         'collections table surface height'
-      ).to.be.greaterThan(180)
-    })
-    cy.get('[data-testid="collections-members-table"]').then(($surface) => {
-      expect(
-        $surface[0].getBoundingClientRect().height,
-        'members table surface height'
-      ).to.be.greaterThan(180)
+      ).to.be.greaterThan(240)
     })
     cy.window().then((win) => {
       expect(win.document.documentElement.scrollHeight).to.be.at.most(
@@ -299,18 +261,7 @@ describe('ui-screen-collections', () => {
       'have.text',
       '12'
     )
-    cy.get('[data-testid="collections-members-summary"]').should(
-      'contain.text',
-      'Showing 12 of 12 items.'
-    )
-    cy.get('[data-testid="collections-member-row-collection-live-item-1"]')
-      .scrollIntoView()
-      .should('be.visible')
-      .and('contain.text', 'Collection Live Item 1')
-    cy.get('[data-testid="collections-member-row-collection-live-item-10"]')
-      .scrollIntoView()
-      .should('be.visible')
-      .and('contain.text', 'Collection Live Item 10')
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
   })
 
   it('UI-SCREEN-COLLECTIONS-002 selects a row and persists active context across refresh', () => {
@@ -336,16 +287,20 @@ describe('ui-screen-collections', () => {
     )
   })
 
-  it('UI-SCREEN-COLLECTIONS-019 exposes active collection Browse control', () => {
+  it('UI-SCREEN-COLLECTIONS-010 moves Browse into row-level View actions', () => {
     signInToCollections()
     cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSelection')
 
-    cy.get('[data-testid="collections-row-watch-list"]').click()
-    cy.wait('@saveCollectionSelection')
-    cy.get('[data-testid="collections-active-browse-control"]')
+    cy.get('[data-testid="collections-active-browse-control"]').should('not.exist')
+    cy.get('[data-testid="collections-active-browse"]').should('not.exist')
+    cy.get('[data-testid="collections-row-watch-list"]').scrollIntoView()
+    cy.get('[data-testid="collections-row-edit-watch-list"]').should('be.visible')
+    cy.get('[data-testid="collections-row-delete-watch-list"]').should('be.visible')
+    cy.get('[data-testid="collections-row-view-watch-list"]')
       .should('be.visible')
-      .and('contain.text', 'Watch List')
-    cy.get('[data-testid="collections-active-browse"]').click()
+      .and('have.attr', 'aria-label', 'View Watch List in inventory')
+      .click({ force: true })
+    cy.wait('@saveCollectionSelection')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.get('[data-testid="collection-active-context"]').should(
       'contain.text',
@@ -367,6 +322,103 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Collections Alpha')
   })
 
+  it('UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as(
+      'saveCollectionSettings'
+    )
+
+    cy.get('[data-testid="collections-new-action"]').click()
+    cy.get('[data-testid="collections-create-input"]').type('{enter}')
+    cy.get('[data-testid="collections-create-dialog"]').should('be.visible')
+    cy.get('[data-testid="collections-create-error"]')
+      .should('be.visible')
+      .and('contain.text', 'Enter a unique collection name.')
+    cy.get('[data-testid="collections-create-input"]')
+      .should('have.attr', 'aria-invalid', 'true')
+      .and('be.focused')
+    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+
+    cy.get('[data-testid="collections-create-input"]').type(
+      'Keyboard Shelf{enter}'
+    )
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.collections).to.include('Keyboard Shelf')
+      expect(persisted.activeCollection).to.equal('Keyboard Shelf')
+    })
+    cy.contains('Keyboard Shelf created and set as the active collection.').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="collections-create-dialog"]').should('not.exist')
+    cy.get('[data-testid="collections-row-keyboard-shelf"]')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'Keyboard Shelf'
+    )
+  })
+
+  it('UI-SCREEN-COLLECTIONS-023 opens Create collection from Ctrl+N and command entry', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as(
+      'saveCollectionSettings'
+    )
+
+    cy.get('[data-testid="collections-search-input"]').click().type('{ctrl}n')
+    cy.get('[data-testid="collections-create-dialog"]').should('not.exist')
+
+    cy.get('body').click(0, 0).type('{ctrl}n')
+    cy.get('[data-testid="collections-create-dialog"]').should('be.visible')
+    cy.get('[data-testid="collections-create-input"]').type('Shortcut Shelf')
+    cy.get('[data-testid="collections-create-submit"]').click()
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.collections).to.include('Shortcut Shelf')
+      expect(persisted.activeCollection).to.equal('Shortcut Shelf')
+    })
+    cy.get('[data-testid="collections-create-dialog"]').should('not.exist')
+    cy.get('[data-testid="collections-row-shortcut-shelf"]')
+      .scrollIntoView()
+      .should('be.visible')
+
+    cy.contains('button', /search/i).first().click()
+    cy.get('input[placeholder="Type a command or search..."]').type(
+      'Create collection'
+    )
+    cy.get('[data-testid="command-create-collection"]')
+      .should('contain.text', 'Create collection')
+      .and('contain.text', 'Ctrl+N')
+      .click()
+
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/collections\/?$/)
+    cy.location('search').should('not.contain', 'create=collection')
+    cy.get('[data-testid="collections-create-dialog"]').should('be.visible')
+    cy.get('[data-testid="collections-create-input"]').type('Command Shelf')
+    cy.get('[data-testid="collections-create-submit"]').click()
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.collections).to.include('Command Shelf')
+      expect(persisted.activeCollection).to.equal('Command Shelf')
+    })
+    cy.get('[data-testid="collections-row-command-shelf"]')
+      .scrollIntoView()
+      .should('be.visible')
+  })
+
   it('UI-SCREEN-COLLECTIONS-004 renames a collection from the row workflow and persists after refresh', () => {
     signInToCollections()
 
@@ -385,20 +437,147 @@ describe('ui-screen-collections', () => {
       .should('exist')
   })
 
-  it('UI-SCREEN-COLLECTIONS-005 deletes a collection and releases assigned items', () => {
+  it('UI-SCREEN-COLLECTIONS-005 soft-deletes a collection and releases assigned items', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-store-1"]').click()
-    cy.get('[data-testid="collections-member-shadowless-pikachu"]').should('be.visible')
+    cy.get('[data-testid="collections-row-count-store-1"]').should('have.text', '1')
     cy.get('[data-testid="collections-row-delete-store-1"]').scrollIntoView().click({ force: true })
     cy.get('[data-testid="collections-delete-submit"]').click()
 
-    cy.contains('Store 1 removed from workspace collections.').should('be.visible')
+    cy.contains('Store 1 hidden from active workspace collections.').should('be.visible')
     cy.get('[data-testid="collections-row-store-1"]').should('not.exist')
     cy.get('[data-testid="collections-active-context"]').should('contain.text', 'All Items')
-    cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
+    cy.get('[data-testid="collections-deleted-filter-toggle"]').click()
+    cy.get('[data-testid="collections-row-store-1"]').should('be.visible')
+    cy.get('[data-testid="collections-row-deleted-store-1"]').should(
       'contain.text',
-      'Currently in Unassigned.'
+      'Deleted collection'
+    )
+  })
+
+  it('UI-SCREEN-COLLECTIONS-032 soft-deletes with deleted filter, reassignment choices, and editable metadata', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as(
+      'saveCollectionSettings'
+    )
+
+    cy.get('[data-testid="collections-row-edit-store-2"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="collections-edit-input"]').clear().type('Store 2 Prime')
+    cy.get('[data-testid="collections-edit-scope-input"]')
+      .clear()
+      .type('Retail showcase')
+    cy.get('[data-testid="collections-edit-status-input"]')
+      .clear()
+      .type('Ready for audit')
+    cy.get('[data-testid="collections-edit-description-input"]')
+      .clear()
+      .type('Display stock with complete shelf metadata.')
+    cy.get('[data-testid="collections-edit-submit"]').click()
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        collectionMetadata?: Record<string, { scopeLabel?: string; statusLabel?: string; description?: string }>
+      }
+      expect(persisted.collections).to.include('Store 2 Prime')
+      expect(persisted.collectionMetadata?.['store-2-prime']?.scopeLabel).to.eq(
+        'Retail showcase'
+      )
+      expect(persisted.collectionMetadata?.['store-2-prime']?.statusLabel).to.eq(
+        'Ready for audit'
+      )
+      expect(persisted.collectionMetadata?.['store-2-prime']?.description).to.eq(
+        'Display stock with complete shelf metadata.'
+      )
+    })
+    cy.get('[data-testid="collections-row-store-2-prime"]').should(
+      'contain.text',
+      'Retail showcase'
+    )
+    cy.get('[data-testid="collections-row-store-2-prime"]').should(
+      'contain.text',
+      'Ready for audit'
+    )
+
+    cy.get('[data-testid="collections-row-store-1"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.get('[data-testid="collections-row-delete-store-1"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="collections-delete-message"]').should(
+      'contain.text',
+      'Store 1 has 1 assigned item'
+    )
+    cy.get('[data-testid="collections-delete-destination-select"]').select(
+      'Warehouse 1'
+    )
+    cy.get('[data-testid="collections-delete-submit"]').click()
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+        items?: Array<{ id: string; collectionName: string | null }>
+        collectionMetadata?: Record<string, { deletedAt?: string | null; statusLabel?: string }>
+      }
+      expect(persisted.collections).to.include('Store 1')
+      expect(persisted.activeCollection).to.eq('All Items')
+      expect(persisted.collectionMetadata?.['store-1']?.deletedAt).to.be.a(
+        'string'
+      )
+      expect(persisted.collectionMetadata?.['store-1']?.statusLabel).to.eq(
+        'Deleted'
+      )
+      expect(
+        persisted.items?.find((item) => item.id === 'inventory-item-pikachu-shadowless')
+          ?.collectionName
+      ).to.eq('Warehouse 1')
+    })
+    cy.get('[data-testid="collections-row-store-1"]').should('not.exist')
+    cy.get('[data-testid="collections-row-warehouse-1"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.get('[data-testid="collections-row-count-warehouse-1"]').should('have.text', '2')
+
+    cy.get('[data-testid="collections-row-watch-list"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.get('[data-testid="collections-row-delete-watch-list"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="collections-delete-message"]').should(
+      'contain.text',
+      'Watch List has 1 assigned item'
+    )
+    cy.get('[data-testid="collections-delete-destination-select"]').should(
+      'have.value',
+      ''
+    )
+    cy.get('[data-testid="collections-delete-submit"]').click()
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        items?: Array<{ id: string; collectionName: string | null }>
+        collectionMetadata?: Record<string, { deletedAt?: string | null }>
+      }
+      expect(persisted.collectionMetadata?.['watch-list']?.deletedAt).to.be.a(
+        'string'
+      )
+      expect(
+        persisted.items?.find((item) => item.id === 'inventory-item-kobe-rookie')
+          ?.collectionName
+      ).to.eq(null)
+    })
+    cy.get('[data-testid="collections-row-all-items"]').click()
+    cy.get('[data-testid="collections-row-count-all-items"]').should('have.text', '5')
+
+    cy.get('[data-testid="collections-deleted-filter-toggle"]').click()
+    cy.get('[data-testid="collections-row-store-1"]').should('be.visible')
+    cy.get('[data-testid="collections-row-deleted-store-1"]').should(
+      'contain.text',
+      'Deleted collection'
     )
   })
 
@@ -412,36 +591,24 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-management-summary"]').should('contain.text', 'Showing 1 of 6 collections.')
   })
 
-  it('UI-SCREEN-COLLECTIONS-017 filters collection members within the members table surface', () => {
+  it('UI-SCREEN-COLLECTIONS-017 retires the members table filter from Collections', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-all-items"]').click()
-    cy.get('[data-testid="collections-members-summary"]').should(
-      'contain.text',
-      'Showing 5 of 5 items.'
-    )
-    cy.get('[data-testid="collections-members-search-input"]').type('charizard')
-    cy.get('[data-testid="collections-member-row-inventory-item-charizard-base"]').should(
-      'exist'
-    )
-    cy.get('[data-testid="collections-member-row-inventory-item-kobe-rookie"]').should(
-      'not.exist'
-    )
-    cy.get('[data-testid="collections-members-summary"]').should(
-      'contain.text',
-      'Showing 1 of 5 items.'
-    )
+    cy.get('[data-testid="collections-members-search-input"]').should('not.exist')
+    cy.get('[data-testid="collections-members-summary"]').should('not.exist')
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
   })
 
   it('UI-SCREEN-COLLECTIONS-007 keeps item assignment actions out of Collections', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-watch-list"]').click()
-    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
     cy.get('[data-testid="collections-assignment-panel"]').should('not.exist')
     cy.get('[data-testid^="collections-move-target-"]').should('not.exist')
     cy.get('[data-testid^="collections-move-submit-"]').should('not.exist')
     cy.get('[data-testid^="collections-unassign-submit-"]').should('not.exist')
+    cy.get('[data-testid="collections-members-table"]').should('not.exist')
   })
 
   it('UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity', () => {
@@ -480,10 +647,7 @@ describe('ui-screen-collections', () => {
       'contain.text',
       'Profile Persisted Vault'
     )
-    cy.get('[data-testid="collections-members-empty-row"]').should(
-      'contain.text',
-      'No items are currently assigned to Profile Persisted Vault.'
-    )
+    cy.get('[data-testid="collections-members-empty-row"]').should('not.exist')
   })
 
   it('UI-SCREEN-COLLECTIONS-011 switches collection state with the active profile', () => {
@@ -529,8 +693,9 @@ describe('ui-screen-collections', () => {
             'contain.text',
             'Profile Two Vault'
           )
-          cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should(
-            'exist'
+          cy.get('[data-testid="collections-row-count-profile-two-vault"]').should(
+            'have.text',
+            '1'
           )
         }
       )
@@ -630,30 +795,38 @@ describe('ui-screen-collections', () => {
     })
     cy.get('[data-testid="collections-row-delete-store-1"]').scrollIntoView().click({ force: true })
     cy.get('[data-testid="collections-delete-submit"]').click()
-    cy.contains('Store 1 removed from workspace collections.').should('be.visible')
+    cy.contains('Store 1 hidden from active workspace collections.').should('be.visible')
     cy.wait('@saveCollectionSettings').then(({ request }) => {
       const settings = (request.body.settings ?? {}) as Record<string, string>
       const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
         collections?: string[]
         activeCollection?: string
+        collectionMetadata?: Record<string, { deletedAt?: string | null }>
       }
       expect(persisted.activeCollection).to.equal('All Items')
       expect(
         persisted.collections ?? [],
         `delete request collections: ${JSON.stringify(persisted.collections ?? [])}`
-      ).not.to.include('Store 1')
+      ).to.include('Store 1')
+      expect(persisted.collectionMetadata?.['store-1']?.deletedAt).to.be.a(
+        'string'
+      )
     })
     cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
       const settings = (response.body.settings ?? {}) as Record<string, string>
       const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
         collections?: string[]
         activeCollection?: string
+        collectionMetadata?: Record<string, { deletedAt?: string | null }>
       }
       expect(persisted.activeCollection).to.equal('All Items')
       expect(
         persisted.collections ?? [],
         `persisted collections: ${JSON.stringify(persisted.collections ?? [])}`
-      ).not.to.include('Store 1')
+      ).to.include('Store 1')
+      expect(persisted.collectionMetadata?.['store-1']?.deletedAt).to.be.a(
+        'string'
+      )
     })
 
     cy.visit('/wishlist/')
