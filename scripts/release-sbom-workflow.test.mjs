@@ -10,8 +10,8 @@ test('explicit package workflows create build and CycloneDX SBOM attestations', 
     assert.match(workflow, /id-token:\s*write/)
     assert.match(workflow, /attestations:\s*write/)
     assert.match(workflow, /actions\/attest@[0-9a-f]{40}/)
-    assert.match(workflow, /subject-path:\s*(?:dist\/cabinet\/cabinet-\*-windows-amd64-portable\.zip|\$\{\{ steps\.package-evidence\.outputs\.package_path \}\})/)
-    assert.match(workflow, /sbom-path:\s*(?:dist\/cabinet\/cabinet-\*-sbom\.cdx\.json|\$\{\{ steps\.package-evidence\.outputs\.sbom_path \}\})/)
+    assert.match(workflow, /subject-path:\s*(?:dist\/cabinet\/cabinet-\*-windows-amd64-portable\.zip|\$\{\{ steps\.(?:package-evidence|candidate-package-evidence)\.outputs\.package_path \}\})/)
+    assert.match(workflow, /sbom-path:\s*(?:dist\/cabinet\/cabinet-\*-sbom\.cdx\.json|\$\{\{ steps\.(?:package-evidence|candidate-package-evidence)\.outputs\.sbom_path \}\})/)
     assert.match(workflow, /cabinet-\*-sbom\.cdx\.json/)
   }
 })
@@ -97,5 +97,18 @@ test('private package workflow resolves one exact package and SBOM before attest
   assert.match(packaging, /\$sbomFiles\.Count -ne 1/)
   assert.match(packaging, /subject-path:\s*\$\{\{ steps\.package-evidence\.outputs\.package_path \}\}/)
   assert.match(packaging, /sbom-path:\s*\$\{\{ steps\.package-evidence\.outputs\.sbom_path \}\}/)
+  assert.doesNotMatch(packaging, /sbom-path:\s*[^\n]*\*/)
+})
+
+test('candidate packaging resolves one exact package and SBOM before attestation', async () => {
+  const workflow = await read('.github/workflows/beta-release-candidate.yml')
+  const packaging = workflow.slice(workflow.indexOf('  package-candidate:'))
+
+  assert.match(packaging, /name:\s*Resolve exact candidate package evidence paths/)
+  assert.match(packaging, /id:\s*candidate-package-evidence/)
+  assert.match(packaging, /\$packageFiles\.Count -ne 1/)
+  assert.match(packaging, /\$sbomFiles\.Count -ne 1/)
+  assert.match(packaging, /subject-path:\s*\$\{\{ steps\.candidate-package-evidence\.outputs\.package_path \}\}/)
+  assert.match(packaging, /sbom-path:\s*\$\{\{ steps\.candidate-package-evidence\.outputs\.sbom_path \}\}/)
   assert.doesNotMatch(packaging, /sbom-path:\s*[^\n]*\*/)
 })
