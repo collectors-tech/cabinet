@@ -83,12 +83,12 @@ func TestCypressExecutionWatchdogFailsClosedAndPreservesUnrelatedProcess(t *test
 	}
 	t.Cleanup(func() { _ = unrelated.Process.Kill(); _, _ = unrelated.Process.Wait() })
 	// cypress.ps1 invokes the watchdog from an already-running PowerShell host.
-	// Warm only that host before measuring the watchdog operation so unrelated
-	// PowerShell startup contention cannot consume the unchanged 15-second guard.
+	// Keep the watchdog itself at one second, but allow the hosted Windows test
+	// harness enough scheduling time to collect its cleanup diagnostics.
 	if sharedWatchdogPowerShellHost == nil {
 		t.Fatal("PowerShell watchdog host unavailable")
 	}
-	output, err := sharedWatchdogPowerShellHost.invokeScriptWithinDeadline(harnessPath, 15*time.Second)
+	output, err := sharedWatchdogPowerShellHost.invokeScriptWithinDeadline(harnessPath, 45*time.Second)
 	if err != nil {
 		t.Fatalf("watchdog harness: %v\n%s", err, output)
 	}
