@@ -196,10 +196,11 @@ jobs:
                 throw "Controlled Telegram fixture is unhealthy before ${spec}."
               }
             }
-            $name = Split-Path (Split-Path $spec -Parent) -Leaf
-            pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec $spec -Browser chrome -Retries 0 -ExecutionTimeoutSec 300 -RequireE2EHooks -LogDir .logs/release-candidate/cypress -LogName "candidate-$name" *>&1 | Tee-Object -Append .logs/release-candidate/cypress.log
+            # The complete spec path prevents two specs in one folder sharing evidence.
+            $summaryKey = (($spec -replace '\.cy\.ts$', '') -replace '[^A-Za-z0-9._-]+', '-').Trim('-')
+            pwsh -NoLogo -NoProfile -File ./cypress.ps1 -Spec $spec -Browser chrome -Retries 0 -ExecutionTimeoutSec 300 -RequireE2EHooks -LogDir .logs/release-candidate/cypress -LogName "candidate-$summaryKey" *>&1 | Tee-Object -Append .logs/release-candidate/cypress.log
             if ($LASTEXITCODE -ne 0) { throw "Candidate Cypress spec failed: $spec" }
-            $summaryPaths = @(Get-ChildItem .logs/release-candidate/cypress -Filter "*-candidate-$name.summary.json" | Select-Object -ExpandProperty FullName)
+            $summaryPaths = @(Get-ChildItem .logs/release-candidate/cypress -Filter "*-candidate-$summaryKey.summary.json" | Select-Object -ExpandProperty FullName)
             if ($summaryPaths.Count -ne 1) { throw "Candidate Cypress must produce exactly one summary for ${spec}; found $($summaryPaths.Count)." }
             $summaryPath = $summaryPaths[0]
             $summary = Get-Content $summaryPath -Raw | ConvertFrom-Json
