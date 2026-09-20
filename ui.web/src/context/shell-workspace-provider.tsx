@@ -17,6 +17,7 @@ export function ShellWorkspaceProvider({
   const [activeProfileId, setActiveProfileId] = useState('local')
   const [activeWorkspace, setActiveWorkspaceState] =
     useState<ShellWorkspace>('navigation')
+  const activeWorkspaceRef = useRef<ShellWorkspace>('navigation')
   const userSelectedWorkspaceRef = useRef<ShellWorkspace | null>(null)
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export function ShellWorkspaceProvider({
         const userSelectedWorkspace = userSelectedWorkspaceRef.current
         setActiveProfileId(nextProfileId)
         if (userSelectedWorkspace) {
+          activeWorkspaceRef.current = userSelectedWorkspace
           setActiveWorkspaceState(userSelectedWorkspace)
           try {
             window.localStorage.setItem(
@@ -58,10 +60,12 @@ export function ShellWorkspaceProvider({
           }
           return
         }
+        activeWorkspaceRef.current = savedWorkspace
         setActiveWorkspaceState(savedWorkspace)
       } catch {
         if (!cancelled) {
           setActiveProfileId('local')
+          activeWorkspaceRef.current = 'navigation'
           setActiveWorkspaceState('navigation')
         }
       }
@@ -75,6 +79,7 @@ export function ShellWorkspaceProvider({
 
   const setActiveWorkspace = useCallback(
     (workspace: ShellWorkspace) => {
+      activeWorkspaceRef.current = workspace
       userSelectedWorkspaceRef.current = workspace
       setActiveWorkspaceState(workspace)
       try {
@@ -90,21 +95,10 @@ export function ShellWorkspaceProvider({
   )
 
   const toggleAssistantWorkspace = useCallback(() => {
-    setActiveWorkspaceState((currentWorkspace) => {
-      const nextWorkspace =
-        currentWorkspace === 'assistant' ? 'navigation' : 'assistant'
-      userSelectedWorkspaceRef.current = nextWorkspace
-      try {
-        window.localStorage.setItem(
-          shellWorkspaceStorageKey(activeProfileId),
-          nextWorkspace
-        )
-      } catch {
-        // Ignore storage failures and keep in-memory state.
-      }
-      return nextWorkspace
-    })
-  }, [activeProfileId])
+    setActiveWorkspace(
+      activeWorkspaceRef.current === 'assistant' ? 'navigation' : 'assistant'
+    )
+  }, [setActiveWorkspace])
 
   const contextValue = useMemo<ShellWorkspaceContextValue>(
     () => ({
