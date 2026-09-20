@@ -94,7 +94,8 @@ func TestPackagedAcceptanceRecorderIsResumableFailClosedAndNonPublishing(t *test
 	for relativePath, required := range map[string][]string{
 		filepath.Join("openspec", "migration", "beta-packaged-core-workflow-acceptance.md"): {
 			"scripts/record-beta-acceptance.mjs",
-			"not_run`, `blocked`, `pass`, or `fail`",
+			"not_run`, `blocked`, `pass`, `fail`, or, for an explicitly Preview-only row, `out_of_scope`",
+			"PROVIDER-08` through `PROVIDER-11`",
 			"candidate fingerprint",
 			"stale candidate",
 			"operator-confirmed",
@@ -160,7 +161,7 @@ func TestSecondPCGAAcceptancePlanIsExecutableAndFailClosed(t *testing.T) {
 		"SHORTCUT-01..04",
 		"separate Chrome and Edge evidence packs",
 		"owner-approved GA scope",
-		"all 51 rows",
+		"all 51 stable evidence rows",
 		"Candidate invalidation",
 		"Do not record credentials, tokens, cookies",
 		"fail_with_blockers",
