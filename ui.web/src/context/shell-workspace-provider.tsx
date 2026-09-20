@@ -90,10 +90,21 @@ export function ShellWorkspaceProvider({
   )
 
   const toggleAssistantWorkspace = useCallback(() => {
-    setActiveWorkspace(
-      activeWorkspace === 'assistant' ? 'navigation' : 'assistant'
-    )
-  }, [activeWorkspace, setActiveWorkspace])
+    setActiveWorkspaceState((currentWorkspace) => {
+      const nextWorkspace =
+        currentWorkspace === 'assistant' ? 'navigation' : 'assistant'
+      userSelectedWorkspaceRef.current = nextWorkspace
+      try {
+        window.localStorage.setItem(
+          shellWorkspaceStorageKey(activeProfileId),
+          nextWorkspace
+        )
+      } catch {
+        // Ignore storage failures and keep in-memory state.
+      }
+      return nextWorkspace
+    })
+  }, [activeProfileId])
 
   const contextValue = useMemo<ShellWorkspaceContextValue>(
     () => ({
