@@ -4,11 +4,13 @@ import { basename, dirname, join } from 'node:path'
 
 import { verifyCabinetSBOM } from './cabinet-sbom.mjs'
 
-const rows = (section, prefix, titles, requiresHumanConfirmation = false) => titles.map((title, index) => ({
+const rows = (section, prefix, titles, requiresHumanConfirmation = false, previewIndexes = []) => titles.map((title, index) => ({
   id: `${prefix}-${String(index + 1).padStart(2, '0')}`,
   section,
   title,
   requires_human_confirmation: requiresHumanConfirmation,
+  required_for_ga: !previewIndexes.includes(index + 1),
+  scope: previewIndexes.includes(index + 1) ? 'preview' : 'ga',
 }))
 
 export const acceptanceRows = Object.freeze([
@@ -53,7 +55,7 @@ export const acceptanceRows = Object.freeze([
     'Replaying one capture proves item and media idempotency with transport/module/schema provenance.',
     'One durable protected-provider image uses the canonical asset manifest/layout and survives restart, backup, relocation and restore.',
     'Browser-closed, Cabinet-restart and extension-service-worker recovery resume without duplicate observations.',
-  ], true),
+  ], true, [8, 9, 10, 11]),
   ...rows('Cross-Cutting Proof', 'CROSS', [
     'Persistence is verified after reload and application restart.',
     'Active-profile isolation is verified for at least one created record, companion session and export/restore path.',
@@ -287,8 +289,11 @@ const sanitizeEnvironment = (environment) => {
 }
 
 const calculateOverall = (rowsToCheck) => {
-  if (rowsToCheck.some((row) => row.status === 'fail' || row.status === 'blocked')) return 'fail_with_blockers'
-  if (rowsToCheck.every((row) => row.status === 'pass')) return 'pass'
+  const requiredRows = rowsToCheck.filter((row) => row.required_for_ga)
+  if (requiredRows.some((row) => row.status === 'fail' || row.status === 'blocked')) return 'fail_with_blockers'
+  const previewRows = rowsToCheck.filter((row) => !row.required_for_ga)
+  if (previewRows.some((row) => !['pass', 'out_of_scope'].includes(row.status))) return 'not_run'
+  if (requiredRows.every((row) => row.status === 'pass')) return 'pass'
   return 'not_run'
 }
 
@@ -337,7 +342,7 @@ const loadRecoverableState = async (path) => {
 }
 
 export const validateAcceptanceState = (state) => {
-  if (!isObject(state) || state.schema_version !== 1 || state.recorder !== 'Cabinet packaged acceptance evidence' || !isObject(state.candidate) || !isObject(state.environment) || !Array.isArray(state.rows)) {
+  if (!isObject(state) || state.schema_version !== 2 || state.recorder !== 'Cabinet packaged acceptance evidence' || !isObject(state.candidate) || !isObject(state.environment) || !Array.isArray(state.rows)) {
     throw new Error('acceptance_state_identity_invalid')
   }
   const { fingerprint, ...identity } = state.candidate
@@ -356,7 +361,8 @@ export const validateAcceptanceState = (state) => {
     const expected = acceptanceRows[index]
     const row = state.rows[index]
     if (!isObject(row) || row.id !== expected.id || row.section !== expected.section || row.title !== expected.title || row.requires_human_confirmation !== expected.requires_human_confirmation ||
-        !['not_run', 'blocked', 'pass', 'fail'].includes(row.status) || !Array.isArray(row.evidence_references) ||
+        row.required_for_ga !== expected.required_for_ga || row.scope !== expected.scope ||
+        !['not_run', 'blocked', 'pass', 'fail', 'out_of_scope'].includes(row.status) || !Array.isArray(row.evidence_references) ||
         typeof row.operator_notes !== 'string' || typeof row.unblock_condition !== 'string' || typeof row.operator_confirmed !== 'boolean') {
       throw new Error(`acceptance_state_row_invalid:${expected.id}`)
     }
@@ -368,6 +374,7 @@ export const validateAcceptanceState = (state) => {
     if (['pass', 'fail'].includes(row.status) && row.evidence_references.length === 0) throw new Error(`acceptance_evidence_reference_required:${row.id}`)
     if (['pass', 'fail'].includes(row.status) && !requiredText(row.operator_notes)) throw new Error(`acceptance_operator_notes_required:${row.id}`)
     if (row.status === 'blocked' && !requiredText(row.unblock_condition)) throw new Error(`acceptance_unblock_condition_required:${row.id}`)
+    if (row.status === 'out_of_scope' && (row.required_for_ga || !requiredText(row.operator_notes))) throw new Error(`acceptance_status_out_of_scope_required:${row.id}`)
     if (row.status === 'pass' && row.requires_human_confirmation && row.operator_confirmed !== true) throw new Error(`acceptance_human_confirmation_required:${row.id}`)
     for (const value of [...row.evidence_references, row.operator_notes, row.unblock_condition]) {
       if (redactAcceptanceText(value) !== value) throw new Error(`acceptance_state_secret_leak:${row.id}`)
@@ -401,7 +408,7 @@ export const createOrResumeAcceptanceRun = async (options) => {
       if (error.code !== 'EEXIST' || await readFile(archivePath, 'utf8') !== archiveContents) throw error
     }
     const state = {
-      schema_version: 1,
+      schema_version: 2,
       recorder: 'Cabinet packaged acceptance evidence',
       candidate,
       environment,
@@ -413,7 +420,7 @@ export const createOrResumeAcceptanceRun = async (options) => {
     return state
   }
   const state = {
-    schema_version: 1,
+    schema_version: 2,
     recorder: 'Cabinet packaged acceptance evidence',
     candidate,
     environment,
@@ -426,10 +433,11 @@ export const createOrResumeAcceptanceRun = async (options) => {
 }
 
 const allowedTransitions = {
-  not_run: new Set(['blocked', 'pass', 'fail']),
+  not_run: new Set(['blocked', 'pass', 'fail', 'out_of_scope']),
   blocked: new Set(['blocked', 'pass', 'fail']),
   fail: new Set(['fail', 'pass']),
   pass: new Set(['pass']),
+  out_of_scope: new Set(['out_of_scope']),
 }
 
 export const recordAcceptanceResult = async ({
@@ -444,7 +452,7 @@ export const recordAcceptanceResult = async ({
   validateAcceptanceState(state)
   const index = state.rows.findIndex((row) => row.id === rowId)
   if (index < 0) throw new Error('acceptance_row_unknown')
-  if (!['blocked', 'pass', 'fail'].includes(status)) throw new Error('acceptance_status_invalid')
+  if (!['blocked', 'pass', 'fail', 'out_of_scope'].includes(status)) throw new Error('acceptance_status_invalid')
   const current = state.rows[index]
   if (!allowedTransitions[current.status].has(status)) throw new Error(`acceptance_status_transition_invalid:${current.status}:${status}`)
   if (!Array.isArray(evidenceReferences)) throw new Error('acceptance_evidence_reference_invalid')
@@ -456,6 +464,8 @@ export const recordAcceptanceResult = async ({
   if (['pass', 'fail'].includes(status) && evidenceReferences.length === 0) throw new Error('acceptance_evidence_reference_required')
   if (['pass', 'fail'].includes(status) && !requiredText(operatorNotes)) throw new Error('acceptance_operator_notes_required')
   if (status === 'blocked' && !requiredText(unblockCondition)) throw new Error('acceptance_unblock_condition_required')
+  if (status === 'out_of_scope' && current.required_for_ga) throw new Error('acceptance_status_out_of_scope_required')
+  if (status === 'out_of_scope' && !requiredText(operatorNotes)) throw new Error('acceptance_operator_notes_required')
   if (status === 'pass' && current.requires_human_confirmation && operatorConfirmed !== true) throw new Error('acceptance_human_confirmation_required')
   const updated = {
     ...current,

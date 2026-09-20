@@ -137,6 +137,47 @@ test('catalog covers every current #1869 checklist row with unique stable identi
   assert.deepEqual(acceptanceRows.map((row) => row.title), checklistRows)
   assert.equal(new Set(acceptanceRows.map((row) => row.id)).size, acceptanceRows.length)
   assert.ok(acceptanceRows.filter((row) => /Frontline|Bonza|Install the exact|recovery/i.test(row.title)).every((row) => row.requires_human_confirmation))
+  assert.deepEqual(
+    acceptanceRows.filter((row) => ['PROVIDER-08', 'PROVIDER-09', 'PROVIDER-10', 'PROVIDER-11'].includes(row.id)).map((row) => ({ id: row.id, required_for_ga: row.required_for_ga, scope: row.scope })),
+    [
+      { id: 'PROVIDER-08', required_for_ga: false, scope: 'preview' },
+      { id: 'PROVIDER-09', required_for_ga: false, scope: 'preview' },
+      { id: 'PROVIDER-10', required_for_ga: false, scope: 'preview' },
+      { id: 'PROVIDER-11', required_for_ga: false, scope: 'preview' },
+    ],
+  )
+})
+
+test('preview-only provider rows can be explicitly excluded without weakening the required GA verdict', async () => {
+  const fixture = await candidateFixture()
+  let state = await start(fixture)
+  for (const row of state.rows) {
+    if (!row.required_for_ga) continue
+    state = await recordAcceptanceResult({
+      state,
+      rowId: row.id,
+      status: 'pass',
+      evidenceReferences: ['evidence/ga-proof.md'],
+      operatorNotes: 'Human packaged acceptance completed.',
+      operatorConfirmed: row.requires_human_confirmation,
+    })
+  }
+  assert.equal(state.overall_result, 'not_run')
+  for (const row of state.rows.filter((row) => !row.required_for_ga)) {
+    state = await recordAcceptanceResult({
+      state,
+      rowId: row.id,
+      status: 'out_of_scope',
+      operatorNotes: 'Preview by the approved GA contract.',
+    })
+  }
+  assert.equal(state.overall_result, 'pass')
+  assert.ok(state.rows.filter((row) => !row.required_for_ga).every((row) => row.status === 'out_of_scope'))
+  const requiredRowState = await start(fixture, join(fixture.directory, 'required-row.json'))
+  await assert.rejects(
+    () => recordAcceptanceResult({ state: requiredRowState, rowId: 'COLLECTOR-01', status: 'out_of_scope', operatorNotes: 'Not allowed.' }),
+    /acceptance_status_out_of_scope_required/,
+  )
 })
 
 test('candidate identity, three manifests, and independently verified package checksums are mandatory', async () => {
@@ -229,12 +270,12 @@ test('invalid transitions and evidence-free terminal states fail closed', async 
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', operatorConfirmed: true }), /acceptance_evidence_reference_required/)
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', evidenceReferences: ['evidence/onboarding.png'], operatorConfirmed: true }), /acceptance_operator_notes_required/)
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'blocked' }), /acceptance_unblock_condition_required/)
-  await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'PROVIDER-08', status: 'pass', evidenceReferences: ['evidence/frontline.png'], operatorNotes: 'Observed user-present flow.' }), /acceptance_human_confirmation_required/)
+  await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'PROVIDER-07', status: 'pass', evidenceReferences: ['evidence/hobbytech.png'], operatorNotes: 'Observed user-present flow.' }), /acceptance_human_confirmation_required/)
   state = await recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', evidenceReferences: ['evidence/onboarding.png'], operatorNotes: 'Packaged flow completed.', operatorConfirmed: true })
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'blocked', unblockCondition: 'rerun later' }), /acceptance_status_transition_invalid/)
   const idempotent = await recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', evidenceReferences: ['evidence/onboarding.png'], operatorNotes: 'Packaged flow completed.', operatorConfirmed: true })
   assert.deepEqual(idempotent, state)
-  const blocked = await recordAcceptanceResult({ state, rowId: 'PROVIDER-08', status: 'blocked', unblockCondition: 'User-present Frontline session is available.' })
+  const blocked = await recordAcceptanceResult({ state, rowId: 'PROVIDER-07', status: 'blocked', unblockCondition: 'User-present Hobbytech session is available.' })
   assert.equal(blocked.overall_result, 'fail_with_blockers')
 })
 
@@ -335,12 +376,12 @@ test('operator CLI initializes and resumes a real JSON and Markdown dry run', as
     'scripts/record-beta-acceptance.mjs', 'record',
     '--json', jsonPath,
     '--markdown', markdownPath,
-    '--row', 'PROVIDER-08',
+    '--row', 'PROVIDER-07',
     '--status', 'blocked',
-    '--unblock', 'User-present Frontline session is available.',
+    '--unblock', 'User-present Hobbytech session is available.',
   ], common)
   const state = JSON.parse(await readFile(jsonPath, 'utf8'))
-  assert.equal(state.rows.find((row) => row.id === 'PROVIDER-08').status, 'blocked')
+  assert.equal(state.rows.find((row) => row.id === 'PROVIDER-07').status, 'blocked')
   assert.equal(state.overall_result, 'fail_with_blockers')
-  assert.match(await readFile(markdownPath, 'utf8'), /PROVIDER-08 \| blocked/)
+  assert.match(await readFile(markdownPath, 'utf8'), /PROVIDER-07 \| blocked/)
 })

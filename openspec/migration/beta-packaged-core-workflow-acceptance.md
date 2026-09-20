@@ -25,7 +25,7 @@ source commit, versions, package filenames, package bytes, candidate-gate run an
 artifact name. A stale candidate is archived under a fingerprinted filename and
 all 51 rows restart as `not_run`; an in-place checksum mismatch fails closed.
 
-Each stable row below is represented exactly once as `not_run`, `blocked`, `pass`, or `fail`.
+Each stable row below is represented exactly once as `not_run`, `blocked`, `pass`, `fail`, or, for an explicitly Preview-only row, `out_of_scope`.
 Use `record --row <stable-id>` to update one row. `pass` and `fail` require one or
 more non-secret `--evidence` references plus operator `--notes`. `blocked` requires an exact `--unblock`
 condition. A human workflow can reach `pass` only with `--operator-confirmed`;
@@ -40,6 +40,14 @@ path is represented by a redacted display value plus SHA-256 identity. Run
 interaction or browser-automation operation.
 Overall output is exactly `not_run`, `fail_with_blockers`, or `pass`; the
 per-row state preserves whether the blocker was `blocked` or `fail`.
+
+`PROVIDER-08` through `PROVIDER-11` retain the Frontline/Bonza live and
+fail-closed evidence requirements, but they are Preview by default under the
+Cabinet 1.0 contract. The recorder may record those rows as `out_of_scope` only
+with an operator note that cites the approved Preview scope. They are then
+excluded from the GA verdict, not treated as passed. Promoting either provider
+to GA requires a focused contract change that makes its rows GA-required before
+the formal run begins.
 
 ```text
 node scripts/record-beta-acceptance.mjs --help
@@ -91,6 +99,7 @@ The #2062 real-runtime Cypress preflight proves that both unconfigured providers
 - [ ] A user-present real Bonza search after normal browser interaction persists an observation, appears through `GET /api/discovery/not-in-collection`, accepts reviewed `add_to_wishlist`, and persists exactly one linked Wishlist row visible through `GET /api/wishlist`.
 - [ ] A stalled or unavailable Frontline request returns within the bounded provider timeout, records no candidates or false success, and leaves the next provider run usable.
 - [ ] A stalled or unavailable Bonza request returns within the bounded provider timeout, records no candidates or false success, and leaves the next provider run usable.
+- Frontline/Bonza rows `PROVIDER-08` through `PROVIDER-11` are Preview by default; see the recorder scope rule above. They remain evidence work and are not auto-passed.
 - [ ] Failure of one provider does not prevent, mutate or corrupt another provider's watches or observations.
 - [ ] Replaying one capture proves item and media idempotency with transport/module/schema provenance.
 - [ ] One durable protected-provider image uses the canonical asset manifest/layout and survives restart, backup, relocation and restore.
