@@ -1,9 +1,11 @@
 import { mount } from 'cypress/react'
 import {
   ShellWorkspaceProvider,
-  useShellWorkspace,
-  type ShellWorkspace,
 } from '@/context/shell-workspace-provider'
+import {
+  type ShellWorkspace,
+  useShellWorkspace,
+} from '@/context/shell-workspace-context'
 
 function WorkspaceProbe() {
   const {
@@ -35,6 +37,15 @@ function WorkspaceProbe() {
       ))}
       <button type='button' onClick={toggleAssistantWorkspace}>
         Toggle assistant
+      </button>
+      <button
+        type='button'
+        onClick={() => {
+          toggleAssistantWorkspace()
+          toggleAssistantWorkspace()
+        }}
+      >
+        Toggle assistant twice
       </button>
     </section>
   )
@@ -96,5 +107,26 @@ describe('ShellWorkspaceProvider', () => {
       .its('localStorage')
       .invoke('getItem', 'cabinet.shell.workspace.active.profile-beta')
       .should('eq', 'search')
+  })
+
+  it('applies each assistant toggle against the latest workspace state', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-gamma' },
+    }).as('activeProfile')
+
+    mount(
+      <ShellWorkspaceProvider>
+        <WorkspaceProbe />
+      </ShellWorkspaceProvider>
+    )
+
+    cy.wait('@activeProfile')
+    cy.contains('button', 'Toggle assistant twice').click()
+    cy.get('[data-testid="active-workspace"]').should('have.text', 'navigation')
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.shell.workspace.active.profile-gamma')
+      .should('eq', 'navigation')
   })
 })
