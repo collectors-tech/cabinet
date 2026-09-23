@@ -12,5 +12,5 @@
 ## 3. Documentation and qualification
 
 - [x] 3.1 Update portable-only GA documentation, privacy, terms, and Help Center contracts.
-- [ ] 3.2 Run focused contracts, OpenSpec validation, and hosted protected checks.
+- [x] 3.2 Run focused contracts, OpenSpec validation, and hosted protected checks.
 - [ ] 3.3 Build a fresh exact GA candidate, complete acceptance/recovery, publish, and replay assets.
