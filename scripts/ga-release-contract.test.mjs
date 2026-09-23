@@ -12,6 +12,18 @@ test('Cabinet 1.0 GA release controls have a canonical identity and guarded publ
   const version = JSON.parse(readFileSync(versionPath, 'utf8'))
   assert.deepEqual(version, { version: '1.0.0', channel: 'ga' })
 
+  const packager = read('scripts/package-installers.ps1')
+  assert.match(packager, /\$ReleaseChannel/)
+  assert.match(packager, /cabinet-release-version\.json/)
+  assert.match(packager, /ga_candidate_not_published/)
+
+  const companionConfig = JSON.parse(readFileSync(join(root, 'browser-extension', 'release-ga.json'), 'utf8'))
+  assert.deepEqual(companionConfig.channel, 'ga')
+  assert.deepEqual(companionConfig.version, '1.0.0')
+  assert.match(read('scripts/package-browser-companion.mjs'), /--release-channel/)
+  assert.match(read('scripts/lib/beta-candidate-bundle.mjs'), /ga_candidate_not_published/)
+  assert.match(read('scripts/create-ga-candidate-bundle.mjs'), /ga_candidate_bundle_identity_invalid/)
+
   const publisher = read('.github/workflows/publish-ga-release.yml')
   assert.match(publisher, /APPROVE CABINET 1\.0 GA/)
   assert.match(publisher, /prerelease:\s*false/)

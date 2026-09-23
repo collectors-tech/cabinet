@@ -54,12 +54,27 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
   repositoryRoot = resolve('.'),
   expectedSourceCommit,
 } = {}) => {
-  const canonical = JSON.parse(await readFile(join(repositoryRoot, 'release', 'cabinet-beta-version.json'), 'utf8'))
   const release = JSON.parse(await readFile(manifestPath, 'utf8'))
   const outputDirectory = dirname(manifestPath)
+  const controls = {
+    'private-beta': {
+      versionFile: 'cabinet-beta-version.json',
+      disclosureFile: 'cabinet-beta-disclosure.json',
+      publicationState: 'private_candidate_not_published',
+      guideFilename: 'WINDOWS-PORTABLE-BETA.md',
+    },
+    ga: {
+      versionFile: 'cabinet-release-version.json',
+      disclosureFile: 'cabinet-ga-disclosure.json',
+      publicationState: 'ga_candidate_not_published',
+      guideFilename: 'WINDOWS-PORTABLE-GA.md',
+    },
+  }[release.channel]
+  if (!controls) throw new Error('cabinet_release_manifest_identity_invalid')
+  const canonical = JSON.parse(await readFile(join(repositoryRoot, 'release', controls.versionFile), 'utf8'))
 
   if (release.schema_version !== 1 || release.product !== 'Cabinet' || release.channel !== canonical.channel ||
-      release.version !== canonical.version || release.publication_state !== 'private_candidate_not_published') {
+      release.version !== canonical.version || release.publication_state !== controls.publicationState) {
     throw new Error('cabinet_release_manifest_identity_invalid')
   }
   if (!/^[a-f0-9]{40}$/.test(release.source_commit) ||
@@ -88,7 +103,7 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
   if (!notes.includes(release.version) || !notes.includes(release.source_commit) || !/portable package/i.test(notes) || !/not an installer/i.test(notes)) {
     throw new Error('cabinet_release_notes_identity_invalid')
   }
-  await verifyCabinetReleaseDisclosure(notes, repositoryRoot)
+  await verifyCabinetReleaseDisclosure(notes, repositoryRoot, release.channel)
 
   const expectedSBOMFilename = `cabinet-${release.version}-sbom.cdx.json`
   const sbom = release.sbom
@@ -120,13 +135,13 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
     paths.add(file.path)
     recordedFiles.set(file.path, file)
   }
-  for (const required of ['cabinet.exe', 'cabinet-mcp.exe', 'README.md', 'WINDOWS-PORTABLE-BETA.md', 'CABINET-SBOM.cdx.json']) {
+  for (const required of ['cabinet.exe', 'cabinet-mcp.exe', 'README.md', controls.guideFilename, 'CABINET-SBOM.cdx.json']) {
     if (!paths.has(required)) throw new Error(`cabinet_required_package_file_missing:${required}`)
   }
   const archivedFiles = readZipEntries(archive)
   if ([...archivedFiles.keys()].sort().join('\n') !== [...paths].sort().join('\n')) throw new Error('cabinet_zip_file_inventory_mismatch')
   if (!archivedFiles.get(sbom.embedded_path)?.equals(sbomBytes)) throw new Error('cabinet_sbom_embedded_bytes_mismatch')
-  const portableGuide = archivedFiles.get('WINDOWS-PORTABLE-BETA.md').toString('utf8')
+  const portableGuide = archivedFiles.get(controls.guideFilename).toString('utf8')
   if (!portableGuide.includes(`Cabinet \`${release.version}\``) ||
       !portableGuide.includes(`\`${expectedFilename}\``) ||
       /\{\{CABINET_[A-Z_]+\}\}/.test(portableGuide)) {
@@ -144,9 +159,11 @@ export const verifyCabinetReleasePackage = async (manifestPath, {
   return release
 }
 
-export const verifyCabinetReleaseDisclosure = async (notes, repositoryRoot = resolve('.')) => {
-  const disclosure = JSON.parse(await readFile(join(repositoryRoot, 'release', 'cabinet-beta-disclosure.json'), 'utf8'))
-  if (disclosure.schema_version !== 1 || disclosure.release_channel !== 'private-beta') {
+export const verifyCabinetReleaseDisclosure = async (notes, repositoryRoot = resolve('.'), channel = 'private-beta') => {
+  const disclosureFile = channel === 'ga' ? 'cabinet-ga-disclosure.json' : channel === 'private-beta' ? 'cabinet-beta-disclosure.json' : undefined
+  if (!disclosureFile) throw new Error('cabinet_release_disclosure_identity_invalid')
+  const disclosure = JSON.parse(await readFile(join(repositoryRoot, 'release', disclosureFile), 'utf8'))
+  if (disclosure.schema_version !== 1 || disclosure.release_channel !== channel) {
     throw new Error('cabinet_release_disclosure_identity_invalid')
   }
   for (const statement of disclosure.statements ?? []) {
