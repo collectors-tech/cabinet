@@ -199,8 +199,21 @@ const verifyCandidate = async ({
   if (!fullCommit(cabinet.source_commit) || companion.source_commit !== cabinet.source_commit || bundle.source_commit !== cabinet.source_commit) {
     throw new Error('acceptance_candidate_source_commit_mismatch')
   }
+  const controls = {
+    'private-beta': {
+      publicationState: 'private_candidate_not_published',
+      bundleProduct: 'Cabinet 0.1 private beta candidate',
+      bundleFilename: 'beta-candidate-bundle-manifest.json',
+    },
+    ga: {
+      publicationState: 'ga_candidate_not_published',
+      bundleProduct: 'Cabinet 1.0 GA candidate',
+      bundleFilename: 'ga-candidate-bundle-manifest.json',
+    },
+  }[cabinet.channel]
+  if (!controls) throw new Error('acceptance_candidate_publication_boundary_invalid')
   for (const manifest of [cabinet, companion, bundle]) {
-    if (manifest.channel !== 'private-beta' || manifest.publication_state !== 'private_candidate_not_published') {
+    if (manifest.channel !== cabinet.channel || manifest.publication_state !== controls.publicationState) {
       throw new Error('acceptance_candidate_publication_boundary_invalid')
     }
   }
@@ -211,7 +224,7 @@ const verifyCandidate = async ({
   }
   if (basename(cabinetManifestPath) !== 'cabinet-release-manifest.json' ||
       basename(companionManifestPath) !== 'browser-companion-release-manifest.json' ||
-      basename(bundleManifestPath) !== 'beta-candidate-bundle-manifest.json') {
+      basename(bundleManifestPath) !== controls.bundleFilename) {
     throw new Error('acceptance_candidate_manifest_filename_invalid')
   }
   const cabinetPackage = await verifyArtifact(dirname(cabinetManifestPath), cabinet.artifact, 'windows-amd64')
@@ -227,7 +240,7 @@ const verifyCandidate = async ({
     { product: cabinet.product, version: cabinet.version, manifest_filename: basename(cabinetManifestPath), release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact], sbom: cabinet.sbom },
     { product: companion.product, version: companion.version_name, manifest_filename: basename(companionManifestPath), release_notes_filename: companion.release_notes_filename, protocol_compatibility: companion.protocol_compatibility, artifacts: companion.artifacts.map(({ target, filename, sha256_filename, sha256 }) => ({ target, filename, sha256_filename, sha256 })) },
   ]
-  if (bundle.schema_version !== 1 || bundle.product !== 'Cabinet 0.1 private beta candidate' || stableStringify(bundle.components) !== stableStringify(expectedComponents)) {
+  if (bundle.schema_version !== 1 || bundle.product !== controls.bundleProduct || stableStringify(bundle.components) !== stableStringify(expectedComponents)) {
     throw new Error('acceptance_combined_manifest_identity_mismatch')
   }
   const identity = {
@@ -254,7 +267,7 @@ const verifyCandidate = async ({
     },
     combined_manifest_filename: basename(bundleManifestPath),
     combined_manifest_sha256: sha256(bundleFile.raw),
-    publication_state: 'private_candidate_not_published',
+    publication_state: controls.publicationState,
   }
   return { ...identity, fingerprint: sha256(stableStringify(identity)) }
 }

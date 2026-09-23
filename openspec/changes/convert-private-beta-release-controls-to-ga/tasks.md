@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add failing contracts for GA identity and beta-artifact rejection.
 - [x] 1.2 Convert package, Companion, manifest, bundle, and verifier identity to `1.0.0` / `ga`.
-- [ ] 1.3 Convert recorder and generated release guidance to the GA identity.
+- [x] 1.3 Convert recorder and generated release guidance to the GA identity.
 
 ## 2. Publication and promotion controls
 
