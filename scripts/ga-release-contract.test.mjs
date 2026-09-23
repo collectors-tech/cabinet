@@ -52,4 +52,5 @@ test('Cabinet 1.0 GA release controls have a canonical identity and guarded publ
   assert.match(candidate, /path:\s*package-source/)
   assert.match(candidate, /working-directory:\s*package-source/)
   assert.match(candidate, /\$env:GITHUB_WORKSPACE\/dist\/cabinet/)
+  assert.match(candidate, /sbom-path:\s*dist\/cabinet\/cabinet-1\.0\.0-sbom\.cdx\.json/)
 })
