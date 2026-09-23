@@ -46,15 +46,15 @@ test('Cabinet 0.1 beta disclosure has one governed source and required release b
   }
 })
 
-test('release notes and Help Center projection are generated from the governed disclosure source', () => {
+test('GA release notes and Help Center projection are bound to the governed disclosure source', () => {
   const packageScript = readRepoFile('scripts/package-installers.ps1')
   const articles = readRepoFile('ui.web/src/features/help-center/articles.ts')
   const generator = readRepoFile('scripts/render-beta-disclosure.mjs')
   const releaseVerifier = readRepoFile('scripts/lib/cabinet-release-verify.mjs')
 
   assert.match(packageScript, /render-beta-disclosure\.mjs.+--format release-notes/s)
-  assert.match(packageScript, /cabinet-beta-disclosure\.json/)
-  assert.match(articles, /cabinet-private-beta-disclosure\.md\?raw/)
+  assert.match(packageScript, /cabinet-ga-disclosure\.json/)
+  assert.match(articles, /cabinet-ga-disclosure\.md\?raw/)
   assert.match(generator, /cabinet-beta-disclosure\.json/)
   assert.match(releaseVerifier, /verifyCabinetReleaseDisclosure/)
 })
