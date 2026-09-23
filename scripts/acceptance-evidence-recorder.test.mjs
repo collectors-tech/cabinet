@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 
 import {
   acceptanceRows,
+  acceptanceRowsForChannel,
   createOrResumeAcceptanceRun,
   redactAcceptanceText,
   recordAcceptanceResult,
@@ -29,14 +30,19 @@ const writeArtifact = async (directory, filename, contents) => {
   return { target: filename.includes('edge') ? 'edge' : filename.includes('chrome') ? 'chrome' : 'windows-amd64', filename, sha256_filename: `${filename}.sha256`, sha256: digest, size_bytes: buffer.length }
 }
 
-const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) => {
+const candidateFixture = async ({ sourceCommit = commit, suffix = 'one', channel = 'private-beta' } = {}) => {
   const directory = await mkdtemp(join(tmpdir(), 'cabinet-acceptance-recorder-'))
-  const candidateVersion = `0.1.0-beta.10.g${sourceCommit.slice(0, 12)}`
-  const cabinetArtifact = await writeArtifact(directory, 'cabinet-0.1.0-beta.10-windows-amd64-portable.zip', `cabinet-${suffix}`)
+  const isGA = channel === 'ga'
+  const cabinetVersion = isGA ? '1.0.0' : '0.1.0-beta.10'
+  const candidateVersion = isGA ? `1.0.0.g${sourceCommit.slice(0, 12)}` : `0.1.0-beta.10.g${sourceCommit.slice(0, 12)}`
+  const publicationState = isGA ? 'ga_candidate_not_published' : 'private_candidate_not_published'
+  const bundleProduct = isGA ? 'Cabinet 1.0 GA candidate' : 'Cabinet 0.1 private beta candidate'
+  const bundleFilename = isGA ? 'ga-candidate-bundle-manifest.json' : 'beta-candidate-bundle-manifest.json'
+  const cabinetArtifact = await writeArtifact(directory, `cabinet-${cabinetVersion}-windows-amd64-portable.zip`, `cabinet-${suffix}`)
   cabinetArtifact.kind = 'portable_zip'
   const buildDate = '2026-08-11T00:00:00Z'
   const sbomDocument = createCabinetSBOM({
-    version: '0.1.0-beta.10',
+    version: cabinetVersion,
     sourceCommit,
     buildDate,
     goModules: [
@@ -49,18 +55,18 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
     } },
   })
   const sbomBytes = Buffer.from(`${JSON.stringify(sbomDocument, null, 2)}\n`)
-  const sbomFilename = 'cabinet-0.1.0-beta.10-sbom.cdx.json'
+  const sbomFilename = `cabinet-${cabinetVersion}-sbom.cdx.json`
   await writeFile(join(directory, sbomFilename), sbomBytes)
   const chromeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-chrome.zip`, `chrome-${suffix}`)
   const edgeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-edge.zip`, `edge-${suffix}`)
   const cabinet = {
     schema_version: 1,
     product: 'Cabinet',
-    channel: 'private-beta',
-    version: '0.1.0-beta.10',
+    channel,
+    version: cabinetVersion,
     source_commit: sourceCommit,
     build_date: buildDate,
-    publication_state: 'private_candidate_not_published',
+    publication_state: publicationState,
     artifact: cabinetArtifact,
     sbom: {
       filename: sbomFilename,
@@ -73,27 +79,27 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
       source_commit: sourceCommit,
       subject_artifact_sha256: cabinetArtifact.sha256,
     },
-    release_notes_filename: 'cabinet-0.1.0-beta.10-release-notes.md',
+    release_notes_filename: `cabinet-${cabinetVersion}-release-notes.md`,
   }
   const companion = {
     schema_version: 1,
     product: 'Cabinet Browser Companion',
-    channel: 'private-beta',
-    version: '0.1.0',
+    channel,
+    version: isGA ? '1.0.0' : '0.1.0',
     version_name: candidateVersion,
     immutable_tag: `browser-companion-v${candidateVersion}`,
     source_commit: sourceCommit,
-    publication_state: 'private_candidate_not_published',
+    publication_state: publicationState,
     protocol_compatibility: { minimum: '1', maximum: '1' },
     release_notes_filename: `cabinet-browser-companion-${candidateVersion}-release-notes.md`,
     artifacts: [chromeArtifact, edgeArtifact],
   }
   const bundle = {
     schema_version: 1,
-    product: 'Cabinet 0.1 private beta candidate',
-    channel: 'private-beta',
+    product: bundleProduct,
+    channel,
     source_commit: sourceCommit,
-    publication_state: 'private_candidate_not_published',
+    publication_state: publicationState,
     components: [
       { product: cabinet.product, version: cabinet.version, manifest_filename: 'cabinet-release-manifest.json', release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact], sbom: cabinet.sbom },
       { product: companion.product, version: companion.version_name, manifest_filename: 'browser-companion-release-manifest.json', release_notes_filename: companion.release_notes_filename, protocol_compatibility: companion.protocol_compatibility, artifacts: companion.artifacts.map(({ target, filename, sha256_filename, sha256 }) => ({ target, filename, sha256_filename, sha256 })) },
@@ -101,13 +107,13 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
   }
   const cabinetManifestPath = join(directory, 'cabinet-release-manifest.json')
   const companionManifestPath = join(directory, 'browser-companion-release-manifest.json')
-  const bundleManifestPath = join(directory, 'beta-candidate-bundle-manifest.json')
+  const bundleManifestPath = join(directory, bundleFilename)
   await writeFile(cabinetManifestPath, `${JSON.stringify(cabinet, null, 2)}\n`)
   await writeFile(companionManifestPath, `${JSON.stringify(companion, null, 2)}\n`)
   await writeFile(bundleManifestPath, `${JSON.stringify(bundle, null, 2)}\n`)
   await writeFile(join(directory, cabinet.release_notes_filename), 'Cabinet release notes')
   await writeFile(join(directory, companion.release_notes_filename), 'Companion release notes')
-  return { directory, cabinetManifestPath, companionManifestPath, bundleManifestPath }
+  return { directory, cabinetManifestPath, companionManifestPath, bundleManifestPath, channel, cabinetVersion }
 }
 
 const environment = {
@@ -125,7 +131,9 @@ const start = async (fixture, outputPath = join(fixture.directory, 'acceptance.j
   companionManifestPath: fixture.companionManifestPath,
   bundleManifestPath: fixture.bundleManifestPath,
   releaseCandidateRunId: '31123456789',
-  releaseCandidateArtifactName: 'cabinet-beta-candidate-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  releaseCandidateArtifactName: fixture.channel === 'ga'
+    ? 'ga-release-candidate-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    : 'cabinet-beta-candidate-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   environment: runtimeEnvironment,
   outputPath,
 })
@@ -137,6 +145,72 @@ test('catalog covers every current #1869 checklist row with unique stable identi
   assert.deepEqual(acceptanceRows.map((row) => row.title), checklistRows)
   assert.equal(new Set(acceptanceRows.map((row) => row.id)).size, acceptanceRows.length)
   assert.ok(acceptanceRows.filter((row) => /Frontline|Bonza|Install the exact|recovery/i.test(row.title)).every((row) => row.requires_human_confirmation))
+  assert.deepEqual(
+    acceptanceRows.filter((row) => ['PROVIDER-08', 'PROVIDER-09', 'PROVIDER-10', 'PROVIDER-11'].includes(row.id)).map((row) => ({ id: row.id, required_for_ga: row.required_for_ga, scope: row.scope })),
+    [
+      { id: 'PROVIDER-08', required_for_ga: false, scope: 'preview' },
+      { id: 'PROVIDER-09', required_for_ga: false, scope: 'preview' },
+      { id: 'PROVIDER-10', required_for_ga: false, scope: 'preview' },
+      { id: 'PROVIDER-11', required_for_ga: false, scope: 'preview' },
+    ],
+  )
+})
+
+test('GA acceptance rows use GA gate, install, recovery, and approval language', () => {
+  const gaRows = acceptanceRowsForChannel('ga')
+  assert.equal(gaRows.length, acceptanceRows.length)
+  assert.match(gaRows.find((row) => row.id === 'IDENTITY-05').title, /Cabinet 1\.0 GA Candidate Gate/)
+  assert.match(gaRows.find((row) => row.id === 'PROVIDER-01').title, /documented GA path/)
+  assert.match(gaRows.find((row) => row.id === 'CROSS-05').title, /GA user/)
+  assert.match(gaRows.find((row) => row.id === 'FAILURE-05').title, /APPROVE CABINET 1\.0 GA <exact-commit>/)
+  assert.doesNotMatch(gaRows.map((row) => row.title).join('\n'), /private beta|beta path|Beta Release Candidate/i)
+})
+
+test('a GA candidate persists and renders only GA acceptance wording', async () => {
+  const fixture = await candidateFixture({ channel: 'ga' })
+  const gaEnvironment = {
+    ...environment,
+    isolated_profile: 'cabinet-ga-acceptance',
+    runtime: { ...environment.runtime, app_version: '1.0.0' },
+  }
+  const state = await start(fixture, join(fixture.directory, 'ga-acceptance.json'), gaEnvironment)
+  assert.equal(state.candidate.channel, 'ga')
+  assert.match(state.rows.find((row) => row.id === 'FAILURE-05').title, /APPROVE CABINET 1\.0 GA <exact-commit>/)
+  const markdown = renderAcceptanceMarkdown(state)
+  assert.match(markdown, /Cabinet 1\.0 GA Candidate Gate/)
+  assert.doesNotMatch(markdown, /APPROVE CABINET 0\.1 PRIVATE BETA|documented beta path|Beta Release Candidate/i)
+})
+
+test('preview-only provider rows can be explicitly excluded without weakening the required GA verdict', async () => {
+  const fixture = await candidateFixture()
+  let state = await start(fixture)
+  for (const row of state.rows) {
+    if (!row.required_for_ga) continue
+    state = await recordAcceptanceResult({
+      state,
+      rowId: row.id,
+      status: 'pass',
+      evidenceReferences: ['evidence/ga-proof.md'],
+      operatorNotes: 'Human packaged acceptance completed.',
+      operatorConfirmed: row.requires_human_confirmation,
+    })
+  }
+  assert.equal(state.overall_result, 'not_run')
+  for (const row of state.rows.filter((row) => !row.required_for_ga)) {
+    state = await recordAcceptanceResult({
+      state,
+      rowId: row.id,
+      status: 'out_of_scope',
+      operatorNotes: 'Preview by the approved GA contract.',
+    })
+  }
+  assert.equal(state.overall_result, 'pass')
+  assert.ok(state.rows.filter((row) => !row.required_for_ga).every((row) => row.status === 'out_of_scope'))
+  const requiredRowState = await start(fixture, join(fixture.directory, 'required-row.json'))
+  await assert.rejects(
+    () => recordAcceptanceResult({ state: requiredRowState, rowId: 'COLLECTOR-01', status: 'out_of_scope', operatorNotes: 'Not allowed.' }),
+    /acceptance_status_out_of_scope_required/,
+  )
 })
 
 test('candidate identity, three manifests, and independently verified package checksums are mandatory', async () => {
@@ -229,12 +303,12 @@ test('invalid transitions and evidence-free terminal states fail closed', async 
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', operatorConfirmed: true }), /acceptance_evidence_reference_required/)
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', evidenceReferences: ['evidence/onboarding.png'], operatorConfirmed: true }), /acceptance_operator_notes_required/)
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'blocked' }), /acceptance_unblock_condition_required/)
-  await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'PROVIDER-08', status: 'pass', evidenceReferences: ['evidence/frontline.png'], operatorNotes: 'Observed user-present flow.' }), /acceptance_human_confirmation_required/)
+  await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'PROVIDER-07', status: 'pass', evidenceReferences: ['evidence/hobbytech.png'], operatorNotes: 'Observed user-present flow.' }), /acceptance_human_confirmation_required/)
   state = await recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', evidenceReferences: ['evidence/onboarding.png'], operatorNotes: 'Packaged flow completed.', operatorConfirmed: true })
   await assert.rejects(() => recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'blocked', unblockCondition: 'rerun later' }), /acceptance_status_transition_invalid/)
   const idempotent = await recordAcceptanceResult({ state, rowId: 'COLLECTOR-01', status: 'pass', evidenceReferences: ['evidence/onboarding.png'], operatorNotes: 'Packaged flow completed.', operatorConfirmed: true })
   assert.deepEqual(idempotent, state)
-  const blocked = await recordAcceptanceResult({ state, rowId: 'PROVIDER-08', status: 'blocked', unblockCondition: 'User-present Frontline session is available.' })
+  const blocked = await recordAcceptanceResult({ state, rowId: 'PROVIDER-07', status: 'blocked', unblockCondition: 'User-present Hobbytech session is available.' })
   assert.equal(blocked.overall_result, 'fail_with_blockers')
 })
 
@@ -335,12 +409,12 @@ test('operator CLI initializes and resumes a real JSON and Markdown dry run', as
     'scripts/record-beta-acceptance.mjs', 'record',
     '--json', jsonPath,
     '--markdown', markdownPath,
-    '--row', 'PROVIDER-08',
+    '--row', 'PROVIDER-07',
     '--status', 'blocked',
-    '--unblock', 'User-present Frontline session is available.',
+    '--unblock', 'User-present Hobbytech session is available.',
   ], common)
   const state = JSON.parse(await readFile(jsonPath, 'utf8'))
-  assert.equal(state.rows.find((row) => row.id === 'PROVIDER-08').status, 'blocked')
+  assert.equal(state.rows.find((row) => row.id === 'PROVIDER-07').status, 'blocked')
   assert.equal(state.overall_result, 'fail_with_blockers')
-  assert.match(await readFile(markdownPath, 'utf8'), /PROVIDER-08 \| blocked/)
+  assert.match(await readFile(markdownPath, 'utf8'), /PROVIDER-07 \| blocked/)
 })

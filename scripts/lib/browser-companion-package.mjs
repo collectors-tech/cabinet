@@ -152,7 +152,7 @@ const writeStaging = async (root, entries) => {
 
 const validateReleaseConfig = (config) => {
   if (config?.schema_version !== 1 || !/^\d+\.\d+\.\d+$/.test(config.version) ||
-      !/^\d+\.\d+\.\d+-[a-z0-9.-]+$/.test(config.version_name_prefix) || config.channel !== 'private-beta' ||
+      !/^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/.test(config.version_name_prefix) || !['private-beta', 'ga'].includes(config.channel) ||
       !Array.isArray(config.targets) || config.targets.join(',') !== 'chrome,edge' ||
       !Array.isArray(config.package_files) || new Set(config.package_files).size !== config.package_files.length ||
       config.package_files.some((path) => !path || path.startsWith('/') || path.includes('\\') ||
@@ -167,11 +167,12 @@ export const packageBrowserCompanion = async ({
   sourceCommit,
   sourceDateEpoch,
   keepStaging = false,
+  releaseConfigPath = 'release.json',
 } = {}) => {
   if (!/^[a-f0-9]{40}$/i.test(String(sourceCommit ?? ''))) throw new Error('source_commit_must_be_full_sha')
   if (!Number.isInteger(Number(sourceDateEpoch)) || Number(sourceDateEpoch) <= 315_532_800) throw new Error('source_date_epoch_invalid')
   const extensionRoot = join(repositoryRoot, 'browser-extension')
-  const releaseConfig = JSON.parse(await readFile(join(extensionRoot, 'release.json'), 'utf8'))
+  const releaseConfig = JSON.parse(await readFile(join(extensionRoot, releaseConfigPath), 'utf8'))
   const developmentManifest = JSON.parse(await readFile(join(extensionRoot, 'manifest.json'), 'utf8'))
   validateReleaseConfig(releaseConfig)
   const candidateVersion = `${releaseConfig.version_name_prefix}.g${sourceCommit.toLowerCase().slice(0, 12)}`
@@ -262,7 +263,7 @@ export const packageBrowserCompanion = async ({
     protocol_compatibility: releaseConfig.protocol_compatibility,
     distribution: releaseConfig.distribution,
     automatic_updates: releaseConfig.automatic_updates,
-    publication_state: 'private_candidate_not_published',
+    publication_state: releaseConfig.channel === 'ga' ? 'ga_candidate_not_published' : 'private_candidate_not_published',
     release_notes_filename: releaseNotesFilename,
     artifacts,
   }
@@ -274,7 +275,7 @@ export const packageBrowserCompanion = async ({
     `Channel: ${releaseManifest.channel}`,
     'Release manifest: browser-companion-release-manifest.json', '',
     ...artifacts.map((artifact) => `- ${artifact.target}: ${artifact.filename} — ${artifact.sha256}`), '',
-    'This build is a private candidate. It does not publish a store listing, release or mutable latest URL.', '',
+    `This build is a ${releaseConfig.channel} candidate. It does not publish a store listing, release or mutable latest URL.`, '',
   ].join('\n')
   await writeFile(join(outputDirectory, 'browser-companion-candidate-summary.md'), summary, { flag: 'wx' })
   return { releaseManifest, releaseManifestPath, outputDirectory }

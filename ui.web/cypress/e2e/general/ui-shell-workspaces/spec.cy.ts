@@ -188,6 +188,24 @@ describe('general/ui-shell-workspaces', () => {
     cy.contains('Profile settings').should('be.visible')
   })
 
+  it('UI-SHELL-WORKSPACES-006A opens the Assistant workspace from the header toggle', () => {
+    openInventory()
+    cy.get('[data-testid="shell-chat-toggle"]')
+      .should('have.attr', 'aria-label', 'Open Cabinet Agent')
+      .click()
+    cy.get('[data-testid="shell-chat-toggle"]').should(
+      'have.attr',
+      'aria-label',
+      'Close Cabinet Agent'
+    )
+    cy.get('[data-testid="shell-workspace-assistant"]').should(
+      'have.attr',
+      'data-active',
+      'true'
+    )
+    cy.get('[data-testid="shell-assistant-workspace"]').should('be.visible')
+  })
+
   it('UI-SHELL-WORKSPACES-007 persists Search workspace as a real shell panel', () => {
     openInventory()
     cy.get('[data-testid="shell-workspace-search"]').click()

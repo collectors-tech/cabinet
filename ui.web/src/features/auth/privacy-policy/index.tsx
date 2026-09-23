@@ -3,15 +3,15 @@ export function PrivacyPolicy() {
     <main className='container mx-auto flex min-h-svh max-w-3xl flex-col gap-6 px-6 py-12'>
       <div className='space-y-2'>
         <p className='text-sm font-medium tracking-[0.2em] text-muted-foreground uppercase'>
-          Cabinet 0.1 Private Beta
+          Cabinet 1.0
         </p>
         <h1 className='text-4xl font-semibold tracking-tight'>
           Privacy Policy
         </h1>
         <p className='text-base text-muted-foreground'>
           This notice describes the data paths and optional external processing
-          implemented by the Cabinet 0.1 private beta. A deployment operator or
-          beta invitation may supply additional terms and contact details.
+          implemented by Cabinet 1.0. The Cabinet release owner operates the
+          repository issue tracker as the product and privacy contact route.
         </p>
       </div>
 
@@ -82,7 +82,7 @@ export function PrivacyPolicy() {
       <section className='space-y-3'>
         <h2 className='text-xl font-semibold'>Retention and deletion</h2>
         <p className='text-sm leading-7 text-muted-foreground'>
-          The beta has no fixed automatic retention period for local workspace
+          Cabinet has no fixed automatic retention period for local workspace
           data, backups, or diagnostics logs. They remain in the configured data
           locations until you remove supported records or backups, or remove the
           data directory after closing Cabinet. Deleting the portable executable
@@ -100,8 +100,8 @@ export function PrivacyPolicy() {
           backup and restore, and a redacted diagnostics export. An export is a
           new copy under your control and is not removed when its source record
           changes. For access, export, deletion, or incident questions, contact
-          the beta coordinator who supplied the candidate or the named
-          deployment operator. Never include credentials, cookies, tokens,
+          the Cabinet repository issue tracker or the named deployment
+          operator. Never include credentials, cookies, tokens,
           Browser Companion secrets, or unreviewed private page content in a
           support request.
         </p>

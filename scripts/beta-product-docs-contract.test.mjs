@@ -9,13 +9,13 @@ const root = new URL('..', import.meta.url).pathname.replace(
 )
 const readRepoFile = (path) => readFileSync(join(root, path), 'utf8')
 
-test('README describes the shipped Windows portable beta and executable-local data boundary', () => {
+test('README describes the shipped Windows portable GA release and executable-local data boundary', () => {
   const readme = readRepoFile('README.md')
   const portableGuide = readRepoFile(
-    'openspec/migration/windows-portable-beta.md'
+    'openspec/migration/windows-portable-ga.md'
   )
 
-  assert.match(readme, /Cabinet 0\.1.+private beta/is)
+  assert.match(readme, /Cabinet 1\.0/is)
   assert.match(readme, /Windows portable ZIP/i)
   assert.match(readme, /not an installer/i)
   assert.match(readme, /unsigned/i)
@@ -30,7 +30,7 @@ test('README describes the shipped Windows portable beta and executable-local da
   assert.match(readme, /diagnostics.+disabled by default/is)
   assert.match(
     readme,
-    /\[Windows portable install, upgrade, rollback, and removal\]\(WINDOWS-PORTABLE-BETA\.md\)/i
+    /\[Windows portable install, upgrade, rollback, and removal\]\(WINDOWS-PORTABLE-GA\.md\)/i
   )
   assert.match(readme, /Help Center.+Integrations/is)
   assert.doesNotMatch(readme, /\]\(openspec\/migration\//i)
@@ -53,7 +53,7 @@ test('README describes the shipped Windows portable beta and executable-local da
   )
 })
 
-test('public privacy notice covers actual beta processing, retention, controls and support boundary', () => {
+test('public privacy notice covers actual GA processing, retention, controls and support boundary', () => {
   const privacy = readRepoFile(
     'ui.web/src/features/auth/privacy-policy/index.tsx'
   )
@@ -73,7 +73,7 @@ test('public privacy notice covers actual beta processing, retention, controls a
     /retention and deletion/i,
     /no fixed automatic retention/i,
     /JSON.+CSV.+backup/is,
-    /beta coordinator/i,
+    /repository issue tracker/i,
     /do not include.+credentials|never include.+credentials/is,
   ]) {
     assert.match(privacy, pattern)
@@ -85,13 +85,13 @@ test('public privacy notice covers actual beta processing, retention, controls a
   )
 })
 
-test('public terms describe beta, provider, companion, auth, diagnostics and support limits', () => {
+test('public terms describe GA, provider, companion, auth, diagnostics and support limits', () => {
   const terms = readRepoFile(
     'ui.web/src/features/auth/terms-of-service/index.tsx'
   )
 
   for (const pattern of [
-    /private beta/i,
+    /Cabinet 1\.0/i,
     /Windows\s+portable/i,
     /third-party providers/i,
     /provider terms/i,
@@ -100,8 +100,8 @@ test('public terms describe beta, provider, companion, auth, diagnostics and sup
     /no unattended crawling|must not use.+unattended/is,
     /ZITADEL/i,
     /diagnostics.+opt in/is,
-    /no support service-level commitment/i,
-    /beta coordinator/i,
+    /no support\s+service-level agreement/i,
+    /repository issue tracker/i,
   ]) {
     assert.match(terms, pattern)
   }
@@ -112,7 +112,7 @@ test('public terms describe beta, provider, companion, auth, diagnostics and sup
   )
 })
 
-test('Help Center publishes beta guidance without draft or plan labels', () => {
+test('Help Center publishes GA guidance without draft or plan labels', () => {
   const index = readRepoFile('docs/help-center/README.md')
   const articles = readRepoFile('ui.web/src/features/help-center/articles.ts')
   const gettingStarted = readRepoFile(
@@ -121,7 +121,7 @@ test('Help Center publishes beta guidance without draft or plan labels', () => {
   const settings = readRepoFile('docs/help-center/sections/settings.md')
 
   assert.match(index, /Cabinet Help Center/i)
-  assert.match(index, /published private-beta guidance/i)
+  assert.match(index, /published Cabinet 1\.0 guidance/i)
   assert.doesNotMatch(index, /\bdrafts?\b|Docs Plan/i)
   assert.doesNotMatch(articles, /Help Center Docs Plan|help-center-docs-plan/i)
   assert.match(articles, /About the Help Center/i)
@@ -147,7 +147,7 @@ test('exact candidate release notes link source-bound user guidance', () => {
   assert.match(packageScript, /\$guidanceBaseURL\/README\.md/)
   assert.match(
     packageScript,
-    /\$guidanceBaseURL\/openspec\/migration\/windows-portable-beta\.md/
+    /\$guidanceBaseURL\/\$\(\$releaseControls\.GuideTemplate\.Replace/
   )
   assert.match(
     packageScript,
@@ -156,7 +156,7 @@ test('exact candidate release notes link source-bound user guidance', () => {
   assert.match(packageScript, /Guidance supplied with this candidate/i)
   assert.match(
     packageScript,
-    /README\.md.+WINDOWS-PORTABLE-BETA\.md.+Help Center.+Integrations/is
+    /README\.md.+\$\(\$releaseControls\.GuideFilename\).+Help Center.+Integrations/is
   )
 })
 

@@ -1,6 +1,6 @@
 import helpCenterReadme from '../../../../docs/help-center/README.md?raw'
 import gettingStartedGuide from '../../../../docs/help-center/getting-started/login-and-database-setup.md?raw'
-import betaDisclosureGuide from '../../../../docs/help-center/reference/cabinet-private-beta-disclosure.md?raw'
+import gaDisclosureGuide from '../../../../docs/help-center/reference/cabinet-ga-disclosure.md?raw'
 import chatsGuide from '../../../../docs/help-center/sections/chats.md?raw'
 import collectionsGuide from '../../../../docs/help-center/sections/collections.md?raw'
 import integrationsGuide from '../../../../docs/help-center/sections/integrations.md?raw'
@@ -28,12 +28,12 @@ export const helpCenterArticles: HelpCenterArticle[] = [
     content: gettingStartedGuide,
   },
   {
-    id: 'cabinet-private-beta-disclosure',
-    title: 'Cabinet 0.1 Private Beta Disclosure',
+    id: 'cabinet-ga-disclosure',
+    title: 'Cabinet 1.0 Disclosure',
     summary:
-      'Review supported beta capabilities, limitations, release gates, and recovery pointers.',
+      'Review supported capabilities, limitations, release gates, and recovery pointers.',
     category: 'Getting Started',
-    content: betaDisclosureGuide,
+    content: gaDisclosureGuide,
   },
   {
     id: 'section-inventory',
@@ -103,7 +103,7 @@ export const helpCenterArticles: HelpCenterArticle[] = [
     id: 'about-help-center',
     title: 'About the Help Center',
     summary:
-      'Find published beta guidance and learn how to report a documentation correction safely.',
+      'Find published guidance and learn how to report a documentation correction safely.',
     category: 'Reference',
     content: helpCenterReadme,
   },
