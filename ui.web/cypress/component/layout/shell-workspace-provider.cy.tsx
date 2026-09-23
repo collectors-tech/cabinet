@@ -1,7 +1,5 @@
 import { mount } from 'cypress/react'
-import {
-  ShellWorkspaceProvider,
-} from '@/context/shell-workspace-provider'
+import { ShellWorkspaceProvider } from '@/context/shell-workspace-provider'
 import {
   type ShellWorkspace,
   useShellWorkspace,
@@ -108,7 +106,6 @@ describe('ShellWorkspaceProvider', () => {
       .invoke('getItem', 'cabinet.shell.workspace.active.profile-beta')
       .should('eq', 'search')
   })
-
   it('applies each assistant toggle against the latest workspace state', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
