@@ -49,7 +49,7 @@
   "release_approval": {
     "issue": 1864,
     "authority": "wildone",
-    "marker": "APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>",
+    "marker": "APPROVE CABINET 1.0 GA <exact-commit>",
     "main_source_branch": "develop",
     "approval_is_commit_exact": true
   },

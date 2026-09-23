@@ -1,8 +1,9 @@
 {
-  "version": 6,
+  "version": 7,
   "issue": 2055,
   "name": "Cabinet 0.1 beta core Cypress acceptance pack",
   "required_categories": [
+    "onboarding",
     "login_profile",
     "inventory",
     "wishlist",
@@ -17,6 +18,10 @@
     "telegram_conversation"
   ],
   "specs": [
+    {
+      "category": "onboarding",
+      "path": "cypress/e2e/general/setup-wizard-first-run/spec.cy.ts"
+    },
     {
       "category": "login_profile",
       "path": "cypress/e2e/general/ui-login-session/spec.cy.ts"

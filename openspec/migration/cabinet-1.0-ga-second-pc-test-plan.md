@@ -49,16 +49,20 @@ exact candidate bundle from #1868 and confirms every item below:
 
 ### Required contract reconciliation before a 1.0 verdict
 
-The current recorder treats all 51 rows as mandatory, including the Frontline
-and Bonza rows. Its final approval row also names the older Cabinet 0.1 private
-beta marker. The recommended GA scope in #2546 makes Frontline and Bonza Preview
-unless they are explicitly promoted.
+The recorder retains all 51 stable evidence rows. `PROVIDER-08` through
+`PROVIDER-11` are explicit Frontline/Bonza Preview rows under the current #2546
+scope: they must be recorded as `out_of_scope` with a scope note, not as pass or
+blocked GA work. Its final approval row still names the existing Cabinet 0.1
+private-beta marker, which is not by itself a Cabinet 1.0 GA approval. The
+recommended GA scope makes Frontline and Bonza Preview unless explicitly
+promoted.
 
 Before the formal run, the owner-approved GA scope and recorder must agree.
-Either approve and test the broader all-row contract, or update the checklist,
-recorder, tests, and approval wording under a focused test-first issue. Do not
-mark an out-of-scope row blocked and then describe the candidate as passing.
-Do not use the old private-beta approval text as 1.0 GA approval.
+To promote a Preview provider, update the checklist, recorder, tests, and
+approval wording under a focused test-first issue before treating its rows as
+GA-required. Do not mark an out-of-scope row blocked and then describe the
+candidate as passing. Do not use the old private-beta approval text as 1.0 GA
+approval.
 
 ## Stop conditions
 
