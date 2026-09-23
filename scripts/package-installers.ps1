@@ -2,6 +2,8 @@ param(
   [string]$Version = "",
   [string]$ExpectedCommit = "",
   [string]$OutputDirectory = "dist",
+  [ValidateSet("private-beta", "ga")]
+  [string]$ReleaseChannel = "private-beta",
   [switch]$InstallUIDeps
 )
 
@@ -10,17 +12,41 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $root "scripts\lib\cabinet-console.ps1")
 
-$versionFile = Join-Path $root "release\cabinet-beta-version.json"
+$releaseControls = if ($ReleaseChannel -eq "ga") {
+  [ordered]@{
+    VersionFile = "release\cabinet-release-version.json"
+    VersionPattern = '^1\.0\.0$'
+    PublicationState = "ga_candidate_not_published"
+    DisclosureFile = "release\cabinet-ga-disclosure.json"
+    GuideTemplate = "openspec\migration\windows-portable-ga.md"
+    GuideFilename = "WINDOWS-PORTABLE-GA.md"
+    Label = "GA"
+  }
+} else {
+  [ordered]@{
+    VersionFile = "release\cabinet-beta-version.json"
+    VersionPattern = '^\d+\.\d+\.\d+-beta\.\d+$'
+    PublicationState = "private_candidate_not_published"
+    DisclosureFile = "release\cabinet-beta-disclosure.json"
+    GuideTemplate = "openspec\migration\windows-portable-beta.md"
+    GuideFilename = "WINDOWS-PORTABLE-BETA.md"
+    Label = "private beta"
+  }
+}
+$versionFile = Join-Path $root $releaseControls.VersionFile
 if ([string]::IsNullOrWhiteSpace($Version)) {
   if (-not (Test-Path $versionFile)) {
-    throw "Missing canonical beta version file: $versionFile"
+    throw "Missing canonical $ReleaseChannel version file: $versionFile"
   }
   $versionPayload = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json
+  if ([string]$versionPayload.channel -ne $ReleaseChannel) {
+    throw "Canonical version file channel does not match selected release channel $ReleaseChannel."
+  }
   $Version = [string]$versionPayload.version
 }
 $resolvedVersion = $Version.Trim()
-if ($resolvedVersion -notmatch '^\d+\.\d+\.\d+-beta\.\d+$') {
-  throw "Version must be a semantic private-beta version such as 0.1.0-beta.1; got '$Version'"
+if ($resolvedVersion -notmatch $releaseControls.VersionPattern) {
+  throw "Version '$Version' is invalid for release channel $ReleaseChannel."
 }
 
 $buildRevision = (& git -C $root rev-parse HEAD 2>$null).Trim().ToLowerInvariant()
@@ -63,9 +89,9 @@ $sbomName = "cabinet-$resolvedVersion-sbom.cdx.json"
 $sbomPath = Join-Path $out $sbomName
 $embeddedSBOMName = "CABINET-SBOM.cdx.json"
 $embeddedSBOMPath = Join-Path $stage $embeddedSBOMName
-$disclosurePath = Join-Path $root "release\cabinet-beta-disclosure.json"
+$disclosurePath = Join-Path $root $releaseControls.DisclosureFile
 
-Write-CabinetBanner -Command "package-installers" -Summary "Build the Windows portable beta package."
+Write-CabinetBanner -Command "package-installers" -Summary "Build the Windows portable $($releaseControls.Label) package."
 Write-CabinetKeyValue -Key "Version" -Value $resolvedVersion
 Write-CabinetKeyValue -Key "Package" -Value $packageName
 Write-CabinetHint "This script creates a truthful Windows portable package, not an installer."
@@ -115,13 +141,13 @@ finally {
 }
 
 Copy-Item -Path (Join-Path $root "README.md") -Destination (Join-Path $stage "README.md") -Force
-$portableGuideTemplate = Get-Content -LiteralPath (Join-Path $root "openspec\migration\windows-portable-beta.md") -Raw
+$portableGuideTemplate = Get-Content -LiteralPath (Join-Path $root $releaseControls.GuideTemplate) -Raw
 $portableGuide = $portableGuideTemplate.Replace("{{CABINET_BETA_VERSION}}", $resolvedVersion).Replace("{{CABINET_PORTABLE_FILENAME}}", $packageName)
 if ($portableGuide -match '\{\{CABINET_[A-Z_]+\}\}') {
   throw "Windows portable guide contains an unresolved release placeholder."
 }
 [System.IO.File]::WriteAllText(
-  (Join-Path $stage "WINDOWS-PORTABLE-BETA.md"),
+  (Join-Path $stage $releaseControls.GuideFilename),
   $portableGuide,
   [System.Text.UTF8Encoding]::new($false)
 )
@@ -141,28 +167,28 @@ Copy-Item -LiteralPath $sbomPath -Destination $embeddedSBOMPath
 
 $disclosureNotes = & node (Join-Path $root "scripts\render-beta-disclosure.mjs") --format release-notes --source $disclosurePath
 if ($LASTEXITCODE -ne 0) {
-  throw "Failed to render governed Cabinet beta disclosure."
+  throw "Failed to render governed Cabinet $ReleaseChannel disclosure."
 }
 $guidanceBaseURL = "https://github.com/collectors-tech/cabinet/blob/$buildRevision"
 
 @"
-# Cabinet $resolvedVersion private beta
+# Cabinet $resolvedVersion $($releaseControls.Label)
 
 Package: ``$packageName``
 Commit: ``$buildRevision``
 Build date: ``$buildDate``
-Channel: private beta
+Channel: $ReleaseChannel
 
 This artefact is a Windows portable package. It is not an installer. Code signing and installer claims are intentionally out of scope until signed installer evidence exists.
 
-Release remains gated on #1864 approval and must not be promoted to ``main`` without explicit approval.
+Release remains gated on explicit approval and must not be promoted to ``main`` without explicit approval.
 
 $disclosureNotes
 
 ## Guidance supplied with this candidate
 
 - Extract ``$packageName`` and open ``README.md`` in the package root for startup, data-path, privacy, support, and development boundaries.
-- Open ``WINDOWS-PORTABLE-BETA.md`` in the package root for install, backup, upgrade, rollback, and removal steps.
+- Open ``$($releaseControls.GuideFilename)`` in the package root for install, backup, upgrade, rollback, and removal steps.
 - Inspect ``$embeddedSBOMName`` in the package root or the separately supplied ``$sbomName`` for the source-bound CycloneDX dependency inventory.
 - After Cabinet starts, open **Help Center > Integrations** for Browser Companion install, pairing, provider capture, revocation, and recovery guidance. Use any separately supplied companion target release notes and manifest with it.
 
@@ -171,7 +197,7 @@ $disclosureNotes
 These links require access to the source repository. The supplied package guidance above remains usable without repository access.
 
 - [Cabinet README]($guidanceBaseURL/README.md)
-- [Windows portable install, upgrade, rollback, and removal]($guidanceBaseURL/openspec/migration/windows-portable-beta.md)
+- [Windows portable install, upgrade, rollback, and removal]($guidanceBaseURL/$($releaseControls.GuideTemplate.Replace('\', '/')))
 - [Browser Companion, provider capture, and recovery]($guidanceBaseURL/docs/help-center/sections/integrations.md)
 "@ | Set-Content -LiteralPath $notesPath -Encoding utf8
 
@@ -197,11 +223,11 @@ $packageFiles = @(
 $releaseManifest = [ordered]@{
   schema_version = 1
   product = "Cabinet"
-  channel = "private-beta"
+  channel = $ReleaseChannel
   version = $resolvedVersion
   source_commit = $buildRevision
   build_date = $buildDate
-  publication_state = "private_candidate_not_published"
+  publication_state = $releaseControls.PublicationState
   artifact = [ordered]@{
     target = "windows-amd64"
     kind = "portable_zip"

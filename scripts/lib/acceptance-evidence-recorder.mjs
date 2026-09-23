@@ -4,11 +4,13 @@ import { basename, dirname, join } from 'node:path'
 
 import { verifyCabinetSBOM } from './cabinet-sbom.mjs'
 
-const rows = (section, prefix, titles, requiresHumanConfirmation = false) => titles.map((title, index) => ({
+const rows = (section, prefix, titles, requiresHumanConfirmation = false, previewIndexes = []) => titles.map((title, index) => ({
   id: `${prefix}-${String(index + 1).padStart(2, '0')}`,
   section,
   title,
   requires_human_confirmation: requiresHumanConfirmation,
+  required_for_ga: !previewIndexes.includes(index + 1),
+  scope: previewIndexes.includes(index + 1) ? 'preview' : 'ga',
 }))
 
 export const acceptanceRows = Object.freeze([
@@ -53,7 +55,7 @@ export const acceptanceRows = Object.freeze([
     'Replaying one capture proves item and media idempotency with transport/module/schema provenance.',
     'One durable protected-provider image uses the canonical asset manifest/layout and survives restart, backup, relocation and restore.',
     'Browser-closed, Cabinet-restart and extension-service-worker recovery resume without duplicate observations.',
-  ], true),
+  ], true, [8, 9, 10, 11]),
   ...rows('Cross-Cutting Proof', 'CROSS', [
     'Persistence is verified after reload and application restart.',
     'Active-profile isolation is verified for at least one created record, companion session and export/restore path.',
@@ -76,6 +78,20 @@ export const acceptanceRows = Object.freeze([
     'Final packaged acceptance does not merge `develop` into `main` or publish a release without #1864 approval.',
   ], true),
 ])
+
+const gaRowTitles = Object.freeze({
+  'IDENTITY-05': 'Successful Cabinet 1.0 GA Candidate Gate run ID and exact artifact name are recorded.',
+  'PROVIDER-01': 'Install the exact Chrome and Edge packages through the documented GA path without developer source tools.',
+  'CROSS-05': 'Empty and error states are useful enough for a GA user to recover or report the issue.',
+  'FAILURE-05': 'If all gates pass, the proposed #1864 approval comment records `APPROVE CABINET 1.0 GA <exact-commit>`; publication is not invoked by this checklist.',
+})
+
+const gaAcceptanceRows = Object.freeze(acceptanceRows.map((row) => Object.freeze({
+  ...row,
+  title: gaRowTitles[row.id] ?? row.title,
+})))
+
+export const acceptanceRowsForChannel = (channel) => channel === 'ga' ? gaAcceptanceRows : acceptanceRows
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -197,8 +213,21 @@ const verifyCandidate = async ({
   if (!fullCommit(cabinet.source_commit) || companion.source_commit !== cabinet.source_commit || bundle.source_commit !== cabinet.source_commit) {
     throw new Error('acceptance_candidate_source_commit_mismatch')
   }
+  const controls = {
+    'private-beta': {
+      publicationState: 'private_candidate_not_published',
+      bundleProduct: 'Cabinet 0.1 private beta candidate',
+      bundleFilename: 'beta-candidate-bundle-manifest.json',
+    },
+    ga: {
+      publicationState: 'ga_candidate_not_published',
+      bundleProduct: 'Cabinet 1.0 GA candidate',
+      bundleFilename: 'ga-candidate-bundle-manifest.json',
+    },
+  }[cabinet.channel]
+  if (!controls) throw new Error('acceptance_candidate_publication_boundary_invalid')
   for (const manifest of [cabinet, companion, bundle]) {
-    if (manifest.channel !== 'private-beta' || manifest.publication_state !== 'private_candidate_not_published') {
+    if (manifest.channel !== cabinet.channel || manifest.publication_state !== controls.publicationState) {
       throw new Error('acceptance_candidate_publication_boundary_invalid')
     }
   }
@@ -209,7 +238,7 @@ const verifyCandidate = async ({
   }
   if (basename(cabinetManifestPath) !== 'cabinet-release-manifest.json' ||
       basename(companionManifestPath) !== 'browser-companion-release-manifest.json' ||
-      basename(bundleManifestPath) !== 'beta-candidate-bundle-manifest.json') {
+      basename(bundleManifestPath) !== controls.bundleFilename) {
     throw new Error('acceptance_candidate_manifest_filename_invalid')
   }
   const cabinetPackage = await verifyArtifact(dirname(cabinetManifestPath), cabinet.artifact, 'windows-amd64')
@@ -225,10 +254,11 @@ const verifyCandidate = async ({
     { product: cabinet.product, version: cabinet.version, manifest_filename: basename(cabinetManifestPath), release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact], sbom: cabinet.sbom },
     { product: companion.product, version: companion.version_name, manifest_filename: basename(companionManifestPath), release_notes_filename: companion.release_notes_filename, protocol_compatibility: companion.protocol_compatibility, artifacts: companion.artifacts.map(({ target, filename, sha256_filename, sha256 }) => ({ target, filename, sha256_filename, sha256 })) },
   ]
-  if (bundle.schema_version !== 1 || bundle.product !== 'Cabinet 0.1 private beta candidate' || stableStringify(bundle.components) !== stableStringify(expectedComponents)) {
+  if (bundle.schema_version !== 1 || bundle.product !== controls.bundleProduct || stableStringify(bundle.components) !== stableStringify(expectedComponents)) {
     throw new Error('acceptance_combined_manifest_identity_mismatch')
   }
   const identity = {
+    channel: cabinet.channel,
     source_commit: cabinet.source_commit,
     release_candidate: { run_id: String(releaseCandidateRunId), artifact_name: releaseCandidateArtifactName },
     cabinet: {
@@ -252,7 +282,7 @@ const verifyCandidate = async ({
     },
     combined_manifest_filename: basename(bundleManifestPath),
     combined_manifest_sha256: sha256(bundleFile.raw),
-    publication_state: 'private_candidate_not_published',
+    publication_state: controls.publicationState,
   }
   return { ...identity, fingerprint: sha256(stableStringify(identity)) }
 }
@@ -287,12 +317,15 @@ const sanitizeEnvironment = (environment) => {
 }
 
 const calculateOverall = (rowsToCheck) => {
-  if (rowsToCheck.some((row) => row.status === 'fail' || row.status === 'blocked')) return 'fail_with_blockers'
-  if (rowsToCheck.every((row) => row.status === 'pass')) return 'pass'
+  const requiredRows = rowsToCheck.filter((row) => row.required_for_ga)
+  if (requiredRows.some((row) => row.status === 'fail' || row.status === 'blocked')) return 'fail_with_blockers'
+  const previewRows = rowsToCheck.filter((row) => !row.required_for_ga)
+  if (previewRows.some((row) => !['pass', 'out_of_scope'].includes(row.status))) return 'not_run'
+  if (requiredRows.every((row) => row.status === 'pass')) return 'pass'
   return 'not_run'
 }
 
-const newRows = () => acceptanceRows.map((row) => ({
+const newRows = (channel) => acceptanceRowsForChannel(channel).map((row) => ({
   ...row,
   status: 'not_run',
   evidence_references: [],
@@ -337,7 +370,7 @@ const loadRecoverableState = async (path) => {
 }
 
 export const validateAcceptanceState = (state) => {
-  if (!isObject(state) || state.schema_version !== 1 || state.recorder !== 'Cabinet packaged acceptance evidence' || !isObject(state.candidate) || !isObject(state.environment) || !Array.isArray(state.rows)) {
+  if (!isObject(state) || state.schema_version !== 2 || state.recorder !== 'Cabinet packaged acceptance evidence' || !isObject(state.candidate) || !isObject(state.environment) || !Array.isArray(state.rows)) {
     throw new Error('acceptance_state_identity_invalid')
   }
   const { fingerprint, ...identity } = state.candidate
@@ -351,12 +384,14 @@ export const validateAcceptanceState = (state) => {
       new Set(state.archived_prior_evidence).size !== state.archived_prior_evidence.length) {
     throw new Error('acceptance_state_archive_history_invalid')
   }
-  if (state.rows.length !== acceptanceRows.length) throw new Error('acceptance_state_rows_incomplete')
-  for (let index = 0; index < acceptanceRows.length; index += 1) {
-    const expected = acceptanceRows[index]
+  const expectedRows = acceptanceRowsForChannel(state.candidate.channel)
+  if (!['private-beta', 'ga'].includes(state.candidate.channel) || state.rows.length !== expectedRows.length) throw new Error('acceptance_state_rows_incomplete')
+  for (let index = 0; index < expectedRows.length; index += 1) {
+    const expected = expectedRows[index]
     const row = state.rows[index]
     if (!isObject(row) || row.id !== expected.id || row.section !== expected.section || row.title !== expected.title || row.requires_human_confirmation !== expected.requires_human_confirmation ||
-        !['not_run', 'blocked', 'pass', 'fail'].includes(row.status) || !Array.isArray(row.evidence_references) ||
+        row.required_for_ga !== expected.required_for_ga || row.scope !== expected.scope ||
+        !['not_run', 'blocked', 'pass', 'fail', 'out_of_scope'].includes(row.status) || !Array.isArray(row.evidence_references) ||
         typeof row.operator_notes !== 'string' || typeof row.unblock_condition !== 'string' || typeof row.operator_confirmed !== 'boolean') {
       throw new Error(`acceptance_state_row_invalid:${expected.id}`)
     }
@@ -368,6 +403,7 @@ export const validateAcceptanceState = (state) => {
     if (['pass', 'fail'].includes(row.status) && row.evidence_references.length === 0) throw new Error(`acceptance_evidence_reference_required:${row.id}`)
     if (['pass', 'fail'].includes(row.status) && !requiredText(row.operator_notes)) throw new Error(`acceptance_operator_notes_required:${row.id}`)
     if (row.status === 'blocked' && !requiredText(row.unblock_condition)) throw new Error(`acceptance_unblock_condition_required:${row.id}`)
+    if (row.status === 'out_of_scope' && (row.required_for_ga || !requiredText(row.operator_notes))) throw new Error(`acceptance_status_out_of_scope_required:${row.id}`)
     if (row.status === 'pass' && row.requires_human_confirmation && row.operator_confirmed !== true) throw new Error(`acceptance_human_confirmation_required:${row.id}`)
     for (const value of [...row.evidence_references, row.operator_notes, row.unblock_condition]) {
       if (redactAcceptanceText(value) !== value) throw new Error(`acceptance_state_secret_leak:${row.id}`)
@@ -401,11 +437,11 @@ export const createOrResumeAcceptanceRun = async (options) => {
       if (error.code !== 'EEXIST' || await readFile(archivePath, 'utf8') !== archiveContents) throw error
     }
     const state = {
-      schema_version: 1,
+      schema_version: 2,
       recorder: 'Cabinet packaged acceptance evidence',
       candidate,
       environment,
-      rows: newRows(),
+      rows: newRows(candidate.channel),
       overall_result: 'not_run',
       archived_prior_evidence: [...(existing.archived_prior_evidence ?? []), archiveFilename],
     }
@@ -413,11 +449,11 @@ export const createOrResumeAcceptanceRun = async (options) => {
     return state
   }
   const state = {
-    schema_version: 1,
+    schema_version: 2,
     recorder: 'Cabinet packaged acceptance evidence',
     candidate,
     environment,
-    rows: newRows(),
+    rows: newRows(candidate.channel),
     overall_result: 'not_run',
     archived_prior_evidence: [],
   }
@@ -426,10 +462,11 @@ export const createOrResumeAcceptanceRun = async (options) => {
 }
 
 const allowedTransitions = {
-  not_run: new Set(['blocked', 'pass', 'fail']),
+  not_run: new Set(['blocked', 'pass', 'fail', 'out_of_scope']),
   blocked: new Set(['blocked', 'pass', 'fail']),
   fail: new Set(['fail', 'pass']),
   pass: new Set(['pass']),
+  out_of_scope: new Set(['out_of_scope']),
 }
 
 export const recordAcceptanceResult = async ({
@@ -444,7 +481,7 @@ export const recordAcceptanceResult = async ({
   validateAcceptanceState(state)
   const index = state.rows.findIndex((row) => row.id === rowId)
   if (index < 0) throw new Error('acceptance_row_unknown')
-  if (!['blocked', 'pass', 'fail'].includes(status)) throw new Error('acceptance_status_invalid')
+  if (!['blocked', 'pass', 'fail', 'out_of_scope'].includes(status)) throw new Error('acceptance_status_invalid')
   const current = state.rows[index]
   if (!allowedTransitions[current.status].has(status)) throw new Error(`acceptance_status_transition_invalid:${current.status}:${status}`)
   if (!Array.isArray(evidenceReferences)) throw new Error('acceptance_evidence_reference_invalid')
@@ -456,6 +493,8 @@ export const recordAcceptanceResult = async ({
   if (['pass', 'fail'].includes(status) && evidenceReferences.length === 0) throw new Error('acceptance_evidence_reference_required')
   if (['pass', 'fail'].includes(status) && !requiredText(operatorNotes)) throw new Error('acceptance_operator_notes_required')
   if (status === 'blocked' && !requiredText(unblockCondition)) throw new Error('acceptance_unblock_condition_required')
+  if (status === 'out_of_scope' && current.required_for_ga) throw new Error('acceptance_status_out_of_scope_required')
+  if (status === 'out_of_scope' && !requiredText(operatorNotes)) throw new Error('acceptance_operator_notes_required')
   if (status === 'pass' && current.requires_human_confirmation && operatorConfirmed !== true) throw new Error('acceptance_human_confirmation_required')
   const updated = {
     ...current,

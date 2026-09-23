@@ -181,11 +181,13 @@ func TestBetaReleaseCandidateWorkflowContract(t *testing.T) {
 		"CYPRESS_telegramRuntimeFixture: \"true\"",
 		"if ($env:CYPRESS_telegramRuntimeFixture -ne \"true\"",
 		"Controlled Telegram fixture flag is required; skipping fixture-controlled specs is forbidden.",
-		"$pack.version -lt 6 -or $pack.spec_count -ne 26 -or $pack.specs.Count -ne 26",
-		"Fixed beta Cypress pack must resolve version 6 with exactly 26 specs.",
+		"$pack.version -lt 7 -or $pack.spec_count -ne 27 -or $pack.specs.Count -ne 27",
+		"Fixed beta Cypress pack must resolve version 7 with exactly 27 specs.",
 		"timeout-minutes: 30",
 		"go test ./... -count=1 -p 1 -parallel 4 -timeout 900s",
-		"$name = Split-Path (Split-Path $spec -Parent) -Leaf",
+		"$summaryKey = (($spec -replace '\\.cy\\.ts$', '') -replace '[^A-Za-z0-9._-]+', '-').Trim('-')",
+		`-LogName "candidate-$summaryKey"`,
+		`-Filter "*-candidate-$summaryKey.summary.json"`,
 		"$summaryPaths.Count -ne 1",
 		"Candidate Cypress must produce exactly one summary",
 		"-Retries 0",
@@ -262,14 +264,15 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 	if manifest.Issue != 2055 {
 		t.Fatalf("manifest should stay bound to #2055, got #%d", manifest.Issue)
 	}
-	if manifest.Version < 6 {
-		t.Fatalf("renderer-bounded Market Watch acceptance pack must be version 6 or newer, got %d", manifest.Version)
+	if manifest.Version < 7 {
+		t.Fatalf("GA onboarding acceptance pack must be version 7 or newer, got %d", manifest.Version)
 	}
-	if len(manifest.Specs) != 26 {
-		t.Fatalf("renderer-bounded Market Watch acceptance pack must contain exactly 26 specs, got %d", len(manifest.Specs))
+	if len(manifest.Specs) != 27 {
+		t.Fatalf("GA onboarding acceptance pack must contain exactly 27 specs, got %d", len(manifest.Specs))
 	}
 
 	required := map[string]bool{
+		"onboarding":            false,
 		"login_profile":         false,
 		"inventory":             false,
 		"wishlist":              false,
@@ -310,6 +313,7 @@ func TestBetaCoreCypressPackManifestContract(t *testing.T) {
 		}
 	}
 	for requiredPath, requiredCategory := range map[string]string{
+		"cypress/e2e/general/setup-wizard-first-run/spec.cy.ts":             "onboarding",
 		"cypress/e2e/integrations/ui-screen-market-watch/01-core.cy.ts":       "provider_handoff",
 		"cypress/e2e/integrations/ui-screen-market-watch/02-create-run.cy.ts": "provider_handoff",
 		"cypress/e2e/integrations/ui-screen-market-watch/03-results.cy.ts":    "provider_handoff",
