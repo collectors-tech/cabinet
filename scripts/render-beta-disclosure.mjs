@@ -8,10 +8,10 @@ const option = (name) => {
 
 const statusLabel = (status) => status.replaceAll('_', ' ')
 
-export const loadBetaDisclosure = async (sourcePath = resolve('release/cabinet-beta-disclosure.json')) => {
+export const loadReleaseDisclosure = async (sourcePath = resolve('release/cabinet-beta-disclosure.json')) => {
   const disclosure = JSON.parse(await readFile(sourcePath, 'utf8'))
-  if (disclosure.schema_version !== 1 || disclosure.release_channel !== 'private-beta') {
-    throw new Error('beta_disclosure_identity_invalid')
+  if (disclosure.schema_version !== 1 || !['private-beta', 'ga'].includes(disclosure.release_channel)) {
+    throw new Error('release_disclosure_identity_invalid')
   }
   if (!Array.isArray(disclosure.statements) || disclosure.statements.length === 0) {
     throw new Error('beta_disclosure_statements_missing')
@@ -19,12 +19,15 @@ export const loadBetaDisclosure = async (sourcePath = resolve('release/cabinet-b
   const ids = new Set()
   for (const statement of disclosure.statements) {
     if (!statement.id || ids.has(statement.id) || !statement.user_facing || statement.channel !== disclosure.release_channel) {
-      throw new Error(`beta_disclosure_statement_invalid:${statement.id ?? 'missing'}`)
+      throw new Error(`release_disclosure_statement_invalid:${statement.id ?? 'missing'}`)
     }
     ids.add(statement.id)
   }
   return disclosure
 }
+
+// Retained for beta-only callers while the controlled GA path uses the channel-neutral loader.
+export const loadBetaDisclosure = loadReleaseDisclosure
 
 export const renderBetaDisclosureMarkdown = (disclosure, { format = 'help-center' } = {}) => {
   const lines = [
@@ -55,6 +58,6 @@ export const renderBetaDisclosureMarkdown = (disclosure, { format = 'help-center
 if (import.meta.url === `file:///${process.argv[1]?.replaceAll('\\', '/')}`) {
   const source = resolve(option('--source') ?? 'release/cabinet-beta-disclosure.json')
   const format = option('--format') ?? 'help-center'
-  const disclosure = await loadBetaDisclosure(source)
+  const disclosure = await loadReleaseDisclosure(source)
   process.stdout.write(renderBetaDisclosureMarkdown(disclosure, { format }))
 }

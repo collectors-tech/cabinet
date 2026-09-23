@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "product": "Cabinet",
+  "release_version": "1.0.0",
+  "release_channel": "ga",
+  "generated_heading": "Cabinet 1.0 capabilities and limitations",
+  "support_pointers": [
+    "Back up from Settings Storage before replacing a portable build or reusing an existing data directory.",
+    "Use Settings Operations for JSON/CSV export, logs, and recovery checks when validating a release.",
+    "Treat release notes, package checksums, and the exact source commit as the support identity for a release."
+  ],
+  "statements": [
+    {
+      "id": "windows-portable-package",
+      "title": "Windows portable package",
+      "status": "supported",
+      "channel": "ga",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Cabinet 1.0 is distributed as an unsigned Windows portable ZIP, not an installer."
+    },
+    {
+      "id": "provider-classification",
+      "title": "Provider readiness",
+      "status": "limited",
+      "channel": "ga",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Supported collector paths are identified in the packaged guidance; protected or user-present provider journeys remain action-required."
+    },
+    {
+      "id": "data-ownership-export-recovery",
+      "title": "Data ownership, export and recovery",
+      "status": "supported",
+      "channel": "ga",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "User data can use export, backup, and restore from local Cabinet surfaces and is not trapped behind a paid gate."
+    }
+  ]
+}
