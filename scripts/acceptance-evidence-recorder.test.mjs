@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 
 import {
   acceptanceRows,
+  acceptanceRowsForChannel,
   createOrResumeAcceptanceRun,
   redactAcceptanceText,
   recordAcceptanceResult,
@@ -29,14 +30,19 @@ const writeArtifact = async (directory, filename, contents) => {
   return { target: filename.includes('edge') ? 'edge' : filename.includes('chrome') ? 'chrome' : 'windows-amd64', filename, sha256_filename: `${filename}.sha256`, sha256: digest, size_bytes: buffer.length }
 }
 
-const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) => {
+const candidateFixture = async ({ sourceCommit = commit, suffix = 'one', channel = 'private-beta' } = {}) => {
   const directory = await mkdtemp(join(tmpdir(), 'cabinet-acceptance-recorder-'))
-  const candidateVersion = `0.1.0-beta.10.g${sourceCommit.slice(0, 12)}`
-  const cabinetArtifact = await writeArtifact(directory, 'cabinet-0.1.0-beta.10-windows-amd64-portable.zip', `cabinet-${suffix}`)
+  const isGA = channel === 'ga'
+  const cabinetVersion = isGA ? '1.0.0' : '0.1.0-beta.10'
+  const candidateVersion = isGA ? `1.0.0.g${sourceCommit.slice(0, 12)}` : `0.1.0-beta.10.g${sourceCommit.slice(0, 12)}`
+  const publicationState = isGA ? 'ga_candidate_not_published' : 'private_candidate_not_published'
+  const bundleProduct = isGA ? 'Cabinet 1.0 GA candidate' : 'Cabinet 0.1 private beta candidate'
+  const bundleFilename = isGA ? 'ga-candidate-bundle-manifest.json' : 'beta-candidate-bundle-manifest.json'
+  const cabinetArtifact = await writeArtifact(directory, `cabinet-${cabinetVersion}-windows-amd64-portable.zip`, `cabinet-${suffix}`)
   cabinetArtifact.kind = 'portable_zip'
   const buildDate = '2026-08-11T00:00:00Z'
   const sbomDocument = createCabinetSBOM({
-    version: '0.1.0-beta.10',
+    version: cabinetVersion,
     sourceCommit,
     buildDate,
     goModules: [
@@ -49,18 +55,18 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
     } },
   })
   const sbomBytes = Buffer.from(`${JSON.stringify(sbomDocument, null, 2)}\n`)
-  const sbomFilename = 'cabinet-0.1.0-beta.10-sbom.cdx.json'
+  const sbomFilename = `cabinet-${cabinetVersion}-sbom.cdx.json`
   await writeFile(join(directory, sbomFilename), sbomBytes)
   const chromeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-chrome.zip`, `chrome-${suffix}`)
   const edgeArtifact = await writeArtifact(directory, `cabinet-browser-companion-${candidateVersion}-edge.zip`, `edge-${suffix}`)
   const cabinet = {
     schema_version: 1,
     product: 'Cabinet',
-    channel: 'private-beta',
-    version: '0.1.0-beta.10',
+    channel,
+    version: cabinetVersion,
     source_commit: sourceCommit,
     build_date: buildDate,
-    publication_state: 'private_candidate_not_published',
+    publication_state: publicationState,
     artifact: cabinetArtifact,
     sbom: {
       filename: sbomFilename,
@@ -73,27 +79,27 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
       source_commit: sourceCommit,
       subject_artifact_sha256: cabinetArtifact.sha256,
     },
-    release_notes_filename: 'cabinet-0.1.0-beta.10-release-notes.md',
+    release_notes_filename: `cabinet-${cabinetVersion}-release-notes.md`,
   }
   const companion = {
     schema_version: 1,
     product: 'Cabinet Browser Companion',
-    channel: 'private-beta',
-    version: '0.1.0',
+    channel,
+    version: isGA ? '1.0.0' : '0.1.0',
     version_name: candidateVersion,
     immutable_tag: `browser-companion-v${candidateVersion}`,
     source_commit: sourceCommit,
-    publication_state: 'private_candidate_not_published',
+    publication_state: publicationState,
     protocol_compatibility: { minimum: '1', maximum: '1' },
     release_notes_filename: `cabinet-browser-companion-${candidateVersion}-release-notes.md`,
     artifacts: [chromeArtifact, edgeArtifact],
   }
   const bundle = {
     schema_version: 1,
-    product: 'Cabinet 0.1 private beta candidate',
-    channel: 'private-beta',
+    product: bundleProduct,
+    channel,
     source_commit: sourceCommit,
-    publication_state: 'private_candidate_not_published',
+    publication_state: publicationState,
     components: [
       { product: cabinet.product, version: cabinet.version, manifest_filename: 'cabinet-release-manifest.json', release_notes_filename: cabinet.release_notes_filename, artifacts: [cabinet.artifact], sbom: cabinet.sbom },
       { product: companion.product, version: companion.version_name, manifest_filename: 'browser-companion-release-manifest.json', release_notes_filename: companion.release_notes_filename, protocol_compatibility: companion.protocol_compatibility, artifacts: companion.artifacts.map(({ target, filename, sha256_filename, sha256 }) => ({ target, filename, sha256_filename, sha256 })) },
@@ -101,13 +107,13 @@ const candidateFixture = async ({ sourceCommit = commit, suffix = 'one' } = {}) 
   }
   const cabinetManifestPath = join(directory, 'cabinet-release-manifest.json')
   const companionManifestPath = join(directory, 'browser-companion-release-manifest.json')
-  const bundleManifestPath = join(directory, 'beta-candidate-bundle-manifest.json')
+  const bundleManifestPath = join(directory, bundleFilename)
   await writeFile(cabinetManifestPath, `${JSON.stringify(cabinet, null, 2)}\n`)
   await writeFile(companionManifestPath, `${JSON.stringify(companion, null, 2)}\n`)
   await writeFile(bundleManifestPath, `${JSON.stringify(bundle, null, 2)}\n`)
   await writeFile(join(directory, cabinet.release_notes_filename), 'Cabinet release notes')
   await writeFile(join(directory, companion.release_notes_filename), 'Companion release notes')
-  return { directory, cabinetManifestPath, companionManifestPath, bundleManifestPath }
+  return { directory, cabinetManifestPath, companionManifestPath, bundleManifestPath, channel, cabinetVersion }
 }
 
 const environment = {
@@ -125,7 +131,9 @@ const start = async (fixture, outputPath = join(fixture.directory, 'acceptance.j
   companionManifestPath: fixture.companionManifestPath,
   bundleManifestPath: fixture.bundleManifestPath,
   releaseCandidateRunId: '31123456789',
-  releaseCandidateArtifactName: 'cabinet-beta-candidate-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  releaseCandidateArtifactName: fixture.channel === 'ga'
+    ? 'ga-release-candidate-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    : 'cabinet-beta-candidate-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   environment: runtimeEnvironment,
   outputPath,
 })
@@ -146,6 +154,31 @@ test('catalog covers every current #1869 checklist row with unique stable identi
       { id: 'PROVIDER-11', required_for_ga: false, scope: 'preview' },
     ],
   )
+})
+
+test('GA acceptance rows use GA gate, install, recovery, and approval language', () => {
+  const gaRows = acceptanceRowsForChannel('ga')
+  assert.equal(gaRows.length, acceptanceRows.length)
+  assert.match(gaRows.find((row) => row.id === 'IDENTITY-05').title, /Cabinet 1\.0 GA Candidate Gate/)
+  assert.match(gaRows.find((row) => row.id === 'PROVIDER-01').title, /documented GA path/)
+  assert.match(gaRows.find((row) => row.id === 'CROSS-05').title, /GA user/)
+  assert.match(gaRows.find((row) => row.id === 'FAILURE-05').title, /APPROVE CABINET 1\.0 GA <exact-commit>/)
+  assert.doesNotMatch(gaRows.map((row) => row.title).join('\n'), /private beta|beta path|Beta Release Candidate/i)
+})
+
+test('a GA candidate persists and renders only GA acceptance wording', async () => {
+  const fixture = await candidateFixture({ channel: 'ga' })
+  const gaEnvironment = {
+    ...environment,
+    isolated_profile: 'cabinet-ga-acceptance',
+    runtime: { ...environment.runtime, app_version: '1.0.0' },
+  }
+  const state = await start(fixture, join(fixture.directory, 'ga-acceptance.json'), gaEnvironment)
+  assert.equal(state.candidate.channel, 'ga')
+  assert.match(state.rows.find((row) => row.id === 'FAILURE-05').title, /APPROVE CABINET 1\.0 GA <exact-commit>/)
+  const markdown = renderAcceptanceMarkdown(state)
+  assert.match(markdown, /Cabinet 1\.0 GA Candidate Gate/)
+  assert.doesNotMatch(markdown, /APPROVE CABINET 0\.1 PRIVATE BETA|documented beta path|Beta Release Candidate/i)
 })
 
 test('preview-only provider rows can be explicitly excluded without weakening the required GA verdict', async () => {

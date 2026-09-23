@@ -79,6 +79,20 @@ export const acceptanceRows = Object.freeze([
   ], true),
 ])
 
+const gaRowTitles = Object.freeze({
+  'IDENTITY-05': 'Successful Cabinet 1.0 GA Candidate Gate run ID and exact artifact name are recorded.',
+  'PROVIDER-01': 'Install the exact Chrome and Edge packages through the documented GA path without developer source tools.',
+  'CROSS-05': 'Empty and error states are useful enough for a GA user to recover or report the issue.',
+  'FAILURE-05': 'If all gates pass, the proposed #1864 approval comment records `APPROVE CABINET 1.0 GA <exact-commit>`; publication is not invoked by this checklist.',
+})
+
+const gaAcceptanceRows = Object.freeze(acceptanceRows.map((row) => Object.freeze({
+  ...row,
+  title: gaRowTitles[row.id] ?? row.title,
+})))
+
+export const acceptanceRowsForChannel = (channel) => channel === 'ga' ? gaAcceptanceRows : acceptanceRows
+
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 const stableValue = (value) => Array.isArray(value)
@@ -244,6 +258,7 @@ const verifyCandidate = async ({
     throw new Error('acceptance_combined_manifest_identity_mismatch')
   }
   const identity = {
+    channel: cabinet.channel,
     source_commit: cabinet.source_commit,
     release_candidate: { run_id: String(releaseCandidateRunId), artifact_name: releaseCandidateArtifactName },
     cabinet: {
@@ -310,7 +325,7 @@ const calculateOverall = (rowsToCheck) => {
   return 'not_run'
 }
 
-const newRows = () => acceptanceRows.map((row) => ({
+const newRows = (channel) => acceptanceRowsForChannel(channel).map((row) => ({
   ...row,
   status: 'not_run',
   evidence_references: [],
@@ -369,9 +384,10 @@ export const validateAcceptanceState = (state) => {
       new Set(state.archived_prior_evidence).size !== state.archived_prior_evidence.length) {
     throw new Error('acceptance_state_archive_history_invalid')
   }
-  if (state.rows.length !== acceptanceRows.length) throw new Error('acceptance_state_rows_incomplete')
-  for (let index = 0; index < acceptanceRows.length; index += 1) {
-    const expected = acceptanceRows[index]
+  const expectedRows = acceptanceRowsForChannel(state.candidate.channel)
+  if (!['private-beta', 'ga'].includes(state.candidate.channel) || state.rows.length !== expectedRows.length) throw new Error('acceptance_state_rows_incomplete')
+  for (let index = 0; index < expectedRows.length; index += 1) {
+    const expected = expectedRows[index]
     const row = state.rows[index]
     if (!isObject(row) || row.id !== expected.id || row.section !== expected.section || row.title !== expected.title || row.requires_human_confirmation !== expected.requires_human_confirmation ||
         row.required_for_ga !== expected.required_for_ga || row.scope !== expected.scope ||
@@ -425,7 +441,7 @@ export const createOrResumeAcceptanceRun = async (options) => {
       recorder: 'Cabinet packaged acceptance evidence',
       candidate,
       environment,
-      rows: newRows(),
+      rows: newRows(candidate.channel),
       overall_result: 'not_run',
       archived_prior_evidence: [...(existing.archived_prior_evidence ?? []), archiveFilename],
     }
@@ -437,7 +453,7 @@ export const createOrResumeAcceptanceRun = async (options) => {
     recorder: 'Cabinet packaged acceptance evidence',
     candidate,
     environment,
-    rows: newRows(),
+    rows: newRows(candidate.channel),
     overall_result: 'not_run',
     archived_prior_evidence: [],
   }
