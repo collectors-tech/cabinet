@@ -10,9 +10,9 @@ Cabinet `{{CABINET_BETA_VERSION}}` is distributed as a Windows portable ZIP. It 
 
 ## Data, backup, upgrade, and rollback
 
-For a normal portable launch, Cabinet creates `data` beside `cabinet.exe`. `/api/runtime` reports the authoritative active `data_dir`; check it before upgrade, backup, restore, relocation, rollback, or removal.
+For a normal portable launch, Cabinet creates `data` beside `cabinet.exe`. `CABINET_DATA_DIR` can override the runtime root and `CABINET_DB_PATH` can override the database file. `/api/runtime` reports the authoritative active `data_dir`; check it before upgrade, backup, restore, relocation, rollback, or removal.
 
-Before replacing a release, make a Settings Storage backup and retain it outside the extracted Cabinet folder. To roll back, extract the prior portable package into a separate writable folder and use a compatible confirmed data directory or restore the saved backup.
+Before replacing a release, make a Settings Storage backup and retain it outside the extracted Cabinet folder. To roll back, extract the prior portable package into a separate writable folder and use a compatible confirmed data directory or restore the saved backup. Deleting the whole extracted folder deletes the default `data` directory; deleting only `cabinet.exe` does not reliably remove data from an overridden location.
 
 ## SBOM and provenance
 

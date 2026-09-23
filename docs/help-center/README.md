@@ -1,10 +1,10 @@
 # Cabinet Help Center
 
-This folder contains published private-beta guidance embedded in Cabinet's authenticated Help Center.
+This folder contains published Cabinet 1.0 guidance embedded in Cabinet's authenticated Help Center.
 
 ## Find guidance
 
-- `reference/cabinet-private-beta-disclosure.md` is generated from the governed capability disclosure and identifies supported and limited beta surfaces.
+- `reference/cabinet-ga-disclosure.md` is generated from the governed capability disclosure and identifies supported and limited release surfaces.
 - `getting-started/` covers first launch, authentication mode, data paths, and profile selection.
 - `sections/` covers the user-facing Cabinet workspaces.
 - `ui-elements.md` explains shared controls and interaction patterns.
@@ -13,7 +13,7 @@ Use the in-app article search or category list to open a guide. Check the exact 
 
 ## Support and corrections
 
-Report missing or inaccurate guidance to the beta coordinator who supplied the candidate. Include the Cabinet version and source commit, but do not include passwords, provider credentials, cookies, Browser Companion credentials, or unreviewed private data.
+Report missing or inaccurate guidance through the Cabinet repository issue tracker. Include the Cabinet version and source commit, but do not include passwords, provider credentials, cookies, Browser Companion credentials, or unreviewed private data.
 
 ## Authoring rule
 
