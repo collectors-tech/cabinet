@@ -51,7 +51,7 @@ test("declares the exact develop and main release protection contract", async ()
   assert.equal(policy.emergency_bypass.authority, "wildone");
   assert.match(
     policy.release_approval.marker,
-    /APPROVE CABINET 0\.1 PRIVATE BETA <exact-commit>/,
+    /APPROVE CABINET 1\.0 GA <exact-commit>/,
   );
 
   assert.deepEqual(policy.branches.develop.required_checks, [
@@ -220,7 +220,7 @@ test("keeps verification read-only and documents approval and emergency evidence
     "branches: [main]",
     "pr.head.ref !== 'develop'",
     "comment.user?.login === 'wildone'",
-    "APPROVE CABINET 0.1 PRIVATE BETA",
+    "APPROVE CABINET 1.0 GA",
     "issues: read",
   ]) {
     assert.ok(
@@ -258,7 +258,7 @@ test("keeps verification read-only and documents approval and emergency evidence
     assert.doesNotMatch(workflow, /body\.includes\(marker\)/);
   }
   for (const fragment of [
-    "APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>",
+    "APPROVE CABINET 1.0 GA <exact-commit>",
     "There is no persistent emergency bypass.",
     "GitHub audit-log/settings evidence",
     "does not authorize external publication",
@@ -273,7 +273,7 @@ test("keeps verification read-only and documents approval and emergency evidence
 
 test("rejects embedded or suffixed release approval markers", () => {
   const marker =
-    "APPROVE CABINET 0.1 PRIVATE BETA 0123456789abcdef0123456789abcdef01234567";
+    "APPROVE CABINET 1.0 GA 0123456789abcdef0123456789abcdef01234567";
   assert.equal(hasExactApprovalLine(marker, marker), true);
   assert.equal(hasExactApprovalLine(`  ${marker}  `, marker), true);
   assert.equal(

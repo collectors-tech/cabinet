@@ -42,6 +42,7 @@ jobs:
         shell: pwsh
         run: |
           npm --prefix ui.web ci
+          npm install -g @fission-ai/openspec@latest
           npm run security:dependencies
           npm --prefix ui.web run build
           go test ./... -count=1 -p 1 -parallel 4 -timeout 900s

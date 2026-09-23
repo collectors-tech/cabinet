@@ -6,8 +6,8 @@
 
 ## 2. Publication and promotion controls
 
-- [ ] 2.1 Convert exact approval and candidate workflow controls to GA markers and artifact names.
-- [ ] 2.2 Convert protected main-promotion approval controls without weakening branch protection.
+- [x] 2.1 Convert exact approval and candidate workflow controls to GA markers and artifact names.
+- [x] 2.2 Convert protected main-promotion approval controls without weakening branch protection.
 
 ## 3. Documentation and qualification
 

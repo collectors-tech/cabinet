@@ -27,7 +27,7 @@ jobs:
 
             const sha = pr.head.sha.toLowerCase()
             if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('promotion head must be a full commit SHA')
-            const marker = `APPROVE CABINET 0.1 PRIVATE BETA ${sha}`
+            const marker = `APPROVE CABINET 1.0 GA ${sha}`
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
