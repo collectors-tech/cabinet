@@ -40,4 +40,5 @@ test('Cabinet 1.0 GA release controls have a canonical identity and guarded publ
   assert.match(candidate, /-ReleaseChannel ga/)
   assert.match(candidate, /--release-channel ga/)
   assert.match(candidate, /create-ga-candidate-bundle\.mjs/)
+  assert.match(candidate, /npm install -g @fission-ai\/openspec@latest/)
 })

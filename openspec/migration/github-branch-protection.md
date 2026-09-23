@@ -1,4 +1,4 @@
-# GitHub branch protection for Cabinet 0.1
+# GitHub branch protection for Cabinet 1.0 GA
 
 Issue: #2056. Parent approval gate: #1864.
 
@@ -57,7 +57,7 @@ Internal candidate creation and packaged acceptance may happen before final appr
 The exact accepted commit must have successful #1868/#1869/#1867 evidence linked to #1864. Max (`wildone`) then posts this exact marker on #1864:
 
 ```text
-APPROVE CABINET 0.1 PRIVATE BETA <exact-commit>
+APPROVE CABINET 1.0 GA <exact-commit>
 ```
 
 The promotion pull request must have `develop` as its head, `main` as its base and the approved commit as its head SHA. The required **Exact #1864 promotion approval** check is the explicit promotion authorization. Post the marker before opening the promotion pull request; if approval arrives later, rerun the failed approval check. A new push requires a new exact-commit #1864 marker. Workflows and GitHub Apps have no bypass allowance and cannot directly push or approve their way around this sequence. The prerelease publisher separately verifies the issue number, exact marker, candidate run and commit before publication.
