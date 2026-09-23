@@ -20,13 +20,40 @@
       "user_facing": "Cabinet 1.0 is distributed as an unsigned Windows portable ZIP, not an installer."
     },
     {
-      "id": "provider-classification",
-      "title": "Provider readiness",
-      "status": "limited",
+      "id": "provider-voglers",
+      "title": "Voglers provider readiness",
+      "status": "supported",
       "channel": "ga",
       "release_note": true,
       "ui": true,
-      "user_facing": "Supported collector paths are identified in the packaged guidance; protected or user-present provider journeys remain action-required."
+      "user_facing": "Voglers is a supported direct public storefront collector path for the Cabinet 1.0 contract."
+    },
+    {
+      "id": "provider-hobbytech",
+      "title": "Hobbytech provider readiness",
+      "status": "packaged_unproven",
+      "channel": "ga",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Hobbytech remains packaged-unproven until an exact GA candidate records the packaged provider journey."
+    },
+    {
+      "id": "provider-frontline-bonza",
+      "title": "Frontline and Bonza provider readiness",
+      "status": "browser_assisted",
+      "channel": "ga",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Frontline and Bonza are preview browser-assisted paths; normal user-present browser interaction is required for protected pages and challenges."
+    },
+    {
+      "id": "assistant-agent-telegram",
+      "title": "Assistant, Agent and Telegram readiness",
+      "status": "preview",
+      "channel": "ga",
+      "release_note": true,
+      "ui": true,
+      "user_facing": "Chat, Assistant, Agent and Telegram features are preview or setup-dependent and do not expand the supported collector contract."
     },
     {
       "id": "data-ownership-export-recovery",

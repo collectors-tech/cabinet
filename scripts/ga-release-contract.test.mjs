@@ -28,6 +28,14 @@ test('Cabinet 1.0 GA release controls have a canonical identity and guarded publ
   assert.match(recorder, /ga_candidate_not_published/)
   assert.match(recorder, /Cabinet 1\.0 GA candidate/)
 
+  const disclosure = JSON.parse(readFileSync(join(root, 'release', 'cabinet-ga-disclosure.json'), 'utf8'))
+  assert.deepEqual(disclosure.release_channel, 'ga')
+  const providerStatuses = new Map(disclosure.statements.map((statement) => [statement.id, statement.status]))
+  assert.deepEqual(providerStatuses.get('provider-voglers'), 'supported')
+  assert.deepEqual(providerStatuses.get('provider-hobbytech'), 'packaged_unproven')
+  assert.deepEqual(providerStatuses.get('provider-frontline-bonza'), 'browser_assisted')
+  assert.deepEqual(providerStatuses.get('assistant-agent-telegram'), 'preview')
+
   const publisher = read('.github/workflows/publish-ga-release.yml')
   assert.match(publisher, /APPROVE CABINET 1\.0 GA/)
   assert.match(publisher, /prerelease:\s*false/)
