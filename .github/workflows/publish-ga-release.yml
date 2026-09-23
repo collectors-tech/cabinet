@@ -111,7 +111,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh attestation verify candidate/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY"
           gh attestation verify candidate/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
 
       - name: Resolve immutable release identity

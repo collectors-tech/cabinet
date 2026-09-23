@@ -47,6 +47,13 @@ test('Cabinet 1.0 GA release controls have a canonical identity and guarded publ
   assert.doesNotMatch(publisher, /candidate\/dist\//)
   assert.doesNotMatch(publisher, /private beta|private-beta/i)
   assert.match(publisher, /attestations:\s*read/)
+  const attestationVerificationLines = publisher
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('gh attestation verify '))
+  assert.deepEqual(attestationVerificationLines, [
+    'gh attestation verify candidate/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom',
+  ])
 
   const candidate = read('.github/workflows/ga-release-candidate.yml')
   assert.match(candidate, /Cabinet 1\.0 GA Candidate Gate/)
