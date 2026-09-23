@@ -100,18 +100,18 @@ jobs:
 
       - name: Verify Cabinet, companion and combined manifests
         run: |
-          node -e "const fs=require('fs'); const manifest=JSON.parse(fs.readFileSync('candidate/dist/cabinet/cabinet-release-manifest.json')); if (manifest.version !== '1.0.0' || manifest.channel !== 'ga' || manifest.publication_state !== 'ga_candidate_not_published') throw new Error('Candidate is not a Cabinet 1.0 GA candidate')"
-          node scripts/verify-cabinet-release-package.mjs --manifest candidate/dist/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
-          node scripts/verify-browser-companion-package.mjs --manifest candidate/dist/browser-companion/browser-companion-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
-          node scripts/create-ga-candidate-bundle.mjs --cabinet-manifest candidate/dist/cabinet/cabinet-release-manifest.json --companion-manifest candidate/dist/browser-companion/browser-companion-release-manifest.json --output candidate/recreated-ga-candidate-bundle-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
-          cmp candidate/recreated-ga-candidate-bundle-manifest.json candidate/dist/ga-candidate-bundle-manifest.json
+          node -e "const fs=require('fs'); const manifest=JSON.parse(fs.readFileSync('candidate/cabinet/cabinet-release-manifest.json')); if (manifest.version !== '1.0.0' || manifest.channel !== 'ga' || manifest.publication_state !== 'ga_candidate_not_published') throw new Error('Candidate is not a Cabinet 1.0 GA candidate')"
+          node scripts/verify-cabinet-release-package.mjs --manifest candidate/cabinet/cabinet-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
+          node scripts/verify-browser-companion-package.mjs --manifest candidate/browser-companion/browser-companion-release-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
+          node scripts/create-ga-candidate-bundle.mjs --cabinet-manifest candidate/cabinet/cabinet-release-manifest.json --companion-manifest candidate/browser-companion/browser-companion-release-manifest.json --output candidate/recreated-ga-candidate-bundle-manifest.json --expected-source-commit "${{ inputs.commit_sha }}"
+          cmp candidate/recreated-ga-candidate-bundle-manifest.json candidate/ga-candidate-bundle-manifest.json
 
       - name: Verify source-bound package attestations
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh attestation verify candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY"
-          gh attestation verify candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
+          gh attestation verify candidate/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY"
+          gh attestation verify candidate/cabinet/cabinet-*-windows-amd64-portable.zip --repo "$GITHUB_REPOSITORY" --predicate-type https://cyclonedx.org/bom
 
       - name: Resolve immutable release identity
         id: release
@@ -121,9 +121,9 @@ jobs:
           version="$(node -p "JSON.parse(require('fs').readFileSync('release/cabinet-release-version.json')).version")"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           {
-            cat candidate/dist/cabinet/cabinet-*-release-notes.md
+            cat candidate/cabinet/cabinet-*-release-notes.md
             echo
-            cat candidate/dist/browser-companion/cabinet-browser-companion-*-release-notes.md
+            cat candidate/browser-companion/cabinet-browser-companion-*-release-notes.md
             echo
             echo "Exact candidate: ${{ inputs.commit_sha }}"
             echo "Approval: $APPROVAL_URL"
@@ -153,14 +153,14 @@ jobs:
           draft: false
           fail_on_unmatched_files: true
           files: |
-            candidate/dist/ga-candidate-bundle-manifest.json
-            candidate/dist/cabinet/cabinet-release-manifest.json
-            candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip
-            candidate/dist/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
-            candidate/dist/cabinet/cabinet-*-release-notes.md
-            candidate/dist/cabinet/cabinet-*-sbom.cdx.json
-            candidate/dist/browser-companion/browser-companion-release-manifest.json
-            candidate/dist/browser-companion/browser-companion-candidate-summary.md
-            candidate/dist/browser-companion/cabinet-browser-companion-*.zip
-            candidate/dist/browser-companion/cabinet-browser-companion-*.zip.sha256
-            candidate/dist/browser-companion/cabinet-browser-companion-*-release-notes.md
+            candidate/ga-candidate-bundle-manifest.json
+            candidate/cabinet/cabinet-release-manifest.json
+            candidate/cabinet/cabinet-*-windows-amd64-portable.zip
+            candidate/cabinet/cabinet-*-windows-amd64-portable.zip.sha256
+            candidate/cabinet/cabinet-*-release-notes.md
+            candidate/cabinet/cabinet-*-sbom.cdx.json
+            candidate/browser-companion/browser-companion-release-manifest.json
+            candidate/browser-companion/browser-companion-candidate-summary.md
+            candidate/browser-companion/cabinet-browser-companion-*.zip
+            candidate/browser-companion/cabinet-browser-companion-*.zip.sha256
+            candidate/browser-companion/cabinet-browser-companion-*-release-notes.md
