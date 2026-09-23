@@ -46,6 +46,7 @@ test('Cabinet 1.0 GA release controls have a canonical identity and guarded publ
   assert.match(publisher, /candidate\/ga-candidate-bundle-manifest\.json/)
   assert.doesNotMatch(publisher, /candidate\/dist\//)
   assert.doesNotMatch(publisher, /private beta|private-beta/i)
+  assert.match(publisher, /attestations:\s*read/)
 
   const candidate = read('.github/workflows/ga-release-candidate.yml')
   assert.match(candidate, /Cabinet 1\.0 GA Candidate Gate/)
