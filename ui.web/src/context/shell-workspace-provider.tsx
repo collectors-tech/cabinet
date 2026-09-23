@@ -17,6 +17,7 @@ export function ShellWorkspaceProvider({
   const [activeProfileId, setActiveProfileId] = useState('local')
   const [activeWorkspace, setActiveWorkspaceState] =
     useState<ShellWorkspace>('navigation')
+  const activeWorkspaceRef = useRef<ShellWorkspace>('navigation')
   const userSelectedWorkspaceRef = useRef<ShellWorkspace | null>(null)
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export function ShellWorkspaceProvider({
         const userSelectedWorkspace = userSelectedWorkspaceRef.current
         setActiveProfileId(nextProfileId)
         if (userSelectedWorkspace) {
+          activeWorkspaceRef.current = userSelectedWorkspace
           setActiveWorkspaceState(userSelectedWorkspace)
           try {
             window.localStorage.setItem(
@@ -58,10 +60,12 @@ export function ShellWorkspaceProvider({
           }
           return
         }
+        activeWorkspaceRef.current = savedWorkspace
         setActiveWorkspaceState(savedWorkspace)
       } catch {
         if (!cancelled) {
           setActiveProfileId('local')
+          activeWorkspaceRef.current = 'navigation'
           setActiveWorkspaceState('navigation')
         }
       }
@@ -75,6 +79,7 @@ export function ShellWorkspaceProvider({
 
   const setActiveWorkspace = useCallback(
     (workspace: ShellWorkspace) => {
+      activeWorkspaceRef.current = workspace
       userSelectedWorkspaceRef.current = workspace
       setActiveWorkspaceState(workspace)
       try {
@@ -91,9 +96,9 @@ export function ShellWorkspaceProvider({
 
   const toggleAssistantWorkspace = useCallback(() => {
     setActiveWorkspace(
-      activeWorkspace === 'assistant' ? 'navigation' : 'assistant'
+      activeWorkspaceRef.current === 'assistant' ? 'navigation' : 'assistant'
     )
-  }, [activeWorkspace, setActiveWorkspace])
+  }, [setActiveWorkspace])
 
   const contextValue = useMemo<ShellWorkspaceContextValue>(
     () => ({
