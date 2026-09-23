@@ -78,6 +78,15 @@ describe("Cabinet beta packaging contract", () => {
     assert.doesNotMatch(workflow, /softprops\/action-gh-release|gh release|create-release/i);
   });
 
+  it("records one unambiguous Cypress summary for every candidate spec", () => {
+    const workflow = readRepoFile(".github/workflows/beta-release-candidate.yml");
+
+    assert.match(workflow, /\$summaryKey = \(\(\$spec -replace '\\.cy\\.ts\$', ''\) -replace '\[\^A-Za-z0-9\._-\]\+', '-'\)\.Trim\('-'\)/);
+    assert.match(workflow, /-LogName "candidate-\$summaryKey"/);
+    assert.match(workflow, /-Filter "\*-candidate-\$summaryKey\.summary\.json"/);
+    assert.doesNotMatch(workflow, /\$name = Split-Path \(Split-Path \$spec -Parent\) -Leaf/);
+  });
+
   it("builds and verifies a real Windows portable package in develop and main gates", () => {
     for (const path of [".github/workflows/develop-quality-gate.yml", ".github/workflows/main-gate.yml"]) {
       const workflow = readRepoFile(path);

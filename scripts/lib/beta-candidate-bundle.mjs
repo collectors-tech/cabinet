@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 
-export const createBetaCandidateBundle = async ({
+export const createCandidateBundle = async ({
   cabinetManifestPath,
   companionManifestPath,
   outputPath,
@@ -12,16 +12,20 @@ export const createBetaCandidateBundle = async ({
   if (cabinet.source_commit !== expectedSourceCommit || companion.source_commit !== expectedSourceCommit) {
     throw new Error('candidate_bundle_source_commit_mismatch')
   }
-  if (cabinet.channel !== 'private-beta' || companion.channel !== 'private-beta' ||
-      cabinet.publication_state !== 'private_candidate_not_published' || companion.publication_state !== 'private_candidate_not_published') {
+  const controls = {
+    'private-beta': { publicationState: 'private_candidate_not_published', product: 'Cabinet 0.1 private beta candidate' },
+    ga: { publicationState: 'ga_candidate_not_published', product: 'Cabinet 1.0 GA candidate' },
+  }[cabinet.channel]
+  if (!controls || companion.channel !== cabinet.channel ||
+      cabinet.publication_state !== controls.publicationState || companion.publication_state !== controls.publicationState) {
     throw new Error('candidate_bundle_publication_boundary_invalid')
   }
   const bundle = {
     schema_version: 1,
-    product: 'Cabinet 0.1 private beta candidate',
-    channel: 'private-beta',
+    product: controls.product,
+    channel: cabinet.channel,
     source_commit: expectedSourceCommit,
-    publication_state: 'private_candidate_not_published',
+    publication_state: controls.publicationState,
     components: [
       {
         product: cabinet.product,
@@ -44,3 +48,5 @@ export const createBetaCandidateBundle = async ({
   await writeFile(outputPath, `${JSON.stringify(bundle, null, 2)}\n`, { flag: 'wx' })
   return bundle
 }
+
+export const createBetaCandidateBundle = createCandidateBundle

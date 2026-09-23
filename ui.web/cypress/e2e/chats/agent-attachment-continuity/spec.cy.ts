@@ -71,6 +71,12 @@ describe('chats/agent-attachment-continuity', () => {
         )
       })
     })
+    // Rehydrate the contextual workspace from the thread identity persisted above.
+    cy.reload()
+    cy.get('[data-testid="active-profile-status"]', { timeout: 20000 }).should(
+      'not.contain',
+      'Loading profiles'
+    )
     openContextualAgent()
     cy.get('[data-testid="shell-assistant-attachment-input"]').selectFile(
       {

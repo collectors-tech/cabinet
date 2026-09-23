@@ -3,22 +3,21 @@ export function TermsOfService() {
     <main className='container mx-auto flex min-h-svh max-w-3xl flex-col gap-6 px-6 py-12'>
       <div className='space-y-2'>
         <p className='text-sm font-medium tracking-[0.2em] text-muted-foreground uppercase'>
-          Cabinet 0.1 Private Beta
+          Cabinet 1.0
         </p>
         <h1 className='text-4xl font-semibold tracking-tight'>
           Terms of Service
         </h1>
         <p className='text-base text-muted-foreground'>
-          These terms describe the operational use boundary of the Cabinet 0.1
-          private beta. Any separate invitation or deployment agreement from
-          your beta coordinator also applies.
+          These terms describe the operational use boundary of Cabinet 1.0.
+          Any separate deployment agreement from your deployment operator also applies.
         </p>
       </div>
 
       <section className='space-y-3'>
-        <h2 className='text-xl font-semibold'>Beta package and use</h2>
+        <h2 className='text-xl font-semibold'>Portable package and use</h2>
         <p className='text-sm leading-7 text-muted-foreground'>
-          Cabinet is supplied for invited evaluation as an unsigned Windows
+          Cabinet is supplied as an unsigned Windows
           portable package, not an installer or automatic-update service. Use it
           only for lawful collection management and user-directed workflows. You
           are responsible for verifying the candidate checksum, keeping backups
@@ -75,11 +74,10 @@ export function TermsOfService() {
       <section className='space-y-3'>
         <h2 className='text-xl font-semibold'>Support and changes</h2>
         <p className='text-sm leading-7 text-muted-foreground'>
-          Report beta problems to the beta coordinator who supplied the exact
-          candidate and include only reviewed, redacted evidence. This beta has
-          no support service-level commitment. Capabilities can change between
-          candidates; the versioned release notes, checksums, and governed
-          capability disclosure describe the candidate you received.
+          Report problems through the Cabinet repository issue tracker and
+          include only reviewed, redacted evidence. Cabinet has no support
+          service-level agreement. The versioned release notes, checksums, and
+          governed capability disclosure describe the release you received.
         </p>
       </section>
     </main>

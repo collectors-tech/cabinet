@@ -30,13 +30,15 @@ export const verifyBrowserCompanionRelease = async (releaseManifestPath, {
   expectedSourceCommit,
   previousManifestPath,
 } = {}) => {
-  const releaseConfig = JSON.parse(await readFile(join(repositoryRoot, 'browser-extension', 'release.json'), 'utf8'))
   const release = JSON.parse(await readFile(releaseManifestPath, 'utf8'))
+  const releaseConfigFile = release.channel === 'ga' ? 'release-ga.json' : release.channel === 'private-beta' ? 'release.json' : undefined
+  if (!releaseConfigFile) throw new Error('release_manifest_version_or_channel_drift')
+  const releaseConfig = JSON.parse(await readFile(join(repositoryRoot, 'browser-extension', releaseConfigFile), 'utf8'))
   const outputDirectory = dirname(releaseManifestPath)
   const expectedVersionName = `${releaseConfig.version_name_prefix}.g${release.source_commit?.slice(0, 12)}`
   if (release.schema_version !== 1 || release.channel !== releaseConfig.channel || release.version !== releaseConfig.version ||
       release.version_name !== expectedVersionName || release.distribution !== releaseConfig.distribution ||
-      release.automatic_updates !== false || release.publication_state !== 'private_candidate_not_published') {
+      release.automatic_updates !== false || release.publication_state !== (release.channel === 'ga' ? 'ga_candidate_not_published' : 'private_candidate_not_published')) {
     throw new Error('release_manifest_version_or_channel_drift')
   }
   if (!/^[a-f0-9]{40}$/.test(release.source_commit) || (expectedSourceCommit && release.source_commit !== expectedSourceCommit.toLowerCase())) {

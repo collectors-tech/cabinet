@@ -24,7 +24,10 @@ describe('chats/assistant-inbox-handoff', () => {
     cy.get('[data-testid="shell-workspace-bell"]').click()
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
     cy.get('[data-testid="notification-inbox-page"]').should('be.visible')
-    cy.get('[data-testid="notification-inbox-row"]').first().scrollIntoView().click()
+    // Opening Inbox causes its live list to refresh. Re-query after scrolling so
+    // Cypress does not retain a row that React has replaced during that refresh.
+    cy.get('[data-testid="notification-inbox-row"]').first().scrollIntoView()
+    cy.get('[data-testid="notification-inbox-row"]').first().click()
     cy.get('[data-testid="notification-inbox-detail-pane"]').within(() => {
       cy.contains('Assistant handoff queued').should('be.visible')
       cy.contains('check this inventory route asynchronously').should('be.visible')
